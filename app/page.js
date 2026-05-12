@@ -8,7 +8,14 @@ import {
   RefreshCw, Settings
 } from 'lucide-react';
 
-const BRANCHES = ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya'];
+const BRANCHES = ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İnkılap Tarihi'];
+
+function allowedBranchesForClass(cls) {
+  const grade = Math.floor(parseInt(cls) / 100);
+  if (grade === 7) return ['Türkçe', 'Matematik', 'Fen Bilgisi', 'Sosyal Bilgiler'];
+  if (grade === 8) return ['Türkçe', 'Matematik', 'Fen Bilgisi', 'İnkılap Tarihi'];
+  return ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya'];
+}
 
 const WEEKDAY_SLOTS = [
   { id: 'w1', label: '15:00–15:30' },
@@ -590,18 +597,22 @@ function StudentPanel({ session, showToast }) {
 
   const myBookings = useMemo(() => allSlots.filter(s => s.booked && s.studentId === session.id), [allSlots, session.id]);
 
+  const studentAllowedBranches = useMemo(() => allowedBranchesForClass(session.cls), [session.cls]);
+
   const available = useMemo(() => {
     return allSlots.filter(s => {
       if (s.booked || s.disabled) return false;
       if (s.allowedGroups?.length > 0 && !s.allowedGroups.includes(session.group)) return false;
       if (session.group === 'mezun' && s.slotId === MEZUN_FORBIDDEN) return false;
+      // Sınıfa göre izin verilen branşlar
+      if (!studentAllowedBranches.includes(s.branch)) return false;
       if (myBookings.some(b => b.teacherId === s.teacherId)) return false;
       if (filterBranch && s.branch !== filterBranch) return false;
       if (filterTeacher && s.teacherId !== filterTeacher) return false;
       if (filterDay !== '' && s.day !== parseInt(filterDay)) return false;
       return true;
     });
-  }, [allSlots, myBookings, session, filterBranch, filterTeacher, filterDay]);
+  }, [allSlots, myBookings, session, studentAllowedBranches, filterBranch, filterTeacher, filterDay]);
 
   const handleBook = async ({ teacherId, day, slotId }) => {
     try {
@@ -662,7 +673,7 @@ function StudentPanel({ session, showToast }) {
           <div className="card p-3 mb-4 flex flex-wrap gap-2">
             <select className="input !w-auto text-sm" value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
               <option value="">Tüm Branşlar</option>
-              {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
+              {studentAllowedBranches.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
             <select className="input !w-auto text-sm" value={filterTeacher} onChange={e => setFilterTeacher(e.target.value)}>
               <option value="">Tüm Öğretmenler</option>
