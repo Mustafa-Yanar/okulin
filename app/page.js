@@ -5,7 +5,7 @@ import {
   BookOpen, Users, LogOut, Plus, Trash2, Edit3, Save, X,
   Search, Calendar, Clock, User, Check,
   BookMarked, GraduationCap, Shield, ChevronLeft, ChevronRight,
-  RefreshCw, Settings, Lock, LayoutGrid, List, ClipboardList, BookText
+  RefreshCw, Settings, Lock, LayoutGrid, List, ClipboardList
 } from 'lucide-react';
 
 const BRANCHES = ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İnkılap Tarihi', 'İngilizce'];
@@ -18,13 +18,30 @@ function allowedBranchesForClass(cls) {
 }
 
 const WEEKDAY_SLOTS = [
-  { id: 'w1', label: '15:00–15:30' },
-  { id: 'w2', label: '15:45–16:15' },
-  { id: 'w3', label: '16:30–17:00' },
-  { id: 'w4', label: '17:15–17:45' },
-  { id: 'w5', label: '18:00–18:30' },
+  { id: 'w1',  label: '09:45–10:20' },
+  { id: 'w2',  label: '10:30–11:05' },
+  { id: 'w3',  label: '11:15–11:50' },
+  { id: 'w4',  label: '12:00–12:35' },
+  { id: 'w5',  label: '13:30–14:05' },
+  { id: 'w6',  label: '14:15–14:50' },
+  { id: 'w7',  label: '15:00–15:35' },
+  { id: 'w8',  label: '15:45–16:20' },
+  { id: 'w9',  label: '16:30–17:05' },
+  { id: 'w10', label: '17:15–17:50' },
+  { id: 'w11', label: '18:00–18:35' },
 ];
-const WEEKEND_SLOT_COUNT = 3; // hafta sonu sadece w1-w3
+const WEEKEND_SLOTS = [
+  { id: 'e1',  label: '09:30–10:05' },
+  { id: 'e2',  label: '10:15–10:50' },
+  { id: 'e3',  label: '11:00–11:35' },
+  { id: 'e4',  label: '11:45–12:20' },
+  { id: 'e5',  label: '12:30–13:05' },
+  { id: 'e6',  label: '13:15–13:50' },
+  { id: 'e7',  label: '14:30–15:05' },
+  { id: 'e8',  label: '15:15–15:50' },
+  { id: 'e9',  label: '16:00–16:35' },
+  { id: 'e10', label: '16:45–17:20' },
+];
 const ALL_DAYS = [
   { index: 0, label: 'Pazartesi', short: 'Pzt', weekend: false },
   { index: 1, label: 'Salı',      short: 'Sal', weekend: false },
@@ -36,10 +53,8 @@ const ALL_DAYS = [
 ];
 
 function slotsForDay(dayIndex) {
-  return dayIndex >= 5 ? WEEKDAY_SLOTS.slice(0, WEEKEND_SLOT_COUNT) : WEEKDAY_SLOTS;
+  return dayIndex >= 5 ? WEEKEND_SLOTS : WEEKDAY_SLOTS;
 }
-
-const MEZUN_FORBIDDEN = 'w3';
 const GROUPS = { ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
 const STUDENT_GROUPS = {
   ortaokul: { label: 'Ortaokul', classes: ['701','702','801','802'] },
@@ -222,24 +237,36 @@ function SlotGrid({ grid, teacher, weekKey, session, students, onBook, onCancel,
             </tr>
           </thead>
           <tbody>
-            {WEEKDAY_SLOTS.map((slot, slotIdx) => {
-              const isWeekendSlot = slotIdx < WEEKEND_SLOT_COUNT;
-              // hafta sonu olmayan slotlarda hafta sonu günleri zaten visibleDays'den çıkmış olabilir
-              const daysToRender = visibleDays.filter(day => !(day.weekend && !isWeekendSlot));
-              if (daysToRender.length === 0 && visibleDays.every(d => d.weekend)) return null;
-              return (
-                <tr key={slot.id} className="border-t border-gray-50">
-                  <td className="py-2 px-3 text-xs text-gray-500 font-500 whitespace-nowrap" style={{ fontWeight: 500 }}>{slot.label}</td>
-                  {visibleDays.map(day => {
-                    if (day.weekend && !isWeekendSlot) {
-                      return <td key={day.index} className="py-1 px-1"><div className="rounded-lg py-2 bg-gray-50 border border-gray-100 text-center text-gray-200 text-xs">—</div></td>;
-                    }
-                    const slotData = (grid && grid[day.index] && grid[day.index][slotIdx]) || { booked: false, disabled: true };
-                    return <SlotCell key={day.index} slotData={slotData} slot={slot} dayIndex={day.index} slotIdx={slotIdx} session={session} teacher={teacher} onCellClick={handleCellClick} onCancel={onCancel} weekKey={weekKey} mezunForbidden={day.weekend ? null : MEZUN_FORBIDDEN} />;
-                  })}
-                </tr>
+            {(() => {
+              const hasWeekday = visibleDays.some(d => !d.weekend);
+              const hasWeekend = visibleDays.some(d => d.weekend);
+              const maxRows = Math.max(
+                hasWeekday ? WEEKDAY_SLOTS.length : 0,
+                hasWeekend ? WEEKEND_SLOTS.length : 0,
               );
-            })}
+              return Array.from({ length: maxRows }, (_, rowIdx) => {
+                const wdSlot = WEEKDAY_SLOTS[rowIdx];
+                const weSlot = WEEKEND_SLOTS[rowIdx];
+                const labelSlot = hasWeekday ? wdSlot : weSlot;
+                if (!labelSlot) return null;
+                return (
+                  <tr key={rowIdx} className="border-t border-gray-50">
+                    <td className="py-2 px-3 text-xs text-gray-500 font-500 whitespace-nowrap" style={{ fontWeight: 500 }}>
+                      {hasWeekday && wdSlot ? wdSlot.label : ''}
+                      {hasWeekday && hasWeekend && weSlot ? <span className="block text-[10px] text-indigo-400">{weSlot.label}</span> : ''}
+                      {!hasWeekday && weSlot ? weSlot.label : ''}
+                    </td>
+                    {visibleDays.map(day => {
+                      const slots = slotsForDay(day.index);
+                      const slot = slots[rowIdx];
+                      if (!slot) return <td key={day.index} className="py-1 px-1"><div className="rounded-lg py-2 bg-gray-50 border border-gray-100 text-center text-gray-200 text-xs">—</div></td>;
+                      const slotData = (grid && grid[day.index] && grid[day.index][rowIdx]) || { booked: false, disabled: true };
+                      return <SlotCell key={day.index} slotData={slotData} slot={slot} dayIndex={day.index} slotIdx={rowIdx} session={session} teacher={teacher} onCellClick={handleCellClick} onCancel={onCancel} weekKey={weekKey} />;
+                    })}
+                  </tr>
+                );
+              });
+            })()}
           </tbody>
         </table>
       </div>
@@ -297,8 +324,8 @@ function SlotGrid({ grid, teacher, weekKey, session, students, onBook, onCancel,
   );
 }
 
-function SlotCell({ slotData, slot, dayIndex, slotIdx, session, teacher, onCellClick, onCancel, weekKey, mezunForbidden }) {
-  const isForbidden = session.role === 'student' && session.group === 'mezun' && mezunForbidden && slot.id === mezunForbidden;
+function SlotCell({ slotData, slot, dayIndex, slotIdx, session, teacher, onCellClick, onCancel, weekKey }) {
+  const isForbidden = false;
   const isDirector = session.role === 'director';
 
   if (isForbidden) {
@@ -379,64 +406,55 @@ function SlotCell({ slotData, slot, dayIndex, slotIdx, session, teacher, onCellC
 }
 
 // ─── ŞABLON EDITÖRÜ ────────────────────────────────────────────────────────────
-// ─── DERS PROGRAMI EDİTÖRÜ ─────────────────────────────────────────────────────
-function LessonScheduleEditor({ teacher, onClose, showToast }) {
-  // schedule: { [dayIndex]: { [lessonNo]: cls | '' } }
-  const [schedule, setSchedule] = useState(null);
+// ─── PROGRAM EDİTÖRÜ (Ders + Etüt birleşik) ────────────────────────────────────
+// program[dayIndex][slotId] = { type: 'ders'|'etut'|null, cls?, studentId?, studentName?, studentCls?, fixed? }
+function ProgramEditor({ teacher, onClose, showToast, students }) {
+  const [program, setProgram] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // activeCell: { dayIndex, slotId } — hangi hücre seçili
+  const [activeCell, setActiveCell] = useState(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const data = await api(`/api/lesson-schedule?teacherId=${teacher.id}`);
-        // Normalize: tüm gün/ders slotlarını doldur
-        const normalized = {};
-        ALL_DAYS.forEach(day => {
-          const lessonCount = day.index >= 5 ? 8 : 6;
-          normalized[day.index] = {};
-          for (let ln = 1; ln <= lessonCount; ln++) {
-            normalized[day.index][ln] = data[day.index]?.[ln] || '';
-          }
-        });
-        setSchedule(normalized);
+        const data = await api(`/api/program?teacherId=${teacher.id}`);
+        setProgram(data);
       } catch {
-        // Boş şablon oluştur
-        const empty = {};
-        ALL_DAYS.forEach(day => {
-          const lessonCount = day.index >= 5 ? 8 : 6;
-          empty[day.index] = {};
-          for (let ln = 1; ln <= lessonCount; ln++) empty[day.index][ln] = '';
-        });
-        setSchedule(empty);
+        setProgram({});
       } finally {
         setLoading(false);
       }
     })();
   }, [teacher.id]);
 
-  const allClasses = Object.values(STUDENT_GROUPS).flatMap(g => g.classes);
+  function getEntry(dayIndex, slotId) {
+    return program?.[String(dayIndex)]?.[slotId] || null;
+  }
 
-  function setCls(dayIndex, lessonNo, cls) {
-    setSchedule(prev => ({
+  function setEntry(dayIndex, slotId, entry) {
+    setProgram(prev => ({
       ...prev,
-      [dayIndex]: { ...prev[dayIndex], [lessonNo]: cls },
+      [String(dayIndex)]: {
+        ...(prev?.[String(dayIndex)] || {}),
+        [slotId]: entry,
+      },
     }));
+  }
+
+  function clearEntry(dayIndex, slotId) {
+    setProgram(prev => {
+      const day = { ...(prev?.[String(dayIndex)] || {}) };
+      delete day[slotId];
+      return { ...prev, [String(dayIndex)]: day };
+    });
   }
 
   async function handleSave() {
     setSaving(true);
     try {
-      // Boş stringleri null'a çevir
-      const cleaned = {};
-      Object.entries(schedule).forEach(([d, lessons]) => {
-        cleaned[d] = {};
-        Object.entries(lessons).forEach(([ln, cls]) => {
-          if (cls) cleaned[d][ln] = cls;
-        });
-      });
-      await api('/api/lesson-schedule', { method: 'POST', body: JSON.stringify({ teacherId: teacher.id, schedule: cleaned }) });
-      showToast('Ders programı kaydedildi');
+      await api('/api/program', { method: 'POST', body: JSON.stringify({ teacherId: teacher.id, program }) });
+      showToast('Program kaydedildi ve uygulandı');
       onClose();
     } catch (err) {
       showToast(err.message, 'error');
@@ -445,149 +463,154 @@ function LessonScheduleEditor({ teacher, onClose, showToast }) {
     }
   }
 
-  return (
-    <Modal title={`${teacher.name} – Ders Programı`} onClose={onClose} wide>
-      {loading ? (
-        <div className="flex items-center justify-center h-40 text-gray-400">Yükleniyor...</div>
-      ) : (
-        <>
-          <p className="text-xs text-gray-500 mb-4">Her güne ve ders saatine bir sınıf atayın. Boş bırakılan slotlar ders yok sayılır. Bu şablon değiştirilene kadar geçerlidir.</p>
-          <div className="space-y-4">
-            {ALL_DAYS.map(day => {
-              const lessonCount = day.index >= 5 ? 8 : 6;
-              return (
-                <div key={day.index}>
-                  <div className="text-xs font-600 text-gray-500 uppercase tracking-wide mb-2" style={{ fontWeight: 600 }}>{day.label}</div>
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                    {Array.from({ length: lessonCount }, (_, i) => i + 1).map(ln => (
-                      <div key={ln}>
-                        <div className="text-[10px] text-gray-400 mb-1 text-center">{ln}. Ders</div>
-                        <select
-                          value={schedule[day.index]?.[ln] || ''}
-                          onChange={e => setCls(day.index, ln, e.target.value)}
-                          className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300">
-                          <option value="">—</option>
-                          {allClasses.map(cls => (
-                            <option key={cls} value={cls}>{cls.toUpperCase()}</option>
-                          ))}
-                        </select>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex justify-end gap-2 mt-6">
-            <button className="btn-ghost" onClick={onClose}>İptal</button>
-            <button className="btn-primary flex items-center gap-1.5" onClick={handleSave} disabled={saving}>
-              <Save size={14} /> {saving ? 'Kaydediliyor...' : 'Kaydet'}
+  const allClasses = Object.values(STUDENT_GROUPS).flatMap(g => g.classes);
+  const allowedStudents = students
+    ? students.filter(s => !teacher.allowedGroups?.length || teacher.allowedGroups.includes(s.group))
+    : [];
+
+  // Aktif hücre için tip/değer seçici
+  function CellEditor({ dayIndex, slotId }) {
+    const entry = getEntry(dayIndex, slotId);
+    const type = entry?.type || null;
+
+    return (
+      <div className="p-4 border-t border-gray-100 bg-gray-50">
+        <div className="text-xs font-600 text-gray-500 mb-2" style={{ fontWeight: 600 }}>
+          {ALL_DAYS.find(d => d.index === dayIndex)?.label} – {slotsForDay(dayIndex).find(s => s.id === slotId)?.label}
+        </div>
+        {/* Tip seçimi */}
+        <div className="flex gap-2 mb-3">
+          {[{val: null, label: 'Boş'}, {val: 'ders', label: 'Ders'}, {val: 'etut', label: 'Etüt'}].map(opt => (
+            <button key={String(opt.val)} onClick={() => {
+              if (opt.val === null) clearEntry(dayIndex, slotId);
+              else setEntry(dayIndex, slotId, { type: opt.val });
+              if (opt.val === null) setActiveCell(null);
+            }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-600 border transition-all ${type === opt.val ? (opt.val === 'ders' ? 'bg-blue-600 text-white border-blue-600' : opt.val === 'etut' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-gray-200 text-gray-600 border-gray-200') : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+              style={{ fontWeight: 600 }}>
+              {opt.label}
             </button>
+          ))}
+        </div>
+
+        {type === 'ders' && (
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Sınıf</label>
+            <select value={entry?.cls || ''} onChange={e => setEntry(dayIndex, slotId, { type: 'ders', cls: e.target.value })}
+              className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
+              <option value="">Sınıf seçin</option>
+              {allClasses.map(cls => <option key={cls} value={cls}>{cls.toUpperCase()}</option>)}
+            </select>
           </div>
-        </>
-      )}
-    </Modal>
-  );
-}
+        )}
 
-function TemplateEditor({ teacher, onClose, onSave, showToast }) {
-  const [template, setTemplate] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await api(`/api/teachers/template?teacherId=${teacher.id}`);
-        // Convert string keys from JSON to numbers
-        const normalized = {};
-        for (const [k, v] of Object.entries(data.template || {})) {
-          normalized[parseInt(k)] = v;
-        }
-        setTemplate(normalized);
-      } catch {
-        setTemplate({});
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [teacher.id]);
-
-  const toggleSlot = (dayIndex, slotId) => {
-    setTemplate(prev => {
-      const current = prev[dayIndex] || [];
-      const next = current.includes(slotId)
-        ? current.filter(s => s !== slotId)
-        : [...current, slotId];
-      return { ...prev, [dayIndex]: next };
-    });
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await api('/api/teachers/template', { method: 'POST', body: JSON.stringify({ teacherId: teacher.id, template }) });
-      showToast('Şablon kaydedildi ve haftaya uygulandı');
-      onSave();
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
+        {type === 'etut' && (
+          <div className="space-y-2">
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Öğrenci (boş = açık slot)</label>
+              <select value={entry?.studentId || ''} onChange={e => {
+                const s = allowedStudents.find(s => s.id === e.target.value);
+                setEntry(dayIndex, slotId, { type: 'etut', studentId: s?.id || '', studentName: s?.name || '', studentCls: s?.cls || '', fixed: entry?.fixed || false });
+              }}
+                className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
+                <option value="">— Açık slot —</option>
+                {allowedStudents.map(s => <option key={s.id} value={s.id}>{s.name} ({s.cls.toUpperCase()})</option>)}
+              </select>
+            </div>
+            {entry?.studentId && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={!!entry?.fixed} onChange={e => setEntry(dayIndex, slotId, { ...entry, fixed: e.target.checked })}
+                  className="w-4 h-4 rounded accent-indigo-600" />
+                <span className="text-xs text-gray-700">Sabit rezervasyon (her hafta tekrar)</span>
+              </label>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (loading) return (
-    <Modal title={`${teacher.name} – Etüt Saati Şablonu`} onClose={onClose} wide>
+    <Modal title={`${teacher.name} – Program`} onClose={onClose} wide>
       <div className="text-center py-8 text-gray-400">Yükleniyor...</div>
     </Modal>
   );
 
   return (
-    <Modal title={`${teacher.name} – Etüt Saati Şablonu`} onClose={onClose} wide>
-      <p className="text-sm text-gray-500 mb-4">
-        Yeşil kutucuklar <strong>açık</strong> (öğrenci alınabilir), gri kutucuklar <strong>kapalı</strong> saatleri gösterir. Her hafta bu şablon otomatik uygulanır.
-      </p>
-      <div className="overflow-x-auto mb-5">
-        <table className="w-full text-sm">
+    <Modal title={`${teacher.name} – Program`} onClose={onClose} wide>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
           <thead>
             <tr>
-              <th className="text-left py-2 px-2 text-xs text-gray-400 font-600 w-24" style={{ fontWeight: 600 }}>Saat</th>
+              <th className="text-left py-2 px-2 text-xs text-gray-400 font-600 w-20" style={{ fontWeight: 600 }}>Saat</th>
               {ALL_DAYS.map(day => (
-                <th key={day.index} className={`text-center py-2 px-1 text-xs font-600 ${day.weekend ? 'text-indigo-400' : 'text-gray-500'}`} style={{ fontWeight: 600 }}>
+                <th key={day.index} className={`text-center py-2 px-1 text-xs font-600 ${day.weekend ? 'text-indigo-500' : 'text-gray-500'}`} style={{ fontWeight: 600 }}>
                   {day.short}
+                  {day.weekend && <span className="block text-[9px] text-indigo-300">H.sonu</span>}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {WEEKDAY_SLOTS.map((slot, slotIdx) => {
-              const isWeekendSlot = slotIdx < WEEKEND_SLOT_COUNT;
-              return (
-                <tr key={slot.id} className="border-t border-gray-50">
-                  <td className="py-1.5 px-2 text-xs text-gray-500 whitespace-nowrap">{slot.label}</td>
-                  {ALL_DAYS.map(day => {
-                    const validForDay = day.weekend ? isWeekendSlot : true;
-                    if (!validForDay) return <td key={day.index} className="py-1 px-1"><div className="rounded py-2 bg-gray-50 text-center text-gray-200 text-xs">—</div></td>;
-                    const open = (template[day.index] || []).includes(slot.id);
-                    return (
-                      <td key={day.index} className="py-1 px-1">
-                        <button onClick={() => toggleSlot(day.index, slot.id)}
-                          className={`w-full rounded-lg py-2 text-xs font-600 border transition-all ${open ? 'bg-green-50 border-green-300 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-300 hover:border-gray-300'}`}
-                          style={{ fontWeight: 600 }}>
-                          {open ? '✓' : '✕'}
-                        </button>
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
+            {Array.from({ length: Math.max(WEEKDAY_SLOTS.length, WEEKEND_SLOTS.length) }, (_, rowIdx) => (
+              <tr key={rowIdx} className="border-t border-gray-50">
+                <td className="py-1 px-2 text-[10px] text-gray-400 whitespace-nowrap">
+                  {WEEKDAY_SLOTS[rowIdx] && <span className="block">{WEEKDAY_SLOTS[rowIdx].label}</span>}
+                  {WEEKEND_SLOTS[rowIdx] && <span className="block text-indigo-300">{WEEKEND_SLOTS[rowIdx].label}</span>}
+                </td>
+                {ALL_DAYS.map(day => {
+                  const slots = slotsForDay(day.index);
+                  const slot = slots[rowIdx];
+                  if (!slot) return <td key={day.index} className="py-1 px-1"><div className="h-9 rounded bg-gray-50 border border-gray-100 text-center text-gray-200 text-xs flex items-center justify-center">—</div></td>;
+                  const entry = getEntry(day.index, slot.id);
+                  const isActive = activeCell?.dayIndex === day.index && activeCell?.slotId === slot.id;
+                  const type = entry?.type;
+
+                  let cellClass = 'h-9 rounded-lg border text-xs font-500 transition-all cursor-pointer flex items-center justify-center px-1 ';
+                  let cellContent = <span className="text-gray-300">+</span>;
+
+                  if (type === 'ders') {
+                    cellClass += 'bg-blue-50 border-blue-200 text-blue-700';
+                    cellContent = <span className="truncate text-[10px] font-600" style={{ fontWeight: 600 }}>{entry.cls ? entry.cls.toUpperCase() : 'Ders'}</span>;
+                  } else if (type === 'etut') {
+                    if (entry.studentId) {
+                      cellClass += 'bg-emerald-50 border-emerald-200 text-emerald-700';
+                      cellContent = (
+                        <div className="text-center leading-tight">
+                          <div className="text-[9px] truncate font-600" style={{ fontWeight: 600 }}>{entry.studentName}</div>
+                          {entry.fixed && <div className="text-[8px] text-violet-500">Sabit</div>}
+                        </div>
+                      );
+                    } else {
+                      cellClass += 'bg-emerald-50 border-dashed border-emerald-300 text-emerald-400';
+                      cellContent = <span className="text-[10px]">Etüt</span>;
+                    }
+                  } else {
+                    cellClass += 'bg-white border-dashed border-gray-200 hover:border-gray-300';
+                  }
+
+                  if (isActive) cellClass += ' ring-2 ring-indigo-400';
+
+                  return (
+                    <td key={day.index} className="py-0.5 px-0.5">
+                      <button className={`w-full ${cellClass}`}
+                        onClick={() => setActiveCell(isActive ? null : { dayIndex: day.index, slotId: slot.id })}>
+                        {cellContent}
+                      </button>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
-      <div className="flex gap-3">
-        <button className="btn-primary flex-1" onClick={handleSave} disabled={saving}>
-          {saving ? 'Kaydediliyor...' : 'Kaydet ve Uygula'}
+
+      {activeCell && <CellEditor dayIndex={activeCell.dayIndex} slotId={activeCell.slotId} />}
+
+      <div className="flex gap-3 mt-4">
+        <button className="btn-primary flex-1 flex items-center justify-center gap-1.5" onClick={handleSave} disabled={saving}>
+          <Save size={14} /> {saving ? 'Kaydediliyor...' : 'Kaydet ve Uygula'}
         </button>
         <button className="btn-ghost" onClick={onClose}>İptal</button>
       </div>
@@ -1190,7 +1213,6 @@ function StudentPanel({ session, showToast }) {
     return allSlots.filter(s => {
       if (s.booked || s.disabled) return false;
       if (s.allowedGroups?.length > 0 && !s.allowedGroups.includes(session.group)) return false;
-      if (session.group === 'mezun' && s.slotId === MEZUN_FORBIDDEN) return false;
       // Sınıfa göre izin verilen branşlar
       if (!studentAllowedBranches.includes(s.branch)) return false;
       if (myBookings.some(b => b.branch === s.branch)) return false;
@@ -1511,12 +1533,10 @@ function DirectorPanel({ session, showToast }) {
   const [editStudent, setEditStudent] = useState(null);
   const [selectedTeacherForSlots, setSelectedTeacherForSlots] = useState(null);
   const [teacherSlots, setTeacherSlots] = useState(null);
-  const [slotModalTeacher, setSlotModalTeacher] = useState(null);
-  const [templateTeacher, setTemplateTeacher] = useState(null);
+  const [programTeacher, setProgramTeacher] = useState(null);
   const [resetTarget, setResetTarget] = useState(null);
   const [expandedTeacherId, setExpandedTeacherId] = useState(null);
   const [historyTarget, setHistoryTarget] = useState(null); // { type: 'teacher'|'student', id, name }
-  const [lessonScheduleTeacher, setLessonScheduleTeacher] = useState(null);
 
   const loadAll = useCallback(async (wk) => {
     setLoading(true);
@@ -1541,13 +1561,6 @@ function DirectorPanel({ session, showToast }) {
     const data = await api(`/api/slots?teacherId=${teacher.id}&week=${wk || weekKey}`);
     setTeacherSlots(data.grid);
     setSelectedTeacherForSlots(teacher);
-  };
-
-  const openSlotModal = async (teacher) => {
-    const data = await api(`/api/slots?teacherId=${teacher.id}&week=${weekKey}`);
-    setTeacherSlots(data.grid);
-    setSelectedTeacherForSlots(teacher);
-    setSlotModalTeacher(teacher);
   };
 
   const handleWeekChange = async (newWeek) => {
@@ -1648,11 +1661,8 @@ function DirectorPanel({ session, showToast }) {
                           <button className="btn-ghost !px-3 !py-1.5 flex items-center gap-1.5 text-sm text-gray-600" onClick={() => setHistoryTarget({ type: 'teacher', id: t.id, name: t.name })}>
                             <Clock size={13} /> Geçmiş
                           </button>
-                          <button className="btn-ghost !px-3 !py-1.5 flex items-center gap-1.5 text-sm text-indigo-600 hover:bg-indigo-50" onClick={() => setLessonScheduleTeacher(t)}>
-                            <BookText size={13} /> Ders Programı
-                          </button>
-                          <button className="btn-primary !px-3 !py-1.5 flex items-center gap-1.5 text-sm" onClick={() => openSlotModal(t)}>
-                            <LayoutGrid size={13} /> Tablo
+                          <button className="btn-primary !px-3 !py-1.5 flex items-center gap-1.5 text-sm" onClick={() => setProgramTeacher(t)}>
+                            <LayoutGrid size={13} /> Program
                           </button>
                         </div>
                       </div>
@@ -1790,28 +1800,9 @@ function DirectorPanel({ session, showToast }) {
             } catch(err){showToast(err.message,'error');}
           }} />
       )}
-      {slotModalTeacher && teacherSlots && (
-        <Modal title={`${slotModalTeacher.name} – ${slotModalTeacher.branch}`} onClose={() => setSlotModalTeacher(null)} wide>
-          <div className="flex items-center justify-between mb-4">
-            <WeekNav weekKey={weekKey} onPrev={() => handleWeekChange(getAdjacentWeek(weekKey,-1))} onNext={() => handleWeekChange(getAdjacentWeek(weekKey,1))} />
-            <button className="btn-ghost !px-3 !py-2 flex items-center gap-1.5 text-sm text-indigo-500" onClick={() => setTemplateTeacher(slotModalTeacher)}>
-              <Settings size={13} /> Şablon
-            </button>
-          </div>
-          <SlotGrid grid={teacherSlots} teacher={slotModalTeacher} weekKey={weekKey} session={session} students={students} onBook={handleBook} onCancel={handleCancel} />
-        </Modal>
-      )}
-      {templateTeacher && (
-        <TemplateEditor teacher={templateTeacher} showToast={showToast}
-          onClose={() => setTemplateTeacher(null)}
-          onSave={async () => {
-            setTemplateTeacher(null);
-            loadAll(weekKey);
-            if (selectedTeacherForSlots?.id === templateTeacher.id) await loadTeacherSlots(templateTeacher);
-          }} />
-      )}
-      {lessonScheduleTeacher && (
-        <LessonScheduleEditor teacher={lessonScheduleTeacher} showToast={showToast} onClose={() => setLessonScheduleTeacher(null)} />
+      {programTeacher && (
+        <ProgramEditor teacher={programTeacher} students={students} showToast={showToast}
+          onClose={() => { setProgramTeacher(null); loadAll(weekKey); }} />
       )}
       {resetTarget && (
         <ResetPasswordModal target={resetTarget} targetRole={resetTarget.role} onClose={() => setResetTarget(null)} showToast={showToast} />
