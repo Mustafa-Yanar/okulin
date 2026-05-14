@@ -31,8 +31,8 @@ export async function POST(req) {
       if (t && t.username === username) {
         const ok = await bcrypt.compare(password, t.passwordHash);
         if (ok) {
-          const res = NextResponse.json({ role: 'teacher', id: t.id, name: t.name, branch: t.branch });
-          await setSession(res, { role: 'teacher', id: t.id, name: t.name, branch: t.branch });
+          const res = NextResponse.json({ role: 'teacher', id: t.id, name: t.name, branch: t.branch, allowedGroups: t.allowedGroups || [] });
+          await setSession(res, { role: 'teacher', id: t.id, name: t.name, branch: t.branch, allowedGroups: t.allowedGroups || [] });
           return res;
         }
       }
