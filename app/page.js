@@ -1721,42 +1721,45 @@ function HistoryModal({ target, onClose, currentWeekKey, currentEntries }) {
   }, [weeks, currentEntries, currentWeekKey]);
 
   const handlePrint = () => {
-    const w = window.open('', '_blank');
-    w.document.write(`<html><head><title>${target.name} – Etüt Geçmişi</title>
-    <style>
-      * { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
-      body { font-family: Arial, sans-serif; font-size: 13px; color: #111; padding: 24px; }
-      h1 { font-size: 18px; margin-bottom: 4px; }
-      .sub { color: #666; font-size: 12px; margin-bottom: 20px; }
-      .week { margin-bottom: 20px; }
-      .week-title { font-size: 14px; font-weight: bold; border-top: 3px solid #6366f1; border-bottom: 1px solid #c7d2fe; padding: 6px 10px; margin-bottom: 8px; color: #3730a3; }
-      .day-title { font-size: 12px; font-weight: bold; color: #4338ca; margin: 8px 0 4px 8px; }
-      .entry { display: flex; justify-content: space-between; padding: 5px 8px 5px 12px; border-left: 4px solid #6366f1; margin-bottom: 3px; }
-      .entry-left { color: #333; }
-      .entry-right { color: #555; font-size: 11px; }
-    </style></head><body>`);
-    w.document.write(`<h1>${target.name}</h1><div class="sub">Etüt Geçmişi</div>`);
+    const s = {
+      body: 'font-family:Arial,sans-serif;font-size:13px;color:#111;padding:24px;',
+      h1: 'font-size:18px;margin:0 0 4px;',
+      sub: 'color:#666;font-size:12px;margin-bottom:20px;',
+      week: 'margin-bottom:24px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;',
+      weekTitle: 'font-size:13px;font-weight:bold;background-color:#f3f4f6;padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#1f2937;',
+      dayTitle: 'font-size:11px;font-weight:bold;color:#4f46e5;margin:10px 0 4px 4px;',
+      entry: 'display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background-color:#f9fafb;border:1px solid #f3f4f6;border-radius:6px;margin-bottom:4px;',
+      entryLeft: 'font-size:12px;font-weight:600;color:#1f2937;',
+      entryRight: 'font-size:11px;color:#6b7280;',
+    };
+    let html = `<html><head><title>${target.name} – Etüt Geçmişi</title>
+    <style>* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }</style>
+    </head><body style="${s.body}">`;
+    html += `<h1 style="${s.h1}">${target.name}</h1><div style="${s.sub}">Etüt Geçmişi</div>`;
     allWeeks.forEach(week => {
-      w.document.write(`<div class="week"><div class="week-title">${weekLabel(week.weekKey)}</div>`);
+      const badge = week.isCurrent ? ' <span style="font-size:10px;background-color:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:99px;font-weight:normal;margin-left:6px;">Bu Hafta</span>' : '';
+      html += `<div style="${s.week}"><div style="${s.weekTitle}">${weekLabel(week.weekKey)}${badge}</div><div style="padding:8px 10px;">`;
       const byDay = {};
       week.entries.forEach(e => {
         if (!byDay[e.day]) byDay[e.day] = { dayLabel: e.dayLabel, entries: [] };
         byDay[e.day].entries.push(e);
       });
       Object.values(byDay).sort((a,b) => a.entries[0].day - b.entries[0].day).forEach(day => {
-        w.document.write(`<div class="day-title">${day.dayLabel}</div>`);
+        html += `<div style="${s.dayTitle}">${day.dayLabel}</div>`;
         day.entries.sort((a,b) => a.slotId.localeCompare(b.slotId)).forEach(e => {
           const right = target.type === 'teacher'
             ? `${e.studentName} · ${(e.studentCls||'').toUpperCase()}`
             : `${e.teacherName} · ${e.branch}`;
-          w.document.write(`<div class="entry"><div class="entry-left">${e.slotLabel}</div><div class="entry-right">${right}</div></div>`);
+          html += `<div style="${s.entry}"><span style="${s.entryLeft}">${e.slotLabel}</span><span style="${s.entryRight}">${right}</span></div>`;
         });
       });
-      w.document.write(`</div>`);
+      html += `</div></div>`;
     });
-    w.document.write('</body></html>');
+    html += '</body></html>';
+    const w = window.open('', '_blank');
+    w.document.write(html);
     w.document.close();
-    w.print();
+    setTimeout(() => w.print(), 300);
   };
 
   const weekLabel = wk => {
