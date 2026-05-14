@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
-import { slotsForDay, ALL_DAYS } from '@/lib/constants';
+import { slotsForDay, ALL_DAYS, MEZUN_ONLY_LESSON_SLOTS, STUDENT_GROUPS } from '@/lib/constants';
 
 // program:{teacherId}
 // → { [dayIndex]: { [slotId]: { type: 'ders'|'etut'|null, cls?, studentId?, studentName?, studentCls?, fixed? } } }
@@ -31,6 +31,19 @@ export async function POST(req) {
   const { teacherId, program } = await req.json();
   if (!teacherId || !program) {
     return NextResponse.json({ error: 'teacherId ve program gerekli' }, { status: 400 });
+  }
+
+  // Hafta içi w1–w6 slotlarına sadece mezun sınıfı atanabilir
+  const mezunClasses = new Set(STUDENT_GROUPS.mezun?.classes || []);
+  for (const [dayIdx, daySlots] of Object.entries(program)) {
+    if (parseInt(dayIdx) >= 5) continue; // hafta sonu kontrolü yok
+    for (const [slotId, entry] of Object.entries(daySlots || {})) {
+      if (entry?.type === 'ders' && MEZUN_ONLY_LESSON_SLOTS.includes(slotId)) {
+        if (entry.cls && !mezunClasses.has(entry.cls)) {
+          return NextResponse.json({ error: `${slotId} slotu (hafta içi ilk 6) sadece mezun sınıflarına ders eklenebilir` }, { status: 400 });
+        }
+      }
+    }
   }
 
   await redis.set(programKey(teacherId), program);

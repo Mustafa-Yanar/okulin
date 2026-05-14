@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { getWeekKey, getTeacherWeekSlots, slotKey, getAllTeachers } from '@/lib/slots';
-import { ALL_DAYS, slotsForDay } from '@/lib/constants';
+import { ALL_DAYS, slotsForDay, MEZUN_FORBIDDEN_ETUT_SLOT } from '@/lib/constants';
 
 // GET /api/slots?week=2024-W20&teacherId=xxx
 export async function GET(req) {
@@ -91,6 +91,11 @@ export async function POST(req) {
   const allowedGroups = teacher.allowedGroups || [];
   if (allowedGroups.length > 0 && !allowedGroups.includes(targetStudent.group)) {
     return NextResponse.json({ error: 'Bu öğrenci bu öğretmenin etütlerine kayıt olamaz' }, { status: 400 });
+  }
+
+  // Mezun öğrenciler hafta içi 16:30–17:05 etüdüne kayıt olamaz
+  if (targetStudent.group === 'mezun' && slotId === MEZUN_FORBIDDEN_ETUT_SLOT && day < 5) {
+    return NextResponse.json({ error: 'Mezun öğrenciler hafta içi 16:30–17:05 saatindeki etüde kayıt olamaz' }, { status: 400 });
   }
 
   // Tüm öğretmenlerin bu haftaki slotlarını çek (çakışma kontrolleri için)

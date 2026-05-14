@@ -56,6 +56,8 @@ function slotsForDay(dayIndex) {
   return dayIndex >= 5 ? WEEKEND_SLOTS : WEEKDAY_SLOTS;
 }
 const GROUPS = { ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
+const MEZUN_ONLY_LESSON_SLOTS = ['w1','w2','w3','w4','w5','w6'];
+const MEZUN_FORBIDDEN_ETUT_SLOT = 'w9';
 const STUDENT_GROUPS = {
   ortaokul: { label: 'Ortaokul', classes: ['701','702','801','802'] },
   lise: { label: 'Lise', classes: ['101','102','201','202','301','302','303','304','305','306','401','402','403','404','405','406','407','408','409','410'] },
@@ -509,10 +511,16 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
         {type === 'ders' && (
           <div className="mb-3">
             <label className="block text-xs text-gray-500 mb-1">Sınıf</label>
+            {dayIndex < 5 && MEZUN_ONLY_LESSON_SLOTS.includes(slotId) && (
+              <p className="text-[10px] text-amber-600 mb-1">Bu saat sadece mezun sınıflarına açıktır.</p>
+            )}
             <select value={cls} onChange={e => { setCls(e.target.value); setClsError(false); }}
               className={`w-full text-xs border rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300 ${clsError ? 'border-red-400' : 'border-gray-200'}`}>
               <option value="">Sınıf seçin</option>
-              {allClasses.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+              {(dayIndex < 5 && MEZUN_ONLY_LESSON_SLOTS.includes(slotId)
+                ? (STUDENT_GROUPS.mezun?.classes || [])
+                : allClasses
+              ).map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
             </select>
             {clsError && <p className="text-xs text-red-500 mt-1">Sınıf seçilmeden ders eklenemez.</p>}
           </div>
