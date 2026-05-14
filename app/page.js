@@ -414,6 +414,7 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
   const [saving, setSaving] = useState(false);
   // activeCell: { dayIndex, slotId } — hangi hücre seçili
   const [activeCell, setActiveCell] = useState(null);
+  const activeCellOriginal = React.useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -482,13 +483,11 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
         </div>
         {/* Tip seçimi */}
         <div className="flex gap-2 mb-3">
-          {[{val: null, label: 'Boş'}, {val: 'ders', label: 'Ders'}, {val: 'etut', label: 'Etüt'}].map(opt => (
+          {[{val: 'ders', label: 'Ders'}, {val: 'etut', label: 'Etüt'}].map(opt => (
             <button key={String(opt.val)} onClick={() => {
-              if (opt.val === null) clearEntry(dayIndex, slotId);
-              else setEntry(dayIndex, slotId, { type: opt.val });
-              if (opt.val === null) setActiveCell(null);
+              setEntry(dayIndex, slotId, { type: opt.val });
             }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-600 border transition-all ${type === opt.val ? (opt.val === 'ders' ? 'bg-blue-600 text-white border-blue-600' : opt.val === 'etut' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-gray-200 text-gray-600 border-gray-200') : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-600 border transition-all ${type === opt.val ? (opt.val === 'ders' ? 'bg-blue-600 text-white border-blue-600' : 'bg-emerald-600 text-white border-emerald-600') : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
               style={{ fontWeight: 600 }}>
               {opt.label}
             </button>
@@ -618,7 +617,24 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
                   return (
                     <td key={day.index} className="py-0.5 px-0.5">
                       <button className={`w-full ${cellClass}`}
-                        onClick={() => setActiveCell(isActive ? null : { dayIndex: day.index, slotId: slot.id })}>
+                        onClick={() => {
+                          if (isActive) {
+                            // Tekrar tıklayınca değişiklikleri geri al
+                            const orig = activeCellOriginal.current;
+                            if (orig !== undefined) {
+                              if (orig === null) {
+                                clearEntry(day.index, slot.id);
+                              } else {
+                                setEntry(day.index, slot.id, orig);
+                              }
+                            }
+                            activeCellOriginal.current = null;
+                            setActiveCell(null);
+                          } else {
+                            activeCellOriginal.current = getEntry(day.index, slot.id);
+                            setActiveCell({ dayIndex: day.index, slotId: slot.id });
+                          }
+                        }}>
                         {cellContent}
                       </button>
                     </td>
