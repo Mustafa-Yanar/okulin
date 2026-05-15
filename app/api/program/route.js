@@ -107,6 +107,18 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Geçmiş hafta düzenlenemez. Sadece mevcut hafta ve sonraki 2 hafta düzenlenebilir.' }, { status: 400 });
   }
 
+  // İzin günü kontrolü
+  const teacherForOff = await redis.get(`teacher:${teacherId}`);
+  const offDays = new Set(teacherForOff?.offDays || []);
+  for (const [dayIdx, daySlots] of Object.entries(program)) {
+    if (!offDays.has(parseInt(dayIdx))) continue;
+    for (const [, entry] of Object.entries(daySlots || {})) {
+      if (entry) {
+        return NextResponse.json({ error: 'Bu gün öğretmenin izin günü olarak işaretli, ders/etüt eklenemez.' }, { status: 400 });
+      }
+    }
+  }
+
   // Hafta içi w1–w6 ders slotlarına sadece mezun sınıfı atanabilir
   const mezunClasses = new Set(STUDENT_GROUPS.mezun?.classes || []);
   for (const [dayIdx, daySlots] of Object.entries(program)) {

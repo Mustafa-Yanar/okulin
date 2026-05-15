@@ -488,6 +488,8 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeCell, setActiveCell] = useState(null);
+  const [offDays, setOffDays] = useState(teacher.offDays || []);
+  const [togglingDay, setTogglingDay] = useState(null);
   // O an düzenlenmekte olan program'da "değişen" entry'leri takip et:
   // sadece bu değişiklikler POST'a gönderilir
   const [dirty, setDirty] = useState({}); // { `${dayIdx}:${slotId}`: entry | null }
@@ -552,6 +554,47 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
       showToast(err.message, 'error');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function toggleOffDay(dayIndex) {
+    const isCurrentlyOff = offDays.includes(dayIndex);
+    const willBeOff = !isCurrentlyOff;
+    // Eğer izin yapacaksa ve o gün dolu ise uyar
+    if (willBeOff) {
+      const dayProg = program?.[String(dayIndex)] || {};
+      const hasEntries = Object.values(dayProg).some(e => e && e.type);
+      if (hasEntries) {
+        if (!confirm('Bu güne tanımlı ders/etüt var. İzin günü yapılırsa hepsi silinecek. Devam etmek istiyor musunuz?')) return;
+      }
+    }
+    setTogglingDay(dayIndex);
+    try {
+      const res = await api('/api/teachers', {
+        method: 'PUT',
+        body: JSON.stringify({ action: 'toggle_off_day', id: teacher.id, dayIndex, off: willBeOff }),
+      });
+      setOffDays(res.offDays || []);
+      // Şablondan silindiyse görüntüyü tazele
+      if (willBeOff) {
+        setProgram(prev => {
+          const next = { ...(prev || {}) };
+          delete next[String(dayIndex)];
+          return next;
+        });
+        // dirty üzerinden o güne ait değişiklikleri temizle
+        setDirty(prev => {
+          const next = { ...prev };
+          for (const k of Object.keys(next)) {
+            if (k.startsWith(`${dayIndex}:`)) delete next[k];
+          }
+          return next;
+        });
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setTogglingDay(null);
     }
   }
 
@@ -729,32 +772,57 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
     </div>
   );
 
-  if (loading) return (
-    <Modal title={`${teacher.name} – Program`} onClose={onClose} wide>
-      {weekNav}
-      <div className="text-center py-8 text-gray-400">Yükleniyor...</div>
-    </Modal>
-  );
+  // İzin günlerini tablo'dan gizle
+  const offSet = new Set(offDays);
+  const visibleDays = ALL_DAYS.filter(d => !offSet.has(d.index));
 
   // Her günün dolu/boş durumu — dolu sütunlar daha geniş
   const dayHasContent = {};
-  for (const day of ALL_DAYS) {
+  for (const day of visibleDays) {
     const dayProg = program?.[String(day.index)] || {};
     dayHasContent[day.index] = Object.values(dayProg).some(e => e && e.type);
   }
   // Genişlik dağıtımı: dolu sütunlar 3 birim, boş sütunlar 1 birim
-  const totalUnits = ALL_DAYS.reduce((sum, d) => sum + (dayHasContent[d.index] ? 3 : 1), 0);
+  const totalUnits = visibleDays.reduce((sum, d) => sum + (dayHasContent[d.index] ? 3 : 1), 0) || 1;
   const dayWidth = (dayIdx) => `${((dayHasContent[dayIdx] ? 3 : 1) / totalUnits) * 100}%`;
+
+  const offDayBar = (
+    <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
+      <span className="text-[10px] text-gray-400 mr-1">İzin günleri:</span>
+      {ALL_DAYS.map(day => {
+        const isOff = offSet.has(day.index);
+        const busy = togglingDay === day.index;
+        return (
+          <button key={day.index}
+            onClick={() => !busy && toggleOffDay(day.index)}
+            disabled={busy}
+            className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${isOff ? 'bg-rose-100 border-rose-200 text-rose-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'} ${busy ? 'opacity-50' : ''}`}
+            title={isOff ? 'İzin günü — tıklayarak aç' : 'Tıklayarak izin günü yap'}>
+            {day.short} {isOff && '×'}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  if (loading) return (
+    <Modal title={`${teacher.name} – Program`} onClose={onClose} wide>
+      {weekNav}
+      {offDayBar}
+      <div className="text-center py-8 text-gray-400">Yükleniyor...</div>
+    </Modal>
+  );
 
   return (
     <Modal title={`${teacher.name} – Program`} onClose={onClose} wide>
       {weekNav}
+      {offDayBar}
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse table-fixed">
           <thead>
             <tr>
               <th className="text-left py-2 px-2 text-xs text-gray-400 font-600" style={{ fontWeight: 600, width: '80px' }}>Saat</th>
-              {ALL_DAYS.map(day => (
+              {visibleDays.map(day => (
                 <th key={day.index}
                   className={`text-center py-2 px-1 text-xs font-600 ${day.weekend ? 'text-indigo-500' : 'text-gray-500'}`}
                   style={{ fontWeight: 600, width: dayWidth(day.index) }}>
@@ -765,13 +833,17 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
             </tr>
           </thead>
           <tbody>
-            {Array.from({ length: Math.max(WEEKDAY_SLOTS.length, WEEKEND_SLOTS.length) }, (_, rowIdx) => (
+            {(() => {
+              const hasWeekday = visibleDays.some(d => !d.weekend);
+              const hasWeekend = visibleDays.some(d => d.weekend);
+              const maxRows = Math.max(hasWeekday ? WEEKDAY_SLOTS.length : 0, hasWeekend ? WEEKEND_SLOTS.length : 0);
+              return Array.from({ length: maxRows }, (_, rowIdx) => (
               <tr key={rowIdx} className="border-t border-gray-50">
                 <td className="py-1 px-2 text-[10px] text-gray-400 whitespace-nowrap">
-                  {WEEKDAY_SLOTS[rowIdx] && <span className="block">{WEEKDAY_SLOTS[rowIdx].label}</span>}
-                  {WEEKEND_SLOTS[rowIdx] && <span className="block text-indigo-300">{WEEKEND_SLOTS[rowIdx].label}</span>}
+                  {hasWeekday && WEEKDAY_SLOTS[rowIdx] && <span className="block">{WEEKDAY_SLOTS[rowIdx].label}</span>}
+                  {hasWeekend && WEEKEND_SLOTS[rowIdx] && <span className="block text-indigo-300">{WEEKEND_SLOTS[rowIdx].label}</span>}
                 </td>
-                {ALL_DAYS.map(day => {
+                {visibleDays.map(day => {
                   const slots = slotsForDay(day.index);
                   const slot = slots[rowIdx];
                   if (!slot) return <td key={day.index} className="py-1 px-1"><div className="h-9 rounded bg-gray-50 border border-gray-100 text-center text-gray-200 text-xs flex items-center justify-center">—</div></td>;
@@ -845,7 +917,8 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
                   );
                 })}
               </tr>
-            ))}
+            ));
+            })()}
           </tbody>
         </table>
       </div>

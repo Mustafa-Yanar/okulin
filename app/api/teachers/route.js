@@ -22,6 +22,7 @@ export async function GET() {
   const teachers = results.filter(Boolean).map(t => ({
     id: t.id, name: t.name, branch: t.branch, username: t.username,
     allowedGroups: t.allowedGroups || [], photoUrl: t.photoUrl || '',
+    offDays: t.offDays || [],
   }));
   return NextResponse.json(teachers);
 }
@@ -68,7 +69,38 @@ export async function PUT(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { id, name, password, branch, allowedGroups, photoUrl } = await req.json();
+  const body = await req.json();
+
+  // Özel aksiyon: bir günü izin/aktif yap. Şablonda o güne ait tüm entry'leri siler.
+  if (body.action === 'toggle_off_day') {
+    const { id, dayIndex, off } = body;
+    const teacher = await redis.get(`teacher:${id}`);
+    if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
+
+    const offDays = new Set(teacher.offDays || []);
+    if (off) offDays.add(dayIndex);
+    else offDays.delete(dayIndex);
+
+    const updated = { ...teacher, offDays: Array.from(offDays).sort() };
+
+    // İzin günü olduysa: o günün şablon entry'lerini sil
+    if (off) {
+      const program = await redis.get(`program:${id}`);
+      if (program && program[String(dayIndex)]) {
+        delete program[String(dayIndex)];
+        await redis.set(`program:${id}`, program);
+      }
+    }
+
+    await redis.set(`teacher:${id}`, updated);
+
+    // Bu haftayı ve sonraki 2 haftayı yeniden init et
+    const cw = getWeekKey();
+    await initWeekForTeacher(id, cw);
+    return NextResponse.json({ ok: true, offDays: updated.offDays });
+  }
+
+  const { id, name, password, branch, allowedGroups, photoUrl } = body;
   const teacher = await redis.get(`teacher:${id}`);
   if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
 
