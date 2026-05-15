@@ -659,10 +659,25 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
 
                   return (
                     <td key={day.index} className="py-0.5 px-0.5">
-                      <button className={`w-full ${cellClass}`}
-                        onClick={() => setActiveCell(isActive ? null : { dayIndex: day.index, slotId: slot.id })}>
-                        {cellContent}
-                      </button>
+                      <div className="relative">
+                        <button className={`w-full ${cellClass}`}
+                          onClick={() => setActiveCell(isActive ? null : { dayIndex: day.index, slotId: slot.id })}>
+                          {cellContent}
+                        </button>
+                        {type && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              clearEntry(day.index, slot.id);
+                              if (isActive) setActiveCell(null);
+                            }}
+                            className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-sm transition-colors z-10"
+                            title="Slotu temizle"
+                          >
+                            <X size={9} strokeWidth={3} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   );
                 })}
