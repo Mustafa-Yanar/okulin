@@ -46,6 +46,34 @@ export async function POST(req) {
     }
   }
 
+  // Sınıf çakışma kontrolü: bu öğretmen dışındaki öğretmenlerin program'larında
+  // aynı gün + aynı slot + aynı sınıf için ders varsa engelle.
+  const otherTeacherIds = (await redis.smembers('teachers')).filter(id => id !== teacherId);
+  if (otherTeacherIds.length > 0) {
+    const pipeline = redis.pipeline();
+    otherTeacherIds.forEach(id => pipeline.get(programKey(id)));
+    const otherPrograms = await pipeline.exec();
+    const teacherNamePipeline = redis.pipeline();
+    otherTeacherIds.forEach(id => teacherNamePipeline.get(`teacher:${id}`));
+    const otherTeachers = await teacherNamePipeline.exec();
+
+    for (const [dayIdx, daySlots] of Object.entries(program)) {
+      for (const [slotId, entry] of Object.entries(daySlots || {})) {
+        if (entry?.type !== 'ders' || !entry.cls) continue;
+        for (let i = 0; i < otherTeacherIds.length; i++) {
+          const otherProg = otherPrograms[i];
+          const otherEntry = otherProg?.[String(dayIdx)]?.[slotId];
+          if (otherEntry?.type === 'ders' && otherEntry.cls === entry.cls) {
+            const otherTeacher = otherTeachers[i];
+            return NextResponse.json({
+              error: `Çakışma: ${entry.cls.toUpperCase()} sınıfı bu gün ve saatte ${otherTeacher?.name || 'başka bir öğretmen'} ile ders olarak işaretli.`,
+            }, { status: 400 });
+          }
+        }
+      }
+    }
+  }
+
   await redis.set(programKey(teacherId), program);
 
   // Etüt slotlarını bu haftanın grid'ine uygula
