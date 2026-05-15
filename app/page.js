@@ -3011,15 +3011,15 @@ function HistoryModal({ target, onClose, currentWeekKey, currentEntries }) {
                         : 'bg-amber-50 border-amber-100 text-amber-700';
                       return (
                         <div key={i} className={`flex items-center justify-between px-3 py-2 rounded-lg border text-sm ${statusClass}`}>
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-700 ${e.status === 'yok' ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`} style={{ fontWeight: 700 }}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-700 shrink-0 ${e.status === 'yok' ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`} style={{ fontWeight: 700 }}>
                               {e.status === 'yok' ? 'YOK' : 'GEÇ'}
                             </span>
-                            <span className="text-xs font-600" style={{ fontWeight: 600 }}>{e.lessonNo}. Ders</span>
-                            <span className="text-xs opacity-70">· {e.cls.toUpperCase()}</span>
+                            <span className="text-xs font-600 shrink-0" style={{ fontWeight: 600 }}>{e.lessonNo}. Ders</span>
+                            {e.slotLabel && <span className="text-xs opacity-70 shrink-0">({e.slotLabel})</span>}
                           </div>
-                          <span className="text-xs opacity-70">
-                            {e.teacherName}{e.branch ? ` · ${e.branch}` : ''}
+                          <span className="text-xs opacity-70 text-right truncate ml-2">
+                            {e.teacherName}{(e.subBranch || e.branch) ? ` · ${e.subBranch || e.branch}` : ''}
                           </span>
                         </div>
                       );
