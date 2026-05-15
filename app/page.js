@@ -145,10 +145,10 @@ function Toast({ toast }) {
   );
 }
 
-function Modal({ title, onClose, children, wide }) {
+function Modal({ title, onClose, children, wide, xwide }) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className={`card-elevated w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} animate-slide-in max-h-[90vh] overflow-y-auto`}>
+      <div className={`card-elevated w-full ${xwide ? 'max-w-5xl' : wide ? 'max-w-3xl' : 'max-w-lg'} animate-slide-in max-h-[90vh] overflow-y-auto`}>
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>{title}</h3>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors"><X size={16} /></button>
@@ -841,123 +841,148 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
   );
 
   if (loading) return (
-    <Modal title={`${teacher.name} – Program`} onClose={onClose} wide>
+    <Modal title={`${teacher.name} – Program`} onClose={onClose} xwide>
       {weekNav}
       {offDayBar}
       <div className="text-center py-8 text-gray-400">Yükleniyor...</div>
     </Modal>
   );
 
+  // Hafta içi / hafta sonu günleri ayrı listele
+  const weekdayDays = visibleDays.filter(d => !d.weekend);
+  const weekendDays = visibleDays.filter(d => d.weekend);
+  const hasWeekday = weekdayDays.length > 0;
+  const hasWeekend = weekendDays.length > 0;
+
   return (
-    <Modal title={`${teacher.name} – Program`} onClose={onClose} wide>
+    <Modal title={`${teacher.name} – Program`} onClose={onClose} xwide>
       {weekNav}
       {offDayBar}
       <div className="overflow-x-auto">
         <table className="w-full text-sm border-collapse table-fixed">
           <thead>
             <tr>
-              <th className="text-left py-2 px-2 text-xs text-gray-400 font-600" style={{ fontWeight: 600, width: '80px' }}>Saat</th>
-              {visibleDays.map(day => (
+              {hasWeekday && (
+                <th className="text-left py-2 px-2 text-xs text-gray-400 font-600" style={{ fontWeight: 600, width: '72px' }}>Saat</th>
+              )}
+              {weekdayDays.map(day => (
                 <th key={day.index}
-                  className={`text-center py-2 px-1 text-xs font-600 ${day.weekend ? 'text-indigo-500' : 'text-gray-500'}`}
+                  className="text-center py-2 px-1 text-xs font-600 text-gray-500"
                   style={{ fontWeight: 600, width: dayWidth(day.index) }}>
                   {day.short}
-                  {day.weekend && <span className="block text-[9px] text-indigo-300">H.sonu</span>}
                 </th>
               ))}
+              {hasWeekday && hasWeekend && (
+                <th className="px-0" style={{ width: '12px' }}><div className="w-px h-6 bg-gray-200 mx-auto" /></th>
+              )}
+              {weekendDays.map(day => (
+                <th key={day.index}
+                  className="text-center py-2 px-1 text-xs font-600 text-indigo-500"
+                  style={{ fontWeight: 600, width: dayWidth(day.index) }}>
+                  {day.short}
+                  <span className="block text-[9px] text-indigo-300">H.sonu</span>
+                </th>
+              ))}
+              {hasWeekend && (
+                <th className="text-right py-2 px-2 text-xs text-indigo-400 font-600" style={{ fontWeight: 600, width: '72px' }}>Saat</th>
+              )}
             </tr>
           </thead>
           <tbody>
             {(() => {
-              const hasWeekday = visibleDays.some(d => !d.weekend);
-              const hasWeekend = visibleDays.some(d => d.weekend);
               const maxRows = Math.max(hasWeekday ? WEEKDAY_SLOTS.length : 0, hasWeekend ? WEEKEND_SLOTS.length : 0);
-              return Array.from({ length: maxRows }, (_, rowIdx) => (
-              <tr key={rowIdx} className="border-t border-gray-50">
-                <td className="py-1 px-2 text-[10px] text-gray-400 whitespace-nowrap">
-                  {hasWeekday && WEEKDAY_SLOTS[rowIdx] && <span className="block">{WEEKDAY_SLOTS[rowIdx].label}</span>}
-                  {hasWeekend && WEEKEND_SLOTS[rowIdx] && <span className="block text-indigo-300">{WEEKEND_SLOTS[rowIdx].label}</span>}
-                </td>
-                {visibleDays.map(day => {
-                  const slots = slotsForDay(day.index);
-                  const slot = slots[rowIdx];
-                  if (!slot) return <td key={day.index} className="py-1 px-1"><div className="h-9 rounded bg-gray-50 border border-gray-100 text-center text-gray-200 text-xs flex items-center justify-center">—</div></td>;
-                  const entry = getEntry(day.index, slot.id);
-                  const isActive = activeCell?.dayIndex === day.index && activeCell?.slotId === slot.id;
-                  const type = entry?.type;
-
-                  let cellClass = 'h-9 rounded-lg border text-xs font-500 transition-all cursor-pointer flex items-center justify-center px-1 ';
-                  let cellContent = <span className="text-gray-300">+</span>;
-
-                  const isTemp = entry?.fixed === false;
-                  const subAbbrev = (sb) => {
-                    if (!sb) return '';
-                    if (sb === 'TYT Matematik') return 'TYT';
-                    if (sb === 'AYT Matematik') return 'AYT';
-                    if (sb === 'Geometri') return 'Geo';
-                    return sb;
-                  };
-                  if (type === 'ders') {
-                    cellClass += isTemp
-                      ? 'bg-blue-50 border-dashed border-blue-300 text-blue-700'
-                      : 'bg-blue-50 border-blue-200 text-blue-700';
+              const subAbbrev = (sb) => {
+                if (!sb) return '';
+                if (sb === 'TYT Matematik') return 'TYT';
+                if (sb === 'AYT Matematik') return 'AYT';
+                if (sb === 'Geometri') return 'Geo';
+                return sb;
+              };
+              const renderDayCell = (day, rowIdx) => {
+                const slots = slotsForDay(day.index);
+                const slot = slots[rowIdx];
+                if (!slot) return <td key={day.index} className="py-1 px-1"><div className="h-9 rounded bg-gray-50 border border-gray-100 text-center text-gray-200 text-xs flex items-center justify-center">—</div></td>;
+                const entry = getEntry(day.index, slot.id);
+                const isActive = activeCell?.dayIndex === day.index && activeCell?.slotId === slot.id;
+                const type = entry?.type;
+                let cellClass = 'h-9 rounded-lg border text-xs font-500 transition-all cursor-pointer flex items-center justify-center px-1 ';
+                let cellContent = <span className="text-gray-300">+</span>;
+                const isTemp = entry?.fixed === false;
+                if (type === 'ders') {
+                  cellClass += isTemp
+                    ? 'bg-blue-50 border-dashed border-blue-300 text-blue-700'
+                    : 'bg-blue-50 border-blue-200 text-blue-700';
+                  cellContent = (
+                    <div className="text-center leading-tight">
+                      <div className="truncate text-[10px] font-600" style={{ fontWeight: 600 }}>{entry.cls ? entry.cls.toUpperCase() : 'Ders'}</div>
+                      {entry.subBranch && <div className="text-[8px] text-blue-500">{subAbbrev(entry.subBranch)}</div>}
+                      {isTemp && <div className="text-[8px] text-amber-600">Geçici</div>}
+                    </div>
+                  );
+                } else if (type === 'etut') {
+                  if (entry.studentId) {
+                    cellClass += 'bg-emerald-50 border-emerald-200 text-emerald-700';
                     cellContent = (
                       <div className="text-center leading-tight">
-                        <div className="truncate text-[10px] font-600" style={{ fontWeight: 600 }}>{entry.cls ? entry.cls.toUpperCase() : 'Ders'}</div>
-                        {entry.subBranch && <div className="text-[8px] text-blue-500">{subAbbrev(entry.subBranch)}</div>}
-                        {isTemp && <div className="text-[8px] text-amber-600">Geçici</div>}
+                        <div className="text-[9px] truncate font-600" style={{ fontWeight: 600 }}>{entry.studentName}</div>
+                        {!isTemp && <div className="text-[8px] text-violet-500">Sabit</div>}
                       </div>
                     );
-                  } else if (type === 'etut') {
-                    if (entry.studentId) {
-                      cellClass += 'bg-emerald-50 border-emerald-200 text-emerald-700';
-                      cellContent = (
-                        <div className="text-center leading-tight">
-                          <div className="text-[9px] truncate font-600" style={{ fontWeight: 600 }}>{entry.studentName}</div>
-                          {!isTemp && <div className="text-[8px] text-violet-500">Sabit</div>}
-                        </div>
-                      );
-                    } else {
-                      cellClass += 'bg-emerald-50 border-dashed border-emerald-300 text-emerald-400';
-                      cellContent = <span className="text-[10px]">Etüt</span>;
-                    }
                   } else {
-                    cellClass += 'bg-white border-dashed border-gray-200 hover:border-gray-300';
+                    cellClass += 'bg-emerald-50 border-dashed border-emerald-300 text-emerald-400';
+                    cellContent = <span className="text-[10px]">Etüt</span>;
                   }
-
-                  const slotIsPast = isSlotPast(weekKey, day.index, slot.label);
-
-                  if (isActive) cellClass += ' ring-2 ring-indigo-400';
-                  if (slotIsPast) cellClass += ' opacity-70 !cursor-not-allowed';
-
-                  return (
-                    <td key={day.index} className="py-0.5 px-0.5">
-                      <div className="relative">
-                        <button className={`w-full ${cellClass}`}
-                          disabled={slotIsPast}
-                          title={slotIsPast ? 'Bu saat dilimi geçmiş — düzenlenemez' : ''}
-                          onClick={() => !slotIsPast && setActiveCell(isActive ? null : { dayIndex: day.index, slotId: slot.id })}>
-                          {cellContent}
+                } else {
+                  cellClass += 'bg-white border-dashed border-gray-200 hover:border-gray-300';
+                }
+                const slotIsPast = isSlotPast(weekKey, day.index, slot.label);
+                if (isActive) cellClass += ' ring-2 ring-indigo-400';
+                if (slotIsPast) cellClass += ' opacity-70 !cursor-not-allowed';
+                return (
+                  <td key={day.index} className="py-0.5 px-0.5">
+                    <div className="relative">
+                      <button className={`w-full ${cellClass}`}
+                        disabled={slotIsPast}
+                        title={slotIsPast ? 'Bu saat dilimi geçmiş — düzenlenemez' : ''}
+                        onClick={() => !slotIsPast && setActiveCell(isActive ? null : { dayIndex: day.index, slotId: slot.id })}>
+                        {cellContent}
+                      </button>
+                      {type && !slotIsPast && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            clearEntry(day.index, slot.id);
+                            if (isActive) setActiveCell(null);
+                          }}
+                          className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-sm transition-colors z-10"
+                          title="Slotu temizle"
+                        >
+                          <X size={9} strokeWidth={3} />
                         </button>
-                        {type && !slotIsPast && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              clearEntry(day.index, slot.id);
-                              if (isActive) setActiveCell(null);
-                            }}
-                            className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-sm transition-colors z-10"
-                            title="Slotu temizle"
-                          >
-                            <X size={9} strokeWidth={3} />
-                          </button>
-                        )}
-                      </div>
+                      )}
+                    </div>
+                  </td>
+                );
+              };
+              return Array.from({ length: maxRows }, (_, rowIdx) => (
+                <tr key={rowIdx} className="border-t border-gray-50">
+                  {hasWeekday && (
+                    <td className="py-1 px-2 text-[10px] text-gray-400 whitespace-nowrap text-left">
+                      {WEEKDAY_SLOTS[rowIdx]?.label || ''}
                     </td>
-                  );
-                })}
-              </tr>
-            ));
+                  )}
+                  {weekdayDays.map(day => renderDayCell(day, rowIdx))}
+                  {hasWeekday && hasWeekend && (
+                    <td className="px-0"><div className="w-px h-9 bg-gray-200 mx-auto" /></td>
+                  )}
+                  {weekendDays.map(day => renderDayCell(day, rowIdx))}
+                  {hasWeekend && (
+                    <td className="py-1 px-2 text-[10px] text-indigo-400 whitespace-nowrap text-right">
+                      {WEEKEND_SLOTS[rowIdx]?.label || ''}
+                    </td>
+                  )}
+                </tr>
+              ));
             })()}
           </tbody>
         </table>
