@@ -145,15 +145,21 @@ function weekRangeLabel(weekKey) {
   return { startStr, endStr, yearStr };
 }
 
-function WeekNav({ weekKey, onPrev, onNext }) {
+function WeekNav({ weekKey, onPrev, onNext, canPrev = true, canNext = true }) {
   const { startStr, endStr, yearStr } = weekRangeLabel(weekKey);
   return (
     <div className="flex items-center gap-1">
-      <button onClick={onPrev} className="btn-ghost !p-2"><ChevronLeft size={16} /></button>
+      <button onClick={onPrev} disabled={!canPrev}
+        className={`btn-ghost !p-2 ${!canPrev ? 'opacity-30 cursor-not-allowed' : ''}`}>
+        <ChevronLeft size={16} />
+      </button>
       <span className="text-xs text-gray-700 text-center whitespace-nowrap">
         {startStr} – {endStr} <strong style={{ fontWeight:700 }}>{yearStr}</strong>
       </span>
-      <button onClick={onNext} className="btn-ghost !p-2"><ChevronRight size={16} /></button>
+      <button onClick={onNext} disabled={!canNext}
+        className={`btn-ghost !p-2 ${!canNext ? 'opacity-30 cursor-not-allowed' : ''}`}>
+        <ChevronRight size={16} />
+      </button>
     </div>
   );
 }
@@ -1192,7 +1198,17 @@ function TeacherPanel({ session, showToast }) {
                 <List size={13} /> Liste
               </button>
             </div>
-            <WeekNav weekKey={weekKey} onPrev={() => handleWeekChange(getAdjacentWeek(weekKey,-1))} onNext={() => handleWeekChange(getAdjacentWeek(weekKey,1))} />
+            {(() => {
+              const cw = getWeekKey();
+              const maxW = getAdjacentWeek(getAdjacentWeek(cw, 1), 1);
+              return (
+                <WeekNav weekKey={weekKey}
+                  canPrev={weekKey !== cw}
+                  canNext={weekKey !== maxW}
+                  onPrev={() => handleWeekChange(getAdjacentWeek(weekKey,-1))}
+                  onNext={() => handleWeekChange(getAdjacentWeek(weekKey,1))} />
+              );
+            })()}
           </div>
           {viewMode === 'table' ? (
             <>
