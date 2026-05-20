@@ -36,7 +36,7 @@ export default function NetChart({ data, series }) {
           {series.map((s, i) => (
             <Line
               key={s}
-              type="monotone"
+              type="linear"
               dataKey={s}
               stroke={COLORS[i % COLORS.length]}
               strokeWidth={2}
