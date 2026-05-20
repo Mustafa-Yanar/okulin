@@ -1,22 +1,23 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Upload, Trash2 } from 'lucide-react';
+import { Upload, Trash2, ChevronDown } from 'lucide-react';
 
-export default function DirectorDeneme() {
-  const [tab, setTab] = useState('upload'); // 'upload' | 'exams'
+// Müdür: Excel yükle + isim eşleştir + deneme listesi/sil.
+export default function DirectorDenemeYonetimi({ showToast }) {
+  const [view, setView] = useState('upload'); // 'upload' | 'list'
   return (
-    <div className="space-y-6">
-      <div className="inline-flex rounded-lg bg-white border border-gray-200 p-1">
+    <div className="space-y-4">
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
         {[
           ['upload', 'Deneme Yükle'],
-          ['exams', 'Denemeler'],
-        ].map(([t, label]) => (
+          ['list', 'Yüklenen Denemeler'],
+        ].map(([k, label]) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-md text-sm font-600 transition-colors ${
-              tab === t ? 'bg-indigo-600 text-white' : 'text-gray-500'
+            key={k}
+            onClick={() => setView(k)}
+            className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${
+              view === k ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
             }`}
             style={{ fontWeight: 600 }}
           >
@@ -24,26 +25,23 @@ export default function DirectorDeneme() {
           </button>
         ))}
       </div>
-      {tab === 'upload' && <UploadSection />}
-      {tab === 'exams' && <ExamsSection />}
+      {view === 'upload' ? <UploadView showToast={showToast} /> : <ListView showToast={showToast} />}
     </div>
   );
 }
 
-function UploadSection() {
+function UploadView({ showToast }) {
   const [name, setName] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [file, setFile] = useState(null);
-  const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState(null);
 
   async function upload(e) {
     e.preventDefault();
-    setError('');
     setResult(null);
-    if (!file) return setError('Excel dosyası seç.');
-    if (!name.trim()) return setError('Deneme adı gir.');
+    if (!file) return showToast('Excel dosyası seç.', 'error');
+    if (!name.trim()) return showToast('Deneme adı gir.', 'error');
     setUploading(true);
     try {
       const fd = new FormData();
@@ -57,21 +55,19 @@ function UploadSection() {
         credentials: 'same-origin',
       });
       const data = await res.json();
-      if (!res.ok) return setError(data.error || 'Yükleme başarısız.');
+      if (!res.ok) return showToast(data.error || 'Yükleme başarısız.', 'error');
       setResult(data);
+      showToast('Deneme yüklendi');
     } catch {
-      setError('Sunucuya ulaşılamadı.');
+      showToast('Sunucuya ulaşılamadı.', 'error');
     } finally {
       setUploading(false);
     }
   }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-6">
-        <h2 className="font-700 text-gray-700 mb-4" style={{ fontWeight: 700 }}>
-          TYT Deneme Sonucu Yükle
-        </h2>
+    <div className="space-y-4">
+      <div className="card p-4 sm:p-5">
         <form onSubmit={upload} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -82,7 +78,7 @@ function UploadSection() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="APOTEMİ TG 3 TYT"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none"
               />
             </div>
             <div>
@@ -93,7 +89,7 @@ function UploadSection() {
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none bg-white"
               />
             </div>
           </div>
@@ -105,29 +101,24 @@ function UploadSection() {
               type="file"
               accept=".xlsx,.xls"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 file:font-600 hover:file:bg-indigo-100"
+              className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
             />
           </div>
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
-          )}
           <button
             type="submit"
             disabled={uploading}
-            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-600 px-6 py-2.5 rounded-lg transition-colors flex items-center gap-2"
-            style={{ fontWeight: 600 }}
+            className="btn-primary !px-6 !py-2.5 flex items-center gap-2 disabled:opacity-60"
           >
-            <Upload size={16} />
-            {uploading ? 'Yükleniyor...' : 'Yükle ve İşle'}
+            <Upload size={16} /> {uploading ? 'Yükleniyor...' : 'Yükle ve İşle'}
           </button>
         </form>
       </div>
-      {result && <MatchBox result={result} />}
+      {result && <MatchBox result={result} showToast={showToast} />}
     </div>
   );
 }
 
-function MatchBox({ result }) {
+function MatchBox({ result, showToast }) {
   const [students, setStudents] = useState([]);
   const [matches, setMatches] = useState({});
   const [saving, setSaving] = useState(false);
@@ -151,27 +142,29 @@ function MatchBox({ result }) {
         credentials: 'same-origin',
         body: JSON.stringify({ matches: payload }),
       });
-      if (res.ok) setSaved(true);
+      if (res.ok) {
+        setSaved(true);
+        showToast('Eşleştirmeler kaydedildi');
+      }
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-4 sm:p-6">
-      <div className="text-green-700 bg-green-50 rounded-lg px-3 py-2 mb-4 text-sm">
-        Yüklendi: {result.rowCount} öğrenci satırı, {result.matchedCount} tanesi otomatik eşleşti.
+    <div className="card p-4 sm:p-5">
+      <div className="text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 mb-4 text-sm">
+        {result.rowCount} satır, {result.matchedCount} tanesi otomatik eşleşti.
       </div>
       {result.unmatched.length === 0 ? (
-        <p className="text-gray-500 text-sm">Tüm isimler eşleşti. Bir şey yapmana gerek yok.</p>
+        <p className="text-gray-500 text-sm">Tüm isimler eşleşti.</p>
       ) : (
         <>
           <h3 className="font-700 text-gray-700 mb-1" style={{ fontWeight: 700 }}>
             Eşleşmeyen İsimler ({result.unmatched.length})
           </h3>
           <p className="text-xs text-gray-400 mb-3">
-            Bu isimleri bir öğrenciyle eşle. Eşlemezsen o satır listede görünür ama
-            kimsenin sayfasına bağlanmaz.
+            Bu isimleri bir öğrenciyle eşle. Eşlemezsen o satır kimsenin sayfasına bağlanmaz.
           </p>
           <div className="space-y-2">
             {result.unmatched.map((excelName) => (
@@ -182,7 +175,7 @@ function MatchBox({ result }) {
                 <select
                   value={matches[excelName] || ''}
                   onChange={(e) => setMatches((m) => ({ ...m, [excelName]: e.target.value }))}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm bg-white outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm bg-white focus:border-indigo-400 focus:outline-none"
                 >
                   <option value="">— eşleştirme —</option>
                   {students.map((s) => (
@@ -197,8 +190,7 @@ function MatchBox({ result }) {
           <button
             onClick={save}
             disabled={saving || saved}
-            className="mt-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-600 px-5 py-2 rounded-lg transition-colors"
-            style={{ fontWeight: 600 }}
+            className="btn-primary !px-5 !py-2 mt-4 disabled:opacity-60"
           >
             {saved ? 'Kaydedildi' : saving ? 'Kaydediliyor...' : 'Eşleştirmeleri Kaydet'}
           </button>
@@ -208,7 +200,7 @@ function MatchBox({ result }) {
   );
 }
 
-function ExamsSection() {
+function ListView({ showToast }) {
   const [exams, setExams] = useState([]);
   const [openId, setOpenId] = useState(null);
   const [ranking, setRanking] = useState([]);
@@ -239,28 +231,33 @@ function ExamsSection() {
     if (res.ok) {
       setExams((prev) => prev.filter((e) => e.id !== id));
       if (openId === id) setOpenId(null);
+      showToast('Deneme silindi');
     }
   }
 
   if (exams.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-400">
-        Henüz deneme yüklenmedi.
-      </div>
+      <div className="card p-10 text-center text-gray-400">Henüz deneme yüklenmedi.</div>
     );
   }
 
   return (
     <div className="space-y-3">
       {exams.map((e) => (
-        <div key={e.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+        <div key={e.id} className="card overflow-hidden">
           <div className="p-4 flex items-center justify-between gap-3">
-            <button onClick={() => open(e.id)} className="text-left flex-1">
-              <div className="font-700 text-gray-800" style={{ fontWeight: 700 }}>
-                {e.name}
-              </div>
-              <div className="text-xs text-gray-400">
-                {e.examType} · {new Date(e.date).toLocaleDateString('tr-TR')}
+            <button onClick={() => open(e.id)} className="text-left flex-1 flex items-center gap-2">
+              <ChevronDown
+                size={16}
+                className={`text-gray-400 transition-transform ${openId === e.id ? 'rotate-180' : ''}`}
+              />
+              <div>
+                <div className="font-700 text-gray-800" style={{ fontWeight: 700 }}>
+                  {e.name}
+                </div>
+                <div className="text-xs text-gray-400">
+                  {e.examType} · {new Date(e.date).toLocaleDateString('tr-TR')}
+                </div>
               </div>
             </button>
             <button onClick={() => remove(e.id)} className="text-gray-300 hover:text-red-600 transition-colors">

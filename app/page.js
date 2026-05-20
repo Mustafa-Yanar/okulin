@@ -7,6 +7,8 @@ import {
   BookMarked, GraduationCap, Shield, ChevronLeft, ChevronRight,
   RefreshCw, Settings, Lock, LayoutGrid, List, ClipboardList, Phone, BarChart3
 } from 'lucide-react';
+import RehberlikAccordion from './_components/rehberlik/RehberlikAccordion';
+import DirectorDenemeYonetimi from './_components/rehberlik/DirectorDenemeYonetimi';
 
 const BRANCHES = ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İnkılap Tarihi', 'İngilizce'];
 
@@ -1469,6 +1471,12 @@ function TeacherPanel({ session, showToast }) {
           style={{ fontWeight: 600 }}>
           <ClipboardList size={13} /> Yoklama
         </button>
+        <button
+          onClick={() => setActiveTab('ogrenciler')}
+          className={`px-4 py-2 text-xs flex items-center gap-1.5 transition-colors font-600 ${activeTab === 'ogrenciler' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+          style={{ fontWeight: 600 }}>
+          <Users size={13} /> Öğrenciler
+        </button>
       </div>
 
       {activeTab === 'rezervasyon' && (
@@ -1514,6 +1522,76 @@ function TeacherPanel({ session, showToast }) {
 
       {activeTab === 'yoklama' && (
         <TeacherAttendancePanel session={session} weekKey={getWeekKey()} showToast={showToast} />
+      )}
+
+      {activeTab === 'ogrenciler' && (
+        <TeacherStudentsView students={students} />
+      )}
+    </div>
+  );
+}
+
+// Öğretmen: öğrenci listesi → kart açılınca rehberlik (salt okunur)
+function TeacherStudentsView({ students }) {
+  const [expandedId, setExpandedId] = useState(null);
+  const [q, setQ] = useState('');
+
+  const filtered = useMemo(() => {
+    const t = q.trim().toLocaleLowerCase('tr');
+    if (!t) return students;
+    return students.filter((s) => (s.name || '').toLocaleLowerCase('tr').includes(t));
+  }, [students, q]);
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Öğrenci ara..."
+          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:border-indigo-400 focus:outline-none"
+        />
+      </div>
+      {filtered.length === 0 ? (
+        <div className="text-center text-gray-400 text-sm py-8">Öğrenci bulunamadı.</div>
+      ) : (
+        <div className="grid gap-1.5">
+          {filtered.map((s) => (
+            <div key={s.id} className="card overflow-hidden text-sm">
+              <button
+                className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-indigo-50/30"
+                onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+              >
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-700 shrink-0"
+                  style={{ background: '#6366f1', fontWeight: 700 }}
+                >
+                  {s.name.slice(0, 2).toUpperCase()}
+                </div>
+                <span className="font-600 truncate" style={{ fontWeight: 600 }}>
+                  {s.name}
+                </span>
+                <span className="text-xs text-gray-400 ml-auto">{(s.cls || '').toUpperCase()}</span>
+                <ChevronRight
+                  size={14}
+                  className="text-gray-400 shrink-0 transition-transform"
+                  style={{ transform: expandedId === s.id ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                />
+              </button>
+              {expandedId === s.id && (
+                <div className="border-t border-gray-100 bg-gray-50 px-3 py-3">
+                  <RehberlikAccordion
+                    subjects={guidanceSubjectsFor(s.cls)}
+                    editable={false}
+                    studentId={s.id}
+                    solvedContent={<StudentGuidanceView studentId={s.id} readOnly />}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -1710,7 +1788,12 @@ function StudentPanel({ session, showToast }) {
       </div>
 
       {tab === 'rehberlik' ? (
-        <StudentGuidancePanel session={session} showToast={showToast} />
+        <RehberlikAccordion
+          subjects={guidanceSubjectsFor(session.cls)}
+          editable={true}
+          studentId={null}
+          solvedContent={<StudentGuidancePanel session={session} showToast={showToast} />}
+        />
       ) : tab === 'myBookings' ? (
         <StudentBookingsView student={{ id: session.id }} allSlots={allSlots} onCancel={handleCancel} />
       ) : (
@@ -2101,7 +2184,7 @@ function DirectorPanel({ session, showToast }) {
   return (
     <div>
       <div className="flex gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">
-        {[['teachers','Öğretmenler'],['students','Sınıf/Öğrenci'],['yoklama','Yoklama']].map(([key,label]) => (
+        {[['teachers','Öğretmenler'],['students','Sınıf/Öğrenci'],['yoklama','Yoklama'],['denemeler','Denemeler']].map(([key,label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${tab===key?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
             style={{ fontWeight:600 }}>{label}</button>
@@ -2278,6 +2361,10 @@ function DirectorPanel({ session, showToast }) {
       {/* YOKLAMA TAB */}
       {tab === 'yoklama' && (
         <DirectorAttendanceView showToast={showToast} />
+      )}
+
+      {tab === 'denemeler' && (
+        <DirectorDenemeYonetimi showToast={showToast} />
       )}
 
       {/* Modals */}
@@ -2540,7 +2627,12 @@ function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceRev
         <StudentAttendanceView studentId={student.id} />
       )}
       {tab === 'rehberlik' && (
-        <StudentGuidanceView studentId={student.id} onReviewed={onGuidanceReviewed} />
+        <RehberlikAccordion
+          subjects={guidanceSubjectsFor(student.cls)}
+          editable={true}
+          studentId={student.id}
+          solvedContent={<StudentGuidanceView studentId={student.id} onReviewed={onGuidanceReviewed} />}
+        />
       )}
     </div>
   );
@@ -2630,7 +2722,7 @@ function StudentAttendanceView({ studentId }) {
   );
 }
 
-function StudentGuidanceView({ studentId, onReviewed }) {
+function StudentGuidanceView({ studentId, onReviewed, readOnly }) {
   const [weeks, setWeeks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(null);
@@ -2699,7 +2791,7 @@ function StudentGuidanceView({ studentId, onReviewed }) {
                   ? <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-600 shrink-0" style={{ fontWeight: 600 }}>Onaylı</span>
                   : <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-600 shrink-0" style={{ fontWeight: 600 }}>İnceleme bekliyor</span>}
               </div>
-              {!w.reviewed && (
+              {!w.reviewed && !readOnly && (
                 <button onClick={() => approve(w.weekKey)} disabled={approving === w.weekKey}
                   className="btn-primary !px-3 !py-1.5 text-xs flex items-center gap-1 shrink-0">
                   <Check size={12} /> {approving === w.weekKey ? 'Onaylanıyor…' : 'Onayla'}
@@ -3717,10 +3809,6 @@ export default function App() {
               <span className="text-sm font-600 text-gray-700" style={{ fontWeight:600 }}>{session.name}</span>
               <span className="text-sm font-500 text-gray-400" style={{ fontWeight:500 }}>{roleLabel[session.role]}</span>
             </div>
-            <a href="/deneme" title="Deneme Analizi" className="btn-ghost !px-3 !py-2 flex items-center gap-1.5 text-indigo-600">
-              <BarChart3 size={14} />
-              <span className="text-xs font-600 hidden sm:inline" style={{ fontWeight:600 }}>Deneme Analizi</span>
-            </a>
             {(session.role === 'teacher' || session.role === 'student') && (
               <button onClick={() => setShowChangePassword(true)} title="Şifremi Değiştir" className="btn-ghost !px-3 !py-2">
                 <Settings size={14} />
