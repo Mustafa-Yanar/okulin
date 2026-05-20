@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import NetChart from './NetChart';
-import { calcNet } from '@/lib/deneme/config';
+import { calcNet, TYT_GROUPS, AYT_CATEGORIES } from '@/lib/deneme/config';
 
 // Bir öğrencinin deneme analizi. studentId verilirse o öğrenci (müdür/öğretmen),
 // verilmezse giriş yapan öğrencinin kendisi (/api/deneme/me).
@@ -74,7 +74,7 @@ export default function DenemeAnaliz({ studentId }) {
       ) : tab === 'liste' ? (
         <ExamList points={filtered} />
       ) : (
-        <GrowthChart points={filtered} />
+        <GrowthChart points={filtered} examType={examType} />
       )}
     </div>
   );
@@ -182,7 +182,22 @@ function ExamDetail({ point }) {
   );
 }
 
-function GrowthChart({ points }) {
+// subjectKey -> soru sayısı (tüm TYT + AYT gruplarından düzleştirilmiş)
+const SUBJECT_QUESTION_COUNTS = (() => {
+  const map = {};
+  const allGroups = [
+    ...TYT_GROUPS,
+    ...Object.values(AYT_CATEGORIES).flatMap((c) => c.groups),
+  ];
+  allGroups.forEach((g) => {
+    g.subjects.forEach((s) => {
+      if (!(s.key in map)) map[s.key] = s.questionCount;
+    });
+  });
+  return map;
+})();
+
+function GrowthChart({ points, examType }) {
   const [mode, setMode] = useState('toplam'); // 'toplam' | 'ders'
 
   // Ders bazlı modda görünecek alt dersler: tüm denemelerde geçen subjectKey'ler (sıralı)
@@ -200,14 +215,14 @@ function GrowthChart({ points }) {
   // İlk derse otomatik geç (ders moduna ilk girişte)
   const activeSubject = selectedSubject || subjectKeys[0] || '';
 
-  const { chartData, chartSeries } = useMemo(() => {
+  const { chartData, chartSeries, yMax } = useMemo(() => {
     if (mode === 'toplam') {
       const data = points.map((p) => ({
         name: p.dateLabel,
         full: `${p.name} (${p.fullDate})`,
         'Toplam Net': p.toplamNet,
       }));
-      return { chartData: data, chartSeries: ['Toplam Net'] };
+      return { chartData: data, chartSeries: ['Toplam Net'], yMax: undefined };
     }
     // Ders bazlı: sadece seçili dersin neti, tek seri
     const label = SUBJECT_LABELS[activeSubject] || activeSubject;
@@ -217,7 +232,8 @@ function GrowthChart({ points }) {
       point[label] = r ? r.net : null;
       return point;
     });
-    return { chartData: data, chartSeries: [label] };
+    const qCount = SUBJECT_QUESTION_COUNTS[activeSubject];
+    return { chartData: data, chartSeries: [label], yMax: qCount ?? undefined };
   }, [points, mode, activeSubject]);
 
   return (
@@ -254,7 +270,7 @@ function GrowthChart({ points }) {
           </select>
         )}
       </div>
-      <NetChart data={chartData} series={chartSeries} />
+      <NetChart data={chartData} series={chartSeries} yMax={yMax} />
     </div>
   );
 }

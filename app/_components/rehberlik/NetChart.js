@@ -13,7 +13,7 @@ import {
 
 const COLORS = ['#6366f1', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#0891b2', '#ca8a04', '#db2777'];
 
-export default function NetChart({ data, series }) {
+export default function NetChart({ data, series, yMax }) {
   if (!data || data.length === 0) {
     return (
       <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
@@ -37,7 +37,11 @@ export default function NetChart({ data, series }) {
             tickFormatter={(i) => indexed[i]?.name ?? ''}
             tick={{ fontSize: 12, fill: '#6b7280' }}
           />
-          <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
+          <YAxis
+            tick={{ fontSize: 12, fill: '#6b7280' }}
+            domain={[0, yMax !== undefined ? yMax : 'auto']}
+            allowDecimals={true}
+          />
           <Tooltip
             contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }}
             labelFormatter={(_, payload) => (payload && payload[0] ? payload[0].payload.full : '')}
