@@ -1531,68 +1531,140 @@ function TeacherPanel({ session, showToast }) {
   );
 }
 
-// Öğretmen: öğrenci listesi → kart açılınca rehberlik (salt okunur)
+// Öğretmen: sınıf akordiyonu (müdürdeki gibi) → öğrenci kartı → rehberlik (salt okunur)
 function TeacherStudentsView({ students }) {
   const [expandedId, setExpandedId] = useState(null);
-  const [q, setQ] = useState('');
+  const [collapsed, setCollapsed] = useState({});
+  const [searchQ, setSearchQ] = useState('');
+  const [filterGroup, setFilterGroup] = useState('');
 
-  const filtered = useMemo(() => {
-    const t = q.trim().toLocaleLowerCase('tr');
-    if (!t) return students;
-    return students.filter((s) => (s.name || '').toLocaleLowerCase('tr').includes(t));
-  }, [students, q]);
+  // Müdürdeki StudentList ile aynı gruplama mantığı
+  const grouped = useMemo(() => {
+    const q = searchQ.toLowerCase();
+    const groupOrder = { ortaokul: 0, lise: 1, mezun: 2 };
+    const clsSort = (cls) => (cls.startsWith('m') ? parseInt(cls.slice(1)) : parseInt(cls));
+    const sorted = students
+      .filter(
+        (s) =>
+          (s.name.toLowerCase().includes(q) ||
+            s.cls.toLowerCase().includes(q) ||
+            s.username?.toLowerCase().includes(q)) &&
+          (!filterGroup || s.group === filterGroup)
+      )
+      .sort((a, b) => {
+        const gDiff = (groupOrder[a.group] ?? 9) - (groupOrder[b.group] ?? 9);
+        if (gDiff !== 0) return gDiff;
+        return clsSort(a.cls) - clsSort(b.cls);
+      });
+    const groups = [];
+    for (const s of sorted) {
+      if (!groups.length || groups[groups.length - 1].cls !== s.cls) {
+        groups.push({ cls: s.cls, label: classLabel(s.cls), group: s.group, students: [] });
+      }
+      groups[groups.length - 1].students.push(s);
+    }
+    return groups;
+  }, [students, searchQ, filterGroup]);
+
+  const toggle = (cls) => setCollapsed((prev) => ({ ...prev, [cls]: !prev[cls] }));
 
   return (
-    <div className="space-y-3">
-      <div className="relative">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+    <div>
+      <div className="flex gap-2 mb-4">
         <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Öğrenci ara..."
-          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:border-indigo-400 focus:outline-none"
+          className="input text-sm"
+          placeholder="İsim, sınıf..."
+          value={searchQ}
+          onChange={(e) => setSearchQ(e.target.value)}
         />
+        <select
+          className="input !w-auto text-sm"
+          value={filterGroup}
+          onChange={(e) => setFilterGroup(e.target.value)}
+        >
+          <option value="">Tüm Gruplar</option>
+          {Object.entries(GROUPS).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
+        </select>
       </div>
-      {filtered.length === 0 ? (
-        <div className="text-center text-gray-400 text-sm py-8">Öğrenci bulunamadı.</div>
-      ) : (
-        <div className="grid gap-1.5">
-          {filtered.map((s) => (
-            <div key={s.id} className="card overflow-hidden text-sm">
+      <div className="grid gap-2">
+        {grouped.length === 0 && (
+          <div className="card p-8 text-center text-gray-400">
+            <GraduationCap size={32} className="mx-auto mb-2 opacity-30" />
+            <p>Öğrenci bulunamadı</p>
+          </div>
+        )}
+        {grouped.map((grp) => {
+          const isOpen = !collapsed[grp.cls];
+          const dotColor =
+            grp.group === 'lise'
+              ? 'linear-gradient(135deg,#6366f1,#4f46e5)'
+              : grp.group === 'ortaokul'
+              ? 'linear-gradient(135deg,#22c55e,#16a34a)'
+              : 'linear-gradient(135deg,#f59e0b,#d97706)';
+          return (
+            <div key={grp.cls}>
               <button
-                className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-indigo-50/30"
-                onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                onClick={() => toggle(grp.cls)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-700 bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors"
+                style={{ fontWeight: 700 }}
               >
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-700 shrink-0"
-                  style={{ background: '#6366f1', fontWeight: 700 }}
-                >
-                  {s.name.slice(0, 2).toUpperCase()}
-                </div>
-                <span className="font-600 truncate" style={{ fontWeight: 600 }}>
-                  {s.name}
+                <span>
+                  {grp.label}{' '}
+                  <span className="font-500 opacity-60" style={{ fontWeight: 500 }}>
+                    ({grp.students.length} öğrenci)
+                  </span>
                 </span>
-                <span className="text-xs text-gray-400 ml-auto">{(s.cls || '').toUpperCase()}</span>
                 <ChevronRight
                   size={14}
-                  className="text-gray-400 shrink-0 transition-transform"
-                  style={{ transform: expandedId === s.id ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                  className="transition-transform"
+                  style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}
                 />
               </button>
-              {expandedId === s.id && (
-                <div className="border-t border-gray-100 bg-gray-50 px-3 py-3">
-                  <RehberlikAccordion
-                    subjects={guidanceSubjectsFor(s.cls)}
-                    editable={false}
-                    studentId={s.id}
-                    solvedContent={<StudentGuidanceView studentId={s.id} readOnly />}
-                  />
+              {isOpen && (
+                <div className="grid gap-1.5 mt-1.5 ml-2">
+                  {grp.students.map((s) => (
+                    <div key={s.id} className="card overflow-hidden text-sm">
+                      <button
+                        className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-indigo-50/30"
+                        onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                      >
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-700 shrink-0"
+                          style={{ background: dotColor, fontWeight: 700 }}
+                        >
+                          {s.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <span className="font-600 truncate" style={{ fontWeight: 600 }}>
+                          {s.name}
+                        </span>
+                        <ChevronRight
+                          size={14}
+                          className="text-gray-400 shrink-0 transition-transform ml-auto"
+                          style={{ transform: expandedId === s.id ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                        />
+                      </button>
+                      {expandedId === s.id && (
+                        <div className="border-t border-gray-100 bg-gray-50 px-3 py-3">
+                          <RehberlikAccordion
+                            subjects={guidanceSubjectsFor(s.cls)}
+                            editable={false}
+                            studentId={s.id}
+                            solvedContent={<StudentGuidanceView studentId={s.id} readOnly />}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
