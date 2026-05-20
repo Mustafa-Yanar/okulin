@@ -7,7 +7,7 @@ import DenemeAnaliz from './DenemeAnaliz';
 
 // Rehberlik sekmesinin 3 akordiyon kartı.
 // - solvedContent: 1. kart içeriği (çözülen sorular) — panele göre dışarıdan verilir
-// - subjects: konu takibi dersleri (guidanceSubjectsFor sonucu)
+// - subjects: konu takibi dersleri (guidanceSubjectsFor sonucu, branşa göre süzülmüş gelir)
 // - editable: konu slider'ları düzenlenebilir mi
 // - studentId: müdür/öğretmen başka öğrenci için; öğrenci kendi için boş
 export default function RehberlikAccordion({ solvedContent, subjects, editable, studentId }) {

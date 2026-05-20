@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import RehberlikAccordion from './_components/rehberlik/RehberlikAccordion';
 import DirectorDenemeYonetimi from './_components/rehberlik/DirectorDenemeYonetimi';
+import { filterSubjectsByBranch, subjectMatchesBranch } from '@/lib/deneme/branch';
 
 const BRANCHES = ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İnkılap Tarihi', 'İngilizce'];
 
@@ -1525,14 +1526,15 @@ function TeacherPanel({ session, showToast }) {
       )}
 
       {activeTab === 'ogrenciler' && (
-        <TeacherStudentsView students={students} />
+        <TeacherStudentsView students={students} branch={session.branch} />
       )}
     </div>
   );
 }
 
 // Öğretmen: sınıf akordiyonu (müdürdeki gibi) → öğrenci kartı → rehberlik (salt okunur)
-function TeacherStudentsView({ students }) {
+// branch: öğretmenin branşı — çözülen sorular ve konu takibi buna göre süzülür.
+function TeacherStudentsView({ students, branch }) {
   const [expandedId, setExpandedId] = useState(null);
   const [collapsed, setCollapsed] = useState({});
   const [searchQ, setSearchQ] = useState('');
@@ -1650,10 +1652,16 @@ function TeacherStudentsView({ students }) {
                       {expandedId === s.id && (
                         <div className="border-t border-gray-100 bg-gray-50 px-3 py-3">
                           <RehberlikAccordion
-                            subjects={guidanceSubjectsFor(s.cls)}
+                            subjects={filterSubjectsByBranch(guidanceSubjectsFor(s.cls), branch)}
                             editable={false}
                             studentId={s.id}
-                            solvedContent={<StudentGuidanceView studentId={s.id} readOnly />}
+                            solvedContent={
+                              <StudentGuidanceView
+                                studentId={s.id}
+                                readOnly
+                                branchFilter={(subject) => subjectMatchesBranch(subject, branch)}
+                              />
+                            }
                           />
                         </div>
                       )}
@@ -2794,7 +2802,7 @@ function StudentAttendanceView({ studentId }) {
   );
 }
 
-function StudentGuidanceView({ studentId, onReviewed, readOnly }) {
+function StudentGuidanceView({ studentId, onReviewed, readOnly, branchFilter }) {
   const [weeks, setWeeks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState(null);
@@ -2849,7 +2857,9 @@ function StudentGuidanceView({ studentId, onReviewed, readOnly }) {
   return (
     <div className="space-y-3">
       {weeks.map(w => {
-        const entries = Object.entries(w.entries || {});
+        let entries = Object.entries(w.entries || {});
+        // Öğretmen branş filtresi: sadece kendi branşının dersleri
+        if (branchFilter) entries = entries.filter(([subject]) => branchFilter(subject));
         let totalSolved = 0;
         entries.forEach(([, v]) => {
           totalSolved += (v.correct || 0) + (v.wrong || 0) + (v.empty || 0);

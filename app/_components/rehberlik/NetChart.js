@@ -21,12 +21,22 @@ export default function NetChart({ data, series }) {
       </div>
     );
   }
+  // X eksenini benzersiz index'e bağla — birden çok deneme aynı tarihe (name)
+  // sahip olduğunda recharts noktaları karıştırıp tooltip'i kilitliyordu.
+  const indexed = data.map((d, i) => ({ ...d, _idx: i }));
   return (
     <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 10, right: 16, left: -16, bottom: 0 }}>
+        <LineChart data={indexed} margin={{ top: 10, right: 16, left: -16, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-          <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#6b7280' }} />
+          <XAxis
+            dataKey="_idx"
+            type="number"
+            domain={[0, indexed.length - 1]}
+            ticks={indexed.map((d) => d._idx)}
+            tickFormatter={(i) => indexed[i]?.name ?? ''}
+            tick={{ fontSize: 12, fill: '#6b7280' }}
+          />
           <YAxis tick={{ fontSize: 12, fill: '#6b7280' }} />
           <Tooltip
             contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb', fontSize: 13 }}
