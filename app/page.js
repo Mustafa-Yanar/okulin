@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import RehberlikAccordion from './_components/rehberlik/RehberlikAccordion';
 import DirectorDenemeYonetimi from './_components/rehberlik/DirectorDenemeYonetimi';
+import ProgramOlusturucu from './_components/program/ProgramOlusturucu';
 import { filterSubjectsByBranch, subjectMatchesBranch } from '@/lib/deneme/branch';
 
 const BRANCHES = ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İnkılap Tarihi', 'İngilizce'];
@@ -2264,7 +2265,7 @@ function DirectorPanel({ session, showToast }) {
   return (
     <div>
       <div className="flex gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">
-        {[['teachers','Öğretmenler'],['students','Sınıf/Öğrenci'],['yoklama','Yoklama'],['denemeler','Denemeler']].map(([key,label]) => (
+        {[['teachers','Öğretmenler'],['students','Sınıf/Öğrenci'],['yoklama','Yoklama'],['program','Ders Programı'],['denemeler','Denemeler']].map(([key,label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${tab===key?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
             style={{ fontWeight:600 }}>{label}</button>
@@ -2441,6 +2442,11 @@ function DirectorPanel({ session, showToast }) {
       {/* YOKLAMA TAB */}
       {tab === 'yoklama' && (
         <DirectorAttendanceView showToast={showToast} />
+      )}
+
+      {tab === 'program' && (
+        <ProgramOlusturucu api={api} showToast={showToast}
+          activeClasses={[...new Set(students.map(s => s.cls))]} />
       )}
 
       {tab === 'denemeler' && (
