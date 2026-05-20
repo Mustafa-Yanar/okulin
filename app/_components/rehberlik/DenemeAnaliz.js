@@ -185,6 +185,21 @@ function ExamDetail({ point }) {
 function GrowthChart({ points }) {
   const [mode, setMode] = useState('toplam'); // 'toplam' | 'ders'
 
+  // Ders bazlı modda görünecek alt dersler: tüm denemelerde geçen subjectKey'ler (sıralı)
+  const subjectKeys = useMemo(() => {
+    const seen = [];
+    points.forEach((p) => {
+      (p.subjectKeys || Object.keys(p.results || {})).forEach((k) => {
+        if (!seen.includes(k)) seen.push(k);
+      });
+    });
+    return seen;
+  }, [points]);
+
+  const [selectedSubject, setSelectedSubject] = useState('');
+  // İlk derse otomatik geç (ders moduna ilk girişte)
+  const activeSubject = selectedSubject || subjectKeys[0] || '';
+
   const { chartData, chartSeries } = useMemo(() => {
     if (mode === 'toplam') {
       const data = points.map((p) => ({
@@ -194,35 +209,50 @@ function GrowthChart({ points }) {
       }));
       return { chartData: data, chartSeries: ['Toplam Net'] };
     }
-    const groupSet = new Set();
-    points.forEach((p) => Object.keys(p.groupNets).forEach((g) => groupSet.add(g)));
-    const series = Array.from(groupSet);
+    // Ders bazlı: sadece seçili dersin neti, tek seri
+    const label = SUBJECT_LABELS[activeSubject] || activeSubject;
     const data = points.map((p) => {
+      const r = p.results?.[activeSubject];
       const point = { name: p.dateLabel, full: `${p.name} (${p.fullDate})` };
-      for (const g of series) point[g] = p.groupNets[g] ?? 0;
+      point[label] = r ? r.net : null;
       return point;
     });
-    return { chartData: data, chartSeries: series };
-  }, [points, mode]);
+    return { chartData: data, chartSeries: [label] };
+  }, [points, mode, activeSubject]);
 
   return (
     <div>
-      <div className="inline-flex rounded-lg bg-gray-100 p-1 mb-3">
-        {[
-          ['toplam', 'Toplam Net'],
-          ['ders', 'Ders Bazlı'],
-        ].map(([m, label]) => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            className={`px-3 py-1.5 rounded-md text-sm font-600 transition-colors ${
-              mode === m ? 'bg-white shadow text-gray-800' : 'text-gray-500'
-            }`}
-            style={{ fontWeight: 600 }}
+      <div className="flex items-center gap-2 flex-wrap mb-3">
+        <div className="inline-flex rounded-lg bg-gray-100 p-1">
+          {[
+            ['toplam', 'Toplam Net'],
+            ['ders', 'Ders Bazlı'],
+          ].map(([m, label]) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={`px-3 py-1.5 rounded-md text-sm font-600 transition-colors ${
+                mode === m ? 'bg-white shadow text-gray-800' : 'text-gray-500'
+              }`}
+              style={{ fontWeight: 600 }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {mode === 'ders' && subjectKeys.length > 0 && (
+          <select
+            value={activeSubject}
+            onChange={(e) => setSelectedSubject(e.target.value)}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm bg-white focus:border-indigo-400 focus:outline-none"
           >
-            {label}
-          </button>
-        ))}
+            {subjectKeys.map((k) => (
+              <option key={k} value={k}>
+                {SUBJECT_LABELS[k] || k}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
       <NetChart data={chartData} series={chartSeries} />
     </div>
