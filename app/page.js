@@ -5,7 +5,7 @@ import {
   BookOpen, Users, LogOut, Plus, Trash2, Edit3, Save, X,
   Search, Calendar, Clock, User, Check,
   BookMarked, GraduationCap, Shield, ChevronLeft, ChevronRight,
-  RefreshCw, Settings, Lock, LayoutGrid, List, ClipboardList, Phone
+  RefreshCw, Settings, Lock, LayoutGrid, List, ClipboardList, Phone, BarChart3
 } from 'lucide-react';
 
 const BRANCHES = ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İnkılap Tarihi', 'İngilizce'];
@@ -3717,6 +3717,10 @@ export default function App() {
               <span className="text-sm font-600 text-gray-700" style={{ fontWeight:600 }}>{session.name}</span>
               <span className="text-sm font-500 text-gray-400" style={{ fontWeight:500 }}>{roleLabel[session.role]}</span>
             </div>
+            <a href="/deneme" title="Deneme Analizi" className="btn-ghost !px-3 !py-2 flex items-center gap-1.5 text-indigo-600">
+              <BarChart3 size={14} />
+              <span className="text-xs font-600 hidden sm:inline" style={{ fontWeight:600 }}>Deneme Analizi</span>
+            </a>
             {(session.role === 'teacher' || session.role === 'student') && (
               <button onClick={() => setShowChangePassword(true)} title="Şifremi Değiştir" className="btn-ghost !px-3 !py-2">
                 <Settings size={14} />
