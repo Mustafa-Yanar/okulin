@@ -345,7 +345,7 @@ function LoadTable({ load, setLoad, keys, coursesForKey }) {
             </td>
             {keys.map(k => coursesForKey(k).includes(d)
               ? <td key={k} className="text-center p-1"><input type="number" min="0" value={(load[k]&&load[k][d])||0}
-                  onChange={e=>set(k,d,e.target.value)} className="input !w-12 !py-1 text-center" /></td>
+                  onChange={e=>set(k,d,e.target.value)} className="input !w-16 !py-1.5 text-center text-sm" /></td>
               : <td key={k} className="text-center text-gray-200">–</td>)}
           </tr>
         ))}
