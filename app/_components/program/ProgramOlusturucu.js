@@ -67,12 +67,12 @@ const COL_COURSES = {
 const DEFAULT_LOAD = {
   'Ortaokul_7':              {'Türkçe':4,'Matematik':4,'Fen Bilgisi':4,'Sosyal Bilgiler':4,'İngilizce':4},
   'Ortaokul_8':              {'Türkçe':4,'Matematik':4,'Fen Bilgisi':4,'İnkılap Tarihi':4,'İngilizce':4},
-  'Lise Ortak_9':            {'Türkçe':0,'Matematik':0,'Fizik':0,'Kimya':0,'Biyoloji':0,'Tarih':0,'Coğrafya':0,'Felsefe':0},
-  'Lise Ortak_10':           {'Türkçe':0,'Matematik':0,'Fizik':0,'Kimya':0,'Biyoloji':0,'Tarih':0,'Coğrafya':0,'Felsefe':0},
-  'Lise Sayısal_11':         {'Türkçe':0,'Matematik':0,'Fizik':0,'Kimya':0,'Biyoloji':0},
-  'Lise Eşit Ağırlık_11':   {'Türkçe':0,'Matematik':0,'Tarih':0,'Coğrafya':0,'Felsefe':0},
-  'Lise Sayısal_12':         {'Türkçe':0,'TYT Matematik':0,'AYT Matematik':0,'Geometri':0,'Fizik':0,'Kimya':0,'Biyoloji':0},
-  'Lise Eşit Ağırlık_12':   {'Türkçe':0,'TYT Matematik':0,'AYT Matematik':0,'Geometri':0,'Tarih':0,'Coğrafya':0,'Felsefe':0},
+  'Lise Ortak_9':            {'Türkçe':4,'Matematik':2,'Fizik':2,'Kimya':2,'Biyoloji':2,'Tarih':2,'Coğrafya':2,'Felsefe':0},
+  'Lise Ortak_10':           {'Türkçe':4,'Matematik':2,'Fizik':2,'Kimya':2,'Biyoloji':2,'Tarih':2,'Coğrafya':2,'Felsefe':0},
+  'Lise Sayısal_11':         {'Türkçe':4,'Matematik':4,'Fizik':4,'Kimya':4,'Biyoloji':4},
+  'Lise Eşit Ağırlık_11':   {'Türkçe':4,'Matematik':4,'Tarih':4,'Coğrafya':4,'Felsefe':4},
+  'Lise Sayısal_12':         {'Türkçe':4,'TYT Matematik':2,'AYT Matematik':2,'Geometri':2,'Fizik':4,'Kimya':4,'Biyoloji':4},
+  'Lise Eşit Ağırlık_12':   {'Türkçe':4,'TYT Matematik':2,'AYT Matematik':2,'Geometri':2,'Tarih':4,'Coğrafya':4,'Felsefe':4},
   'Mezun Sayısal':           {'Türkçe':2,'TYT Matematik':4,'AYT Matematik':4,'Geometri':2,'Fizik':4,'Kimya':4,'Biyoloji':4},
   'Mezun Eşit Ağırlık':     {'Türkçe':4,'TYT Matematik':4,'AYT Matematik':4,'Geometri':2,'Tarih':4,'Coğrafya':4,'Felsefe':2},
 };
