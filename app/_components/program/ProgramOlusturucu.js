@@ -520,6 +520,27 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
           }
         }
 
+        // Strateji C: çakışan öğretmenin tüm sınıflarını yeniden blok dağıt
+        if (countConflicts() >= c0) {
+          const affectedCls = [...new Set(
+            vars.filter(vv => vv.tid === v.tid).map(vv => vv.cls)
+          )];
+          // Snapshot al
+          const snapBlks = {}; affectedCls.forEach(c2 => snapBlks[c2] = [...blkAssign[c2]]);
+          affectedCls.forEach(c2 => {
+            const blks = [...blocksOf[c2]].sort(() => Math.random() - 0.5);
+            blkAssign[c2] = blks;
+            assignBlocks(blks, pairsOf[c2]);
+          });
+          if (countConflicts() >= c0) {
+            // Geri al
+            affectedCls.forEach(c2 => {
+              blkAssign[c2] = snapBlks[c2];
+              assignBlocks(snapBlks[c2], pairsOf[c2]);
+            });
+          }
+        }
+
         cur=countConflicts();
       }
       return cur;
