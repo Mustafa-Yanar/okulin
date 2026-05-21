@@ -113,9 +113,6 @@ function classBlockPairs(cls) {
       for (let i = 0; i < MEZUN_SLOTS.length; i += 2)
         blocks.push([d, MEZUN_SLOTS[i], MEZUN_SLOTS[i+1]]);
     });
-    // Akşam blokları: w7-w8 (idx 6-7) → 1 ekstra blok/gün × 4 gün = 4 blok
-    // Toplam 16 blok kapasitesi; optimizer yerleştirme için hareket alanı
-    MEZUN_DAYS.forEach(d => blocks.push([d, 6, 7]));
     return blocks;
   }
   // Ortaokul: 5 blok/gün (e1-e10); Lise: 4 blok/gün (e1-e8)
@@ -564,16 +561,20 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
     if(bestSnapshot) bestSnapshot.forEach((snap,i)=>{ vars[i].tid=snap.tid; vars[i].day=snap.day; vars[i].slot=snap.slot; });
 
     const assigned=[]; const tLoad={}; teachers.forEach(t=>tLoad[t.id]=0);
-    if (best>0) {
+    // best=0 veya best>0 — her durumda tüm varsları işle.
+    // Aynı öğretmen+gün+slot çakışmasında: ilk gelen assigned, sonraki unplaced.
+    // İzin günü olan var her zaman unplaced.
+    {
       const seen=new Set();
       vars.forEach(v => {
         const k=v.tid+'|'+v.day+'|'+v.slot;
         const offBad=(teacherById[v.tid].offDays||[]).includes(v.day);
-        if(seen.has(k)||offBad) unplaced.push({cls:v.cls,course:v.course,reason:offBad?'öğretmen izinli':'öğretmen çakışması'});
-        else { seen.add(k); assigned.push({cls:v.cls,course:v.course,teacherId:v.tid,teacherName:teacherById[v.tid].name,day:v.day,slot:v.slot}); tLoad[v.tid]++; }
+        if(offBad) { unplaced.push({cls:v.cls,course:v.course,reason:'öğretmen izinli'}); return; }
+        if(seen.has(k)) { unplaced.push({cls:v.cls,course:v.course,reason:'öğretmen çakışması'}); return; }
+        seen.add(k);
+        assigned.push({cls:v.cls,course:v.course,teacherId:v.tid,teacherName:teacherById[v.tid].name,day:v.day,slot:v.slot});
+        tLoad[v.tid]++;
       });
-    } else {
-      vars.forEach(v => { assigned.push({cls:v.cls,course:v.course,teacherId:v.tid,teacherName:teacherById[v.tid].name,day:v.day,slot:v.slot}); tLoad[v.tid]++; });
     }
     setResult({assigned,unplaced,tLoad,total:assigned.length,ms:Math.round(performance.now()-t0)});
     showToast?.(`${assigned.length} ders yerleşti${unplaced.length?`, ${unplaced.length} açıkta`:''}`, unplaced.length?'info':'success');
