@@ -379,7 +379,19 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         blkAssign[c] = blks;
         assignBlocks(blks, pairsOf[c]);
       });
-      vars.forEach(v => v.tid = rnd(v.eligibleIds));
+
+      // Blok çiftine tek tid ata: pair[0] ve pair[1] her zaman aynı öğretmen
+      const setPairTid = (pair, tid) => {
+        vars[pair[0]].tid = tid;
+        if (pair[1] !== undefined) vars[pair[1]].tid = tid;
+      };
+      classes.forEach(c => {
+        pairsOf[c].forEach(pair => {
+          const eligible = vars[pair[0]].eligibleIds;
+          setPairTid(pair, rnd(eligible));
+        });
+      });
+
       const tkey = v => v.tid+'|'+v.day+'|'+v.slot;
       const countConflicts = () => {
         let n=0; const m=new Map();
@@ -400,21 +412,27 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         const bad=badVars(); if(!bad.length) break;
         const vi = rnd(bad);
         const v = vars[vi];
-        // Öğretmen değiştir
+
+        // Çifti bul — öğretmen değişikliği çiftin ikisine birden uygulanır
+        const pairs = pairsOf[v.cls];
+        const pairIdx = pairs.findIndex(p => p.includes(vi));
+        const pair = pairIdx >= 0 ? pairs[pairIdx] : null;
+
+        // Öğretmen değiştir (çift birlikte)
         let bestTid=v.tid, bestDelta=0;
         for (const tid of v.eligibleIds) {
-          const o=v.tid; v.tid=tid; const c=countConflicts();
+          const o=v.tid;
+          if (pair) setPairTid(pair, tid); else v.tid=tid;
+          const c=countConflicts();
           if(c-cur<bestDelta){bestDelta=c-cur;bestTid=tid;}
-          v.tid=o;
+          if (pair) setPairTid(pair, o); else v.tid=o;
         }
-        v.tid=bestTid;
+        if (pair) setPairTid(pair, bestTid); else v.tid=bestTid;
 
         // Blok takas — iki strateji dene, iyileşen kabul et:
         const c0 = cur;
 
         // Strateji A: kendi sınıfı içinde çiftler arası takas
-        const pairs = pairsOf[v.cls];
-        const pairIdx = pairs.findIndex(p => p.includes(vi));
         if (pairIdx >= 0) {
           const blks = blkAssign[v.cls];
           const otherPairIdx = Math.floor(Math.random() * pairs.length);
@@ -428,10 +446,11 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
           }
         }
 
-        // Strateji B: aynı branştaki farklı bir sınıfın çiftiyle blok takas
+        // Strateji B: aynı branş VE aynı grup sınıfıyla blok takas (farklı grup karıştırma yasak)
         if (countConflicts() >= c0) {
           const sameBranchCls = classes.filter(c2 =>
             c2 !== v.cls &&
+            classToGroup(c2) === v.grp &&
             pairsOf[c2].some(p => vars[p[0]]?.branch === v.branch)
           );
           if (sameBranchCls.length > 0) {
@@ -441,12 +460,10 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
             const pi1 = pairIdx >= 0 ? pairIdx : 0;
             const blks1 = blkAssign[v.cls];
             const blks2 = blkAssign[cls2];
-            // blks1[pi1] ↔ blks2[pi2] takas
             const tmp1 = blks1[pi1]; blks1[pi1] = blks2[pi2]; blks2[pi2] = tmp1;
             assignBlocks(blks1, pairsOf[v.cls]);
             assignBlocks(blks2, pairs2);
             if (countConflicts() >= c0) {
-              // Geri al
               blks2[pi2] = blks1[pi1]; blks1[pi1] = tmp1;
               assignBlocks(blks1, pairsOf[v.cls]);
               assignBlocks(blks2, pairs2);
