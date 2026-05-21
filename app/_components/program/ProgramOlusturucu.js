@@ -108,10 +108,14 @@ function classBlockPairs(cls) {
   const g = classToGroup(cls);
   const blocks = [];
   if (g === 'mezun') {
+    // Sabah blokları: w1-w6 (idx 0-5) → 3 blok/gün × 4 gün = 12 blok
     MEZUN_DAYS.forEach(d => {
       for (let i = 0; i < MEZUN_SLOTS.length; i += 2)
         blocks.push([d, MEZUN_SLOTS[i], MEZUN_SLOTS[i+1]]);
     });
+    // Akşam blokları: w7-w8 (idx 6-7) → 1 ekstra blok/gün × 4 gün = 4 blok
+    // Toplam 16 blok kapasitesi; optimizer yerleştirme için hareket alanı
+    MEZUN_DAYS.forEach(d => blocks.push([d, 6, 7]));
     return blocks;
   }
   // Ortaokul: 5 blok/gün (e1-e10); Lise: 4 blok/gün (e1-e8)
@@ -546,7 +550,18 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
       return cur;
     }
     let best=Infinity;
-    for(let r=0;r<80&&best>0&&performance.now()-t0<6000;r++){const c=attempt(4000);if(c<best)best=c;}
+    // Her attempt vars'ı mutate eder; en iyi sonucu snapshot'la
+    let bestSnapshot = null;
+    for(let r=0;r<80&&best>0&&performance.now()-t0<6000;r++){
+      const c=attempt(4000);
+      if(c<best){
+        best=c;
+        bestSnapshot=vars.map(v=>({...v}));
+        if(best===0) break;
+      }
+    }
+    // En iyi sonucu geri yükle
+    if(bestSnapshot) bestSnapshot.forEach((snap,i)=>{ vars[i].tid=snap.tid; vars[i].day=snap.day; vars[i].slot=snap.slot; });
 
     const assigned=[]; const tLoad={}; teachers.forEach(t=>tLoad[t.id]=0);
     if (best>0) {
