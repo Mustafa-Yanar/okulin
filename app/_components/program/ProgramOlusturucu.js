@@ -460,23 +460,23 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         const pairIdx = pairs.findIndex(p => p.includes(vi));
         const pair = pairIdx >= 0 ? pairs[pairIdx] : null;
 
-        // Öğretmen değiştir (çift birlikte) — aynı dersin tüm blokları aynı öğretmende kalır
-        let bestTid=v.tid, bestDelta=0;
+        // Öğretmen değiştir — aynı dersin tüm blokları birlikte değişir
+        const courseBlocks = pair ? (courseBlocksOf[v.cls][v.course]||[]) : null;
+        const oldTid = v.tid; // mevcut öğretmen (tüm bloklar aynı)
+        let bestTid = oldTid, bestDelta = 0;
         for (const tid of v.eligibleIds) {
-          const oldTids = pair
-            ? (courseBlocksOf[v.cls][v.course]||[]).map(p => vars[p[0]].tid)
-            : [v.tid];
-          // Tüm aynı ders bloklarına aynı öğretmeni dene
-          if (pair) (courseBlocksOf[v.cls][v.course]||[]).forEach(p => setPairTid(p, tid));
+          if (tid === oldTid) continue;
+          if (courseBlocks) courseBlocks.forEach(p => setPairTid(p, tid));
           else v.tid = tid;
           const c = countConflicts();
-          if(c-cur<bestDelta){bestDelta=c-cur;bestTid=tid;}
-          // Geri al
-          if (pair) (courseBlocksOf[v.cls][v.course]||[]).forEach((p,i) => setPairTid(p, oldTids[i]));
-          else v.tid = oldTids[0];
+          if (c - cur < bestDelta) { bestDelta = c - cur; bestTid = tid; }
+          if (courseBlocks) courseBlocks.forEach(p => setPairTid(p, oldTid));
+          else v.tid = oldTid;
         }
-        if (pair) (courseBlocksOf[v.cls][v.course]||[]).forEach(p => setPairTid(p, bestTid));
-        else v.tid = bestTid;
+        if (bestTid !== oldTid) {
+          if (courseBlocks) courseBlocks.forEach(p => setPairTid(p, bestTid));
+          else v.tid = bestTid;
+        }
 
         // Blok takas — iki strateji dene, iyileşen kabul et:
         const c0 = cur;
