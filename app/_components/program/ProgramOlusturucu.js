@@ -152,7 +152,7 @@ function slotLabel(day, slotIdx) {
   return t ? `${t.start}–${t.end}` : '';
 }
 function shortCourse(c) {
-  return ({'TYT Matematik':'TYT','AYT Matematik':'AYT','Geometri':'Geo','Matematik':'Mat','Fen Bilgisi':'Fen','Sosyal Bilgiler':'Sos','İnkılap Tarihi':'İnk','İngilizce':'İng'})[c] || c.slice(0,5);
+  return ({'TYT Matematik':'TYT Mat','AYT Matematik':'AYT Mat','Geometri':'Geo','Matematik':'Mat','Fen Bilgisi':'Fen','Sosyal Bilgiler':'Sos','İnkılap Tarihi':'İnk','İngilizce':'İng'})[c] || c.slice(0,5);
 }
 function currentWeekKey() {
   const d = new Date(); d.setHours(0,0,0,0);
@@ -242,23 +242,41 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
       }
     }
 
-    function attempt(maxSteps) {
-      // Blok atama: sınıftaki her ders çifti → bir blok (aynı gün, ardışık 2 slot)
-      classes.forEach(c => {
-        const idxList = byClass[c];
-        const blks = [...blocksOf[c]].sort(()=>Math.random()-.5);
-        for (let i = 0; i < idxList.length; i += 2) {
-          const blk = blks[(i/2) % blks.length];
-          const [day, sA, sB] = blk;
-          vars[idxList[i]].day = day; vars[idxList[i]].slot = sA; vars[idxList[i]].room = roomOf[c];
-          if (i+1 < idxList.length) {
-            vars[idxList[i+1]].day = day; vars[idxList[i+1]].slot = sB; vars[idxList[i+1]].room = roomOf[c];
-          }
+    // Blok atamasını yapar: her ders çifti aynı gün ardışık 2 slota
+    // pairs: [[varIdx0, varIdx1], ...] aynı sınıf-ders çiftleri
+    function assignBlocks(shuffledBlks, pairs) {
+      pairs.forEach((pair, pi) => {
+        const blk = shuffledBlks[pi % shuffledBlks.length];
+        const [day, sA, sB] = blk;
+        vars[pair[0]].day = day; vars[pair[0]].slot = sA; vars[pair[0]].room = roomOf[vars[pair[0]].cls];
+        if (pair[1] !== undefined) {
+          vars[pair[1]].day = day; vars[pair[1]].slot = sB; vars[pair[1]].room = roomOf[vars[pair[1]].cls];
         }
+      });
+    }
+
+    // Her sınıf için ders çiftlerini oluştur (aynı ders, idx sırasıyla çiftlenir)
+    const pairsOf = {};
+    classes.forEach(c => {
+      const idxList = byClass[c];
+      const pairs = [];
+      for (let i = 0; i < idxList.length; i += 2) {
+        pairs.push(i+1 < idxList.length ? [idxList[i], idxList[i+1]] : [idxList[i]]);
+      }
+      pairsOf[c] = pairs;
+    });
+
+    function attempt(maxSteps) {
+      // Blok atama: her sınıf için blokları karıştır, ders çiftlerini benzersiz bloklara ata
+      const blkAssign = {}; // cls → shuffledBlks
+      classes.forEach(c => {
+        const blks = [...blocksOf[c]].sort(()=>Math.random()-.5);
+        blkAssign[c] = blks;
+        assignBlocks(blks, pairsOf[c]);
       });
       vars.forEach(v => v.tid = rnd(v.eligibleIds));
       const tkey = v => v.tid+'|'+v.day+'|'+v.slot;
-      const conflicts = () => {
+      const countConflicts = () => {
         let n=0; const m=new Map();
         vars.forEach(v => { const k=tkey(v); m.set(k,(m.get(k)||0)+1); });
         m.forEach(c => { if(c>1) n+=c-1; });
@@ -272,28 +290,40 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         vars.forEach((v,i) => { if((teacherById[v.tid].offDays||[]).includes(v.day)) bad.push(i); });
         return [...new Set(bad)];
       };
-      let cur = conflicts();
+      let cur = countConflicts();
       for (let step=0; step<maxSteps && cur>0; step++) {
         const bad=badVars(); if(!bad.length) break;
-        const v=vars[rnd(bad)];
+        const vi = rnd(bad);
+        const v = vars[vi];
         // Öğretmen değiştir
         let bestTid=v.tid, bestDelta=0;
-        for (const tid of v.eligibleIds) { const o=v.tid; v.tid=tid; const c=conflicts(); if(c-cur<bestDelta){bestDelta=c-cur;bestTid=tid;} v.tid=o; }
+        for (const tid of v.eligibleIds) {
+          const o=v.tid; v.tid=tid; const c=countConflicts();
+          if(c-cur<bestDelta){bestDelta=c-cur;bestTid=tid;}
+          v.tid=o;
+        }
         v.tid=bestTid;
-        // Blok yer değiştir: sınıftaki başka bir çift ile blokları takas et
-        const mates=byClass[v.cls];
-        const vi=mates.indexOf(vars.indexOf(v));
-        // Bir blok ortağı bul ve onunla farklı bir bloğa geç
-        const blks=[...blocksOf[v.cls]].sort(()=>Math.random()-.5);
-        const newBlk=blks[0]; if(!newBlk) { cur=conflicts(); continue; }
-        const [nd,nsA,nsB]=newBlk;
-        const c0=conflicts();
-        // v'nin çift ortağını bul
-        const vi2 = vars.findIndex((x,i)=>x.cls===v.cls&&x.day===v.day&&x.slot===(v.slot===v.slot?WEEKEND_PRIMARY_SLOTS[0]:0)&&i!==vars.indexOf(v));
-        const oldDay=v.day,oldSlotA=v.slot;
-        v.day=nd; v.slot=nsA;
-        if(conflicts()>c0){v.day=oldDay;v.slot=oldSlotA;}
-        cur=conflicts();
+        // Blok takas: v'nin bulunduğu çifti başka bir bloğa taşı (çiftiyle birlikte)
+        const pairs = pairsOf[v.cls];
+        const pairIdx = pairs.findIndex(p => p.includes(vi));
+        if (pairIdx >= 0) {
+          const blks = blkAssign[v.cls];
+          // Mevcut blok ile rastgele başka bir bloğu takas et
+          const otherPairIdx = Math.floor(Math.random() * pairs.length);
+          if (otherPairIdx !== pairIdx) {
+            // Takas
+            const tmp = blks[pairIdx]; blks[pairIdx] = blks[otherPairIdx]; blks[otherPairIdx] = tmp;
+            const c0 = cur;
+            assignBlocks(blks, pairs);
+            const c1 = countConflicts();
+            if (c1 >= c0) {
+              // Geri al
+              blks[otherPairIdx] = blks[pairIdx]; blks[pairIdx] = tmp;
+              assignBlocks(blks, pairs);
+            }
+          }
+        }
+        cur=countConflicts();
       }
       return cur;
     }
