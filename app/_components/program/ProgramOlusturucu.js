@@ -401,26 +401,34 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         vars[pair[0]].tid = tid;
         if (pair[1] !== undefined) vars[pair[1]].tid = tid;
       };
-      // Aynı dersin birden fazla bloğu varsa farklı öğretmen ata (mümkünse)
+      // Aynı dersin tüm blokları aynı öğretmene atanır (tek öğretmen kuralı)
       classes.forEach(c => {
         for (const [, courseBlocks] of Object.entries(courseBlocksOf[c])) {
-          const usedTids = [];
-          courseBlocks.forEach(pair => {
-            const eligible = vars[pair[0]].eligibleIds;
-            const unused = eligible.filter(tid => !usedTids.includes(tid));
-            const chosen = rnd(unused.length > 0 ? unused : eligible);
-            setPairTid(pair, chosen);
-            usedTids.push(chosen);
-          });
+          const eligible = vars[courseBlocks[0][0]].eligibleIds;
+          const chosen = rnd(eligible);
+          courseBlocks.forEach(pair => setPairTid(pair, chosen));
         }
       });
 
       const tkey = v => v.tid+'|'+v.day+'|'+v.slot;
+      // Çakışma: öğretmen slot çakışması + izin günü + aynı sınıf aynı ders aynı gün
       const countConflicts = () => {
-        let n=0; const m=new Map();
+        let n=0;
+        // Öğretmen slot çakışması
+        const m=new Map();
         vars.forEach(v => { const k=tkey(v); m.set(k,(m.get(k)||0)+1); });
         m.forEach(c => { if(c>1) n+=c-1; });
+        // İzin günü
         vars.forEach(v => { if((teacherById[v.tid].offDays||[]).includes(v.day)) n++; });
+        // Aynı sınıf + aynı ders + aynı gün → fazladan blok başına 1 ceza
+        classes.forEach(c => {
+          for (const [, courseBlocks] of Object.entries(courseBlocksOf[c])) {
+            const days = courseBlocks.map(p => vars[p[0]].day);
+            const dayCounts = {};
+            days.forEach(d => { dayCounts[d] = (dayCounts[d]||0)+1; });
+            Object.values(dayCounts).forEach(cnt => { if(cnt>1) n += cnt-1; });
+          }
+        });
         return n;
       };
       const badVars = () => {
@@ -428,6 +436,18 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         vars.forEach((v,i) => { const k=tkey(v); if(!m.has(k))m.set(k,[]); m.get(k).push(i); });
         const bad=[]; m.forEach(a => { if(a.length>1) bad.push(...a); });
         vars.forEach((v,i) => { if((teacherById[v.tid].offDays||[]).includes(v.day)) bad.push(i); });
+        // Aynı sınıf + aynı ders + aynı gün
+        classes.forEach(c => {
+          for (const [, courseBlocks] of Object.entries(courseBlocksOf[c])) {
+            const byDay = {};
+            courseBlocks.forEach(p => {
+              const d = vars[p[0]].day;
+              if (!byDay[d]) byDay[d] = [];
+              byDay[d].push(...p);
+            });
+            Object.values(byDay).forEach(idxs => { if(idxs.length>2) bad.push(...idxs); });
+          }
+        });
         return [...new Set(bad)];
       };
       let cur = countConflicts();
@@ -441,24 +461,23 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         const pairIdx = pairs.findIndex(p => p.includes(vi));
         const pair = pairIdx >= 0 ? pairs[pairIdx] : null;
 
-        // Öğretmen değiştir (çift birlikte) — aynı dersin diğer bloklarındaki tid'den kaçın
-        const siblingTids = pair
-          ? (courseBlocksOf[v.cls][v.course] || [])
-              .filter(p => p !== pair)
-              .map(p => vars[p[0]].tid)
-          : [];
-        // Önce kullanılmayan öğretmenleri dene, yoksa hepsini
-        const candidatesFirst = v.eligibleIds.filter(tid => !siblingTids.includes(tid));
-        const candidates = candidatesFirst.length > 0 ? candidatesFirst : v.eligibleIds;
+        // Öğretmen değiştir (çift birlikte) — aynı dersin tüm blokları aynı öğretmende kalır
         let bestTid=v.tid, bestDelta=0;
-        for (const tid of candidates) {
-          const o=v.tid;
-          if (pair) setPairTid(pair, tid); else v.tid=tid;
-          const c=countConflicts();
+        for (const tid of v.eligibleIds) {
+          const oldTids = pair
+            ? (courseBlocksOf[v.cls][v.course]||[]).map(p => vars[p[0]].tid)
+            : [v.tid];
+          // Tüm aynı ders bloklarına aynı öğretmeni dene
+          if (pair) (courseBlocksOf[v.cls][v.course]||[]).forEach(p => setPairTid(p, tid));
+          else v.tid = tid;
+          const c = countConflicts();
           if(c-cur<bestDelta){bestDelta=c-cur;bestTid=tid;}
-          if (pair) setPairTid(pair, o); else v.tid=o;
+          // Geri al
+          if (pair) (courseBlocksOf[v.cls][v.course]||[]).forEach((p,i) => setPairTid(p, oldTids[i]));
+          else v.tid = oldTids[0];
         }
-        if (pair) setPairTid(pair, bestTid); else v.tid=bestTid;
+        if (pair) (courseBlocksOf[v.cls][v.course]||[]).forEach(p => setPairTid(p, bestTid));
+        else v.tid = bestTid;
 
         // Blok takas — iki strateji dene, iyileşen kabul et:
         const c0 = cur;
