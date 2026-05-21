@@ -22,7 +22,7 @@ export async function GET() {
   const teachers = results.filter(Boolean).map(t => ({
     id: t.id, name: t.name, branch: t.branch, username: t.username,
     allowedGroups: t.allowedGroups || [], photoUrl: t.photoUrl || '',
-    offDays: t.offDays || [],
+    offDays: t.offDays || [], extraBranches: t.extraBranches || [],
   }));
   return NextResponse.json(teachers);
 }
@@ -33,7 +33,7 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { name, password, branch, allowedGroups, photoUrl } = await req.json();
+  const { name, password, branch, allowedGroups, photoUrl, extraBranches } = await req.json();
   if (!name || !password || !branch) {
     return NextResponse.json({ error: 'Tüm alanlar gerekli' }, { status: 400 });
   }
@@ -52,7 +52,7 @@ export async function POST(req) {
 
   const id = makeId();
   const hash = await bcrypt.hash(password, 10);
-  const teacher = { id, name, username, passwordHash: hash, branch, allowedGroups: allowedGroups || [], photoUrl: photoUrl || '' };
+  const teacher = { id, name, username, passwordHash: hash, branch, allowedGroups: allowedGroups || [], photoUrl: photoUrl || '', extraBranches: extraBranches || [] };
   await redis.set(`teacher:${id}`, teacher);
   await redis.sadd('teachers', id);
 
@@ -60,7 +60,7 @@ export async function POST(req) {
   const weekKey = getWeekKey();
   await initWeekForTeacher(id, weekKey);
 
-  return NextResponse.json({ id, name, branch, username, allowedGroups: teacher.allowedGroups, photoUrl: teacher.photoUrl });
+  return NextResponse.json({ id, name, branch, username, allowedGroups: teacher.allowedGroups, photoUrl: teacher.photoUrl, extraBranches: teacher.extraBranches });
 }
 
 export async function PUT(req) {
@@ -100,11 +100,11 @@ export async function PUT(req) {
     return NextResponse.json({ ok: true, offDays: updated.offDays });
   }
 
-  const { id, name, password, branch, allowedGroups, photoUrl } = body;
+  const { id, name, password, branch, allowedGroups, photoUrl, extraBranches } = body;
   const teacher = await redis.get(`teacher:${id}`);
   if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
 
-  const updated = { ...teacher, name, username: name, branch, allowedGroups: allowedGroups || teacher.allowedGroups, photoUrl: photoUrl !== undefined ? photoUrl : teacher.photoUrl };
+  const updated = { ...teacher, name, username: name, branch, allowedGroups: allowedGroups || teacher.allowedGroups, photoUrl: photoUrl !== undefined ? photoUrl : teacher.photoUrl, extraBranches: extraBranches !== undefined ? extraBranches : (teacher.extraBranches || []) };
   if (password) {
     updated.passwordHash = await bcrypt.hash(password, 10);
   }

@@ -3151,11 +3151,13 @@ function TeacherForm({ initial, onClose, onSave }) {
   const [name, setName] = useState(initial?.name||'');
   const [password, setPassword] = useState('');
   const [branch, setBranch] = useState(initial?.branch||BRANCHES[0]);
+  const [extraBranches, setExtraBranches] = useState(initial?.extraBranches||[]);
   const [allowedGroups, setAllowedGroups] = useState(initial?.allowedGroups||[]);
   const [photoUrl, setPhotoUrl] = useState(initial?.photoUrl||'');
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const toggleGroup = g => setAllowedGroups(prev => prev.includes(g)?prev.filter(x=>x!==g):[...prev,g]);
+  const toggleExtraBranch = b => setExtraBranches(prev => prev.includes(b)?prev.filter(x=>x!==b):[...prev,b]);
 
   const handlePhoto = async e => {
     const file = e.target.files?.[0];
@@ -3172,7 +3174,7 @@ function TeacherForm({ initial, onClose, onSave }) {
     finally { setUploading(false); }
   };
 
-  const submit = async e => { e.preventDefault(); setLoading(true); await onSave({name, username: name, password, branch, allowedGroups, photoUrl}); setLoading(false); };
+  const submit = async e => { e.preventDefault(); setLoading(true); await onSave({name, username: name, password, branch, extraBranches, allowedGroups, photoUrl}); setLoading(false); };
   return (
     <Modal title={initial?'Öğretmen Düzenle':'Yeni Öğretmen'} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
@@ -3197,6 +3199,19 @@ function TeacherForm({ initial, onClose, onSave }) {
             {BRANCHES.map(b=><option key={b} value={b}>{b}</option>)}
           </select>
         </FormField>
+        <div>
+          <Label>Ek Branşlar <span className="text-gray-400 font-400" style={{fontWeight:400}}>(isteğe bağlı)</span></Label>
+          <p className="text-xs text-gray-400 mb-2">Birden fazla derse girebilecek öğretmenler için ekleyin</p>
+          <div className="flex gap-2 flex-wrap">
+            {BRANCHES.filter(b=>b!==branch).map(b => (
+              <button key={b} type="button" onClick={() => toggleExtraBranch(b)}
+                className={`px-3 py-1.5 rounded-lg text-sm border transition-all font-500 ${extraBranches.includes(b)?'border-violet-300 bg-violet-50 text-violet-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                style={{fontWeight:500}}>
+                {extraBranches.includes(b)&&<Check size={12} className="inline mr-1" />}{b}
+              </button>
+            ))}
+          </div>
+        </div>
         <div>
           <Label>Hangi gruplara etüt verebilir?</Label>
           <p className="text-xs text-gray-400 mb-2">Hiç seçilmezse tüm gruplara açık</p>
