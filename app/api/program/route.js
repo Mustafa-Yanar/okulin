@@ -248,3 +248,17 @@ export async function POST(req) {
 
   return NextResponse.json({ ok: true });
 }
+
+// DELETE /api/program — bir öğretmenin şablon programını tamamen siler
+export async function DELETE(req) {
+  const session = await getSession();
+  if (!session || session.role !== 'director') {
+    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  }
+
+  const { teacherId } = await req.json();
+  if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
+
+  await redis.del(programKey(teacherId));
+  return NextResponse.json({ ok: true });
+}

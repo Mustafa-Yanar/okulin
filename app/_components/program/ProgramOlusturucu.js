@@ -153,6 +153,12 @@ function currentWeekKey() {
   return `${d.getFullYear()}-W${String(wk).padStart(2,'0')}`;
 }
 
+// Öğretmenin hangi gruplara ders girebileceği (boşsa tüm gruplar)
+function teacherGroups(t) {
+  const ag = t.allowedGroups || [];
+  return ag.length > 0 ? ag : ['ortaokul','lise','mezun'];
+}
+
 // ── Ana bileşen ──
 export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
   const [teachers, setTeachers] = useState(null);
@@ -161,6 +167,8 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
   const [extraWeekend, setExtraWeekend] = useState(false);
   const [maxWeekly, setMaxWeekly]       = useState(40);
   const [applying, setApplying]         = useState(false);
+  const [clearing, setClearing]         = useState(false);
+  const [conflicts, setConflicts]       = useState(null); // null | { items: [], checked: true }
   const [preview, setPreview]           = useState(null); // 'teacher' | 'class' | null
   const [previewId, setPreviewId]       = useState(null);
 
@@ -191,6 +199,8 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
   // ── min-conflicts çözücü ──
   function generate() {
     if (!teachers) return;
+    setResult(null);
+    setConflicts(null);
     const t0 = performance.now();
     const vars = [], unplaced = [];
 
@@ -199,7 +209,10 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
       for (const course of coursesForCol(key)) {
         const hours = (load[key]?.[course]) || 0; if (hours <= 0) continue;
         const branch = COURSE_BRANCH[course];
-        const eligible = teachers.filter(tt => teacherTeaches(tt,branch) && (tt.allowedGroups||[]).includes(grp)).map(e=>e.id);
+        // Öğretmen hem branşa uymalı hem o gruba ders girebilmeli
+        const eligible = teachers.filter(tt =>
+          teacherTeaches(tt, branch) && teacherGroups(tt).includes(grp)
+        ).map(e => e.id);
         if (!eligible.length) { for(let h=0;h<hours;h++) unplaced.push({cls,course,reason:'uygun öğretmen yok'}); continue; }
         for (let h=0;h<hours;h++) vars.push({cls,course,branch,grp,eligibleIds:eligible});
       }
@@ -272,11 +285,68 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
     showToast?.(`${assigned.length} ders yerleşti${unplaced.length?`, ${unplaced.length} açıkta`:''}`, unplaced.length?'info':'success');
   }
 
+  // ── Çakışma kontrolü: mevcut programları oku ve çakışanları bul ──
+  async function checkConflicts() {
+    if (!result?.assigned.length) return;
+    try {
+      // Mevcut programları çek
+      const existing = {};
+      await Promise.all(teachers.map(async t => {
+        try {
+          const prog = await api(`/api/program?teacherId=${t.id}`);
+          existing[t.id] = prog || {};
+        } catch { existing[t.id] = {}; }
+      }));
+      const items = [];
+      for (const a of result.assigned) {
+        const sid = slotIdFor(a.day, a.slot); if (!sid) continue;
+        const prog = existing[a.teacherId] || {};
+        const dayProg = prog[String(a.day)] || {};
+        const cur = dayProg[sid];
+        if (cur && cur.cls && cur.cls !== a.cls) {
+          const tName = teachers.find(t=>t.id===a.teacherId)?.name || a.teacherId;
+          items.push(`${tName} — ${DAYS[a.day]} ${sid}: mevcut ${cur.cls.toUpperCase()} → yeni ${a.cls.toUpperCase()} (${a.course})`);
+        }
+      }
+      setConflicts({ items, checked: true });
+      return items.length;
+    } catch(e) {
+      showToast?.(e.message,'error');
+      return -1;
+    }
+  }
+
+  // ── Mevcut programları temizle ──
+  async function clearAllPrograms() {
+    setClearing(true);
+    try {
+      for (const t of teachers) {
+        await api('/api/program', { method: 'DELETE', body: JSON.stringify({ teacherId: t.id }) });
+      }
+      showToast?.('Tüm programlar temizlendi','success');
+    } catch(e) { showToast?.(e.message,'error'); }
+    finally { setClearing(false); }
+  }
+
   // ── Uygula: program:{teacherId} şablonlarına yaz ──
   async function applyToTemplates(weekKey) {
     if (!result?.assigned.length) return;
+    // Çakışma kontrolü yapılmamışsa önce kontrol et
+    if (!conflicts?.checked) {
+      const n = await checkConflicts();
+      if (n === -1) return;
+      if (n > 0) {
+        showToast?.(`${n} çakışma var — kontrol edip onaylayın`,'info');
+        return;
+      }
+    }
     setApplying(true);
     try {
+      // Önce tüm öğretmenlerin programını temizle
+      for (const t of teachers) {
+        await api('/api/program', { method: 'DELETE', body: JSON.stringify({ teacherId: t.id }) });
+      }
+      // Yeni programı yaz
       const byTeacher = {};
       for (const a of result.assigned) {
         const sid = slotIdFor(a.day, a.slot); if (!sid) continue;
@@ -291,7 +361,8 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         await api('/api/program',{method:'POST',body:JSON.stringify({teacherId,weekKey,program})});
         ok++;
       }
-      showToast?.(`${ok} öğretmenin programı şablona uygulandı`,'success');
+      showToast?.(`${ok} öğretmenin programı uygulandı`,'success');
+      setConflicts(null);
     } catch(e) { showToast?.(e.message,'error'); }
     finally { setApplying(false); }
   }
@@ -332,6 +403,11 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
             <input type="checkbox" checked={extraWeekend} onChange={e=>setExtraWeekend(e.target.checked)} />
             H.sonu +9/10. ders
           </label>
+          <button onClick={clearAllPrograms} disabled={clearing}
+            className="btn-ghost !px-3 !py-2 text-xs text-red-500 hover:bg-red-50 flex items-center gap-1.5 border border-red-200"
+            title="Tüm öğretmenlerin mevcut programını sil">
+            {clearing ? 'Siliniyor...' : 'Programları Temizle'}
+          </button>
           <button onClick={generate} className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm">
             <Sparkles size={14} /> Oluştur
           </button>
@@ -359,12 +435,38 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         <LoadTable load={load} setLoad={setLoad} cols={activeCols} />
       </div>
 
+      {/* Çakışma uyarısı */}
+      {conflicts?.checked && conflicts.items.length > 0 && (
+        <div className="card p-4 border-amber-200" style={{background:'#fffbeb'}}>
+          <div className="flex items-start gap-2 mb-2">
+            <AlertTriangle size={15} className="text-amber-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm text-amber-700" style={{fontWeight:700}}>Mevcut programla {conflicts.items.length} çakışma var</p>
+              <p className="text-xs text-amber-600 mt-0.5">Uygulamak bu slotların üzerine yazacak. Devam etmek istiyor musunuz?</p>
+            </div>
+          </div>
+          <ul className="text-xs text-gray-600 mb-3 space-y-0.5 pl-5 list-disc">
+            {conflicts.items.slice(0,10).map((item,i)=><li key={i}>{item}</li>)}
+            {conflicts.items.length>10 && <li className="text-gray-400">...ve {conflicts.items.length-10} tane daha</li>}
+          </ul>
+          <div className="flex gap-2">
+            <button onClick={() => applyToTemplates(currentWeekKey())} disabled={applying}
+              className="btn-primary !px-3 !py-1.5 text-xs flex items-center gap-1.5">
+              {applying ? 'Uygulanıyor...' : <><Check size={12}/> Yine de Uygula</>}
+            </button>
+            <button onClick={() => setConflicts(null)} className="btn-ghost !px-3 !py-1.5 text-xs">İptal</button>
+          </div>
+        </div>
+      )}
+
       {/* Sonuç */}
       {result && (
         <ResultView
           result={result} classes={classes} teachers={teachers}
           maxWeekly={maxWeekly} applying={applying}
+          conflictsChecked={conflicts?.checked && conflicts.items.length === 0}
           onApply={() => applyToTemplates(currentWeekKey())}
+          onCheckConflicts={checkConflicts}
           onPrintTeacher={id => printSchedule('teacher',id)}
           onPrintClass={cls => printSchedule('class',cls)}
         />
@@ -442,7 +544,7 @@ function LoadTable({ load, setLoad, cols }) {
 }
 
 // ── Sonuç görünümü ──
-function ResultView({ result, classes, teachers, maxWeekly, applying, onApply, onPrintTeacher, onPrintClass }) {
+function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsChecked, onApply, onCheckConflicts, onPrintTeacher, onPrintClass }) {
   const [viewMode, setViewMode] = useState('class');
   const [viewDay, setViewDay]   = useState('all');
 
@@ -484,11 +586,20 @@ function ResultView({ result, classes, teachers, maxWeekly, applying, onApply, o
             <option value="all">Tüm günler</option>
             {usedDays.map(d=><option key={d} value={d}>{DAYS[d]}</option>)}
           </select>
-          <button onClick={onApply} disabled={applying||result.unplaced.length>0}
-            className="btn-success !px-3 !py-1.5 flex items-center gap-1.5 text-xs disabled:opacity-50"
-            title={result.unplaced.length?'Önce tüm dersler yerleşmeli':''}>
-            {applying?'Uygulanıyor...':<><Check size={13}/> Şablona Uygula</>}
-          </button>
+          {conflictsChecked
+            ? (
+              <button onClick={onApply} disabled={applying||result.unplaced.length>0}
+                className="btn-success !px-3 !py-1.5 flex items-center gap-1.5 text-xs disabled:opacity-50">
+                {applying?'Uygulanıyor...':<><Check size={13}/> Şablona Uygula</>}
+              </button>
+            ) : (
+              <button onClick={onCheckConflicts} disabled={applying||result.unplaced.length>0}
+                className="btn-primary !px-3 !py-1.5 flex items-center gap-1.5 text-xs disabled:opacity-50"
+                title={result.unplaced.length?'Önce tüm dersler yerleşmeli':''}>
+                <Check size={13}/> Uygula
+              </button>
+            )
+          }
         </div>
       </div>
 

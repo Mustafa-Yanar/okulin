@@ -3213,7 +3213,7 @@ function TeacherForm({ initial, onClose, onSave }) {
           </div>
         </div>
         <div>
-          <Label>Hangi gruplara etüt verebilir?</Label>
+          <Label>Hangi gruplara ders girebilir?</Label>
           <p className="text-xs text-gray-400 mb-2">Hiç seçilmezse tüm gruplara açık</p>
           <div className="flex gap-2 flex-wrap">
             {Object.entries(GROUPS).map(([key,label]) => (
