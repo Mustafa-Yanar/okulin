@@ -289,11 +289,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
     (async () => {
       try {
         const data = await api('/api/teachers');
-        // Tarih branşlı öğretmen ortaokul sosyal/inkılap da verebilir (runtime ekstra)
-        const withExtra = data.map(t => t.branch === 'Tarih'
-          ? { ...t, extraBranches: [...(t.extraBranches||[]), 'Sosyal Bilgiler'].filter((v,i,a)=>a.indexOf(v)===i) }
-          : t);
-        setTeachers(withExtra);
+        setTeachers(data);
       } catch(e) { showToast?.(e.message,'error'); setTeachers([]); }
     })();
   }, [api, showToast]);
@@ -329,7 +325,6 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
       }
     }
 
-    const roomOf = classRoomMap(classes);
     // Blok bazlı: her blok = [gün, slotA, slotB]
     const blocksOf = {}; classes.forEach(c => blocksOf[c] = classBlockPairs(c));
     // Her ders vars dizisini çift çift grupla: vars[2k] ve vars[2k+1] aynı blok
@@ -353,9 +348,9 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
       pairs.forEach((pair, pi) => {
         const blk = shuffledBlks[pi % shuffledBlks.length];
         const [day, sA, sB] = blk;
-        vars[pair[0]].day = day; vars[pair[0]].slot = sA; vars[pair[0]].room = roomOf[vars[pair[0]].cls];
+        vars[pair[0]].day = day; vars[pair[0]].slot = sA;
         if (pair[1] !== undefined) {
-          vars[pair[1]].day = day; vars[pair[1]].slot = sB; vars[pair[1]].room = roomOf[vars[pair[1]].cls];
+          vars[pair[1]].day = day; vars[pair[1]].slot = sB;
         }
       });
     }
@@ -411,7 +406,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
       });
 
       const tkey = v => v.tid+'|'+v.day+'|'+v.slot;
-      // Çakışma: öğretmen slot çakışması + izin günü + aynı sınıf aynı ders aynı gün
+      // Çakışma: öğretmen slot çakışması + izin günü + aynı sınıf aynı ders aynı gün + max yük aşımı
       const countConflicts = () => {
         let n=0;
         // Öğretmen slot çakışması
@@ -420,6 +415,10 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         m.forEach(c => { if(c>1) n+=c-1; });
         // İzin günü
         vars.forEach(v => { if((teacherById[v.tid].offDays||[]).includes(v.day)) n++; });
+        // Max yük aşımı — her sınıf ders bloğu 2 saat sayar
+        const tidLoad = {};
+        vars.forEach(v => { tidLoad[v.tid] = (tidLoad[v.tid]||0)+1; });
+        Object.entries(tidLoad).forEach(([tid, cnt]) => { if(cnt > maxWeekly) n += cnt - maxWeekly; });
         // Aynı sınıf + aynı ders + aynı gün → fazladan blok başına 1 ceza
         classes.forEach(c => {
           for (const [, courseBlocks] of Object.entries(courseBlocksOf[c])) {
@@ -535,10 +534,10 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         const k=v.tid+'|'+v.day+'|'+v.slot;
         const offBad=(teacherById[v.tid].offDays||[]).includes(v.day);
         if(seen.has(k)||offBad) unplaced.push({cls:v.cls,course:v.course,reason:offBad?'öğretmen izinli':'öğretmen çakışması'});
-        else { seen.add(k); assigned.push({cls:v.cls,course:v.course,teacherId:v.tid,teacherName:teacherById[v.tid].name,day:v.day,slot:v.slot,room:v.room}); tLoad[v.tid]++; }
+        else { seen.add(k); assigned.push({cls:v.cls,course:v.course,teacherId:v.tid,teacherName:teacherById[v.tid].name,day:v.day,slot:v.slot}); tLoad[v.tid]++; }
       });
     } else {
-      vars.forEach(v => { assigned.push({cls:v.cls,course:v.course,teacherId:v.tid,teacherName:teacherById[v.tid].name,day:v.day,slot:v.slot,room:v.room}); tLoad[v.tid]++; });
+      vars.forEach(v => { assigned.push({cls:v.cls,course:v.course,teacherId:v.tid,teacherName:teacherById[v.tid].name,day:v.day,slot:v.slot}); tLoad[v.tid]++; });
     }
     setResult({assigned,unplaced,tLoad,total:assigned.length,ms:Math.round(performance.now()-t0)});
     showToast?.(`${assigned.length} ders yerleşti${unplaced.length?`, ${unplaced.length} açıkta`:''}`, unplaced.length?'info':'success');
@@ -858,13 +857,10 @@ function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsC
   const unplacedGrouped={};
   result.unplaced.forEach(u=>{const k=`${u.course} — ${u.reason}`;(unplacedGrouped[k]=unplacedGrouped[k]||{cls:new Set(),n:0}).n++;unplacedGrouped[k].cls.add(u.cls);});
 
-  let rowKeys;
-  if (viewMode==='class') rowKeys=classes;
-  else if (viewMode==='teacher') rowKeys=teachers.map(t=>t.name);
-  else rowKeys=[...Array(12).keys()].map(i=>i+1);
+  const rowKeys = viewMode==='class' ? classes : teachers.map(t=>t.name);
 
   const find=(rk,d,i)=>result.assigned.find(a=>a.day===d&&a.slot===i&&(
-    viewMode==='class'?a.cls===rk:viewMode==='teacher'?a.teacherName===rk:a.room===rk));
+    viewMode==='class'?a.cls===rk:a.teacherName===rk));
 
   return (
     <div className="card p-4 space-y-3">
@@ -881,7 +877,6 @@ function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsC
           <select value={viewMode} onChange={e=>setViewMode(e.target.value)} className="input !w-auto !py-1.5 text-xs">
             <option value="class">Sınıf bazlı</option>
             <option value="teacher">Öğretmen bazlı</option>
-            <option value="room">Derslik bazlı</option>
           </select>
           <select value={viewDay} onChange={e=>setViewDay(e.target.value)} className="input !w-auto !py-1.5 text-xs">
             <option value="all">Tüm günler</option>
@@ -1094,7 +1089,7 @@ function SchedulePage({ title, lessons }) {
                     <td key={d+'-'+rowIdx} style={{border:`1px solid ${col}30`,borderLeft:`3px solid ${col}60`,background:`${col}12`,padding:'5px 8px',textAlign:'center'}}>
                       <div style={{fontWeight:700,color:col,fontSize:11}}>{a.course}</div>
                       <div style={{fontSize:10,color:'#6b7280'}}>{slotLabel(d, a.slot)}</div>
-                      <div style={{fontSize:10,color:'#9ca3af'}}>{a.cls.toUpperCase()} · D{a.room}</div>
+                      <div style={{fontSize:10,color:'#9ca3af'}}>{a.cls.toUpperCase()}</div>
                     </td>
                   );
                 })}
