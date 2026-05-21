@@ -931,15 +931,19 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
                   cellClass += 'bg-white border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50/40';
                 }
                 const slotIsPast = isSlotPast(weekKey, day.index, slot.label);
+                // 'available' (müsait ders saati) ve kapalı slot haftadan bağımsız
+                // şablon ayarı — geçmiş kontrolünden muaf. Geçmiş engeli sadece
+                // gerçek etüt rezervasyonuna (öğrenci atanmış) uygulanır.
+                const blockPast = slotIsPast && type === 'etut';
                 if (isActive) cellClass += ' ring-2 ring-indigo-400';
-                if (slotIsPast) cellClass += ' opacity-70 !cursor-not-allowed';
+                if (blockPast) cellClass += ' opacity-70 !cursor-not-allowed';
                 return (
                   <td key={day.index} className="py-0.5 px-0.5">
                     <div className="relative">
                       <button className={cellClass}
-                        disabled={slotIsPast}
-                        title={slotIsPast ? 'Bu saat dilimi geçmiş — düzenlenemez' : (type ? 'Tıkla: seçenekler' : 'Tıkla: ders saati aç')}
-                        onClick={() => !slotIsPast && handleSlotClick(day.index, slot.id)}>
+                        disabled={blockPast}
+                        title={blockPast ? 'Bu saat dilimi geçmiş — düzenlenemez' : (type ? 'Tıkla: seçenekler' : 'Tıkla: ders saati aç')}
+                        onClick={() => !blockPast && handleSlotClick(day.index, slot.id)}>
                         {cellContent}
                       </button>
                       {type && !slotIsPast && (

@@ -110,11 +110,16 @@ export async function POST(req) {
 
   // Geçmiş slotları diff'ten sessizce kaldır — frontend yanlışlıkla gönderirse
   // mevcut etüt/ders kayıtlarına dokunulmaz.
+  // İSTİSNA: type:'available' haftadan bağımsız şablon ayarı (öğretmenin genel
+  // müsaitliği); geçmiş-silme kuralından muaf, aksi halde bu haftanın geçmiş
+  // günleri işaretlenemez.
   const postSlotTimes = await getSlotTimes();
   for (const dayIdx of Object.keys(program)) {
     const di = parseInt(dayIdx);
     const slots = slotsForDay(di, di >= 5 ? postSlotTimes.weekend : postSlotTimes.weekday);
     for (const slotId of Object.keys(program[dayIdx] || {})) {
+      const entry = program[dayIdx][slotId];
+      if (entry?.type === 'available') continue; // şablon müsaitliği — koru
       const slotDef = slots.find(s => s.id === slotId);
       if (!slotDef) continue;
       const slotStart = slotStartTime(weekKey, parseInt(dayIdx), slotDef.label);
