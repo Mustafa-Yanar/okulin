@@ -168,6 +168,104 @@ function teacherGroups(t) {
   return ag.length > 0 ? ag : ['ortaokul','lise','mezun'];
 }
 
+// Bir grubun kullanabileceği toplam blok kapasitesi (öğretmen başına)
+function teacherBlockCap(t, grp, extraWeekend) {
+  const offDays = new Set(t.offDays || []);
+  // Mezun: Pzt-Per sabah, 3 blok/gün
+  if (grp === 'mezun') {
+    return MEZUN_DAYS.filter(d => !offDays.has(d)).length * (MEZUN_SLOTS.length / 2);
+  }
+  // Lise/ortaokul: hafta sonu 4 blok/gün (+1 ekstra), hafta içi 1 blok/gün
+  const wkendBlks = extraWeekend ? 5 : 4;
+  const wkend = WEEKEND_DAYS.filter(d => !offDays.has(d)).length * wkendBlks;
+  const wkday = [0,1,2,3,4].filter(d => !offDays.has(d)).length * 1;
+  return wkend + wkday;
+}
+
+// Ön analiz: oluşturmadan önce kapasite/çakışma sorunlarını hesapla
+function analyzeLoad(classes, load, teachers, extraWeekend) {
+  const errors = [], warnings = [], infos = [];
+
+  // 1. Tek sayı kontrolü
+  for (const cls of classes) {
+    const key = colKeyFor(cls);
+    for (const course of coursesForCol(key)) {
+      const h = (load[key]?.[course]) || 0;
+      if (h > 0 && h % 2 !== 0) {
+        errors.push(`${cls.toUpperCase()} — ${course}: ${h} saat (tek sayı, blok yapılamaz)`);
+      }
+    }
+  }
+
+  // 2. Uygun öğretmen yok
+  for (const cls of classes) {
+    const key = colKeyFor(cls), grp = classToGroup(cls);
+    for (const course of coursesForCol(key)) {
+      const h = (load[key]?.[course]) || 0; if (h <= 0) continue;
+      const branch = COURSE_BRANCH[course];
+      const eligible = teachers.filter(tt =>
+        teacherTeaches(tt, branch) && teacherGroups(tt).includes(grp)
+      );
+      if (eligible.length === 0) {
+        errors.push(`${cls.toUpperCase()} — ${course}: uygun öğretmen yok (branş: ${branch})`);
+      }
+    }
+  }
+
+  // 3. Branş bazında talep vs kapasite
+  // Her branş için: toplam talep saati ve toplam blok kapasitesi
+  const branchDemand = {}; // branch → toplam saat talebi
+  const branchPairs = {};  // branch+grp kombinasyonu için toplam çift talebi
+
+  for (const cls of classes) {
+    const key = colKeyFor(cls), grp = classToGroup(cls);
+    for (const course of coursesForCol(key)) {
+      const h = (load[key]?.[course]) || 0; if (h <= 0) continue;
+      const branch = COURSE_BRANCH[course];
+      const k = branch + '|' + grp;
+      branchPairs[k] = (branchPairs[k] || 0) + Math.ceil(h / 2);
+      branchDemand[branch] = (branchDemand[branch] || 0) + h;
+    }
+  }
+
+  // Her branş+grup için uygun öğretmenlerin toplam blok kapasitesi
+  for (const [bk, pairDemand] of Object.entries(branchPairs)) {
+    const [branch, grp] = bk.split('|');
+    const eligible = teachers.filter(tt =>
+      teacherTeaches(tt, branch) && teacherGroups(tt).includes(grp)
+    );
+    if (eligible.length === 0) continue; // zaten hata var yukarıda
+    const totalCap = eligible.reduce((s, t) => s + teacherBlockCap(t, grp, extraWeekend), 0);
+    if (pairDemand > totalCap) {
+      const grpLabel = grp === 'mezun' ? 'Mezun' : grp === 'lise' ? 'Lise' : 'Ortaokul';
+      errors.push(`${branch} (${grpLabel}): ${pairDemand * 2} saat talep, ${totalCap * 2} saat kapasite — ${pairDemand - totalCap} blok sığmaz`);
+    } else if (pairDemand > totalCap * 0.85) {
+      const grpLabel = grp === 'mezun' ? 'Mezun' : grp === 'lise' ? 'Lise' : 'Ortaokul';
+      warnings.push(`${branch} (${grpLabel}): kapasite %${Math.round(pairDemand/totalCap*100)} dolu — yerleştirme zorlaşabilir`);
+    }
+  }
+
+  // 4. İzin günü olan öğretmenler
+  const offTeachers = teachers.filter(t => (t.offDays||[]).length > 0);
+  if (offTeachers.length > 0) {
+    offTeachers.forEach(t => {
+      const dayNames = (t.offDays||[]).map(d => DAYS[d]).join(', ');
+      infos.push(`${t.name} — izin günleri: ${dayNames} (kapasite düşük)`);
+    });
+  }
+
+  // 5. Hiç talep yok kontrolü
+  const totalHours = classes.reduce((s, cls) => {
+    const key = colKeyFor(cls);
+    return s + coursesForCol(key).reduce((ss, c) => ss + ((load[key]?.[c]) || 0), 0);
+  }, 0);
+  if (totalHours === 0) {
+    infos.push('Hiç ders saati girilmemiş — ders yükü tablosunu doldurun.');
+  }
+
+  return { errors, warnings, infos, ok: errors.length === 0 };
+}
+
 // ── Ana bileşen ──
 export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
   const [teachers, setTeachers] = useState(null);
@@ -180,6 +278,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
   const [conflicts, setConflicts]       = useState(null); // null | { items: [], checked: true }
   const [preview, setPreview]           = useState(null); // 'teacher' | 'class' | null
   const [previewId, setPreviewId]       = useState(null);
+  const [analysis, setAnalysis]         = useState(null); // null | { errors, warnings, infos, ok }
 
   const classes = useMemo(() => {
     const base = (activeClasses?.length) ? activeClasses : ALL_CLASSES;
@@ -198,6 +297,12 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
       } catch(e) { showToast?.(e.message,'error'); setTeachers([]); }
     })();
   }, [api, showToast]);
+
+  // Analizi yeniden hesapla: teachers/load/extraWeekend/classes değişince
+  useEffect(() => {
+    if (!teachers) return;
+    setAnalysis(analyzeLoad(classes, load, teachers, extraWeekend));
+  }, [teachers, load, extraWeekend, classes]);
 
   // Ders yükü tablosu her zaman tüm sütunları gösterir
   const activeCols = LOAD_COLUMNS;
@@ -495,6 +600,47 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         <p className="text-xs text-gray-400 mb-3">Her sınıf türü için haftalık ders saatlerini girin.</p>
         <LoadTable load={load} setLoad={setLoad} cols={activeCols} />
       </div>
+
+      {/* Ön analiz paneli */}
+      {analysis && (
+        <div className="card p-4 space-y-2">
+          <div className="flex items-center gap-2 mb-1">
+            {analysis.ok
+              ? <Check size={14} className="text-emerald-500" />
+              : <AlertTriangle size={14} className="text-red-500" />}
+            <span className="text-sm" style={{fontWeight:700, color: analysis.ok ? '#059669' : '#dc2626'}}>
+              {analysis.ok ? 'Ön analiz tamam — oluşturabilirsiniz' : `${analysis.errors.length} hata, ${analysis.warnings.length} uyarı`}
+            </span>
+          </div>
+          {analysis.errors.length > 0 && (
+            <ul className="text-xs space-y-1">
+              {analysis.errors.map((e,i) => (
+                <li key={i} className="flex items-start gap-1.5 text-red-700">
+                  <span className="mt-0.5 shrink-0">✕</span><span>{e}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {analysis.warnings.length > 0 && (
+            <ul className="text-xs space-y-1">
+              {analysis.warnings.map((w,i) => (
+                <li key={i} className="flex items-start gap-1.5 text-amber-700">
+                  <span className="mt-0.5 shrink-0">⚠</span><span>{w}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {analysis.infos.length > 0 && (
+            <ul className="text-xs space-y-1">
+              {analysis.infos.map((inf,i) => (
+                <li key={i} className="flex items-start gap-1.5 text-gray-400">
+                  <span className="mt-0.5 shrink-0">i</span><span>{inf}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Çakışma uyarısı */}
       {conflicts?.checked && conflicts.items.length > 0 && (
