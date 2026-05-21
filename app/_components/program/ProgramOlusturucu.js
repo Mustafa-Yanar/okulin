@@ -989,12 +989,11 @@ function PrintPreview({ type, id, result, teachers, classes, onClose }) {
 
 function SchedulePage({ title, lessons }) {
   const usedDays = [...new Set(lessons.map(a=>a.day))].sort();
-  // Her gün için kullanılan slot'ları sıralı al
-  const daySlots = usedDays.map(d =>
-    [...new Set(lessons.filter(a=>a.day===d).map(a=>a.slot))].sort((a,b)=>a-b)
+  // Her gün için slotları sıralı dizi — sıra numarası = slot sırası
+  const dayLessons = usedDays.map(d =>
+    lessons.filter(a=>a.day===d).sort((a,b)=>a.slot-b.slot)
   );
-  const maxPerDay = Math.max(0,...daySlots.map(s=>s.length));
-  const find = (d,s) => lessons.find(a=>a.day===d&&a.slot===s);
+  const maxRows = Math.max(0, ...dayLessons.map(ls=>ls.length));
 
   return (
     <div className="print-page p-8" style={{pageBreakAfter:'always',minHeight:'100vh'}}>
@@ -1007,43 +1006,28 @@ function SchedulePage({ title, lessons }) {
       ) : (
         <table style={{borderCollapse:'collapse',width:'100%',fontSize:11}}>
           <thead>
-            {/* Gün başlıkları — her gün birleşik hücre */}
             <tr>
-              <th style={{border:'1px solid #e5e7eb',padding:'6px 8px',background:'#f9fafb',textAlign:'left'}} rowSpan={2}>Sıra</th>
-              {usedDays.map((d,di) => (
-                <th key={d} colSpan={daySlots[di].length || 1}
-                  style={{border:'1px solid #e5e7eb',borderLeft:'3px solid #6366f1',padding:'6px 8px',background:'#eef2ff',textAlign:'center',fontWeight:700,color:'#4338ca'}}>
+              <th style={{border:'1px solid #e5e7eb',padding:'6px 8px',background:'#f9fafb',textAlign:'center',color:'#9ca3af',width:36}}>Sıra</th>
+              {usedDays.map(d => (
+                <th key={d} style={{border:'1px solid #e5e7eb',borderLeft:'3px solid #6366f1',padding:'6px 8px',background:'#eef2ff',textAlign:'center',fontWeight:700,color:'#4338ca'}}>
                   {DAYS[d]}
                 </th>
               ))}
             </tr>
-            {/* Saat satırı */}
-            <tr>
-              {usedDays.map((d,di) =>
-                daySlots[di].map((s,si) => (
-                  <th key={d+'-'+s}
-                    style={{border:'1px solid #e5e7eb',borderLeft:si===0?'3px solid #6366f1':'1px solid #e5e7eb',padding:'4px 6px',background:'#f9fafb',textAlign:'center',fontWeight:400,color:'#9ca3af',whiteSpace:'nowrap',fontSize:10}}>
-                    {si+1}. {slotLabel(d, s)}
-                  </th>
-                ))
-              )}
-            </tr>
           </thead>
           <tbody>
-            {[...Array(maxPerDay).keys()].map(rowIdx => (
+            {[...Array(maxRows).keys()].map(rowIdx => (
               <tr key={rowIdx}>
-                <td style={{border:'1px solid #e5e7eb',padding:'5px 8px',color:'#9ca3af',textAlign:'center',fontWeight:600}}>{rowIdx+1}</td>
+                <td style={{border:'1px solid #e5e7eb',padding:'5px 8px',color:'#9ca3af',textAlign:'center',fontWeight:600,background:'#f9fafb'}}>{rowIdx+1}</td>
                 {usedDays.map((d,di) => {
-                  const s = daySlots[di][rowIdx];
-                  if (s === undefined) return <td key={d+'-empty-'+rowIdx} style={{border:'1px solid #e5e7eb',borderLeft:'3px solid #e5e7eb',background:'#fafafa'}}/>;
-                  const a = find(d, s);
-                  const leftBorder = '3px solid #6366f130';
-                  if (!a) return <td key={d+'-'+s} style={{border:'1px solid #e5e7eb',borderLeft:leftBorder,background:'#f9fafb'}}/>;
+                  const a = dayLessons[di][rowIdx];
+                  if (!a) return <td key={d+'-'+rowIdx} style={{border:'1px solid #e5e7eb',borderLeft:'3px solid #6366f130',background:'#fafafa'}}/>;
                   const col = COURSE_COLOR[a.course]||'#6366f1';
                   return (
-                    <td key={d+'-'+s} style={{border:`1px solid ${col}30`,borderLeft:`3px solid ${col}60`,background:`${col}12`,padding:'5px 8px',textAlign:'center'}}>
+                    <td key={d+'-'+rowIdx} style={{border:`1px solid ${col}30`,borderLeft:`3px solid ${col}60`,background:`${col}12`,padding:'5px 8px',textAlign:'center'}}>
                       <div style={{fontWeight:700,color:col,fontSize:11}}>{a.course}</div>
-                      <div style={{fontSize:10,color:'#6b7280'}}>{a.cls.toUpperCase()} · D{a.room}</div>
+                      <div style={{fontSize:10,color:'#6b7280'}}>{slotLabel(d, a.slot)}</div>
+                      <div style={{fontSize:10,color:'#9ca3af'}}>{a.cls.toUpperCase()} · D{a.room}</div>
                     </td>
                   );
                 })}
