@@ -1537,7 +1537,7 @@ function TeacherPanel({ session, showToast }) {
 // branch: öğretmenin branşı — çözülen sorular ve konu takibi buna göre süzülür.
 function TeacherStudentsView({ students, branch }) {
   const [expandedId, setExpandedId] = useState(null);
-  const [collapsed, setCollapsed] = useState({});
+  const [openCls, setOpenCls] = useState(null);
   const [searchQ, setSearchQ] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
 
@@ -1569,7 +1569,7 @@ function TeacherStudentsView({ students, branch }) {
     return groups;
   }, [students, searchQ, filterGroup]);
 
-  const toggle = (cls) => setCollapsed((prev) => ({ ...prev, [cls]: !prev[cls] }));
+  const toggle = (cls) => setOpenCls(prev => prev === cls ? null : cls);
 
   return (
     <div>
@@ -1601,7 +1601,7 @@ function TeacherStudentsView({ students, branch }) {
           </div>
         )}
         {grouped.map((grp) => {
-          const isOpen = !collapsed[grp.cls];
+          const isOpen = openCls === grp.cls;
           const dotColor =
             grp.group === 'lise'
               ? 'linear-gradient(135deg,#6366f1,#4f46e5)'
@@ -2929,7 +2929,7 @@ function StudentGuidanceView({ studentId, onReviewed, readOnly, branchFilter }) 
 function StudentList({ students, allSlots, weekKey, onCancelBooking, onEdit, onDelete, onDeleteClass, onReset, onHistory, pendingGuidance, onGuidanceReviewed }) {
   const [searchQ, setSearchQ] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
-  const [collapsed, setCollapsed] = useState({});
+  const [openCls, setOpenCls] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [scheduleCls, setScheduleCls] = useState(null);
 
@@ -2957,7 +2957,7 @@ function StudentList({ students, allSlots, weekKey, onCancelBooking, onEdit, onD
     return groups;
   }, [students, searchQ, filterGroup]);
 
-  const toggle = cls => setCollapsed(prev => ({ ...prev, [cls]: !prev[cls] }));
+  const toggle = cls => setOpenCls(prev => prev === cls ? null : cls);
 
   return (
     <div>
@@ -2971,7 +2971,7 @@ function StudentList({ students, allSlots, weekKey, onCancelBooking, onEdit, onD
       <div className="grid gap-2">
         {grouped.length === 0 && <div className="card p-8 text-center text-gray-400"><GraduationCap size={32} className="mx-auto mb-2 opacity-30" /><p>Öğrenci bulunamadı</p></div>}
         {grouped.map(grp => {
-          const isOpen = !collapsed[grp.cls];
+          const isOpen = openCls === grp.cls;
           const dotColor = grp.group==='lise'
             ? 'linear-gradient(135deg,#6366f1,#4f46e5)'
             : grp.group==='ortaokul'
