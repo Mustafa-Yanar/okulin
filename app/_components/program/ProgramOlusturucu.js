@@ -190,11 +190,8 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
     })();
   }, [api, showToast]);
 
-  // Aktif sütunlar: bu okuldaki sınıflardan türetilir
-  const activeCols = useMemo(() => {
-    const usedKeys = new Set(classes.map(colKeyFor));
-    return LOAD_COLUMNS.filter(c => usedKeys.has(c.key));
-  }, [classes]);
+  // Ders yükü tablosu her zaman tüm sütunları gösterir
+  const activeCols = LOAD_COLUMNS;
 
   // ── min-conflicts çözücü ──
   function generate() {
