@@ -213,12 +213,14 @@ export async function POST(req) {
 
   // 3) Geçici (fixed: false) entry'leri grid'e doğrudan yaz
   const gridPipeline = redis.pipeline();
+  let gridCmds = 0;
   for (const [dayIdx, daySlots] of Object.entries(program)) {
     for (const [slotId, entry] of Object.entries(daySlots || {})) {
       const k = slotKey(weekKey, teacherId, parseInt(dayIdx), slotId);
       if (!entry) {
         // Slot temizlendi — grid'de varsa kaldır (kapalı yap)
         gridPipeline.set(k, { booked: false, disabled: true }, { ex: 60 * 60 * 24 * 16 });
+        gridCmds++;
         continue;
       }
       if (entry.fixed === false) {
@@ -232,6 +234,7 @@ export async function POST(req) {
           };
           if (entry.subBranch) gridEntry.subBranch = entry.subBranch;
           gridPipeline.set(k, gridEntry, { ex: 60 * 60 * 24 * 16 });
+          gridCmds++;
         } else if (entry.type === 'etut' && entry.studentId) {
           gridPipeline.set(k, {
             booked: true,
@@ -242,14 +245,17 @@ export async function POST(req) {
             bookedBy: 'director',
             fixed: false,
           }, { ex: 60 * 60 * 24 * 16 });
+          gridCmds++;
         } else if (entry.type === 'etut') {
           // Açık etüt slotu (öğrenci rezerve edebilir)
           gridPipeline.set(k, { booked: false, disabled: false }, { ex: 60 * 60 * 24 * 16 });
+          gridCmds++;
         }
       }
     }
   }
-  await gridPipeline.exec();
+  // Upstash boş pipeline'da exec() → "Pipeline is empty" hatası. Sadece komut varsa çalıştır.
+  if (gridCmds > 0) await gridPipeline.exec();
 
   return NextResponse.json({ ok: true });
 }
