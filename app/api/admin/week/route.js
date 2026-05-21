@@ -80,5 +80,43 @@ export async function POST(req) {
     return NextResponse.json({ ok: true, weekKey, deleted, teachers: ids?.length || 0 });
   }
 
+  // Tüm öğretmenlerin izin günlerini, ders programlarını ve slot kayıtlarını sil
+  if (action === 'reset-all') {
+    const ids = await redis.smembers('teachers');
+    const deleted = { offDays: 0, programs: 0, slots: 0 };
+
+    // 1. İzin günlerini temizle
+    for (const tid of (ids || [])) {
+      const teacher = await redis.get(`teacher:${tid}`);
+      if (!teacher) continue;
+      if ((teacher.offDays || []).length > 0) {
+        await redis.set(`teacher:${tid}`, { ...teacher, offDays: [] });
+        deleted.offDays++;
+      }
+    }
+
+    // 2. Ders programı şablonlarını sil (program:*)
+    {
+      let cursor = 0;
+      do {
+        const [nextCursor, keys] = await redis.scan(cursor, { match: 'program:*', count: 100 });
+        cursor = parseInt(nextCursor);
+        if (keys.length > 0) { await redis.del(...keys); deleted.programs += keys.length; }
+      } while (cursor !== 0);
+    }
+
+    // 3. Tüm slot kayıtlarını sil (slot:*)
+    {
+      let cursor = 0;
+      do {
+        const [nextCursor, keys] = await redis.scan(cursor, { match: 'slot:*', count: 100 });
+        cursor = parseInt(nextCursor);
+        if (keys.length > 0) { await redis.del(...keys); deleted.slots += keys.length; }
+      } while (cursor !== 0);
+    }
+
+    return NextResponse.json({ ok: true, deleted, teachers: ids?.length || 0 });
+  }
+
   return NextResponse.json({ error: 'Geçersiz işlem' }, { status: 400 });
 }

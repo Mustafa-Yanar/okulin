@@ -484,12 +484,17 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
 
   // ── Mevcut programları temizle ──
   async function clearAllPrograms() {
+    if (!window.confirm('Tüm öğretmenlerin izin günleri, ders programları ve etüt rezervasyonları silinecek. Emin misiniz?')) return;
     setClearing(true);
     try {
-      for (const t of teachers) {
-        await api('/api/program', { method: 'DELETE', body: JSON.stringify({ teacherId: t.id }) });
-      }
-      showToast?.('Tüm programlar temizlendi','success');
+      const res = await api('/api/admin/week', { method: 'POST', body: JSON.stringify({ action: 'reset-all' }) });
+      showToast?.(`Temizlendi — ${res.teachers} öğretmen, ${res.deleted.programs} program, ${res.deleted.slots} slot, ${res.deleted.offDays} izin günü`, 'success');
+      // Öğretmen listesini yeniden yükle (offDays değişti)
+      const data = await api('/api/teachers');
+      const withExtra = data.map(t => t.branch === 'Tarih'
+        ? { ...t, extraBranches: [...(t.extraBranches||[]), 'Sosyal Bilgiler'].filter((v,i,a)=>a.indexOf(v)===i) }
+        : t);
+      setTeachers(withExtra);
     } catch(e) { showToast?.(e.message,'error'); }
     finally { setClearing(false); }
   }
