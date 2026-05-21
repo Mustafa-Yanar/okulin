@@ -4,3 +4,7 @@ node_modules/
 .env.local
 .env*.local
 .vercel
+.venv-solver/
+__pycache__/
+*.pyc
+api/solver/_harness.py

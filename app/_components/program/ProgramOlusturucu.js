@@ -274,6 +274,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
   const [load, setLoad]         = useState(() => JSON.parse(JSON.stringify(DEFAULT_LOAD)));
   const [result, setResult]     = useState(null);
   const [maxWeekly, setMaxWeekly] = useState(40);
+  const [generating, setGenerating] = useState(false);
   const [applying, setApplying]   = useState(false);
   const [clearing, setClearing]   = useState(false);
   const [conflicts, setConflicts] = useState(null);
@@ -304,280 +305,36 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
   // Ders yükü tablosu her zaman tüm sütunları gösterir
   const activeCols = LOAD_COLUMNS;
 
-  // ── min-conflicts çözücü ──
-  function generate() {
+  // ── CP-SAT çözücü (OR-Tools, Python serverless) ──
+  // Kısıtların tümü server'da modellenir; frontend payload'ı hazırlar ve sonucu gösterir.
+  async function generate() {
     if (!teachers) return;
     setResult(null);
     setConflicts(null);
-    const t0 = performance.now();
-    const vars = [], unplaced = [];
-
-    for (const cls of classes) {
-      const key = colKeyFor(cls), grp = classToGroup(cls);
-      for (const course of coursesForCol(key)) {
-        const hours = (load[key]?.[course]) || 0; if (hours <= 0) continue;
-        const branch = COURSE_BRANCH[course];
-        // Öğretmen hem branşa uymalı hem o gruba ders girebilmeli
-        const eligible = teachers.filter(tt =>
-          teacherTeaches(tt, branch) && teacherGroups(tt).includes(grp)
-        ).map(e => e.id);
-        if (!eligible.length) { for(let h=0;h<hours;h++) unplaced.push({cls,course,reason:'uygun öğretmen yok'}); continue; }
-        for (let h=0;h<hours;h++) vars.push({cls,course,branch,grp,eligibleIds:eligible});
-      }
-    }
-
-    // Blok bazlı: her blok = [gün, slotA, slotB]
-    const blocksOf = {}; classes.forEach(c => blocksOf[c] = classBlockPairs(c));
-    // Her ders vars dizisini çift çift grupla: vars[2k] ve vars[2k+1] aynı blok
-    // (hours zaten çift, vars'ı çiftler halinde işleyeceğiz)
-    const byClass = {}; classes.forEach(c => byClass[c] = []);
-    vars.forEach((v,i) => byClass[v.cls].push(i));
-    const teacherById = {}; teachers.forEach(t => teacherById[t.id]=t);
-    const rnd = arr => arr[(Math.random()*arr.length)|0];
-
-    for (const c of classes) {
-      const need = Math.ceil(byClass[c].length / 2); // blok sayısı
-      if (need > blocksOf[c].length) {
-        const fazla = byClass[c].length - blocksOf[c].length * 2;
-        for (let k=0;k<Math.max(0,fazla);k++) unplaced.push({cls:c,course:'(çeşitli)',reason:'sınıf penceresine sığmıyor'});
-      }
-    }
-
-    // Blok atamasını yapar: her ders çifti aynı gün ardışık 2 slota
-    // pairs: [[varIdx0, varIdx1], ...] aynı sınıf-ders çiftleri
-    function assignBlocks(shuffledBlks, pairs) {
-      pairs.forEach((pair, pi) => {
-        const blk = shuffledBlks[pi % shuffledBlks.length];
-        const [day, sA, sB] = blk;
-        vars[pair[0]].day = day; vars[pair[0]].slot = sA;
-        if (pair[1] !== undefined) {
-          vars[pair[1]].day = day; vars[pair[1]].slot = sB;
-        }
-      });
-    }
-
-    // Her sınıf için ders çiftlerini oluştur — önce ders bazında grupla,
-    // sonra her dersin saatlerini 2'li bloklara ayır.
-    // Kural: aynı dersin farklı blokları (4 saat → 2 blok) farklı öğretmen almalı.
-    const pairsOf = {};
-    // courseBlocksOf[cls][course] = [[varIdx0,varIdx1], ...] — o ders için blok çiftleri
-    const courseBlocksOf = {};
-    classes.forEach(c => {
-      const byCourse = {};
-      byClass[c].forEach(i => {
-        const course = vars[i].course;
-        if (!byCourse[course]) byCourse[course] = [];
-        byCourse[course].push(i);
-      });
-      const pairs = [];
-      courseBlocksOf[c] = {};
-      for (const [course, idxList] of Object.entries(byCourse)) {
-        const courseBlocks = [];
-        for (let i = 0; i < idxList.length; i += 2) {
-          const pair = i+1 < idxList.length ? [idxList[i], idxList[i+1]] : [idxList[i]];
-          pairs.push(pair);
-          courseBlocks.push(pair);
-        }
-        courseBlocksOf[c][course] = courseBlocks;
-      }
-      pairsOf[c] = pairs;
-    });
-
-    function attempt(maxSteps) {
-      // Blok atama: her sınıf için blokları karıştır, ders çiftlerini benzersiz bloklara ata
-      const blkAssign = {}; // cls → shuffledBlks
+    setGenerating(true);
+    try {
+      // Her sınıfın blok havuzu + sütun anahtarı + grubu → payload (domain mantığı tek kaynak: burası)
+      const blocks = {}, colKey = {}, group = {};
       classes.forEach(c => {
-        const blks = [...blocksOf[c]].sort(()=>Math.random()-.5);
-        blkAssign[c] = blks;
-        assignBlocks(blks, pairsOf[c]);
+        blocks[c] = classBlockPairs(c);
+        colKey[c] = colKeyFor(c);
+        group[c] = classToGroup(c);
       });
+      const payload = { classes, teachers, load, maxWeekly, blocks, colKey, group };
+      const data = await api('/api/program-solve', { method: 'POST', body: JSON.stringify(payload) });
 
-      // Blok çiftine tek tid ata: pair[0] ve pair[1] her zaman aynı öğretmen
-      const setPairTid = (pair, tid) => {
-        vars[pair[0]].tid = tid;
-        if (pair[1] !== undefined) vars[pair[1]].tid = tid;
-      };
-      // Aynı dersin tüm blokları aynı öğretmene atanır (tek öğretmen kuralı)
-      classes.forEach(c => {
-        for (const [, courseBlocks] of Object.entries(courseBlocksOf[c])) {
-          const eligible = vars[courseBlocks[0][0]].eligibleIds;
-          const chosen = rnd(eligible);
-          courseBlocks.forEach(pair => setPairTid(pair, chosen));
-        }
-      });
+      const assigned = data.assigned || [];
+      const unplaced = data.unplaced || [];
+      const tLoad = data.tLoad || {};
+      teachers.forEach(t => { if (tLoad[t.id] == null) tLoad[t.id] = 0; });
 
-      const tkey = v => v.tid+'|'+v.day+'|'+v.slot;
-      // Çakışma: öğretmen slot çakışması + izin günü + aynı sınıf aynı ders aynı gün + max yük aşımı
-      const countConflicts = () => {
-        let n=0;
-        // Öğretmen slot çakışması
-        const m=new Map();
-        vars.forEach(v => { const k=tkey(v); m.set(k,(m.get(k)||0)+1); });
-        m.forEach(c => { if(c>1) n+=c-1; });
-        // İzin günü
-        vars.forEach(v => { if((teacherById[v.tid].offDays||[]).includes(v.day)) n++; });
-        // Max yük aşımı — her sınıf ders bloğu 2 saat sayar
-        const tidLoad = {};
-        vars.forEach(v => { tidLoad[v.tid] = (tidLoad[v.tid]||0)+1; });
-        Object.entries(tidLoad).forEach(([tid, cnt]) => { if(cnt > maxWeekly) n += cnt - maxWeekly; });
-        // Aynı sınıf + aynı ders + aynı gün → fazladan blok başına 1 ceza
-        classes.forEach(c => {
-          for (const [, courseBlocks] of Object.entries(courseBlocksOf[c])) {
-            const days = courseBlocks.map(p => vars[p[0]].day);
-            const dayCounts = {};
-            days.forEach(d => { dayCounts[d] = (dayCounts[d]||0)+1; });
-            Object.values(dayCounts).forEach(cnt => { if(cnt>1) n += cnt-1; });
-          }
-        });
-        return n;
-      };
-      const badVars = () => {
-        const m=new Map();
-        vars.forEach((v,i) => { const k=tkey(v); if(!m.has(k))m.set(k,[]); m.get(k).push(i); });
-        const bad=[]; m.forEach(a => { if(a.length>1) bad.push(...a); });
-        vars.forEach((v,i) => { if((teacherById[v.tid].offDays||[]).includes(v.day)) bad.push(i); });
-        // Aynı sınıf + aynı ders + aynı gün
-        classes.forEach(c => {
-          for (const [, courseBlocks] of Object.entries(courseBlocksOf[c])) {
-            const byDay = {};
-            courseBlocks.forEach(p => {
-              const d = vars[p[0]].day;
-              if (!byDay[d]) byDay[d] = [];
-              byDay[d].push(...p);
-            });
-            Object.values(byDay).forEach(idxs => { if(idxs.length>2) bad.push(...idxs); });
-          }
-        });
-        return [...new Set(bad)];
-      };
-      let cur = countConflicts();
-      for (let step=0; step<maxSteps && cur>0; step++) {
-        const bad=badVars(); if(!bad.length) break;
-        const vi = rnd(bad);
-        const v = vars[vi];
-
-        // Çifti bul — öğretmen değişikliği çiftin ikisine birden uygulanır
-        const pairs = pairsOf[v.cls];
-        const pairIdx = pairs.findIndex(p => p.includes(vi));
-        const pair = pairIdx >= 0 ? pairs[pairIdx] : null;
-
-        // Öğretmen değiştir — aynı dersin tüm blokları birlikte değişir
-        const courseBlocks = pair ? (courseBlocksOf[v.cls][v.course]||[]) : null;
-        const oldTid = v.tid; // mevcut öğretmen (tüm bloklar aynı)
-        let bestTid = oldTid, bestDelta = 0;
-        for (const tid of v.eligibleIds) {
-          if (tid === oldTid) continue;
-          if (courseBlocks) courseBlocks.forEach(p => setPairTid(p, tid));
-          else v.tid = tid;
-          const c = countConflicts();
-          if (c - cur < bestDelta) { bestDelta = c - cur; bestTid = tid; }
-          if (courseBlocks) courseBlocks.forEach(p => setPairTid(p, oldTid));
-          else v.tid = oldTid;
-        }
-        if (bestTid !== oldTid) {
-          if (courseBlocks) courseBlocks.forEach(p => setPairTid(p, bestTid));
-          else v.tid = bestTid;
-        }
-
-        // Blok takas — iki strateji dene, iyileşen kabul et:
-        const c0 = cur;
-
-        // Strateji A: kendi sınıfı içinde çiftler arası takas
-        if (pairIdx >= 0) {
-          const blks = blkAssign[v.cls];
-          const otherPairIdx = Math.floor(Math.random() * pairs.length);
-          if (otherPairIdx !== pairIdx) {
-            const tmp = blks[pairIdx]; blks[pairIdx] = blks[otherPairIdx]; blks[otherPairIdx] = tmp;
-            assignBlocks(blks, pairs);
-            if (countConflicts() >= c0) {
-              blks[otherPairIdx] = blks[pairIdx]; blks[pairIdx] = tmp;
-              assignBlocks(blks, pairs);
-            }
-          }
-        }
-
-        // Strateji B: aynı branş VE aynı grup sınıfıyla blok takas (farklı grup karıştırma yasak)
-        if (countConflicts() >= c0) {
-          const sameBranchCls = classes.filter(c2 =>
-            c2 !== v.cls &&
-            classToGroup(c2) === v.grp &&
-            pairsOf[c2].some(p => vars[p[0]]?.branch === v.branch)
-          );
-          if (sameBranchCls.length > 0) {
-            const cls2 = sameBranchCls[Math.floor(Math.random() * sameBranchCls.length)];
-            const pairs2 = pairsOf[cls2];
-            const pi2 = Math.floor(Math.random() * pairs2.length);
-            const pi1 = pairIdx >= 0 ? pairIdx : 0;
-            const blks1 = blkAssign[v.cls];
-            const blks2 = blkAssign[cls2];
-            const tmp1 = blks1[pi1]; blks1[pi1] = blks2[pi2]; blks2[pi2] = tmp1;
-            assignBlocks(blks1, pairsOf[v.cls]);
-            assignBlocks(blks2, pairs2);
-            if (countConflicts() >= c0) {
-              blks2[pi2] = blks1[pi1]; blks1[pi1] = tmp1;
-              assignBlocks(blks1, pairsOf[v.cls]);
-              assignBlocks(blks2, pairs2);
-            }
-          }
-        }
-
-        // Strateji C: çakışan öğretmenin tüm sınıflarını yeniden blok dağıt
-        if (countConflicts() >= c0) {
-          const affectedCls = [...new Set(
-            vars.filter(vv => vv.tid === v.tid).map(vv => vv.cls)
-          )];
-          // Snapshot al
-          const snapBlks = {}; affectedCls.forEach(c2 => snapBlks[c2] = [...blkAssign[c2]]);
-          affectedCls.forEach(c2 => {
-            const blks = [...blocksOf[c2]].sort(() => Math.random() - 0.5);
-            blkAssign[c2] = blks;
-            assignBlocks(blks, pairsOf[c2]);
-          });
-          if (countConflicts() >= c0) {
-            // Geri al
-            affectedCls.forEach(c2 => {
-              blkAssign[c2] = snapBlks[c2];
-              assignBlocks(snapBlks[c2], pairsOf[c2]);
-            });
-          }
-        }
-
-        cur=countConflicts();
-      }
-      return cur;
+      setResult({ assigned, unplaced, tLoad, total: assigned.length, ms: data.ms ?? 0 });
+      showToast?.(`${assigned.length} ders yerleşti${unplaced.length ? `, ${unplaced.length} açıkta` : ''}`, unplaced.length ? 'info' : 'success');
+    } catch (e) {
+      showToast?.(e.message, 'error');
+    } finally {
+      setGenerating(false);
     }
-    let best=Infinity;
-    // Her attempt vars'ı mutate eder; en iyi sonucu snapshot'la
-    let bestSnapshot = null;
-    for(let r=0;r<80&&best>0&&performance.now()-t0<6000;r++){
-      const c=attempt(4000);
-      if(c<best){
-        best=c;
-        bestSnapshot=vars.map(v=>({...v}));
-        if(best===0) break;
-      }
-    }
-    // En iyi sonucu geri yükle
-    if(bestSnapshot) bestSnapshot.forEach((snap,i)=>{ vars[i].tid=snap.tid; vars[i].day=snap.day; vars[i].slot=snap.slot; });
-
-    const assigned=[]; const tLoad={}; teachers.forEach(t=>tLoad[t.id]=0);
-    // best=0 veya best>0 — her durumda tüm varsları işle.
-    // Aynı öğretmen+gün+slot çakışmasında: ilk gelen assigned, sonraki unplaced.
-    // İzin günü olan var her zaman unplaced.
-    {
-      const seen=new Set();
-      vars.forEach(v => {
-        const k=v.tid+'|'+v.day+'|'+v.slot;
-        const offBad=(teacherById[v.tid].offDays||[]).includes(v.day);
-        if(offBad) { unplaced.push({cls:v.cls,course:v.course,reason:'öğretmen izinli'}); return; }
-        if(seen.has(k)) { unplaced.push({cls:v.cls,course:v.course,reason:'öğretmen çakışması'}); return; }
-        seen.add(k);
-        assigned.push({cls:v.cls,course:v.course,teacherId:v.tid,teacherName:teacherById[v.tid].name,day:v.day,slot:v.slot});
-        tLoad[v.tid]++;
-      });
-    }
-    setResult({assigned,unplaced,tLoad,total:assigned.length,ms:Math.round(performance.now()-t0)});
-    showToast?.(`${assigned.length} ders yerleşti${unplaced.length?`, ${unplaced.length} açıkta`:''}`, unplaced.length?'info':'success');
   }
 
   // ── Çakışma kontrolü: mevcut programları oku ve çakışanları bul ──
@@ -704,8 +461,9 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
             title="Tüm öğretmenlerin mevcut programını sil">
             {clearing ? 'Siliniyor...' : 'Programları Temizle'}
           </button>
-          <button onClick={generate} className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm">
-            <Sparkles size={14} /> Oluştur
+          <button onClick={generate} disabled={generating}
+            className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm disabled:opacity-60">
+            <Sparkles size={14} /> {generating ? 'Oluşturuluyor… (~30 sn)' : 'Oluştur'}
           </button>
         </div>
       </div>

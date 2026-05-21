@@ -9,5 +9,10 @@
       "path": "/api/backup",
       "schedule": "0 0 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "api/solve.py": {
+      "maxDuration": 60
+    }
+  }
 }
