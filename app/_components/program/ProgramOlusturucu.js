@@ -114,8 +114,9 @@ function classBlockPairs(cls, extraWeekend) {
     });
     return blocks;
   }
-  // Hafta sonu: e1-e8 → 4 blok per gün; e9-e10 → +1 blok per gün
-  const wkendSlots = extraWeekend ? [...WEEKEND_PRIMARY_SLOTS,...WEEKEND_EXTRA_SLOTS] : WEEKEND_PRIMARY_SLOTS;
+  // Ortaokul her zaman +9/10. blokları kullanır; lise sadece extraWeekend işaretliyse
+  const useExtra = extraWeekend || g === 'ortaokul';
+  const wkendSlots = useExtra ? [...WEEKEND_PRIMARY_SLOTS,...WEEKEND_EXTRA_SLOTS] : WEEKEND_PRIMARY_SLOTS;
   WEEKEND_DAYS.forEach(d => {
     for (let i = 0; i < wkendSlots.length; i += 2)
       blocks.push([d, wkendSlots[i], wkendSlots[i+1]]);
@@ -175,8 +176,8 @@ function teacherBlockCap(t, grp, extraWeekend) {
   if (grp === 'mezun') {
     return MEZUN_DAYS.filter(d => !offDays.has(d)).length * (MEZUN_SLOTS.length / 2);
   }
-  // Lise/ortaokul: hafta sonu 4 blok/gün (+1 ekstra), hafta içi 1 blok/gün
-  const wkendBlks = extraWeekend ? 5 : 4;
+  // Ortaokul her zaman 5 blok/gün (ekstra dahil); lise extraWeekend'e göre
+  const wkendBlks = (extraWeekend || grp === 'ortaokul') ? 5 : 4;
   const wkend = WEEKEND_DAYS.filter(d => !offDays.has(d)).length * wkendBlks;
   const wkday = [0,1,2,3,4].filter(d => !offDays.has(d)).length * 1;
   return wkend + wkday;
@@ -408,26 +409,52 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
           v.tid=o;
         }
         v.tid=bestTid;
-        // Blok takas: v'nin bulunduğu çifti başka bir bloğa taşı (çiftiyle birlikte)
+
+        // Blok takas — iki strateji dene, iyileşen kabul et:
+        const c0 = cur;
+
+        // Strateji A: kendi sınıfı içinde çiftler arası takas
         const pairs = pairsOf[v.cls];
         const pairIdx = pairs.findIndex(p => p.includes(vi));
         if (pairIdx >= 0) {
           const blks = blkAssign[v.cls];
-          // Mevcut blok ile rastgele başka bir bloğu takas et
           const otherPairIdx = Math.floor(Math.random() * pairs.length);
           if (otherPairIdx !== pairIdx) {
-            // Takas
             const tmp = blks[pairIdx]; blks[pairIdx] = blks[otherPairIdx]; blks[otherPairIdx] = tmp;
-            const c0 = cur;
             assignBlocks(blks, pairs);
-            const c1 = countConflicts();
-            if (c1 >= c0) {
-              // Geri al
+            if (countConflicts() >= c0) {
               blks[otherPairIdx] = blks[pairIdx]; blks[pairIdx] = tmp;
               assignBlocks(blks, pairs);
             }
           }
         }
+
+        // Strateji B: aynı branştaki farklı bir sınıfın çiftiyle blok takas
+        if (countConflicts() >= c0) {
+          const sameBranchCls = classes.filter(c2 =>
+            c2 !== v.cls &&
+            pairsOf[c2].some(p => vars[p[0]]?.branch === v.branch)
+          );
+          if (sameBranchCls.length > 0) {
+            const cls2 = sameBranchCls[Math.floor(Math.random() * sameBranchCls.length)];
+            const pairs2 = pairsOf[cls2];
+            const pi2 = Math.floor(Math.random() * pairs2.length);
+            const pi1 = pairIdx >= 0 ? pairIdx : 0;
+            const blks1 = blkAssign[v.cls];
+            const blks2 = blkAssign[cls2];
+            // blks1[pi1] ↔ blks2[pi2] takas
+            const tmp1 = blks1[pi1]; blks1[pi1] = blks2[pi2]; blks2[pi2] = tmp1;
+            assignBlocks(blks1, pairsOf[v.cls]);
+            assignBlocks(blks2, pairs2);
+            if (countConflicts() >= c0) {
+              // Geri al
+              blks2[pi2] = blks1[pi1]; blks1[pi1] = tmp1;
+              assignBlocks(blks1, pairsOf[v.cls]);
+              assignBlocks(blks2, pairs2);
+            }
+          }
+        }
+
         cur=countConflicts();
       }
       return cur;
