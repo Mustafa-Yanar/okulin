@@ -45,10 +45,28 @@ def solve(payload):
     colkey_by_cls = payload.get('colKey', {})
     group_by_cls = payload.get('group', {})
 
+    # Özellik 1 (KATI): öğretmen başına işaretli (gün, slotIndex) kümesi.
+    # teacherSlots gönderildiyse katı uygulanır: öğretmen sadece bu slotlara atanır,
+    # işaretsiz öğretmene (boş set) hiç ders verilmez.
+    teacher_slots_raw = payload.get('teacherSlots') or {}
+    avail = {tid: set(tuple(p) for p in pairs) for tid, pairs in teacher_slots_raw.items()}
+    strict_mode = len(teacher_slots_raw) > 0
+
+    def block_ok(t, b):
+        # blok p=(day,slotA,slotB) öğretmen t'ye uygun mu (HEM slotA HEM slotB available)
+        if not strict_mode:
+            return True
+        av = avail.get(t, set())
+        return (b[0], b[1]) in av and (b[0], b[2]) in av
+
+    # Özellik 2: ön eşleştirme kilitleri [{teacherId, cls, course}]
+    presets = payload.get('presets') or []
+
     teacher_by_id = {t['id']: t for t in teachers}
 
     assigned = []
     unplaced = []
+    preset_warnings = []
 
     model = cp_model.CpModel()
 
@@ -110,8 +128,26 @@ def solve(payload):
     y = {}
     for cc, elig in eligible_of_cc.items():
         y[cc] = {t: model.NewBoolVar('y_%s_%s_%s' % (cc[0], cc[1], t)) for t in elig}
-        # tek öğretmen kuralı (HARD): tam 1 öğretmen seçilir
-        model.AddExactlyOne(list(y[cc].values()))
+        # tek öğretmen kuralı (HARD): en fazla 1 öğretmen.
+        # ExactlyOne yerine AtMostOne — katı modda tüm eligible öğretmenler
+        # available'sızsa hiç öğretmen seçilemez (INFEASIBLE değil, ders unplaced).
+        model.AddAtMostOne(list(y[cc].values()))
+        sum_y = sum(y[cc].values())
+        for u in units_of_cc[cc]:
+            # öğretmen seçilmediyse (sum_y=0) bu cc'nin hiçbir unit'i yerleşemez
+            model.Add(placed[u] <= sum_y)
+
+    # ── Özellik 2: ön eşleştirme kilitleri (HARD) ──
+    for pr in presets:
+        cc = (pr.get('cls'), pr.get('course'))
+        tid = pr.get('teacherId')
+        if cc not in eligible_of_cc:
+            preset_warnings.append('%s %s: ders programda yok (atlandı)' % (cc[0], cc[1]))
+            continue
+        if tid not in y[cc]:
+            preset_warnings.append('%s %s: seçilen öğretmen bu derse uygun değil (atlandı)' % (cc[0], cc[1]))
+            continue
+        model.Add(y[cc][tid] == 1)
 
     # ── HARD: K3 — aynı sınıf+ders aynı günde en fazla 1 blok ──
     for cc, idxs in units_of_cc.items():
@@ -160,8 +196,9 @@ def solve(payload):
         z[keyz] = zv
         return zv
 
-    # ── HARD: K4 — öğretmen aynı (gün,slot)'ta en fazla 1 sınıf ──
-    # Her öğretmen için (gün,slot) -> kaplayan z değişkenleri
+    # ── HARD: K6 (izin günü) + Özellik 1 (aktif slot) — blok-öğretmen yasakları ──
+    # Bir blok p, öğretmen t'ye uygun değilse (izin günü VEYA katı modda işaretsiz slot)
+    # x[u][p] AND y[cc][t] olamaz.
     for cc, idxs in units_of_cc.items():
         cls = cc[0]
         pool = blocks_by_cls.get(cls, [])
@@ -170,9 +207,7 @@ def solve(payload):
             off = set(teacher_by_id[t].get('offDays') or [])
             for u in idxs:
                 for p, b in enumerate(pool):
-                    day = b[0]
-                    if day in off:
-                        # izin günü: bu blok bu öğretmene yasak → x AND y olamaz
+                    if b[0] in off or not block_ok(t, b):
                         model.AddBoolOr([x[u][p].Not(), y[cc][t].Not()])
 
     # K4 çakışma toplamları: (t, day, slot) -> z listesi
@@ -186,8 +221,8 @@ def solve(payload):
             for u in idxs:
                 for p, b in enumerate(pool):
                     day, sA, sB = b[0], b[1], b[2]
-                    if day in off:
-                        continue  # zaten yasaklandı
+                    if day in off or not block_ok(t, b):
+                        continue  # yasak (izin günü / işaretsiz slot) — z yaratma
                     zv = get_z(u, p, t, cc)
                     for s in (sA, sB):
                         teacher_slot_cover.setdefault((t, day, s), []).append(zv)
@@ -244,6 +279,7 @@ def solve(payload):
                 unplaced.append({'cls': cc[0], 'course': cc[1], 'reason': 'çözüm bulunamadı'})
         return {'assigned': [], 'unplaced': unplaced,
                 'tLoad': {t['id']: 0 for t in teachers},
+                'presetWarnings': preset_warnings,
                 'ms': int((time.time() - t0) * 1000)}
 
     # ── Çözümü oku ──
@@ -257,7 +293,12 @@ def solve(payload):
 
     for u, (cls, course) in enumerate(units):
         if solver.Value(placed[u]) == 0:
-            unplaced.append({'cls': cls, 'course': course, 'reason': 'yerleştirilemedi (çakışma/kapasite)'})
+            # öğretmen hiç seçilemediyse (katı modda available yok) ayrı reason
+            if strict_mode and chosen_teacher.get((cls, course)) is None:
+                reason = 'müsait slot yok (katı mod — öğretmen işaretlenmemiş)'
+            else:
+                reason = 'yerleştirilemedi (çakışma/kapasite)'
+            unplaced.append({'cls': cls, 'course': course, 'reason': reason})
             continue
         pool = pool_of_unit[u]
         chosen_p = None
@@ -282,4 +323,5 @@ def solve(payload):
         tload[t] = int(solver.Value(load_vars[t]))
 
     return {'assigned': assigned, 'unplaced': unplaced, 'tLoad': tload,
+            'presetWarnings': preset_warnings,
             'ms': int((time.time() - t0) * 1000)}
