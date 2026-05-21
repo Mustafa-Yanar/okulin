@@ -103,20 +103,21 @@ function teacherTeaches(t, branch) {
 
 // Sınıfın ders bloklarını döndürür: [[gün, slotA, slotB], ...]
 // Her blok = 2 ardışık slot (aynı ders çifti)
-function classBlockPairs(cls, extraWeekend) {
+// Kural: 9/10. hafta sonu blokları sadece ortaokula açık; lise ve mezun asla kullanamaz
+function classBlockPairs(cls) {
   const g = classToGroup(cls);
   const blocks = [];
   if (g === 'mezun') {
-    // Pzt-Per, sabah slot'ları: 0-5 → bloklar [0,1],[2,3],[4,5]
     MEZUN_DAYS.forEach(d => {
       for (let i = 0; i < MEZUN_SLOTS.length; i += 2)
         blocks.push([d, MEZUN_SLOTS[i], MEZUN_SLOTS[i+1]]);
     });
     return blocks;
   }
-  // Ortaokul her zaman +9/10. blokları kullanır; lise sadece extraWeekend işaretliyse
-  const useExtra = extraWeekend || g === 'ortaokul';
-  const wkendSlots = useExtra ? [...WEEKEND_PRIMARY_SLOTS,...WEEKEND_EXTRA_SLOTS] : WEEKEND_PRIMARY_SLOTS;
+  // Ortaokul: 5 blok/gün (e1-e10); Lise: 4 blok/gün (e1-e8)
+  const wkendSlots = g === 'ortaokul'
+    ? [...WEEKEND_PRIMARY_SLOTS, ...WEEKEND_EXTRA_SLOTS]
+    : WEEKEND_PRIMARY_SLOTS;
   WEEKEND_DAYS.forEach(d => {
     for (let i = 0; i < wkendSlots.length; i += 2)
       blocks.push([d, wkendSlots[i], wkendSlots[i+1]]);
@@ -170,21 +171,20 @@ function teacherGroups(t) {
 }
 
 // Bir grubun kullanabileceği toplam blok kapasitesi (öğretmen başına)
-function teacherBlockCap(t, grp, extraWeekend) {
+function teacherBlockCap(t, grp) {
   const offDays = new Set(t.offDays || []);
-  // Mezun: Pzt-Per sabah, 3 blok/gün
   if (grp === 'mezun') {
     return MEZUN_DAYS.filter(d => !offDays.has(d)).length * (MEZUN_SLOTS.length / 2);
   }
-  // Ortaokul her zaman 5 blok/gün (ekstra dahil); lise extraWeekend'e göre
-  const wkendBlks = (extraWeekend || grp === 'ortaokul') ? 5 : 4;
+  // Ortaokul: 5 blok/gün; Lise: 4 blok/gün
+  const wkendBlks = grp === 'ortaokul' ? 5 : 4;
   const wkend = WEEKEND_DAYS.filter(d => !offDays.has(d)).length * wkendBlks;
   const wkday = [0,1,2,3,4].filter(d => !offDays.has(d)).length * 1;
   return wkend + wkday;
 }
 
 // Ön analiz: oluşturmadan önce kapasite/çakışma sorunlarını hesapla
-function analyzeLoad(classes, load, teachers, extraWeekend) {
+function analyzeLoad(classes, load, teachers) {
   const errors = [], warnings = [], infos = [];
 
   // 1. Tek sayı kontrolü
@@ -236,7 +236,7 @@ function analyzeLoad(classes, load, teachers, extraWeekend) {
       teacherTeaches(tt, branch) && teacherGroups(tt).includes(grp)
     );
     if (eligible.length === 0) continue; // zaten hata var yukarıda
-    const totalCap = eligible.reduce((s, t) => s + teacherBlockCap(t, grp, extraWeekend), 0);
+    const totalCap = eligible.reduce((s, t) => s + teacherBlockCap(t, grp), 0);
     if (pairDemand > totalCap) {
       const grpLabel = grp === 'mezun' ? 'Mezun' : grp === 'lise' ? 'Lise' : 'Ortaokul';
       errors.push(`${branch} (${grpLabel}): ${pairDemand * 2} saat talep, ${totalCap * 2} saat kapasite — ${pairDemand - totalCap} blok sığmaz`);
@@ -272,14 +272,13 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
   const [teachers, setTeachers] = useState(null);
   const [load, setLoad]         = useState(() => JSON.parse(JSON.stringify(DEFAULT_LOAD)));
   const [result, setResult]     = useState(null);
-  const [extraWeekend, setExtraWeekend] = useState(false);
-  const [maxWeekly, setMaxWeekly]       = useState(40);
-  const [applying, setApplying]         = useState(false);
-  const [clearing, setClearing]         = useState(false);
-  const [conflicts, setConflicts]       = useState(null); // null | { items: [], checked: true }
-  const [preview, setPreview]           = useState(null); // 'teacher' | 'class' | null
-  const [previewId, setPreviewId]       = useState(null);
-  const [analysis, setAnalysis]         = useState(null); // null | { errors, warnings, infos, ok }
+  const [maxWeekly, setMaxWeekly] = useState(40);
+  const [applying, setApplying]   = useState(false);
+  const [clearing, setClearing]   = useState(false);
+  const [conflicts, setConflicts] = useState(null);
+  const [preview, setPreview]     = useState(null);
+  const [previewId, setPreviewId] = useState(null);
+  const [analysis, setAnalysis]   = useState(null);
 
   const classes = useMemo(() => {
     const base = (activeClasses?.length) ? activeClasses : ALL_CLASSES;
@@ -302,8 +301,8 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
   // Analizi yeniden hesapla: teachers/load/extraWeekend/classes değişince
   useEffect(() => {
     if (!teachers) return;
-    setAnalysis(analyzeLoad(classes, load, teachers, extraWeekend));
-  }, [teachers, load, extraWeekend, classes]);
+    setAnalysis(analyzeLoad(classes, load, teachers));
+  }, [teachers, load, classes]);
 
   // Ders yükü tablosu her zaman tüm sütunları gösterir
   const activeCols = LOAD_COLUMNS;
@@ -332,7 +331,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
 
     const roomOf = classRoomMap(classes);
     // Blok bazlı: her blok = [gün, slotA, slotB]
-    const blocksOf = {}; classes.forEach(c => blocksOf[c] = classBlockPairs(c, extraWeekend));
+    const blocksOf = {}; classes.forEach(c => blocksOf[c] = classBlockPairs(c));
     // Her ders vars dizisini çift çift grupla: vars[2k] ve vars[2k+1] aynı blok
     // (hours zaten çift, vars'ı çiftler halinde işleyeceğiz)
     const byClass = {}; classes.forEach(c => byClass[c] = []);
@@ -596,10 +595,6 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
           <label className="text-xs text-gray-500 flex items-center gap-1">Haftalık maks
             <input type="number" value={maxWeekly} onChange={e=>setMaxWeekly(parseInt(e.target.value)||40)}
               className="input !w-16 !py-1.5 text-center" />
-          </label>
-          <label className="text-xs text-gray-500 flex items-center gap-1.5 cursor-pointer select-none">
-            <input type="checkbox" checked={extraWeekend} onChange={e=>setExtraWeekend(e.target.checked)} />
-            H.sonu +9/10. ders
           </label>
           <button onClick={clearAllPrograms} disabled={clearing}
             className="btn-ghost !px-3 !py-2 text-xs text-red-500 hover:bg-red-50 flex items-center gap-1.5 border border-red-200"
