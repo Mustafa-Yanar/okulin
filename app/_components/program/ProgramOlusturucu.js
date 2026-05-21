@@ -101,19 +101,28 @@ function teacherTeaches(t, branch) {
   return t.branch === branch || (t.extraBranches||[]).includes(branch);
 }
 
-// Sınıfın ders penceresi (gün, slot index çiftleri)
-function classSlotPairs(cls, extraWeekend) {
-  const g = classToGroup(cls), pairs = [];
+// Sınıfın ders bloklarını döndürür: [[gün, slotA, slotB], ...]
+// Her blok = 2 ardışık slot (aynı ders çifti)
+function classBlockPairs(cls, extraWeekend) {
+  const g = classToGroup(cls);
+  const blocks = [];
   if (g === 'mezun') {
-    MEZUN_DAYS.forEach(d => MEZUN_SLOTS.forEach(s => pairs.push([d,s])));
-    return pairs;
+    // Pzt-Per, sabah slot'ları: 0-5 → bloklar [0,1],[2,3],[4,5]
+    MEZUN_DAYS.forEach(d => {
+      for (let i = 0; i < MEZUN_SLOTS.length; i += 2)
+        blocks.push([d, MEZUN_SLOTS[i], MEZUN_SLOTS[i+1]]);
+    });
+    return blocks;
   }
-  // Hafta sonu
+  // Hafta sonu: e1-e8 → 4 blok per gün; e9-e10 → +1 blok per gün
   const wkendSlots = extraWeekend ? [...WEEKEND_PRIMARY_SLOTS,...WEEKEND_EXTRA_SLOTS] : WEEKEND_PRIMARY_SLOTS;
-  WEEKEND_DAYS.forEach(d => wkendSlots.forEach(s => pairs.push([d,s])));
-  // Hafta içi (Pzt–Per, sadece 17:15-18:35 = idx 9,10)
-  [0,1,2,3,4].forEach(d => WEEKDAY_LISE_SLOTS.forEach(s => pairs.push([d,s])));
-  return pairs;
+  WEEKEND_DAYS.forEach(d => {
+    for (let i = 0; i < wkendSlots.length; i += 2)
+      blocks.push([d, wkendSlots[i], wkendSlots[i+1]]);
+  });
+  // Hafta içi akşam: idx 9,10 → 1 blok per gün
+  [0,1,2,3,4].forEach(d => blocks.push([d, 9, 10]));
+  return blocks;
 }
 
 function classRoomMap(classes) {
@@ -216,21 +225,36 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
     }
 
     const roomOf = classRoomMap(classes);
-    const pairsOf = {}; classes.forEach(c => pairsOf[c] = classSlotPairs(c, extraWeekend));
+    // Blok bazlı: her blok = [gün, slotA, slotB]
+    const blocksOf = {}; classes.forEach(c => blocksOf[c] = classBlockPairs(c, extraWeekend));
+    // Her ders vars dizisini çift çift grupla: vars[2k] ve vars[2k+1] aynı blok
+    // (hours zaten çift, vars'ı çiftler halinde işleyeceğiz)
     const byClass = {}; classes.forEach(c => byClass[c] = []);
     vars.forEach((v,i) => byClass[v.cls].push(i));
     const teacherById = {}; teachers.forEach(t => teacherById[t.id]=t);
     const rnd = arr => arr[(Math.random()*arr.length)|0];
 
-    for (const c of classes) if (byClass[c].length > pairsOf[c].length) {
-      const fazla = byClass[c].length - pairsOf[c].length;
-      for (let k=0;k<fazla;k++) unplaced.push({cls:c,course:'(çeşitli)',reason:'sınıf penceresine sığmıyor'});
+    for (const c of classes) {
+      const need = Math.ceil(byClass[c].length / 2); // blok sayısı
+      if (need > blocksOf[c].length) {
+        const fazla = byClass[c].length - blocksOf[c].length * 2;
+        for (let k=0;k<Math.max(0,fazla);k++) unplaced.push({cls:c,course:'(çeşitli)',reason:'sınıf penceresine sığmıyor'});
+      }
     }
 
     function attempt(maxSteps) {
+      // Blok atama: sınıftaki her ders çifti → bir blok (aynı gün, ardışık 2 slot)
       classes.forEach(c => {
-        const slots = [...pairsOf[c]].sort(()=>Math.random()-.5);
-        byClass[c].forEach((vi,k) => { const p=slots[k%slots.length]; vars[vi].day=p[0];vars[vi].slot=p[1];vars[vi].room=roomOf[c]; });
+        const idxList = byClass[c];
+        const blks = [...blocksOf[c]].sort(()=>Math.random()-.5);
+        for (let i = 0; i < idxList.length; i += 2) {
+          const blk = blks[(i/2) % blks.length];
+          const [day, sA, sB] = blk;
+          vars[idxList[i]].day = day; vars[idxList[i]].slot = sA; vars[idxList[i]].room = roomOf[c];
+          if (i+1 < idxList.length) {
+            vars[idxList[i+1]].day = day; vars[idxList[i+1]].slot = sB; vars[idxList[i+1]].room = roomOf[c];
+          }
+        }
       });
       vars.forEach(v => v.tid = rnd(v.eligibleIds));
       const tkey = v => v.tid+'|'+v.day+'|'+v.slot;
@@ -252,13 +276,23 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
       for (let step=0; step<maxSteps && cur>0; step++) {
         const bad=badVars(); if(!bad.length) break;
         const v=vars[rnd(bad)];
+        // Öğretmen değiştir
         let bestTid=v.tid, bestDelta=0;
         for (const tid of v.eligibleIds) { const o=v.tid; v.tid=tid; const c=conflicts(); if(c-cur<bestDelta){bestDelta=c-cur;bestTid=tid;} v.tid=o; }
         v.tid=bestTid;
-        const mates=byClass[v.cls]; const wj=rnd(mates);
+        // Blok yer değiştir: sınıftaki başka bir çift ile blokları takas et
+        const mates=byClass[v.cls];
+        const vi=mates.indexOf(vars.indexOf(v));
+        // Bir blok ortağı bul ve onunla farklı bir bloğa geç
+        const blks=[...blocksOf[v.cls]].sort(()=>Math.random()-.5);
+        const newBlk=blks[0]; if(!newBlk) { cur=conflicts(); continue; }
+        const [nd,nsA,nsB]=newBlk;
         const c0=conflicts();
-        const td=vars[wj].day,ts=vars[wj].slot; vars[wj].day=v.day;vars[wj].slot=v.slot;v.day=td;v.slot=ts;
-        if(conflicts()>c0){const dd=v.day,ss=v.slot;v.day=vars[wj].day;v.slot=vars[wj].slot;vars[wj].day=dd;vars[wj].slot=ss;}
+        // v'nin çift ortağını bul
+        const vi2 = vars.findIndex((x,i)=>x.cls===v.cls&&x.day===v.day&&x.slot===(v.slot===v.slot?WEEKEND_PRIMARY_SLOTS[0]:0)&&i!==vars.indexOf(v));
+        const oldDay=v.day,oldSlotA=v.slot;
+        v.day=nd; v.slot=nsA;
+        if(conflicts()>c0){v.day=oldDay;v.slot=oldSlotA;}
         cur=conflicts();
       }
       return cur;
@@ -647,33 +681,56 @@ function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsC
       {/* Program tablosu */}
       <div className="overflow-x-auto">
         <table className="text-[11px]" style={{borderCollapse:'collapse'}}>
-          <thead><tr>
-            <th className="p-2 sticky left-0 z-10" style={{background:'#f5f6fb',border:'1px solid #eef0f5'}}>
-              {viewMode==='class'?'Sınıf':viewMode==='teacher'?'Öğretmen':'Derslik'}
-            </th>
-            {days.map(d=>[...Array(SLOTS_PER_DAY).keys()].map(i=>(
-              <th key={d+'-'+i} className="p-1 text-gray-400" style={{minWidth:72,border:'1px solid #eef0f5',background:'#f5f6fb',fontWeight:500}}>
-                {DAYS[d].slice(0,3)}<br/><span className="text-gray-300">{i+1}</span>
+          <thead>
+            {/* Gün başlıkları — her gün için sütun sayısı kadar birleşik hücre */}
+            <tr>
+              <th className="p-2 sticky left-0 z-10" rowSpan={2} style={{background:'#f5f6fb',border:'1px solid #eef0f5',verticalAlign:'middle'}}>
+                {viewMode==='class'?'Sınıf':viewMode==='teacher'?'Öğretmen':'Derslik'}
               </th>
-            )))}
-          </tr></thead>
+              {days.map(d => {
+                const slotsInDay = [...new Set(result.assigned.filter(a=>a.day===d).map(a=>a.slot))].sort((a,b)=>a-b);
+                return (
+                  <th key={d} colSpan={slotsInDay.length || 1}
+                    style={{minWidth:72,border:'1px solid #eef0f5',borderLeft:'3px solid #c7d2fe',background:'#eef2ff',textAlign:'center',padding:'4px 6px',fontWeight:700,color:'#4338ca',fontSize:11}}>
+                    {DAYS[d]}
+                  </th>
+                );
+              })}
+            </tr>
+            {/* Ders sırası numaraları */}
+            <tr>
+              {days.map(d => {
+                const slotsInDay = [...new Set(result.assigned.filter(a=>a.day===d).map(a=>a.slot))].sort((a,b)=>a-b);
+                return slotsInDay.map((s,si) => (
+                  <th key={d+'-'+s} className="p-1 text-gray-400"
+                    style={{minWidth:64,border:'1px solid #eef0f5',borderLeft:si===0?'3px solid #c7d2fe':'1px solid #eef0f5',background:'#f5f6fb',fontWeight:500,textAlign:'center'}}>
+                    {si+1}
+                  </th>
+                ));
+              })}
+            </tr>
+          </thead>
           <tbody>
             {rowKeys.map(rk=>(
               <tr key={rk}>
                 <td className="p-2 sticky left-0 z-10 whitespace-nowrap" style={{background:'#fff',fontWeight:700,border:'1px solid #eef0f5'}}>
                   {viewMode==='class'?String(rk).toUpperCase():viewMode==='room'?`D${rk} (${rk<=5?'1.k':rk<=8?'2.k':'3.k'})`:rk}
                 </td>
-                {days.map(d=>[...Array(SLOTS_PER_DAY).keys()].map(i=>{
-                  const a=find(rk,d,i);
-                  if (!a) return <td key={d+'-'+i} style={{minWidth:72,border:'1px solid #eef0f5'}}/>;
-                  const col=COURSE_COLOR[a.course]||'#6366f1';
-                  return (
-                    <td key={d+'-'+i} className="p-1 text-center" style={{minWidth:72,border:`1px solid ${col}30`,background:`${col}14`,color:col}}>
-                      <b>{viewMode==='class'?shortCourse(a.course):a.cls.toUpperCase()}</b><br/>
-                      <span style={{opacity:.6,fontSize:10}}>{viewMode==='class'?a.teacherName.split(' ')[0]:shortCourse(a.course)}</span>
-                    </td>
-                  );
-                }))}
+                {days.map(d => {
+                  const slotsInDay = [...new Set(result.assigned.filter(a=>a.day===d).map(a=>a.slot))].sort((a,b)=>a-b);
+                  return slotsInDay.map((s,si) => {
+                    const a=find(rk,d,s);
+                    const leftBorder = si===0 ? '3px solid #c7d2fe' : '1px solid #eef0f5';
+                    if (!a) return <td key={d+'-'+s} style={{minWidth:64,border:'1px solid #eef0f5',borderLeft:leftBorder}}/>;
+                    const col=COURSE_COLOR[a.course]||'#6366f1';
+                    return (
+                      <td key={d+'-'+s} className="p-1 text-center" style={{minWidth:64,border:`1px solid ${col}30`,borderLeft:si===0?`3px solid ${col}60`:undefined,background:`${col}14`,color:col}}>
+                        <b>{viewMode==='class'?shortCourse(a.course):a.cls.toUpperCase()}</b><br/>
+                        <span style={{opacity:.6,fontSize:10}}>{viewMode==='class'?a.teacherName.split(' ')[0]:shortCourse(a.course)}</span>
+                      </td>
+                    );
+                  });
+                })}
               </tr>
             ))}
           </tbody>
@@ -728,9 +785,13 @@ function PrintPreview({ type, id, result, teachers, classes, onClose }) {
 }
 
 function SchedulePage({ title, lessons }) {
-  const usedDays=[...new Set(lessons.map(a=>a.day))].sort();
-  const maxSlot=Math.max(0,...lessons.map(a=>a.slot));
-  const find=(d,s)=>lessons.find(a=>a.day===d&&a.slot===s);
+  const usedDays = [...new Set(lessons.map(a=>a.day))].sort();
+  // Her gün için kullanılan slot'ları sıralı al
+  const daySlots = usedDays.map(d =>
+    [...new Set(lessons.filter(a=>a.day===d).map(a=>a.slot))].sort((a,b)=>a-b)
+  );
+  const maxPerDay = Math.max(0,...daySlots.map(s=>s.length));
+  const find = (d,s) => lessons.find(a=>a.day===d&&a.slot===s);
 
   return (
     <div className="print-page p-8" style={{pageBreakAfter:'always',minHeight:'100vh'}}>
@@ -743,25 +804,41 @@ function SchedulePage({ title, lessons }) {
       ) : (
         <table style={{borderCollapse:'collapse',width:'100%',fontSize:11}}>
           <thead>
+            {/* Gün başlıkları — her gün birleşik hücre */}
             <tr>
-              <th style={{border:'1px solid #e5e7eb',padding:'6px 8px',background:'#f9fafb',textAlign:'left'}}>Saat</th>
-              {usedDays.map(d=>(
-                <th key={d} style={{border:'1px solid #e5e7eb',padding:'6px 8px',background:'#f9fafb',textAlign:'center'}}>{DAYS[d]}</th>
+              <th style={{border:'1px solid #e5e7eb',padding:'6px 8px',background:'#f9fafb',textAlign:'left'}} rowSpan={2}>Sıra</th>
+              {usedDays.map((d,di) => (
+                <th key={d} colSpan={daySlots[di].length || 1}
+                  style={{border:'1px solid #e5e7eb',borderLeft:'3px solid #6366f1',padding:'6px 8px',background:'#eef2ff',textAlign:'center',fontWeight:700,color:'#4338ca'}}>
+                  {DAYS[d]}
+                </th>
               ))}
+            </tr>
+            {/* Saat satırı */}
+            <tr>
+              {usedDays.map((d,di) =>
+                daySlots[di].map((s,si) => (
+                  <th key={d+'-'+s}
+                    style={{border:'1px solid #e5e7eb',borderLeft:si===0?'3px solid #6366f1':'1px solid #e5e7eb',padding:'4px 6px',background:'#f9fafb',textAlign:'center',fontWeight:400,color:'#9ca3af',whiteSpace:'nowrap',fontSize:10}}>
+                    {si+1}. {slotLabel(d, s)}
+                  </th>
+                ))
+              )}
             </tr>
           </thead>
           <tbody>
-            {[...Array(maxSlot+1).keys()].map(i=>(
-              <tr key={i}>
-                <td style={{border:'1px solid #e5e7eb',padding:'5px 8px',color:'#6b7280',whiteSpace:'nowrap'}}>
-                  {i+1}. {slotLabel(usedDays[0]??5, i)}
-                </td>
-                {usedDays.map(d=>{
-                  const a=find(d,i);
-                  if (!a) return <td key={d} style={{border:'1px solid #e5e7eb',background:'#f9fafb'}}/>;
-                  const col=COURSE_COLOR[a.course]||'#6366f1';
+            {[...Array(maxPerDay).keys()].map(rowIdx => (
+              <tr key={rowIdx}>
+                <td style={{border:'1px solid #e5e7eb',padding:'5px 8px',color:'#9ca3af',textAlign:'center',fontWeight:600}}>{rowIdx+1}</td>
+                {usedDays.map((d,di) => {
+                  const s = daySlots[di][rowIdx];
+                  if (s === undefined) return <td key={d+'-empty-'+rowIdx} style={{border:'1px solid #e5e7eb',borderLeft:'3px solid #e5e7eb',background:'#fafafa'}}/>;
+                  const a = find(d, s);
+                  const leftBorder = '3px solid #6366f130';
+                  if (!a) return <td key={d+'-'+s} style={{border:'1px solid #e5e7eb',borderLeft:leftBorder,background:'#f9fafb'}}/>;
+                  const col = COURSE_COLOR[a.course]||'#6366f1';
                   return (
-                    <td key={d} style={{border:`1px solid ${col}40`,background:`${col}12`,padding:'5px 8px',textAlign:'center'}}>
+                    <td key={d+'-'+s} style={{border:`1px solid ${col}30`,borderLeft:`3px solid ${col}60`,background:`${col}12`,padding:'5px 8px',textAlign:'center'}}>
                       <div style={{fontWeight:700,color:col,fontSize:11}}>{a.course}</div>
                       <div style={{fontSize:10,color:'#6b7280'}}>{a.cls.toUpperCase()} · D{a.room}</div>
                     </td>
