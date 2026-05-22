@@ -9,3 +9,4 @@ __pycache__/
 *.pyc
 api/solver/_harness.py
 CLAUDE.local.md
+ai-bridge/
