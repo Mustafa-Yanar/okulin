@@ -4,6 +4,7 @@ import { v4 as uuid } from 'crypto';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { getWeekKey, initWeekForTeacher } from '@/lib/slots';
+import { normalizeTeacher } from '@/lib/teacherMigrate';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -19,10 +20,10 @@ export async function GET() {
   const pipeline = redis.pipeline();
   ids.forEach(id => pipeline.get(`teacher:${id}`));
   const results = await pipeline.exec();
-  const teachers = results.filter(Boolean).map(t => ({
-    id: t.id, name: t.name, branch: t.branch, username: t.username,
+  const teachers = results.filter(Boolean).map(normalizeTeacher).map(t => ({
+    id: t.id, name: t.name, username: t.username, branches: t.branches || [],
     allowedGroups: t.allowedGroups || [], photoUrl: t.photoUrl || '',
-    offDays: t.offDays || [], extraBranches: t.extraBranches || [],
+    offDays: t.offDays || [],
   }));
   return NextResponse.json(teachers);
 }
@@ -33,9 +34,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { name, password, branch, allowedGroups, photoUrl, extraBranches } = await req.json();
-  if (!name || !password || !branch) {
-    return NextResponse.json({ error: 'Tüm alanlar gerekli' }, { status: 400 });
+  const { name, password, branches, allowedGroups, photoUrl } = await req.json();
+  if (!name || !password || !branches?.length) {
+    return NextResponse.json({ error: 'İsim, şifre ve en az bir branş gerekli' }, { status: 400 });
   }
 
   // İsim soyisim kullanıcı adı olarak kullanılır
@@ -52,7 +53,7 @@ export async function POST(req) {
 
   const id = makeId();
   const hash = await bcrypt.hash(password, 10);
-  const teacher = { id, name, username, passwordHash: hash, branch, allowedGroups: allowedGroups || [], photoUrl: photoUrl || '', extraBranches: extraBranches || [] };
+  const teacher = { id, name, username, passwordHash: hash, branches, allowedGroups: allowedGroups || [], photoUrl: photoUrl || '' };
   await redis.set(`teacher:${id}`, teacher);
   await redis.sadd('teachers', id);
 
@@ -60,7 +61,7 @@ export async function POST(req) {
   const weekKey = getWeekKey();
   await initWeekForTeacher(id, weekKey);
 
-  return NextResponse.json({ id, name, branch, username, allowedGroups: teacher.allowedGroups, photoUrl: teacher.photoUrl, extraBranches: teacher.extraBranches });
+  return NextResponse.json({ id, name, username, branches, allowedGroups: teacher.allowedGroups, photoUrl: teacher.photoUrl });
 }
 
 export async function PUT(req) {
@@ -100,11 +101,18 @@ export async function PUT(req) {
     return NextResponse.json({ ok: true, offDays: updated.offDays });
   }
 
-  const { id, name, password, branch, allowedGroups, photoUrl, extraBranches } = body;
+  const { id, name, password, branches, allowedGroups, photoUrl } = body;
   const teacher = await redis.get(`teacher:${id}`);
   if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
 
-  const updated = { ...teacher, name, username: name, branch, allowedGroups: allowedGroups || teacher.allowedGroups, photoUrl: photoUrl !== undefined ? photoUrl : teacher.photoUrl, extraBranches: extraBranches !== undefined ? extraBranches : (teacher.extraBranches || []) };
+  const updated = {
+    ...teacher, name, username: name,
+    branches: branches !== undefined ? branches : (teacher.branches || []),
+    allowedGroups: allowedGroups || teacher.allowedGroups,
+    photoUrl: photoUrl !== undefined ? photoUrl : teacher.photoUrl,
+  };
+  delete updated.branch;        // eski şema alanlarını temizle
+  delete updated.extraBranches;
   if (password) {
     updated.passwordHash = await bcrypt.hash(password, 10);
   }

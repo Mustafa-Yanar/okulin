@@ -10,20 +10,8 @@ import {
 import RehberlikAccordion from './_components/rehberlik/RehberlikAccordion';
 import DirectorDenemeYonetimi from './_components/rehberlik/DirectorDenemeYonetimi';
 import ProgramOlusturucu from './_components/program/ProgramOlusturucu';
-import { filterSubjectsByBranch, subjectMatchesBranch } from '@/lib/deneme/branch';
-
-const BRANCHES = ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İnkılap Tarihi', 'İngilizce'];
-
-const SUB_BRANCHES = {
-  Matematik: ['TYT Matematik', 'AYT Matematik', 'Geometri'],
-};
-
-function classNeedsSubBranch(cls) {
-  if (!cls) return false;
-  if (cls.startsWith('m')) return true;
-  const grade = Math.floor(parseInt(cls) / 100);
-  return grade === 4;
-}
+import { subjectMatchesBranch } from '@/lib/deneme/branch';
+import { branchesForGroups, allBranches, allowedBranchesForClass, MATH_FAMILY } from '@/lib/constants';
 
 // Rehberlik için ders listesi
 function guidanceSubjectsFor(cls) {
@@ -89,14 +77,6 @@ function guidanceSubjectsFor(cls) {
   return [];
 }
 
-function allowedBranchesForClass(cls) {
-  if (!cls) return [];
-  if (cls.startsWith('m')) return ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe'];
-  const grade = Math.floor(parseInt(cls) / 100);
-  if (grade === 7) return ['Türkçe', 'Matematik', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İngilizce'];
-  if (grade === 8) return ['Türkçe', 'Matematik', 'Fen Bilgisi', 'İnkılap Tarihi', 'İngilizce'];
-  return ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe'];
-}
 
 const WEEKDAY_SLOT_IDS = ['w1','w2','w3','w4','w5','w6','w7','w8','w9','w10','w11','w12'];
 const WEEKEND_SLOT_IDS = ['e1','e2','e3','e4','e5','e6','e7','e8','e9','e10','e11','e12'];
@@ -313,6 +293,16 @@ function SlotGrid({ grid, program, teacher, weekKey, session, students, onBook, 
   const [searchQ, setSearchQ] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [fixedBooking, setFixedBooking] = useState(false);
+  const [bookingBranch, setBookingBranch] = useState('');
+
+  const teacherBranches = teacher.branches || [];
+  // Rezervasyon için seçilebilir dersler: öğretmen verir ∩ öğrenci sınıfı görür
+  const bookCls = session.role === 'student' ? session.cls : selectedStudent?.cls;
+  const bookableBranches = useMemo(() => {
+    if (!bookCls) return teacherBranches;
+    const allowed = allowedBranchesForClass(bookCls);
+    return teacherBranches.filter(b => allowed.includes(b));
+  }, [bookCls, teacher.branches]);
 
   const filteredStudents = useMemo(() => {
     if (!students) return [];
@@ -363,8 +353,12 @@ function SlotGrid({ grid, program, teacher, weekKey, session, students, onBook, 
     if (!bookingSlot) return;
     let studentId = session.role === 'student' ? session.id : selectedStudent?.id;
     if (!studentId) return;
-    await onBook({ teacherId: teacher.id, day: bookingSlot.dayIndex, slotId: bookingSlot.slotId, studentId, weekKey, forceOpen: bookingSlot.forceOpen, fixed: fixedBooking });
+    // Branş: seçili ya da tek aday otomatik
+    const branch = bookingBranch || (bookableBranches.length === 1 ? bookableBranches[0] : '');
+    if (!branch) return; // çok aday var ama seçilmedi
+    await onBook({ teacherId: teacher.id, day: bookingSlot.dayIndex, slotId: bookingSlot.slotId, studentId, weekKey, forceOpen: bookingSlot.forceOpen, fixed: fixedBooking, branch });
     setBookingSlot(null);
+    setBookingBranch('');
   };
 
   const colCount = visibleDays.length;
@@ -429,9 +423,26 @@ function SlotGrid({ grid, program, teacher, weekKey, session, students, onBook, 
           )}
           {session.role === 'student' ? (
             <div>
-              <p className="text-sm text-gray-600 mb-4"><strong>{teacher.name}</strong> – {teacher.branch} dersine kayıt oluyorsunuz.</p>
+              <p className="text-sm text-gray-600 mb-3"><strong>{teacher.name}</strong> ile etüde kayıt oluyorsunuz.</p>
+              {bookableBranches.length > 1 && (
+                <div className="mb-4">
+                  <Label>Ders seç</Label>
+                  <div className="flex gap-2 flex-wrap mt-1">
+                    {bookableBranches.map(b => (
+                      <button key={b} type="button" onClick={() => setBookingBranch(b)}
+                        className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${bookingBranch===b?'border-indigo-300 bg-indigo-50 text-indigo-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                        {b}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {bookableBranches.length === 1 && (
+                <p className="text-sm text-gray-500 mb-4">Ders: <strong>{bookableBranches[0]}</strong></p>
+              )}
               <div className="flex gap-3">
-                <button className="btn-primary flex-1" onClick={confirmBook}>Onayla</button>
+                <button className="btn-primary flex-1" onClick={confirmBook}
+                  disabled={bookableBranches.length > 1 && !bookingBranch}>Onayla</button>
                 <button className="btn-ghost" onClick={() => setBookingSlot(null)}>İptal</button>
               </div>
             </div>
@@ -451,6 +462,22 @@ function SlotGrid({ grid, program, teacher, weekKey, session, students, onBook, 
                 ))}
                 {filteredStudents.length === 0 && searchQ && <p className="text-sm text-gray-400 text-center py-4">Öğrenci bulunamadı</p>}
               </div>
+              {selectedStudent && bookableBranches.length > 1 && (
+                <div className="mb-4">
+                  <Label>Ders seç</Label>
+                  <div className="flex gap-2 flex-wrap mt-1">
+                    {bookableBranches.map(b => (
+                      <button key={b} type="button" onClick={() => setBookingBranch(b)}
+                        className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${bookingBranch===b?'border-indigo-300 bg-indigo-50 text-indigo-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                        {b}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {selectedStudent && bookableBranches.length === 0 && (
+                <p className="text-xs text-amber-600 mb-3">Bu öğretmenin bu öğrenci sınıfına verebileceği ders yok.</p>
+              )}
               {session.role === 'director' && (
                 <label className="flex items-center gap-2 mb-4 cursor-pointer select-none">
                   <input type="checkbox" checked={fixedBooking} onChange={e => setFixedBooking(e.target.checked)}
@@ -460,7 +487,8 @@ function SlotGrid({ grid, program, teacher, weekKey, session, students, onBook, 
                 </label>
               )}
               <div className="flex gap-3">
-                <button className="btn-primary flex-1" onClick={confirmBook} disabled={!selectedStudent}>
+                <button className="btn-primary flex-1" onClick={confirmBook}
+                  disabled={!selectedStudent || bookableBranches.length === 0 || (bookableBranches.length > 1 && !bookingBranch)}>
                   {selectedStudent ? `${selectedStudent.name} için Rezerve Et` : 'Öğrenci Seçin'}
                 </button>
                 <button className="btn-ghost" onClick={() => setBookingSlot(null)}>İptal</button>
@@ -1442,7 +1470,7 @@ function TeacherPanel({ session, showToast }) {
           {viewMode === 'table' ? (
             <>
               <div className="card p-4">
-                <SlotGrid grid={slots} program={program} teacher={{ id: session.id, name: session.name, branch: session.branch, allowedGroups: session.allowedGroups }} weekKey={weekKey} session={session} students={students} onBook={handleBook} onCancel={handleCancel} hideEmptyDays />
+                <SlotGrid grid={slots} program={program} teacher={{ id: session.id, name: session.name, branches: session.branches || [], allowedGroups: session.allowedGroups }} weekKey={weekKey} session={session} students={students} onBook={handleBook} onCancel={handleCancel} hideEmptyDays />
               </div>
               <p className="text-xs text-gray-400 mt-3 text-center">✕ = kapalı saat &nbsp;·&nbsp; + = rezervasyon yapılabilir</p>
             </>
@@ -1458,7 +1486,7 @@ function TeacherPanel({ session, showToast }) {
       )}
 
       {activeTab === 'ogrenciler' && (
-        <TeacherStudentsView students={students} branch={session.branch} />
+        <TeacherStudentsView students={students} branches={session.branches || []} />
       )}
     </div>
   );
@@ -1466,7 +1494,12 @@ function TeacherPanel({ session, showToast }) {
 
 // Öğretmen: sınıf akordiyonu (müdürdeki gibi) → öğrenci kartı → rehberlik (salt okunur)
 // branch: öğretmenin branşı — çözülen sorular ve konu takibi buna göre süzülür.
-function TeacherStudentsView({ students, branch }) {
+function TeacherStudentsView({ students, branches = [] }) {
+  // Bir ders öğretmenin HERHANGİ branşına uyuyorsa göster (çoklu branş OR)
+  const subjectMatchesAny = (subject) =>
+    branches.length === 0 || branches.some(b => subjectMatchesBranch(subject, b));
+  const filterSubjectsAny = (subjects) =>
+    branches.length === 0 ? subjects : subjects.filter(subjectMatchesAny);
   const [expandedId, setExpandedId] = useState(null);
   const [openCls, setOpenCls] = useState(null);
   const [searchQ, setSearchQ] = useState('');
@@ -1584,14 +1617,14 @@ function TeacherStudentsView({ students, branch }) {
                       {expandedId === s.id && (
                         <div className="border-t border-gray-100 bg-gray-50 px-3 py-3">
                           <RehberlikAccordion
-                            subjects={filterSubjectsByBranch(guidanceSubjectsFor(s.cls), branch)}
+                            subjects={filterSubjectsAny(guidanceSubjectsFor(s.cls))}
                             editable={false}
                             studentId={s.id}
                             solvedContent={
                               <StudentGuidanceView
                                 studentId={s.id}
                                 readOnly
-                                branchFilter={(subject) => subjectMatchesBranch(subject, branch)}
+                                branchFilter={subjectMatchesAny}
                               />
                             }
                           />
@@ -1610,7 +1643,7 @@ function TeacherStudentsView({ students, branch }) {
 }
 
 // ─── AVAILABLE TREE ────────────────────────────────────────────────────────────
-function AvailableTree({ available, onBook }) {
+function AvailableTree({ available, onBook, selectableBranchesFor }) {
   const [openTeachers, setOpenTeachers] = useState({});
   const [openDays, setOpenDays] = useState({});
 
@@ -1619,7 +1652,7 @@ function AvailableTree({ available, onBook }) {
     const map = {};
     for (const s of available) {
       if (!map[s.teacherId]) {
-        map[s.teacherId] = { id: s.teacherId, name: s.teacherName, branch: s.branch, days: {} };
+        map[s.teacherId] = { id: s.teacherId, name: s.teacherName, branches: s.branches || [], days: {} };
       }
       const dayKey = s.day;
       if (!map[s.teacherId].days[dayKey]) {
@@ -1656,11 +1689,11 @@ function AvailableTree({ available, onBook }) {
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-700 shrink-0"
                   style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)', fontWeight: 700 }}>
-                  {teacher.branch.slice(0, 2)}
+                  {(teacher.branches[0] || '?').slice(0, 2)}
                 </div>
                 <div className="text-left">
                   <div className="font-700 text-gray-900 text-sm" style={{ fontWeight: 700 }}>{teacher.name}</div>
-                  <div className="text-xs text-gray-500">{teacher.branch} · {totalSlots} boş saat</div>
+                  <div className="text-xs text-gray-500">{teacher.branches.join(', ')} · {totalSlots} boş saat</div>
                 </div>
               </div>
               <ChevronRight size={16} className="text-gray-400 shrink-0 transition-transform" style={{ transform: tOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
@@ -1686,18 +1719,32 @@ function AvailableTree({ available, onBook }) {
 
                       {dOpen && (
                         <div className="px-5 py-1.5 space-y-1.5">
-                          {day.slots.map((s, i) => (
-                            <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-gray-100 hover:border-indigo-200 transition-colors">
-                              <div className="flex items-center gap-2">
-                                <Clock size={12} className="text-indigo-400 shrink-0" />
-                                <span className="text-xs font-600 text-gray-700" style={{ fontWeight: 600 }}>{s.slotLabel}</span>
+                          {day.slots.map((s, i) => {
+                            const sel = selectableBranchesFor ? selectableBranchesFor(s) : (s.branches || []);
+                            return (
+                              <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-gray-100 hover:border-indigo-200 transition-colors">
+                                <div className="flex items-center gap-2">
+                                  <Clock size={12} className="text-indigo-400 shrink-0" />
+                                  <span className="text-xs font-600 text-gray-700" style={{ fontWeight: 600 }}>{s.slotLabel}</span>
+                                </div>
+                                {sel.length === 1 ? (
+                                  <button onClick={() => onBook({ teacherId: s.teacherId, day: s.day, slotId: s.slotId, branch: sel[0] })}
+                                    className="btn-primary !px-3 !py-1 text-xs">
+                                    {sel[0]} · Al
+                                  </button>
+                                ) : (
+                                  <div className="flex gap-1 flex-wrap justify-end">
+                                    {sel.map(b => (
+                                      <button key={b} onClick={() => onBook({ teacherId: s.teacherId, day: s.day, slotId: s.slotId, branch: b })}
+                                        className="btn-primary !px-2.5 !py-1 text-[11px]">
+                                        {b}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                              <button onClick={() => onBook({ teacherId: s.teacherId, day: s.day, slotId: s.slotId })}
-                                className="btn-primary !px-3 !py-1 text-xs">
-                                Etüt Al
-                              </button>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -1745,27 +1792,40 @@ function StudentPanel({ session, showToast }) {
 
   const studentAllowedBranches = useMemo(() => allowedBranchesForClass(session.cls), [session.cls]);
 
+  // Öğrencinin bu hafta zaten aldığı dersler + mat ailesi alınmış mı
+  const bookedBranches = useMemo(() => new Set(myBookings.map(b => b.branch).filter(Boolean)), [myBookings]);
+  const mathTaken = useMemo(() => myBookings.some(b => MATH_FAMILY.includes(b.branch)), [myBookings]);
+
+  // Bir slotun bu öğrenci için seçilebilir dersleri (öğretmen verir ∩ sınıf görür ∩ kural)
+  const selectableBranchesFor = useCallback((s) => {
+    return (s.branches || []).filter(b => {
+      if (!studentAllowedBranches.includes(b)) return false;
+      if (bookedBranches.has(b)) return false;                  // aynı dersten 2. etüt yok
+      if (MATH_FAMILY.includes(b) && mathTaken) return false;   // mat ailesi tek
+      return true;
+    });
+  }, [studentAllowedBranches, bookedBranches, mathTaken]);
+
   const available = useMemo(() => {
     return allSlots.filter(s => {
       if (s.booked || s.disabled) return false;
       if (!s.allowedGroups || s.allowedGroups.length === 0) return false;
       if (!s.allowedGroups.includes(session.group)) return false;
-      // Geçmiş slotlar listede görünmesin
       if (isSlotPast(weekKey, s.day, s.slotLabel)) return false;
-      // Sınıfa göre izin verilen branşlar
-      if (!studentAllowedBranches.includes(s.branch)) return false;
-      if (myBookings.some(b => b.branch === s.branch)) return false;
       if (myBookings.some(b => b.day === s.day && b.slotId === s.slotId)) return false;
-      if (filterBranch && s.branch !== filterBranch) return false;
+      // En az bir seçilebilir ders kalmalı
+      const sel = selectableBranchesFor(s);
+      if (sel.length === 0) return false;
+      if (filterBranch && !sel.includes(filterBranch)) return false;
       if (filterTeacher && s.teacherId !== filterTeacher) return false;
       if (filterDay !== '' && s.day !== parseInt(filterDay)) return false;
       return true;
     });
-  }, [allSlots, myBookings, session, studentAllowedBranches, filterBranch, filterTeacher, filterDay, weekKey]);
+  }, [allSlots, myBookings, session, selectableBranchesFor, filterBranch, filterTeacher, filterDay, weekKey]);
 
-  const handleBook = async ({ teacherId, day, slotId }) => {
+  const handleBook = async ({ teacherId, day, slotId, branch }) => {
     try {
-      await api('/api/slots', { method: 'POST', body: JSON.stringify({ teacherId, day, slotId, weekKey }) });
+      await api('/api/slots', { method: 'POST', body: JSON.stringify({ teacherId, day, slotId, weekKey, branch }) });
       showToast('Etüde kaydoldunuz!');
       loadData(weekKey);
     } catch (err) { showToast(err.message, 'error'); }
@@ -1809,7 +1869,7 @@ function StudentPanel({ session, showToast }) {
       ) : tab === 'myBookings' ? (
         <StudentBookingsView student={{ id: session.id }} allSlots={allSlots} onCancel={handleCancel} />
       ) : (
-        <AvailableTree available={available} onBook={handleBook} />
+        <AvailableTree available={available} onBook={handleBook} selectableBranchesFor={selectableBranchesFor} />
       )}
     </div>
   );
@@ -2231,7 +2291,7 @@ function DirectorPanel({ session, showToast }) {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="font-600" style={{ fontWeight:600 }}>{t.name}</div>
-                        <div className="text-xs text-gray-500">{t.branch}</div>
+                        <div className="text-xs text-gray-500">{(t.branches||[]).join(', ')}</div>
                         <div className="flex gap-1 mt-1 flex-wrap">
                           {(t.allowedGroups||[]).map(g => <span key={g} className="badge" style={{ background:'#e0e7ff',color:'#4338ca' }}>{GROUPS[g]}</span>)}
                           {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'#f3f4f6',color:'#9ca3af' }}>Tüm gruplar</span>}
@@ -3081,14 +3141,23 @@ function ClassScheduleModal({ cls, onClose }) {
 function TeacherForm({ initial, onClose, onSave }) {
   const [name, setName] = useState(initial?.name||'');
   const [password, setPassword] = useState('');
-  const [branch, setBranch] = useState(initial?.branch||BRANCHES[0]);
-  const [extraBranches, setExtraBranches] = useState(initial?.extraBranches||[]);
+  const [branches, setBranches] = useState(initial?.branches||[]);
   const [allowedGroups, setAllowedGroups] = useState(initial?.allowedGroups||[]);
   const [photoUrl, setPhotoUrl] = useState(initial?.photoUrl||'');
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
-  const toggleGroup = g => setAllowedGroups(prev => prev.includes(g)?prev.filter(x=>x!==g):[...prev,g]);
-  const toggleExtraBranch = b => setExtraBranches(prev => prev.includes(b)?prev.filter(x=>x!==b):[...prev,b]);
+
+  // Grup değişince, artık geçerli olmayan (grup-dışı) seçili branşları otomatik kaldır
+  const toggleGroup = g => setAllowedGroups(prev => {
+    const next = prev.includes(g) ? prev.filter(x=>x!==g) : [...prev, g];
+    const allowed = branchesForGroups(next);
+    setBranches(bs => bs.filter(b => allowed.includes(b)));
+    return next;
+  });
+  const toggleBranch = b => setBranches(prev => prev.includes(b)?prev.filter(x=>x!==b):[...prev,b]);
+
+  // allowedGroups'a göre seçilebilir branş havuzu (boşsa tüm gruplar)
+  const visibleBranches = useMemo(() => branchesForGroups(allowedGroups), [allowedGroups]);
 
   const handlePhoto = async e => {
     const file = e.target.files?.[0];
@@ -3105,7 +3174,13 @@ function TeacherForm({ initial, onClose, onSave }) {
     finally { setUploading(false); }
   };
 
-  const submit = async e => { e.preventDefault(); setLoading(true); await onSave({name, username: name, password, branch, extraBranches, allowedGroups, photoUrl}); setLoading(false); };
+  const submit = async e => {
+    e.preventDefault();
+    if (branches.length === 0) { alert('En az bir branş seçin'); return; }
+    setLoading(true);
+    await onSave({name, username: name, password, branches, allowedGroups, photoUrl});
+    setLoading(false);
+  };
   return (
     <Modal title={initial?'Öğretmen Düzenle':'Yeni Öğretmen'} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
@@ -3125,27 +3200,10 @@ function TeacherForm({ initial, onClose, onSave }) {
         <FormField label={initial?'Şifre (boş bırakırsan değişmez)':'Şifre'}>
           <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} required={!initial} />
         </FormField>
-        <FormField label="Branş">
-          <select className="input" value={branch} onChange={e=>setBranch(e.target.value)}>
-            {BRANCHES.map(b=><option key={b} value={b}>{b}</option>)}
-          </select>
-        </FormField>
-        <div>
-          <Label>Ek Branşlar <span className="text-gray-400 font-400" style={{fontWeight:400}}>(isteğe bağlı)</span></Label>
-          <p className="text-xs text-gray-400 mb-2">Birden fazla derse girebilecek öğretmenler için ekleyin</p>
-          <div className="flex gap-2 flex-wrap">
-            {BRANCHES.filter(b=>b!==branch).map(b => (
-              <button key={b} type="button" onClick={() => toggleExtraBranch(b)}
-                className={`px-3 py-1.5 rounded-lg text-sm border transition-all font-500 ${extraBranches.includes(b)?'border-violet-300 bg-violet-50 text-violet-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}
-                style={{fontWeight:500}}>
-                {extraBranches.includes(b)&&<Check size={12} className="inline mr-1" />}{b}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Önce grup — branş havuzu gruba bağlı */}
         <div>
           <Label>Hangi gruplara ders girebilir?</Label>
-          <p className="text-xs text-gray-400 mb-2">Hiç seçilmezse tüm gruplara açık</p>
+          <p className="text-xs text-gray-400 mb-2">Hiç seçilmezse tüm gruplara açık. Branş listesi buna göre belirlenir.</p>
           <div className="flex gap-2 flex-wrap">
             {Object.entries(GROUPS).map(([key,label]) => (
               <button key={key} type="button" onClick={() => toggleGroup(key)}
@@ -3155,6 +3213,21 @@ function TeacherForm({ initial, onClose, onSave }) {
               </button>
             ))}
           </div>
+        </div>
+        {/* Branşlar — grup havuzundan çoklu seçim */}
+        <div>
+          <Label>Branşlar <span className="text-gray-400 font-400" style={{fontWeight:400}}>(verebildiği dersler)</span></Label>
+          <p className="text-xs text-gray-400 mb-2">Öğretmenin girebileceği dersleri işaretleyin. Sadece işaretli dersler atanabilir.</p>
+          <div className="flex gap-2 flex-wrap">
+            {visibleBranches.map(b => (
+              <button key={b} type="button" onClick={() => toggleBranch(b)}
+                className={`px-3 py-1.5 rounded-lg text-sm border transition-all font-500 ${branches.includes(b)?'border-violet-300 bg-violet-50 text-violet-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                style={{fontWeight:500}}>
+                {branches.includes(b)&&<Check size={12} className="inline mr-1" />}{b}
+              </button>
+            ))}
+          </div>
+          {branches.length === 0 && <p className="text-xs text-amber-600 mt-2">En az bir branş seçin.</p>}
         </div>
         <div className="flex gap-3 pt-2">
           <button className="btn-primary flex-1" disabled={loading}>{loading?'Kaydediliyor...':'Kaydet'}</button>

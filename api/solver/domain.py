@@ -1,32 +1,14 @@
-"""Ders → branş eşlemesi ve öğretmen uygunluk mantığı.
+"""Öğretmen uygunluk mantığı (çoklu branş modeli).
 
-Kaynak: app/_components/program/ProgramOlusturucu.js (COURSE_BRANCH, teacherTeaches,
-teacherGroups). Blok havuzu (classBlockPairs) ve sütun anahtarı (colKeyFor) frontend'de
-hesaplanıp payload ile geliyor; burada tekrar üretilmiyor (tek kaynak frontend).
+Ders adı = branş adı; otomatik eşleme YOK. Öğretmen `branches[]` içinde verebildiği
+dersleri tutar. Blok havuzu (classBlockPairs) ve sütun anahtarı frontend'de hesaplanıp
+payload ile geliyor.
 """
 
-# Ders → branş. İnkılap Tarihi/Sosyal Bilgiler, TYT/AYT/Geometri→Matematik eşlemeleri kritik.
-COURSE_BRANCH = {
-    'Türkçe': 'Türkçe',
-    'TYT Matematik': 'Matematik', 'AYT Matematik': 'Matematik', 'Geometri': 'Matematik',
-    'Matematik': 'Matematik',
-    'Fizik': 'Fizik', 'Kimya': 'Kimya', 'Biyoloji': 'Biyoloji',
-    'Tarih': 'Tarih', 'Coğrafya': 'Coğrafya', 'Felsefe': 'Felsefe',
-    'Fen Bilgisi': 'Fen Bilgisi',
-    'Sosyal Bilgiler': 'Sosyal Bilgiler', 'İnkılap Tarihi': 'Sosyal Bilgiler',
-    'İngilizce': 'İngilizce',
-}
 
-
-def course_branch(course):
-    return COURSE_BRANCH.get(course, course)
-
-
-def teacher_teaches(teacher, branch):
-    """Öğretmen branşı veya ekstra branşıyla bu dersi verebilir mi."""
-    if teacher.get('branch') == branch:
-        return True
-    return branch in (teacher.get('extraBranches') or [])
+def teacher_teaches(teacher, course):
+    """Öğretmen bu dersi (= branşı) verebilir mi — branches listesinde mi."""
+    return course in (teacher.get('branches') or [])
 
 
 def teacher_groups(teacher):
@@ -37,9 +19,8 @@ def teacher_groups(teacher):
 
 def eligible_teachers(teachers, course, group):
     """Bu (ders, grup) için uygun öğretmen id listesi."""
-    branch = course_branch(course)
     ids = []
     for t in teachers:
-        if teacher_teaches(t, branch) and group in teacher_groups(t):
+        if teacher_teaches(t, course) and group in teacher_groups(t):
             ids.append(t['id'])
     return ids

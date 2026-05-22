@@ -31,8 +31,10 @@ export async function POST(req) {
       if (t && t.username === username) {
         const ok = await bcrypt.compare(password, t.passwordHash);
         if (ok) {
-          const res = NextResponse.json({ role: 'teacher', id: t.id, name: t.name, branch: t.branch, allowedGroups: t.allowedGroups || [] });
-          await setSession(res, { role: 'teacher', id: t.id, name: t.name, branch: t.branch, allowedGroups: t.allowedGroups || [] });
+          const branches = Array.isArray(t.branches) ? t.branches
+            : [t.branch, ...(t.extraBranches || [])].filter(Boolean); // eski kayıt fallback
+          const res = NextResponse.json({ role: 'teacher', id: t.id, name: t.name, branches, allowedGroups: t.allowedGroups || [] });
+          await setSession(res, { role: 'teacher', id: t.id, name: t.name, branches, allowedGroups: t.allowedGroups || [] });
           return res;
         }
       }

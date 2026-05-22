@@ -23,7 +23,7 @@ Girdi payload:
 import time
 from ortools.sat.python import cp_model
 
-from solver.domain import eligible_teachers, course_branch
+from solver.domain import eligible_teachers
 
 # Objective ağırlıkları: önce her şeyi yerleştir, sonra aşımı kıs, sonra dengele
 W_UNPLACED = 100000
@@ -93,7 +93,7 @@ def solve(payload):
                 # her blok için bir unplaced satırı
                 for _ in range(hours // 2):
                     unplaced.append({'cls': cls, 'course': course,
-                                     'reason': 'uygun öğretmen yok (branş: %s)' % course_branch(course)})
+                                     'reason': 'uygun öğretmen yok (ders: %s)' % course})
                 continue
             B = hours // 2
             cc = (cls, course)

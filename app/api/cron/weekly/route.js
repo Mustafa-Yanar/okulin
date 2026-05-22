@@ -49,7 +49,7 @@ export async function GET(req) {
           slotId: slot.id, slotLabel: slot.label,
           studentId: sd.studentId, studentName: sd.studentName, studentCls: sd.studentCls,
           bookedBy: sd.bookedBy, fixed: !!sd.fixed,
-          teacherId: tid, teacherName: teacher.name, branch: teacher.branch,
+          teacherId: tid, teacherName: teacher.name, branch: sd.branch || '',
         };
         teacherEntries.push(entry);
         if (sd.studentId) {

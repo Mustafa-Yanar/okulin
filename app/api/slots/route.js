@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { getWeekKey, getTeacherWeekSlots, slotKey, getAllTeachers, slotStartTime, getSlotTimes } from '@/lib/slots';
-import { ALL_DAYS, slotsForDay, MEZUN_FORBIDDEN_ETUT_SLOT } from '@/lib/constants';
+import { ALL_DAYS, slotsForDay, MEZUN_FORBIDDEN_ETUT_SLOT, MATH_FAMILY, allowedBranchesForClass } from '@/lib/constants';
 
 // GET /api/slots?week=2024-W20&teacherId=xxx
 export async function GET(req) {
@@ -31,7 +31,7 @@ export async function GET(req) {
         allSlots.push({
           teacherId: teacher.id,
           teacherName: teacher.name,
-          branch: teacher.branch,
+          branches: teacher.branches || [],
           allowedGroups: teacher.allowedGroups || [],
           day: day.index,
           dayLabel: day.label,
@@ -52,11 +52,14 @@ export async function POST(req) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
 
-  const { teacherId, day, slotId, studentId, weekKey: wk, forceOpen } = await req.json();
+  const { teacherId, day, slotId, studentId, weekKey: wk, forceOpen, branch } = await req.json();
   const weekKey = wk || getWeekKey();
 
-  const teacher = await redis.get(`teacher:${teacherId}`);
-  if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
+  const teacherRaw = await redis.get(`teacher:${teacherId}`);
+  if (!teacherRaw) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
+  // Eski şema güvenliği: branch+extraBranches → branches
+  const teacher = Array.isArray(teacherRaw.branches) ? teacherRaw
+    : { ...teacherRaw, branches: [teacherRaw.branch, ...(teacherRaw.extraBranches || [])].filter(Boolean) };
 
   // Etiketsiz öğretmende rezervasyon yapılamaz
   if (!teacher.allowedGroups || teacher.allowedGroups.length === 0) {
@@ -116,13 +119,25 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Mezun öğrenciler hafta içi 16:30–17:05 saatindeki etüde kayıt olamaz' }, { status: 400 });
   }
 
+  // Branş (ders) doğrulaması — öğretmen verebilmeli VE öğrenci sınıfı görebilmeli
+  const studentAllowed = allowedBranchesForClass(targetStudent.cls);
+  let bookingBranch = branch;
+  if (!bookingBranch) {
+    // Tek seçenek varsa otomatik belirle (geriye dönük: branş gönderilmezse)
+    const candidates = (teacher.branches || []).filter(b => studentAllowed.includes(b));
+    if (candidates.length === 1) bookingBranch = candidates[0];
+  }
+  if (!bookingBranch || !(teacher.branches || []).includes(bookingBranch) || !studentAllowed.includes(bookingBranch)) {
+    return NextResponse.json({ error: 'Geçersiz veya seçilmemiş ders. Bu öğretmen-öğrenci için uygun bir ders seçin.' }, { status: 400 });
+  }
+
   // Tüm öğretmenlerin bu haftaki slotlarını çek (çakışma kontrolleri için)
   const allTeachers = await getAllTeachers();
   const allWeekKeys = [];
   for (const t of allTeachers) {
     for (const day2 of ALL_DAYS) {
       for (const slot of slotsForDay(day2.index, day2.index >= 5 ? slotTimes.weekend : slotTimes.weekday)) {
-        allWeekKeys.push({ key: slotKey(weekKey, t.id, day2.index, slot.id), branch: t.branch, day: day2.index, slotId: slot.id });
+        allWeekKeys.push({ key: slotKey(weekKey, t.id, day2.index, slot.id), day: day2.index, slotId: slot.id });
       }
     }
   }
@@ -140,11 +155,18 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Bu öğrenci aynı gün aynı saatte başka bir etüde kayıtlı' }, { status: 400 });
   }
 
-  // Kural 2: Aynı branştan birden fazla etüt — müdür bypass edebilir
   if (session.role !== 'director') {
-    const branchConflict = studentSlots.some(s => s.branch === teacher.branch);
+    // Kural 2: Aynı dersten (branş) ikinci etüt — müdür bypass edebilir
+    const branchConflict = studentSlots.some(s => s.data.branch === bookingBranch);
     if (branchConflict) {
-      return NextResponse.json({ error: `Bu öğrenci bu hafta ${teacher.branch} dersinden zaten etüt almış` }, { status: 400 });
+      return NextResponse.json({ error: `Bu öğrenci bu hafta ${bookingBranch} dersinden zaten etüt almış` }, { status: 400 });
+    }
+    // Kural 3: TYT/AYT/Geometri "matematik ailesi" — yalnız birinden alınabilir
+    if (MATH_FAMILY.includes(bookingBranch)) {
+      const mathConflict = studentSlots.some(s => MATH_FAMILY.includes(s.data.branch));
+      if (mathConflict) {
+        return NextResponse.json({ error: 'Bu öğrenci bu hafta matematik (TYT/AYT/Geometri) etüdü zaten almış' }, { status: 400 });
+      }
     }
   }
 
@@ -154,6 +176,7 @@ export async function POST(req) {
     studentId: targetStudentId,
     studentName: targetStudent.name,
     studentCls: targetStudent.cls,
+    branch: bookingBranch,
     bookedBy: session.role,
     bookedAt: new Date().toISOString(),
   };

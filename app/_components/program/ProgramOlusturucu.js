@@ -7,14 +7,7 @@ import {
   DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES,
 } from '@/lib/constants';
 
-// ── Ders ↔ branş eşlemeleri ──
-const COURSE_BRANCH = {
-  'Türkçe':'Türkçe','TYT Matematik':'Matematik','AYT Matematik':'Matematik','Geometri':'Matematik',
-  'Matematik':'Matematik','Fizik':'Fizik','Kimya':'Kimya','Biyoloji':'Biyoloji',
-  'Tarih':'Tarih','Coğrafya':'Coğrafya','Felsefe':'Felsefe',
-  'Fen Bilgisi':'Fen Bilgisi','Sosyal Bilgiler':'Sosyal Bilgiler','İnkılap Tarihi':'Sosyal Bilgiler','İngilizce':'İngilizce',
-};
-const SUB_BRANCH_OF = { 'TYT Matematik':'TYT Matematik','AYT Matematik':'AYT Matematik','Geometri':'Geometri' };
+// Ders adı = branş adı; otomatik eşleme yok (çoklu branş modeli).
 
 const DAYS = ['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'];
 const SLOTS_PER_DAY = 12;
@@ -97,8 +90,8 @@ function coursesForClass(cls) { return coursesForCol(colKeyFor(cls)); }
 
 const ALL_CLASSES = [...STUDENT_GROUPS.ortaokul.classes,...STUDENT_GROUPS.lise.classes,...STUDENT_GROUPS.mezun.classes];
 
-function teacherTeaches(t, branch) {
-  return t.branch === branch || (t.extraBranches||[]).includes(branch);
+function teacherTeaches(t, course) {
+  return (t.branches || []).includes(course);
 }
 
 // Sınıfın ders bloklarını döndürür: [[gün, slotA, slotB], ...]
@@ -204,12 +197,11 @@ function analyzeLoad(classes, load, teachers) {
     const key = colKeyFor(cls), grp = classToGroup(cls);
     for (const course of coursesForCol(key)) {
       const h = (load[key]?.[course]) || 0; if (h <= 0) continue;
-      const branch = COURSE_BRANCH[course];
       const eligible = teachers.filter(tt =>
-        teacherTeaches(tt, branch) && teacherGroups(tt).includes(grp)
+        teacherTeaches(tt, course) && teacherGroups(tt).includes(grp)
       );
       if (eligible.length === 0) {
-        errors.push(`${cls.toUpperCase()} — ${course}: uygun öğretmen yok (branş: ${branch})`);
+        errors.push(`${cls.toUpperCase()} — ${course}: uygun öğretmen yok`);
       }
     }
   }
@@ -223,7 +215,7 @@ function analyzeLoad(classes, load, teachers) {
     const key = colKeyFor(cls), grp = classToGroup(cls);
     for (const course of coursesForCol(key)) {
       const h = (load[key]?.[course]) || 0; if (h <= 0) continue;
-      const branch = COURSE_BRANCH[course];
+      const branch = course; // ders adı = branş
       const k = branch + '|' + grp;
       branchPairs[k] = (branchPairs[k] || 0) + Math.ceil(h / 2);
       branchDemand[branch] = (branchDemand[branch] || 0) + h;
@@ -406,10 +398,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
       showToast?.(`Temizlendi — ${res.teachers} öğretmen, ${res.deleted.programs} program, ${res.deleted.slots} slot, ${res.deleted.offDays} izin günü`, 'success');
       // Öğretmen listesini yeniden yükle (offDays değişti)
       const data = await api('/api/teachers');
-      const withExtra = data.map(t => t.branch === 'Tarih'
-        ? { ...t, extraBranches: [...(t.extraBranches||[]), 'Sosyal Bilgiler'].filter((v,i,a)=>a.indexOf(v)===i) }
-        : t);
-      setTeachers(withExtra);
+      setTeachers(data);
     } catch(e) { showToast?.(e.message,'error'); }
     finally { setClearing(false); }
   }
@@ -438,8 +427,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         const sid = slotIdFor(a.day, a.slot); if (!sid) continue;
         byTeacher[a.teacherId] = byTeacher[a.teacherId] || {};
         byTeacher[a.teacherId][a.day] = byTeacher[a.teacherId][a.day] || {};
-        const entry = {type:'ders', cls:a.cls, fixed:true};
-        if (SUB_BRANCH_OF[a.course]) entry.subBranch = SUB_BRANCH_OF[a.course];
+        const entry = {type:'ders', cls:a.cls, fixed:true, branch:a.course};
         byTeacher[a.teacherId][a.day][sid] = entry;
       }
       let ok=0;
@@ -467,8 +455,8 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
   // Bir ders+sınıf için uygun öğretmenler (analyzeLoad'daki eligible mantığıyla aynı)
   function eligibleTeachersForPreset(cls, course) {
     if (!cls || !course) return [];
-    const branch = COURSE_BRANCH[course], grp = classToGroup(cls);
-    return teachers.filter(t => teacherTeaches(t, branch) && teacherGroups(t).includes(grp));
+    const grp = classToGroup(cls);
+    return teachers.filter(t => teacherTeaches(t, course) && teacherGroups(t).includes(grp));
   }
   function addPreset() {
     if (!presetTeacher || !presetCls || !presetCourse) return;
@@ -489,8 +477,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
   });
   const capByBranch={};
   teachers.forEach(t => {
-    capByBranch[t.branch]=(capByBranch[t.branch]||0)+1;
-    (t.extraBranches||[]).forEach(b=>capByBranch[b]=(capByBranch[b]||0)+1);
+    (t.branches||[]).forEach(b=>capByBranch[b]=(capByBranch[b]||0)+1);
   });
 
   return (
@@ -748,7 +735,7 @@ function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsC
   const usedDays = [...new Set(result.assigned.map(a=>a.day))].sort();
   const days = viewDay==='all' ? usedDays : [parseInt(viewDay)];
   const teacherById={}; teachers.forEach(t=>teacherById[t.id]=t);
-  const loadRows = teachers.map(t=>({name:t.name,n:result.tLoad[t.id]||0,branch:t.branch,id:t.id})).sort((a,b)=>b.n-a.n);
+  const loadRows = teachers.map(t=>({name:t.name,n:result.tLoad[t.id]||0,branch:(t.branches||[])[0],id:t.id})).sort((a,b)=>b.n-a.n);
   const maxN = Math.max(1,...loadRows.map(r=>r.n));
 
   const unplacedGrouped={};
@@ -911,7 +898,7 @@ function PrintPreview({ type, id, result, teachers, classes, onClose }) {
     if (type==='teacher') {
       return teachers.map(t => {
         const lessons = result.assigned.filter(a=>a.teacherId===t.id);
-        return { title:`${t.name} — ${t.branch}`, lessons };
+        return { title:`${t.name} — ${(t.branches||[]).join(', ')}`, lessons };
       });
     } else {
       return classes.map(cls => {

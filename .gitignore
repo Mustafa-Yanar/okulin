@@ -8,3 +8,4 @@ node_modules/
 __pycache__/
 *.pyc
 api/solver/_harness.py
+CLAUDE.local.md

@@ -103,6 +103,7 @@ export async function GET(req) {
       lessonInfoMap[`${meta.date}|${meta.teacherId}|${ln}`] = {
         slotLabel: meta.slot.label,
         subBranch: sd.subBranch || '',
+        branch: sd.branch || '',
       };
     });
   }
@@ -117,7 +118,7 @@ export async function GET(req) {
       dayLabel: DAY_NAMES_TR[d.getDay()],
       teacherId: m.teacherId,
       teacherName: teacher?.name || m.teacherId,
-      branch: teacher?.branch || '',
+      branch: info.branch || info.subBranch || '',
       cls: m.cls,
       lessonNo: m.lessonNo,
       slotLabel: info.slotLabel || '',

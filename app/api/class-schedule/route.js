@@ -58,7 +58,7 @@ export async function GET(req) {
       slotLabel: m.slot.label,
       teacherId: teacher.id,
       teacherName: teacher.name,
-      branch: teacher.branch || '',
+      branch: sd.branch || sd.subBranch || '',
       subBranch: sd.subBranch || '',
       fixed: sd.fixed !== false,
     });
