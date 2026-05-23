@@ -31,10 +31,10 @@ Her özellik veya düzeltme tamamlandığında **onay beklemeden:**
 **Koşul:** Build başarılı geçtikten sonra. Build kırılırsa commit atma, önce düzelt.
 
 ## AI Köprüsü (Gemini ile haberleşme)
-Aynı projede Gemini de çalışıyor. Dosya üzerinden haberleşirsiniz (`ai-bridge/`, gitignore'da):
-- **Sen (Claude) yazarsın:** `ai-bridge/claude-to-gemini.md` — yeni mesajı en alta ekle (`## [tarih saat] #N` + `---`).
-- **Sen okursun:** `ai-bridge/gemini-to-claude.md` — Gemini'nin yazdıkları. Otomatik kontrol etme; Mustafa "Gemini yazdı, oku" deyince oku.
-- Gemini'nin dosyasına ASLA yazma. Gemini rakip değil, ortak — çıktısını tamamla, hata avlama.
+Gemini ortak, rakip değil — çıktısını tamamla, hata avlama. Dosya üzerinden haberleşme deseni:
+**Sen yazarsın** `ai-bridge/claude-to-gemini.md` (yeni mesaj en alta: `## [tarih saat] #N` + `---`), **okursun** `ai-bridge/gemini-to-claude.md` (Mustafa "Gemini yazdı, oku" deyince). Gemini'nin dosyasına ASLA yazma.
+
+> NOT (2026-05-23): Bu köprünün geçmiş içeriği (üçlü AI konsol = **ai-bridge projesi** geliştirme sohbeti) artık ayrı projeye taşındı: `~/Workspace/active/ai-bridge/bridge/`. Buradaki `ai-bridge/` klasörü artık YOK; etüttakip'e özel Gemini koordinasyonu gerekirse yeniden oluşur (gitignore'da). ai-bridge'i geliştirmek için o projenin dizininden çalış (`cd ~/Workspace/active/ai-bridge && claude`).
 
 ## Yapma
 - Mock/test endpoint'leri prod kodda bırakma
