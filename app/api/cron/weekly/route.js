@@ -30,49 +30,90 @@ export async function GET(req) {
   nextMonday.setDate(monday.getDate() + 7);
   const nextWeek = getWeekKey(nextMonday);
 
-  // Mevcut haftayı arşivle (öğretmen bazlı ve öğrenci bazlı)
+  // 1. Tüm öğretmen nesnelerini tek bir pipeline ile paralel olarak çek
+  const teachersPipeline = redis.pipeline();
+  ids.forEach(tid => teachersPipeline.get(`teacher:${tid}`));
+  const teachersResults = await teachersPipeline.exec();
+  const teachersMap = {};
+  ids.forEach((tid, idx) => {
+    if (teachersResults[idx]) {
+      teachersMap[tid] = teachersResults[idx];
+    }
+  });
+
+  // 2. Tüm öğretmenlerin tüm günlük slot anahtarlarını topla ve tek pipeline ile çek
   const studentArchiveMap = {}; // studentId -> entries[]
   const slotTimes = await getSlotTimes();
+  const slotKeysMeta = []; // list of { key, teacherId, dayIndex, slot }
+  const slotPipeline = redis.pipeline();
 
   for (const tid of ids) {
-    const teacher = await redis.get(`teacher:${tid}`);
-    if (!teacher) continue;
-
-    const teacherEntries = [];
+    if (!teachersMap[tid]) continue;
     for (const day of ALL_DAYS) {
-      for (const slot of slotsForDay(day.index, day.index >= 5 ? slotTimes.weekend : slotTimes.weekday)) {
+      const slots = slotsForDay(day.index, day.index >= 5 ? slotTimes.weekend : slotTimes.weekday);
+      for (const slot of slots) {
         const k = slotKey(currentWeek, tid, day.index, slot.id);
-        const sd = await redis.get(k);
-        if (!sd || !sd.booked) continue;
-        const entry = {
-          day: day.index, dayLabel: day.label,
-          slotId: slot.id, slotLabel: slot.label,
-          studentId: sd.studentId, studentName: sd.studentName, studentCls: sd.studentCls,
-          bookedBy: sd.bookedBy, fixed: !!sd.fixed,
-          teacherId: tid, teacherName: teacher.name, branch: sd.branch || '',
-        };
-        teacherEntries.push(entry);
-        if (sd.studentId) {
-          if (!studentArchiveMap[sd.studentId]) studentArchiveMap[sd.studentId] = [];
-          studentArchiveMap[sd.studentId].push(entry);
-        }
+        slotKeysMeta.push({ k, teacherId: tid, dayIndex: day.index, slot });
+        slotPipeline.get(k);
       }
     }
-    if (teacherEntries.length > 0) {
-      await redis.set(`archive:teacher:${tid}:${currentWeek}`, teacherEntries);
+  }
+
+  const slotResults = await slotPipeline.exec();
+
+  // 3. Arşiv haritasını doldur
+  const teacherArchiveMap = {}; // teacherId -> entries[]
+
+  slotKeysMeta.forEach((meta, idx) => {
+    const sd = slotResults[idx];
+    if (sd && sd.booked) {
+      const teacher = teachersMap[meta.teacherId];
+      const entry = {
+        day: meta.dayIndex,
+        dayLabel: ALL_DAYS.find(d => d.index === meta.dayIndex)?.label || '',
+        slotId: meta.slot.id,
+        slotLabel: meta.slot.label,
+        studentId: sd.studentId,
+        studentName: sd.studentName,
+        studentCls: sd.studentCls,
+        bookedBy: sd.bookedBy,
+        fixed: !!sd.fixed,
+        teacherId: meta.teacherId,
+        teacherName: teacher.name,
+        branch: sd.branch || '',
+      };
+
+      if (!teacherArchiveMap[meta.teacherId]) teacherArchiveMap[meta.teacherId] = [];
+      teacherArchiveMap[meta.teacherId].push(entry);
+
+      if (sd.studentId) {
+        if (!studentArchiveMap[sd.studentId]) studentArchiveMap[sd.studentId] = [];
+        studentArchiveMap[sd.studentId].push(entry);
+      }
     }
-  }
+  });
 
-  // Öğrenci arşivlerini kaydet
+  // 4. Arşivleri Redis'e pipelined olarak yaz
+  const writePipeline = redis.pipeline();
+  let hasWriteOps = false;
+
+  for (const [tid, entries] of Object.entries(teacherArchiveMap)) {
+    writePipeline.set(`archive:teacher:${tid}:${currentWeek}`, entries);
+    hasWriteOps = true;
+  }
   for (const [sid, entries] of Object.entries(studentArchiveMap)) {
-    await redis.set(`archive:student:${sid}:${currentWeek}`, entries);
+    writePipeline.set(`archive:student:${sid}:${currentWeek}`, entries);
+    hasWriteOps = true;
   }
 
-  for (const tid of ids) {
-    const teacher = await redis.get(`teacher:${tid}`);
-    if (!teacher) continue;
-    // initWeekForTeacher program'daki sabit rezervasyonları da uygular
-    await initWeekForTeacher(tid, nextWeek);
+  if (hasWriteOps) {
+    await writePipeline.exec();
+  }
+
+  // 5. Tüm öğretmenlerin yeni haftasını paralel (Promise.all) olarak init et
+  const activeTeacherIds = ids.filter(tid => !!teachersMap[tid]);
+  if (activeTeacherIds.length > 0) {
+    await Promise.all(activeTeacherIds.map(tid => initWeekForTeacher(tid, nextWeek)));
   }
 
   await redis.set('current_week', nextWeek);

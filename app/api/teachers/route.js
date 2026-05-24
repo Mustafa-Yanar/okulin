@@ -44,9 +44,12 @@ export async function POST(req) {
 
   // Aynı isimde öğretmen var mı kontrol et
   const teacherIds = await redis.smembers('teachers');
-  for (const tid of teacherIds) {
-    const t = await redis.get(`teacher:${tid}`);
-    if (t && t.username === username) {
+  if (teacherIds && teacherIds.length > 0) {
+    const pipeline = redis.pipeline();
+    teacherIds.forEach(tid => pipeline.get(`teacher:${tid}`));
+    const teachers = await pipeline.exec();
+    const exists = teachers.some(t => t && t.username === username);
+    if (exists) {
       return NextResponse.json({ error: 'Bu isimde bir öğretmen zaten kayıtlı' }, { status: 400 });
     }
   }

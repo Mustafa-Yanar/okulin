@@ -26,30 +26,38 @@ export async function POST(req) {
 
     // Try teacher
     const teacherIds = await redis.smembers('teachers');
-    for (const tid of teacherIds) {
-      const t = await redis.get(`teacher:${tid}`);
-      if (t && t.username === username) {
-        const ok = await bcrypt.compare(password, t.passwordHash);
-        if (ok) {
-          const branches = Array.isArray(t.branches) ? t.branches
-            : [t.branch, ...(t.extraBranches || [])].filter(Boolean); // eski kayıt fallback
-          const res = NextResponse.json({ role: 'teacher', id: t.id, name: t.name, branches, allowedGroups: t.allowedGroups || [] });
-          await setSession(res, { role: 'teacher', id: t.id, name: t.name, branches, allowedGroups: t.allowedGroups || [] });
-          return res;
+    if (teacherIds && teacherIds.length > 0) {
+      const pipeline = redis.pipeline();
+      teacherIds.forEach(tid => pipeline.get(`teacher:${tid}`));
+      const teachers = await pipeline.exec();
+      for (const t of teachers) {
+        if (t && t.username === username) {
+          const ok = await bcrypt.compare(password, t.passwordHash);
+          if (ok) {
+            const branches = Array.isArray(t.branches) ? t.branches
+              : [t.branch, ...(t.extraBranches || [])].filter(Boolean); // eski kayıt fallback
+            const res = NextResponse.json({ role: 'teacher', id: t.id, name: t.name, branches, allowedGroups: t.allowedGroups || [] });
+            await setSession(res, { role: 'teacher', id: t.id, name: t.name, branches, allowedGroups: t.allowedGroups || [] });
+            return res;
+          }
         }
       }
     }
 
     // Try student
     const studentIds = await redis.smembers('students');
-    for (const sid of studentIds) {
-      const s = await redis.get(`student:${sid}`);
-      if (s && s.username === username) {
-        const ok = await bcrypt.compare(password, s.passwordHash);
-        if (ok) {
-          const res = NextResponse.json({ role: 'student', id: s.id, name: s.name, cls: s.cls, group: s.group });
-          await setSession(res, { role: 'student', id: s.id, name: s.name, cls: s.cls, group: s.group });
-          return res;
+    if (studentIds && studentIds.length > 0) {
+      const pipeline = redis.pipeline();
+      studentIds.forEach(sid => pipeline.get(`student:${sid}`));
+      const students = await pipeline.exec();
+      for (const s of students) {
+        if (s && s.username === username) {
+          const ok = await bcrypt.compare(password, s.passwordHash);
+          if (ok) {
+            const res = NextResponse.json({ role: 'student', id: s.id, name: s.name, cls: s.cls, group: s.group });
+            await setSession(res, { role: 'student', id: s.id, name: s.name, cls: s.cls, group: s.group });
+            return res;
+          }
         }
       }
     }
