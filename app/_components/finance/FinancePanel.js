@@ -37,9 +37,9 @@ function ReceiptPrintArea({ data, onClose }) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 no-print">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 print:bg-transparent print:static print:p-0">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md print:shadow-none print:max-w-none print:w-full print:border-none">
+        <div className="flex items-center justify-between p-4 border-b border-gray-100 no-print">
           <span className="font-700 text-gray-800" style={{ fontWeight: 700 }}>Makbuz Önizlemesi</span>
           <div className="flex gap-2">
             <button
@@ -55,7 +55,7 @@ function ReceiptPrintArea({ data, onClose }) {
           </div>
         </div>
 
-        <div id="print-area" className="p-6">
+        <div id="print-preview" className="p-6">
           {/* Makbuz içeriği */}
           <div className="text-center border-b border-gray-200 pb-4 mb-4">
             <div className="font-800 text-lg text-gray-900" style={{ fontWeight: 800 }}>{dershane.name}</div>
@@ -81,24 +81,15 @@ function ReceiptPrintArea({ data, onClose }) {
               ))}
             </tbody>
           </table>
-          <div className="bg-indigo-50 rounded-xl p-4 text-center">
-            <div className="text-xs text-indigo-500 uppercase tracking-wide mb-1 font-600" style={{ fontWeight: 600 }}>Tahsil Edilen Tutar</div>
-            <div className="text-3xl font-800 text-indigo-700" style={{ fontWeight: 800 }}>₺{fmt(payment.amount)}</div>
+          <div className="bg-indigo-50 rounded-xl p-4 text-center print:bg-gray-50 print:border print:border-gray-200">
+            <div className="text-xs text-indigo-500 uppercase tracking-wide mb-1 font-600 print:text-gray-500" style={{ fontWeight: 600 }}>Tahsil Edilen Tutar</div>
+            <div className="text-3xl font-800 text-indigo-700 print:text-gray-900" style={{ fontWeight: 800 }}>₺{fmt(payment.amount)}</div>
           </div>
           <div className="text-center text-xs text-gray-400 mt-4">
             Kaydeden: {payment.recordedBy}
           </div>
         </div>
       </div>
-
-      <style>{`
-        @media print {
-          body > *:not(#print-area) { display: none !important; }
-          .no-print { position: fixed !important; inset: 0 !important; background: white !important; display: flex !important; align-items: center !important; justify-content: center !important; }
-          #print-area { display: block !important; padding: 24px !important; }
-          button, .no-print > div > div:first-child { display: none !important; }
-        }
-      `}</style>
     </div>
   );
 }
