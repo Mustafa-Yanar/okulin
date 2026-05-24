@@ -5,11 +5,13 @@ import {
   BookOpen, Users, LogOut, Plus, Trash2, Edit3, Save, X,
   Search, Calendar, Clock, User, Check,
   BookMarked, GraduationCap, Shield, ChevronLeft, ChevronRight,
-  RefreshCw, Settings, Lock, LayoutGrid, List, ClipboardList, Phone, BarChart3
+  RefreshCw, Settings, Lock, LayoutGrid, List, ClipboardList, Phone, BarChart3,
+  Wallet
 } from 'lucide-react';
 import RehberlikAccordion from './_components/rehberlik/RehberlikAccordion';
 import DirectorDenemeYonetimi from './_components/rehberlik/DirectorDenemeYonetimi';
 import ProgramOlusturucu from './_components/program/ProgramOlusturucu';
+import FinancePanel from './_components/finance/FinancePanel';
 import { subjectMatchesBranch } from '@/lib/deneme/branch';
 import { branchesForGroups, allBranches, allowedBranchesForClass, MATH_FAMILY } from '@/lib/constants';
 
@@ -2256,7 +2258,7 @@ function DirectorPanel({ session, showToast }) {
   return (
     <div>
       <div className="flex gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">
-        {[['teachers','Öğretmenler'],['students','Sınıf/Öğrenci'],['yoklama','Yoklama'],['program','Ders Programı'],['denemeler','Denemeler']].map(([key,label]) => (
+        {[['teachers','Öğretmenler'],['students','Sınıf/Öğrenci'],['yoklama','Yoklama'],['program','Ders Programı'],['denemeler','Denemeler'],['muhasebe','💰 Muhasebe']].map(([key,label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${tab===key?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
             style={{ fontWeight:600 }}>{label}</button>
@@ -2442,6 +2444,10 @@ function DirectorPanel({ session, showToast }) {
 
       {tab === 'denemeler' && (
         <DirectorDenemeYonetimi showToast={showToast} />
+      )}
+
+      {tab === 'muhasebe' && (
+        <FinancePanel session={session} showToast={showToast} />
       )}
 
       {/* Modals */}
@@ -3845,6 +3851,24 @@ function DirectorSettingsModal({ current, onClose, onSave, showToast }) {
   );
 }
 
+// ─── ACCOUNTANT PANEL ──────────────────────────────────────────────────────────
+function AccountantPanel({ session, showToast }) {
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#0891b2,#0284c7)' }}>
+          <Wallet size={20} color="white" />
+        </div>
+        <div>
+          <h2 className="text-xl font-800 text-gray-900" style={{ fontWeight: 800 }}>Muhasebe Paneli</h2>
+          <p className="text-sm text-gray-500">Öğrenci ödemeleri ve finansal takip</p>
+        </div>
+      </div>
+      <FinancePanel session={session} showToast={showToast} />
+    </div>
+  );
+}
+
 // ─── APP ROOT ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -3895,9 +3919,9 @@ export default function App() {
     }} showToast={showToast} /><Toast toast={toast} /></>
   );
 
-  const roleLabel = { director:'Müdür', teacher:'Öğretmen', student:'Öğrenci' };
-  const roleColor = { director:'#6366f1', teacher:'#22c55e', student:'#f59e0b' };
-  const RoleIcon = { director:Shield, teacher:BookMarked, student:GraduationCap };
+  const roleLabel = { director:'Müdür', teacher:'Öğretmen', student:'Öğrenci', accountant:'Muhasebeci' };
+  const roleColor = { director:'#6366f1', teacher:'#22c55e', student:'#f59e0b', accountant:'#0891b2' };
+  const RoleIcon = { director:Shield, teacher:BookMarked, student:GraduationCap, accountant:Wallet };
   const Icon = RoleIcon[session.role] || User;
 
   return (
@@ -3934,6 +3958,7 @@ export default function App() {
         {session.role==='director' && <DirectorPanel session={session} showToast={showToast} />}
         {session.role==='teacher' && <TeacherPanel session={session} showToast={showToast} />}
         {session.role==='student' && <StudentPanel session={session} showToast={showToast} />}
+        {session.role==='accountant' && <AccountantPanel session={session} showToast={showToast} />}
       </main>
       {showChangePassword && (
         <ChangePasswordModal showToast={showToast} onClose={() => setShowChangePassword(false)} />

@@ -24,6 +24,25 @@ export async function POST(req) {
       }
     }
 
+    // Try accountant
+    const accountantIds = await redis.smembers('accountants');
+    if (accountantIds && accountantIds.length > 0) {
+      const pipeline = redis.pipeline();
+      accountantIds.forEach(aid => pipeline.get(`accountant:${aid}`));
+      const accountants = await pipeline.exec();
+      for (const a of accountants) {
+        if (a && a.username === username) {
+          const ok = await bcrypt.compare(password, a.passwordHash);
+          if (ok) {
+            const res = NextResponse.json({ role: 'accountant', id: a.id, name: a.name });
+            await setSession(res, { role: 'accountant', id: a.id, name: a.name });
+            return res;
+          }
+        }
+      }
+    }
+
+
     // Try teacher
     const teacherIds = await redis.smembers('teachers');
     if (teacherIds && teacherIds.length > 0) {
