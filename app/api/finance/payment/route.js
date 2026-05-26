@@ -18,12 +18,29 @@ export async function POST(req) {
   if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   const { studentId, amount, date, method, note, installmentIdx } = await req.json();
-  if (!studentId || !amount || amount <= 0) {
-    return NextResponse.json({ error: 'Geçersiz ödeme bilgisi' }, { status: 400 });
+  if (!studentId) {
+    return NextResponse.json({ error: 'Öğrenci gerekli' }, { status: 400 });
   }
 
   const record = await redis.get(`finance:${studentId}`);
   if (!record) return NextResponse.json({ error: 'Finansal kayıt bulunamadı' }, { status: 404 });
+
+  const installments = [...(record.installments || [])];
+
+  // Hedef taksiti belirle: açıkça seçilen ya da (genel ödemede) ilk ödenmemiş.
+  const explicit = installmentIdx !== null && installmentIdx !== undefined && installmentIdx >= 0;
+  let targetIdx = explicit ? installmentIdx : null;
+  if (!explicit && installments.length > 0) {
+    targetIdx = installments.findIndex(inst => !inst.paid);
+  }
+  const targetInst = (targetIdx !== null && targetIdx >= 0) ? installments[targetIdx] : null;
+
+  // Taksit AÇIKÇA seçildiyse HER ZAMAN taksitin tamamı ödenir (kısmi ödeme yok).
+  // Genel ödemede kullanıcının girdiği tutar kullanılır.
+  const payAmount = (explicit && targetInst) ? (parseFloat(targetInst.amount) || 0) : parseFloat(amount);
+  if (!payAmount || payAmount <= 0) {
+    return NextResponse.json({ error: 'Geçersiz ödeme tutarı' }, { status: 400 });
+  }
 
   const receiptNo = await generateReceiptNo();
   const paymentDate = date || new Date().toISOString().slice(0, 10);
@@ -31,7 +48,7 @@ export async function POST(req) {
   const payment = {
     id: Math.random().toString(36).slice(2, 10),
     date: paymentDate,
-    amount: parseFloat(amount),
+    amount: payAmount,
     method: method || 'Nakit',
     note: note || '',
     receiptNo,
@@ -42,26 +59,15 @@ export async function POST(req) {
   const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
   const balance = record.netFee - totalPaid;
 
-  // Taksit eşleştirme: belirtilmişse veya otomatik (en yakın vadeli ödenmemiş)
-  let installments = [...(record.installments || [])];
-  let targetIdx = installmentIdx ?? null;
-
-  if (installments.length > 0 && targetIdx === null) {
-    // Otomatik: ilk ödenmemiş taksiti işaretle
-    targetIdx = installments.findIndex(inst => !inst.paid);
-  }
-
-  if (targetIdx !== null && targetIdx >= 0 && installments[targetIdx]) {
-    const due = parseFloat(installments[targetIdx].amount) || 0;
-    const pay = parseFloat(amount);
-    // Taksiti YALNIZ ödeme tutarı taksiti karşılıyorsa "ödendi" işaretle (kısmi ödeme kapatmaz;
-    // tutar yine payments[]'e yazılır ve bakiyeyi düşürür). +0.01 kuruş yuvarlama toleransı.
-    if (due <= 0 || pay + 0.01 >= due) {
+  // Taksiti "ödendi" işaretle: açık seçimde her zaman; genel ödemede yalnız tam karşılanıyorsa.
+  if (targetInst) {
+    const due = parseFloat(targetInst.amount) || 0;
+    if (explicit || due <= 0 || payAmount + 0.01 >= due) {
       installments[targetIdx] = {
-        ...installments[targetIdx],
+        ...targetInst,
         paid: true,
         paidDate: paymentDate,
-        paidAmount: pay,
+        paidAmount: payAmount,
         method: method || 'Nakit',
         receiptNo,
       };

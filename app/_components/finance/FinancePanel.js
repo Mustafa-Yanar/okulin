@@ -169,9 +169,13 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
             <input
               type="number" min="0.01" step="0.01"
               value={amount} onChange={e => setAmount(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
-              placeholder="0,00" required autoFocus
+              readOnly={installmentIdx !== ''}
+              className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none ${installmentIdx !== '' ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed' : 'bg-gray-50 border-gray-200 focus:border-indigo-400'}`}
+              placeholder="0,00" required autoFocus={installmentIdx === ''}
             />
+            {installmentIdx !== '' && (
+              <p className="text-[11px] text-gray-400 mt-1">Taksitin tamamı ödenir — kısmi ödeme alınmaz.</p>
+            )}
           </div>
 
           <div>

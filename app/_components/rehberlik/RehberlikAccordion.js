@@ -11,10 +11,10 @@ import DenemeAnaliz from './DenemeAnaliz';
 // - editable: konu slider'ları düzenlenebilir mi
 // - studentId: müdür/öğretmen başka öğrenci için; öğrenci kendi için boş
 export default function RehberlikAccordion({ solvedContent, subjects, editable, studentId }) {
-  const [open, setOpen] = useState('solved'); // tek kart açık
+  const [open, setOpen] = useState(null); // hepsi kapalı başlar
 
   const cards = [
-    { key: 'solved', label: 'Çözülen Sorular', icon: ClipboardList, body: solvedContent },
+    { key: 'solved', label: 'Haftalık Çözülen Sorular', icon: ClipboardList, body: solvedContent },
     {
       key: 'topics',
       label: 'Konu Takibi',
