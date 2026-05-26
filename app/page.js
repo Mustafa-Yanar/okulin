@@ -2861,14 +2861,14 @@ function StudentBookingsView({ student, allSlots, onCancel }) {
 }
 
 function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceReviewed }) {
-  const [tab, setTab] = useState('etut');
+  const [tab, setTab] = useState('rehberlik');
   return (
     <div className="px-3 py-2">
       <div className="flex gap-1 mb-3 p-1 bg-white rounded-full w-fit border border-gray-200 shadow-sm">
         {[
-          ['etut', 'Etüt Geçmişi', Clock],
-          ['devamsizlik', 'Devamsızlık Bilgisi', ClipboardList],
           ['rehberlik', 'Rehberlik', BookOpen],
+          ['devamsizlik', 'Devamsızlık Bilgisi', ClipboardList],
+          ['etut', 'Etüt Geçmişi', Clock],
         ].map(([key, label, Icon]) => {
           const active = tab === key;
           return (
