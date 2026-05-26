@@ -1,13 +1,13 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'Çözüm Etüt',
+  title: 'Akyazı Çözüm Özel Öğretim Kursu',
   description: 'Etüt takip ve rezervasyon sistemi',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Çözüm Etüt',
+    title: 'Çözüm Kurs',
   },
   other: {
     'mobile-web-app-capable': 'yes',

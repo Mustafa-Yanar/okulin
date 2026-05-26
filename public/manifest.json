@@ -1,6 +1,6 @@
 {
-  "name": "Çözüm Etüt",
-  "short_name": "Çözüm Etüt",
+  "name": "Akyazı Çözüm Özel Öğretim Kursu",
+  "short_name": "Çözüm Kurs",
   "description": "Etüt takip ve rezervasyon sistemi",
   "start_url": "/",
   "display": "standalone",

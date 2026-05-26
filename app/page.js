@@ -4123,11 +4123,11 @@ export default function App() {
     <div className="min-h-screen">
       <header className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background:'linear-gradient(135deg,#6366f1,#4f46e5)' }}>
-              <BookOpen size={16} color="white" />
-            </div>
-            <span className="font-800 text-gray-900" style={{ fontWeight:800 }}>Çözüm Etüt</span>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img src="/logo.jpg" alt="Akyazı Çözüm Özel Öğretim Kursu"
+              className="w-9 h-9 rounded-lg object-contain shrink-0"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            <span className="font-800 text-gray-900 text-sm sm:text-base leading-tight truncate" style={{ fontWeight:800 }}>Akyazı Çözüm Özel Öğretim Kursu</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background:'#f3f4f6' }}>
