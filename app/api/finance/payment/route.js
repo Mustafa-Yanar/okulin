@@ -52,14 +52,20 @@ export async function POST(req) {
   }
 
   if (targetIdx !== null && targetIdx >= 0 && installments[targetIdx]) {
-    installments[targetIdx] = {
-      ...installments[targetIdx],
-      paid: true,
-      paidDate: paymentDate,
-      paidAmount: parseFloat(amount),
-      method: method || 'Nakit',
-      receiptNo,
-    };
+    const due = parseFloat(installments[targetIdx].amount) || 0;
+    const pay = parseFloat(amount);
+    // Taksiti YALNIZ ödeme tutarı taksiti karşılıyorsa "ödendi" işaretle (kısmi ödeme kapatmaz;
+    // tutar yine payments[]'e yazılır ve bakiyeyi düşürür). +0.01 kuruş yuvarlama toleransı.
+    if (due <= 0 || pay + 0.01 >= due) {
+      installments[targetIdx] = {
+        ...installments[targetIdx],
+        paid: true,
+        paidDate: paymentDate,
+        paidAmount: pay,
+        method: method || 'Nakit',
+        receiptNo,
+      };
+    }
   }
 
   const updated = { ...record, payments, installments, balance };

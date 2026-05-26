@@ -58,22 +58,26 @@ export async function POST(req) {
 
   const netFee = Math.max(0, (parseFloat(totalFee) || 0) - (parseFloat(discount) || 0));
 
-  // Taksit planını yapılandır
+  const existing = await redis.get(`finance:${studentId}`);
+
+  // Taksit planını yapılandır — mevcut ÖDENMİŞ taksit durumlarını idx'e göre KORU.
+  // (Düzenlemede ödeme bilgisi silinmesin; client'tan gelen paid'e güvenme — sunucu yetkili.)
   let installmentList = [];
   if (paymentPlan === 'taksitli' && installments && installments.length > 0) {
-    installmentList = installments.map((inst, idx) => ({
-      idx,
-      dueDate: inst.dueDate,
-      amount: parseFloat(inst.amount) || 0,
-      paid: false,
-      paidDate: null,
-      paidAmount: null,
-      method: null,
-      receiptNo: null,
-    }));
+    installmentList = installments.map((inst, idx) => {
+      const prev = existing?.installments?.[idx];
+      return {
+        idx,
+        dueDate: inst.dueDate,
+        amount: parseFloat(inst.amount) || 0,
+        paid: prev?.paid || false,
+        paidDate: prev?.paidDate || null,
+        paidAmount: prev?.paidAmount || null,
+        method: prev?.method || null,
+        receiptNo: prev?.receiptNo || null,
+      };
+    });
   }
-
-  const existing = await redis.get(`finance:${studentId}`);
   const record = {
     studentId,
     studentName,
