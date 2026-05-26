@@ -3203,11 +3203,6 @@ function StudentList({ students, allSlots, weekKey, onCancelBooking, onEdit, onD
                           <button className="btn-ghost !px-2 !py-1.5 text-red-400 hover:bg-red-50" onClick={() => onDelete(s)}><Trash2 size={12} /></button>
                         </div>
                       </div>
-                      {expandedId === s.id && (
-                        <div className="border-t border-gray-100 bg-gray-50">
-                          <StudentExpandedView student={s} allSlots={allSlots} onCancelBooking={onCancelBooking} onGuidanceReviewed={onGuidanceReviewed} />
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -3219,6 +3214,26 @@ function StudentList({ students, allSlots, weekKey, onCancelBooking, onEdit, onD
       {scheduleCls && (
         <ClassScheduleModal cls={scheduleCls} onClose={() => setScheduleCls(null)} />
       )}
+      {expandedId && (() => {
+        const st = students.find(x => x.id === expandedId);
+        if (!st) return null;
+        // Modal: backdrop'a/yana/boşluğa tıklayınca KAPANMAZ; yalnız sağ üstteki X kapatır.
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 shrink-0">
+                <h3 className="font-700 text-base truncate" style={{ fontWeight: 700 }}>
+                  {st.name} <span className="font-500 text-gray-400 text-sm" style={{ fontWeight: 500 }}>· {classLabel(st.cls)}</span>
+                </h3>
+                <button onClick={() => setExpandedId(null)} className="p-2 rounded-lg hover:bg-gray-100 shrink-0" title="Kapat"><X size={18} /></button>
+              </div>
+              <div className="overflow-y-auto">
+                <StudentExpandedView student={st} allSlots={allSlots} onCancelBooking={onCancelBooking} onGuidanceReviewed={onGuidanceReviewed} />
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
