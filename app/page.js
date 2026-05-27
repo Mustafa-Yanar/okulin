@@ -13,7 +13,7 @@ import DirectorDenemeYonetimi from './_components/rehberlik/DirectorDenemeYoneti
 import ProgramOlusturucu from './_components/program/ProgramOlusturucu';
 import FinancePanel from './_components/finance/FinancePanel';
 import { subjectMatchesBranch } from '@/lib/deneme/branch';
-import { branchesForGroups, allBranches, allowedBranchesForClass, MATH_FAMILY } from '@/lib/constants';
+import { branchesForGroups, allBranches, allowedBranchesForClass, MATH_FAMILY, classLabel, getWeekKey } from '@/lib/constants';
 
 // Rehberlik için ders listesi
 function guidanceSubjectsFor(cls) {
@@ -162,20 +162,6 @@ const STUDENT_GROUPS = {
   mezun: { label: 'Mezun', classes: ['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10'] },
 };
 
-function classLabel(cls) {
-  if (cls.startsWith('m')) {
-    const n = parseInt(cls.slice(1));
-    return `Mezun ${n <= 5 ? 'Sayısal' : 'EA'} (${cls.toUpperCase()})`;
-  }
-  const g = Math.floor(parseInt(cls) / 100);
-  const sec = parseInt(cls.slice(1));
-  const gNames = { 7:'7.Sınıf', 8:'8.Sınıf', 1:'9.Sınıf', 2:'10.Sınıf', 3:'11.Sınıf', 4:'12.Sınıf' };
-  let type = '';
-  if (g === 3) type = sec <= 3 ? ' Sayısal' : ' EA';
-  if (g === 4) type = sec <= 5 ? ' Sayısal' : ' EA';
-  return `${gNames[g] || g+'.Sınıf'}${type} (${cls})`;
-}
-
 async function api(path, opts = {}) {
   const res = await fetch(path, {
     ...opts,
@@ -216,15 +202,6 @@ function Label({ children }) {
 }
 function FormField({ label, children }) {
   return <div className="mb-4"><Label>{label}</Label>{children}</div>;
-}
-
-function getWeekKey(date = new Date()) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
 // O haftanın o günündeki slot başlangıç zamanı geçmiş mi?
