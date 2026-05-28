@@ -10,3 +10,9 @@ __pycache__/
 api/solver/_harness.py
 CLAUDE.local.md
 ai-bridge/
+
+# Refactor geçiş dosyaları (test sonrası silinecek / sadece local planlama)
+app/page.backup.js
+architecture_analysis.md
+implementation_plan.md
+walkthrough.md
