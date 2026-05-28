@@ -14,7 +14,6 @@ import FinancePanel from './finance/FinancePanel';
 import { StudentBookingsView } from './StudentPanel';
 import { TeacherBookingsList } from './TeacherPanel';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
-import DirectorDashboard from './DirectorDashboard';
 
 import {
   STUDENT_GROUPS,
@@ -42,9 +41,9 @@ async function api(path, opts = {}) {
   return data;
 }
 
-function Modal({ title, onClose, children, wide, xwide }) {
+function Modal({ title, onClose, children, wide, xwide, lockClose }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={lockClose ? undefined : (e => e.target === e.currentTarget && onClose())}>
       <div className={`card-elevated w-full ${xwide ? 'max-w-5xl' : wide ? 'max-w-3xl' : 'max-w-lg'} animate-slide-in max-h-[90vh] overflow-y-auto`}>
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>{title}</h3>
@@ -1027,7 +1026,7 @@ function TeacherForm({ initial, onClose, onSave }) {
   );
 }
 
-function StudentForm({ initial, onClose, onSave }) {
+function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
   const [name, setName] = useState(initial?.name||'');
   const [password, setPassword] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(initial?.group||'ortaokul');
@@ -1039,6 +1038,15 @@ function StudentForm({ initial, onClose, onSave }) {
   const submit = async e => { e.preventDefault(); setLoading(true); await onSave({name, username: name, password, cls, phone, parentPhone}); setLoading(false); };
   return (
     <Modal title={initial?'Öğrenci Düzenle':'Yeni Öğrenci'} onClose={onClose}>
+      {!initial && onSwitchToImport && (
+        <div className="mb-4 -mt-1 flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-100">
+          <span className="text-xs text-indigo-600">Toplu öğrenci yüklemek ister misin?</span>
+          <button type="button" onClick={onSwitchToImport}
+            className="text-xs font-600 text-indigo-700 hover:text-indigo-900 flex items-center gap-1 shrink-0" style={{ fontWeight: 600 }}>
+            <BookOpen size={12} /> Excel ile Yükle →
+          </button>
+        </div>
+      )}
       <form onSubmit={submit} className="space-y-4">
         <FormField label="Ad Soyad"><input className="input" value={name} onChange={e=>setName(e.target.value)} required /></FormField>
         <FormField label={initial?'Şifre (boş bırakırsan değişmez)':'Şifre'}>
@@ -1823,7 +1831,9 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
 
 // ─── MAIN DIRECTOR PANEL ────────────────────────────────────────────────────────
 export default function DirectorPanel({ session, showToast }) {
-  const [tab, setTab] = useState('dashboard');
+  const [tab, setTab] = useState('teachers');
+  const [showProgramOlusturucuModal, setShowProgramOlusturucuModal] = useState(false);
+  const [showDenemelerModal, setShowDenemelerModal] = useState(false);
   const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
   const [weekKey, setWeekKey] = useState(getWeekKey());
@@ -1917,36 +1927,26 @@ export default function DirectorPanel({ session, showToast }) {
   return (
     <div>
       <div className="flex gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">
-        {[['dashboard','Genel'],['teachers','Öğretmenler'],['students','Sınıf/Öğrenci'],['yoklama','Yoklama'],['program','Ders Programı'],['denemeler','Denemeler'],['muhasebe','💰 Muhasebe']].map(([key,label]) => (
+        {[['teachers','Öğretmenler'],['students','Rehberlik'],['yoklama','Yoklama'],['muhasebe','💰 Muhasebe']].map(([key,label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${tab===key?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
             style={{ fontWeight:600 }}>{label}</button>
         ))}
       </div>
 
-      {/* DASHBOARD TAB */}
-      {tab === 'dashboard' && (
-        <DirectorDashboard
-          session={session}
-          teachers={teachers}
-          students={students}
-          allSlots={allSlots}
-          weekKey={weekKey}
-          pendingGuidance={pendingGuidance}
-          onNewTeacher={() => { setEditTeacher(null); setShowTeacherForm(true); setTab('teachers'); }}
-          onNewStudent={() => { setEditStudent(null); setShowStudentForm(true); setTab('students'); }}
-          onGotoTab={(t) => setTab(t)}
-        />
-      )}
-
       {/* TEACHERS TAB */}
       {tab === 'teachers' && (
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğretmenler ({teachers.length})</h3>
-            <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
-              <Plus size={14} /> Ekle
-            </button>
+            <div className="flex gap-2 flex-wrap">
+              <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
+                <Plus size={14} /> Öğretmen Ekle
+              </button>
+              <button className="btn-ghost !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => setShowProgramOlusturucuModal(true)}>
+                <LayoutGrid size={14} /> Ders Programı
+              </button>
+            </div>
           </div>
           <div className="grid gap-2">
             {teachers.map(t => {
@@ -2039,27 +2039,15 @@ export default function DirectorPanel({ session, showToast }) {
       {/* STUDENTS TAB */}
       {tab === 'students' && (
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğrenciler ({students.length})</h3>
-            <div className="flex gap-2">
-              <button className="btn-ghost !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => setShowImport(true)}>
-                <BookOpen size={14} /> Excel Yükle
-              </button>
+            <div className="flex gap-2 flex-wrap">
               <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditStudent(null); setShowStudentForm(true); }}>
-                <Plus size={14} /> Ekle
+                <Plus size={14} /> Öğrenci Ekle
               </button>
-              {students.length > 0 && (
-                <button className="btn-ghost !px-4 !py-2 flex items-center gap-1.5 text-sm text-red-500 hover:bg-red-50" onClick={async () => {
-                  if (!confirm(`Tüm ${students.length} öğrenci silinsin mi? Bu işlem geri alınamaz.`)) return;
-                  try {
-                    await api('/api/students', { method: 'DELETE', body: JSON.stringify({ ids: students.map(s => s.id) }) });
-                    showToast(`${students.length} öğrenci silindi`);
-                    loadAll(weekKey);
-                  } catch(err) { showToast(err.message, 'error'); }
-                }}>
-                  <Trash2 size={14} /> Tümünü Sil
-                </button>
-              )}
+              <button className="btn-ghost !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => setShowDenemelerModal(true)}>
+                <ClipboardList size={14} /> Denemeler
+              </button>
             </div>
           </div>
           <StudentList students={students}
@@ -2109,15 +2097,6 @@ export default function DirectorPanel({ session, showToast }) {
         <DirectorAttendanceView showToast={showToast} />
       )}
 
-      {tab === 'program' && (
-        <ProgramOlusturucu api={api} showToast={showToast}
-          activeClasses={[...new Set(students.map(s => s.cls))]} />
-      )}
-
-      {tab === 'denemeler' && (
-        <DirectorDenemeYonetimi showToast={showToast} />
-      )}
-
       {tab === 'muhasebe' && (
         <DirectorMuhasebeTab session={session} showToast={showToast} />
       )}
@@ -2135,6 +2114,7 @@ export default function DirectorPanel({ session, showToast }) {
       )}
       {showStudentForm && (
         <StudentForm initial={editStudent} onClose={() => { setShowStudentForm(false); setEditStudent(null); }}
+          onSwitchToImport={() => { setShowStudentForm(false); setEditStudent(null); setShowImport(true); }}
           onSave={async data => {
             try {
               if (editStudent) { await api('/api/students',{method:'PUT',body:JSON.stringify({id:editStudent.id,...data})}); showToast('Öğrenci güncellendi'); }
@@ -2152,6 +2132,17 @@ export default function DirectorPanel({ session, showToast }) {
       )}
       {showImport && (
         <ImportModal onClose={() => setShowImport(false)} showToast={showToast} onDone={() => { setShowImport(false); loadAll(weekKey); }} />
+      )}
+      {showProgramOlusturucuModal && (
+        <Modal title="Ders Programı Oluştur" onClose={() => setShowProgramOlusturucuModal(false)} xwide lockClose>
+          <ProgramOlusturucu api={api} showToast={showToast}
+            activeClasses={[...new Set(students.map(s => s.cls))]} />
+        </Modal>
+      )}
+      {showDenemelerModal && (
+        <Modal title="Denemeler" onClose={() => setShowDenemelerModal(false)} xwide lockClose>
+          <DirectorDenemeYonetimi showToast={showToast} />
+        </Modal>
       )}
     </div>
   );
