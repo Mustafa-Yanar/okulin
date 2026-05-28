@@ -17,9 +17,11 @@ const WEEKEND_DAYS = [5,6];
 
 // Hafta içi lise/ortaokul: sadece w10(idx=9) ve w11(idx=10) — 17:15-18:35
 const WEEKDAY_LISE_SLOTS = [9,10];
-// Hafta sonu: önce e1-e8 (idx 0-7), yetmezse e9-e10 (idx 8-9)
-const WEEKEND_PRIMARY_SLOTS = [0,1,2,3,4,5,6,7];
-const WEEKEND_EXTRA_SLOTS   = [8,9];
+// Hafta sonu — gruba göre kullanılabilir slotlar
+// Ortaokul: e1-e10 (idx 0-9) = 5 blok/gün
+// Lise: e1-e12 (idx 0-11) = 6 blok/gün (tüm hafta sonu açık)
+const WEEKEND_ORTAOKUL_SLOTS = [0,1,2,3,4,5,6,7,8,9];
+const WEEKEND_LISE_SLOTS     = [0,1,2,3,4,5,6,7,8,9,10,11];
 
 const FLOOR1 = [1,2,3,4,5], FLOOR2 = [6,7,8], FLOOR3 = [9,10,11,12];
 
@@ -108,10 +110,8 @@ function classBlockPairs(cls) {
     });
     return blocks;
   }
-  // Ortaokul: 5 blok/gün (e1-e10); Lise: 4 blok/gün (e1-e8)
-  const wkendSlots = g === 'ortaokul'
-    ? [...WEEKEND_PRIMARY_SLOTS, ...WEEKEND_EXTRA_SLOTS]
-    : WEEKEND_PRIMARY_SLOTS;
+  // Ortaokul: 5 blok/gün (e1-e10); Lise: 6 blok/gün (e1-e12, sınır yok)
+  const wkendSlots = g === 'ortaokul' ? WEEKEND_ORTAOKUL_SLOTS : WEEKEND_LISE_SLOTS;
   WEEKEND_DAYS.forEach(d => {
     for (let i = 0; i < wkendSlots.length; i += 2)
       blocks.push([d, wkendSlots[i], wkendSlots[i+1]]);
@@ -170,8 +170,8 @@ function teacherBlockCap(t, grp) {
   if (grp === 'mezun') {
     return MEZUN_DAYS.filter(d => !offDays.has(d)).length * (MEZUN_SLOTS.length / 2);
   }
-  // Ortaokul: 5 blok/gün; Lise: 4 blok/gün
-  const wkendBlks = grp === 'ortaokul' ? 5 : 4;
+  // Ortaokul: 5 blok/gün (e1-e10); Lise: 6 blok/gün (e1-e12, sınır yok)
+  const wkendBlks = grp === 'ortaokul' ? 5 : 6;
   const wkend = WEEKEND_DAYS.filter(d => !offDays.has(d)).length * wkendBlks;
   const wkday = [0,1,2,3,4].filter(d => !offDays.has(d)).length * 1;
   return wkend + wkday;

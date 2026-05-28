@@ -42,7 +42,7 @@ Her özellik/düzeltme tamamlanınca onay beklemeden: değişen dosyaları `git 
 ## Otomatik ders programı (CP-SAT)
 - Akış: `ProgramOlusturucu.js generate()` → `POST /api/program-solve` (Node, director auth) → `/solve` (next.config.js rewrite → `api/solve.py`) → `api/solver/model.py`.
 - **Proxy URL kritik:** production'da sabit alias `cozumetut.vercel.app` kullanır (VERCEL_URL deployment-protection'a takılır). `SOLVER_SHARED_SECRET` ile korunur.
-- Blok = aynı gün 2 ardışık slot, aynı öğretmen. Mezun: Pzt-Per × w1-w6 (12 blok). Lise: hafta sonu e1-e8 + hafta içi w10-w11. Ortaokul: hafta sonu e1-e10 + hafta içi w10-w11. Hafta içi w1-w6 sadece mezun.
+- Blok = aynı gün 2 ardışık slot, aynı öğretmen. Mezun: Pzt-Per × w1-w6 (12 blok). Lise: hafta sonu e1-e12 (6 blok/gün, sınır yok — 2026-05-29 kaldırıldı) + hafta içi w10-w11. Ortaokul: hafta sonu e1-e10 + hafta içi w10-w11. Hafta içi w1-w6 sadece mezun.
 - Kısıtlar (HARD): bir sınıf-ders tek öğretmen (TYT/AYT/Geometri ayrı); aynı sınıf+ders aynı gün max 1 blok; öğretmen/sınıf (gün,slot) tek; izin günü (offDays); KATI aktif-slot (sadece müdürün `available` işaretlediği slotlar — işaretsiz öğretmene ders YOK). SOFT: maxWeekly aşımı + yük dengeleme.
 - Ön eşleştirme (preset): müdür öğretmen→sınıf→ders kilitler (HARD).
 - Çözücü çıktısı `{assigned, unplaced, tLoad, presetWarnings, ms}`. `slot` 0-tabanlı index.
