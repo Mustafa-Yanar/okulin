@@ -68,7 +68,7 @@ const DEFAULT_LOAD = {
   'Lise Eşit Ağırlık_11':   {'Türkçe':4,'Matematik':4,'Tarih':4,'Coğrafya':4,'Felsefe':0},
   'Lise Sayısal_12':         {'Türkçe':4,'TYT Matematik':4,'AYT Matematik':4,'Geometri':2,'Fizik':4,'Kimya':4,'Biyoloji':4},
   'Lise Eşit Ağırlık_12':   {'Türkçe':4,'TYT Matematik':4,'AYT Matematik':4,'Geometri':2,'Tarih':4,'Coğrafya':4,'Felsefe':2},
-  'Mezun Sayısal':           {'Türkçe':4,'TYT Matematik':4,'AYT Matematik':4,'Geometri':2,'Fizik':4,'Kimya':4,'Biyoloji':4},
+  'Mezun Sayısal':           {'Türkçe':2,'TYT Matematik':4,'AYT Matematik':4,'Geometri':2,'Fizik':4,'Kimya':4,'Biyoloji':4},
   'Mezun Eşit Ağırlık':     {'Türkçe':4,'TYT Matematik':4,'AYT Matematik':4,'Geometri':2,'Tarih':4,'Coğrafya':4,'Felsefe':2},
 };
 
