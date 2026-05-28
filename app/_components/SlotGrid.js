@@ -64,7 +64,10 @@ function isSlotPast(weekKey, dayIndex, slotLabel) {
   }
 }
 
-function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teacher, onCellClick, onCancel, weekKey }) {
+// SlotCell — desktop'ta <td>, mobile'da <div> olarak sarılır (asDiv prop'u).
+// İçindeki tüm <td className="py-1 px-1"> wrapper'ları Wrap ile parametrize edildi.
+function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teacher, onCellClick, onCancel, weekKey, asDiv = false }) {
+  const Wrap = asDiv ? 'div' : 'td';
   const isDirector = session.role === 'director';
   const isPast = isSlotPast(weekKey, dayIndex, slot.label);
   const isLessonFromProg = progEntry?.type === 'ders';
@@ -79,25 +82,25 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
       const cls = lessonCls ? lessonCls.toUpperCase() : '—';
       const subShort = lessonSubBranch === 'TYT Matematik' ? 'TYT' : lessonSubBranch === 'AYT Matematik' ? 'AYT' : lessonSubBranch === 'Geometri' ? 'Geo' : lessonSubBranch;
       return (
-        <td className="py-1 px-1">
+        <Wrap className="py-1 px-1">
           <div className={`rounded-lg py-1.5 px-1 text-center bg-blue-50 border select-none ${lessonIsTemp ? 'border-dashed border-blue-300' : 'border-blue-100'}`}>
             <div className="text-[10px] font-600 text-blue-700 truncate" style={{ fontWeight: 600 }}>{cls}</div>
             {subShort && <div className="text-[9px] text-blue-500 truncate">{subShort}</div>}
             <div className="text-[9px] text-blue-400">{lessonIsTemp ? 'Geçici ders' : 'Ders'}</div>
           </div>
-        </td>
+        </Wrap>
       );
     }
     if (isDirector) {
       if (isPast) {
         return (
-          <td className="py-1 px-1">
+          <Wrap className="py-1 px-1">
             <div className="rounded-lg py-2 px-1 text-center text-xs text-gray-200 bg-gray-50 border border-gray-100 select-none" title="Bu saat dilimi geçmiş">✕</div>
-          </td>
+          </Wrap>
         );
       }
       return (
-        <td className="py-1 px-1">
+        <Wrap className="py-1 px-1">
           <button
             onClick={() => onCellClick(dayIndex, slotIdx, slotData, true)}
             title="Ek slot aç ve rezervasyon yap"
@@ -105,13 +108,13 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
           >
             +
           </button>
-        </td>
+        </Wrap>
       );
     }
     return (
-      <td className="py-1 px-1">
+      <Wrap className="py-1 px-1">
         <div className="rounded-lg py-2 px-1 text-center text-xs text-gray-200 bg-gray-50 border border-gray-100 select-none">✕</div>
-      </td>
+      </Wrap>
     );
   }
 
@@ -131,7 +134,7 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
     const c = colorMap[bookedBy] || colorMap.student;
 
     return (
-      <td className="py-1 px-1">
+      <Wrap className="py-1 px-1">
         <div className={`rounded-lg py-1.5 px-1 text-center ${c.bg} border ${c.border} relative group overflow-hidden`}>
           <div className={`text-xs font-600 ${c.name} truncate`} style={{ fontWeight: 600 }}>{slotData.studentName}</div>
           <div className={`text-[10px] ${c.sub} truncate`}>{clsDisplay}</div>
@@ -146,27 +149,86 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
             </button>
           )}
         </div>
-      </td>
+      </Wrap>
     );
   }
 
   if (isPast) {
     return (
-      <td className="py-1 px-1">
+      <Wrap className="py-1 px-1">
         <div className="rounded-lg py-2 px-1 text-center text-xs text-gray-200 bg-gray-50 border border-gray-100 select-none" title="Bu saat dilimi geçmiş">✕</div>
-      </td>
+      </Wrap>
     );
   }
 
   return (
-    <td className="py-1 px-1">
+    <Wrap className="py-1 px-1">
       <button
         onClick={() => onCellClick(dayIndex, slotIdx, slotData)}
         className="w-full rounded-lg py-2 px-1 text-center border border-dashed border-emerald-400 bg-emerald-50 hover:border-emerald-500 hover:bg-emerald-100 transition-colors text-xs text-emerald-500 hover:text-emerald-700"
       >
         +
       </button>
-    </td>
+    </Wrap>
+  );
+}
+
+// MobileDayCard — bir günün tüm slot'larını dikey kart olarak gösterir (mobile).
+// Boş, kapalı + geçmiş ve ders olmayan slot'ları gizler (kalabalığı azaltır).
+function MobileDayCard({ day, grid, program, teacher, weekKey, session, onCellClick, onCancel }) {
+  const slots = slotsForDay(day.index);
+
+  // Hangi slot'lar gösterilsin? Boş + disabled + geçmiş olanları atla.
+  const visibleEntries = slots.map((slot, slotIdx) => {
+    const slotData = (grid && grid[day.index] && grid[day.index][slotIdx]) || { booked: false, disabled: true };
+    const progEntry = program?.[String(day.index)]?.[slot.id];
+    const isLesson = progEntry?.type === 'ders' || slotData?.lessonType === 'ders';
+    const isPast = isSlotPast(weekKey, day.index, slot.label);
+    // Filtre: ders varsa göster; booked ise göster; açık (disabled değil) ise göster;
+    // müdür ise kapalı slot'ları da göster (geçmiş hariç).
+    const isDirector = session.role === 'director';
+    const isAvailable = !slotData.disabled;
+    const showForDirector = isDirector && !isPast;
+    if (!isLesson && !slotData.booked && !isAvailable && !showForDirector) return null;
+    return { slot, slotIdx, slotData, progEntry };
+  }).filter(Boolean);
+
+  if (visibleEntries.length === 0) return null;
+
+  return (
+    <div className="card overflow-hidden">
+      <div className={`px-4 py-2.5 border-b border-gray-100 flex items-center justify-between ${day.weekend ? 'bg-indigo-50/50' : 'bg-gray-50/50'}`}>
+        <div>
+          <div className={`font-700 text-sm ${day.weekend ? 'text-indigo-700' : 'text-gray-900'}`} style={{ fontWeight: 700 }}>{day.label}</div>
+          {day.weekend && <div className="text-[10px] text-indigo-400">Hafta sonu</div>}
+        </div>
+        <span className="text-xs text-gray-400">{visibleEntries.length} slot</span>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {visibleEntries.map(({ slot, slotIdx, slotData, progEntry }) => (
+          <div key={slot.id} className="px-3 py-2 flex items-center gap-3">
+            <div className="text-[11px] text-gray-500 font-500 whitespace-nowrap w-20 shrink-0" style={{ fontWeight: 500 }}>
+              {slot.label}
+            </div>
+            <div className="flex-1 min-w-0">
+              <SlotCell
+                slotData={slotData}
+                progEntry={progEntry}
+                slot={slot}
+                dayIndex={day.index}
+                slotIdx={slotIdx}
+                session={session}
+                teacher={teacher}
+                onCellClick={onCellClick}
+                onCancel={onCancel}
+                weekKey={weekKey}
+                asDiv
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -242,7 +304,8 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
 
   return (
     <div>
-      <div className="overflow-x-auto">
+      {/* DESKTOP: tablo görünümü (md ve üstü) */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm table-fixed">
           <thead>
             <tr>
@@ -289,6 +352,23 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
             })()}
           </tbody>
         </table>
+      </div>
+
+      {/* MOBILE: gün gün dikey kart listesi (md altı) */}
+      <div className="md:hidden space-y-3">
+        {visibleDays.map(day => (
+          <MobileDayCard
+            key={day.index}
+            day={day}
+            grid={grid}
+            program={program}
+            teacher={teacher}
+            weekKey={weekKey}
+            session={session}
+            onCellClick={handleCellClick}
+            onCancel={onCancel}
+          />
+        ))}
       </div>
 
       {bookingSlot && (
