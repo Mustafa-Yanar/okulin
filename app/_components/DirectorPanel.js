@@ -14,6 +14,7 @@ import FinancePanel from './finance/FinancePanel';
 import { StudentBookingsView } from './StudentPanel';
 import { TeacherBookingsList } from './TeacherPanel';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
+import DirectorDashboard from './DirectorDashboard';
 
 import {
   STUDENT_GROUPS,
@@ -1822,7 +1823,7 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
 
 // ─── MAIN DIRECTOR PANEL ────────────────────────────────────────────────────────
 export default function DirectorPanel({ session, showToast }) {
-  const [tab, setTab] = useState('teachers');
+  const [tab, setTab] = useState('dashboard');
   const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
   const [weekKey, setWeekKey] = useState(getWeekKey());
@@ -1916,12 +1917,27 @@ export default function DirectorPanel({ session, showToast }) {
   return (
     <div>
       <div className="flex gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">
-        {[['teachers','Öğretmenler'],['students','Sınıf/Öğrenci'],['yoklama','Yoklama'],['program','Ders Programı'],['denemeler','Denemeler'],['muhasebe','💰 Muhasebe']].map(([key,label]) => (
+        {[['dashboard','Genel'],['teachers','Öğretmenler'],['students','Sınıf/Öğrenci'],['yoklama','Yoklama'],['program','Ders Programı'],['denemeler','Denemeler'],['muhasebe','💰 Muhasebe']].map(([key,label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${tab===key?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
             style={{ fontWeight:600 }}>{label}</button>
         ))}
       </div>
+
+      {/* DASHBOARD TAB */}
+      {tab === 'dashboard' && (
+        <DirectorDashboard
+          session={session}
+          teachers={teachers}
+          students={students}
+          allSlots={allSlots}
+          weekKey={weekKey}
+          pendingGuidance={pendingGuidance}
+          onNewTeacher={() => { setEditTeacher(null); setShowTeacherForm(true); setTab('teachers'); }}
+          onNewStudent={() => { setEditStudent(null); setShowStudentForm(true); setTab('students'); }}
+          onGotoTab={(t) => setTab(t)}
+        />
+      )}
 
       {/* TEACHERS TAB */}
       {tab === 'teachers' && (
