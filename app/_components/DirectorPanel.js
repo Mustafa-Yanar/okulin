@@ -1697,7 +1697,7 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
           <thead>
             <tr>
               {hasWeekday && (
-                <th className="hidden md:table-cell text-left py-2 px-2 text-xs text-gray-400 font-600" style={{ fontWeight: 600, width: '72px' }}>Saat</th>
+                <th className="hiddentext-left py-2 px-2 text-xs text-gray-400 font-600" style={{ fontWeight: 600, width: '72px' }}>Saat</th>
               )}
               {weekdayDays.map(day => (
                 <th key={day.index}
@@ -1707,7 +1707,7 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
                 </th>
               ))}
               {hasWeekday && hasWeekend && (
-                <th className="hidden md:table-cell px-0" style={{ width: '12px' }}><div className="w-px h-6 bg-gray-200 mx-auto" /></th>
+                <th className="hiddenpx-0" style={{ width: '12px' }}><div className="w-px h-6 bg-gray-200 mx-auto" /></th>
               )}
               {weekendDays.map(day => (
                 <th key={day.index}
@@ -1718,7 +1718,7 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
                 </th>
               ))}
               {hasWeekend && (
-                <th className="hidden md:table-cell text-right py-2 px-2 text-xs text-indigo-400 font-600" style={{ fontWeight: 600, width: '72px' }}>Saat</th>
+                <th className="hiddentext-right py-2 px-2 text-xs text-indigo-400 font-600" style={{ fontWeight: 600, width: '72px' }}>Saat</th>
               )}
             </tr>
           </thead>
@@ -1786,17 +1786,17 @@ function ProgramEditor({ teacher, onClose, showToast, students }) {
               return Array.from({ length: maxRows }, (_, rowIdx) => (
                 <tr key={rowIdx} className="border-t border-gray-50">
                   {hasWeekday && (
-                    <td className="hidden md:table-cell py-1 px-2 text-[10px] text-gray-400 whitespace-nowrap text-left">
+                    <td className="hiddenpy-1 px-2 text-[10px] text-gray-400 whitespace-nowrap text-left">
                       {weekdaySlots[rowIdx]?.label || ''}
                     </td>
                   )}
                   {weekdayDays.map(day => renderDayCell(day, rowIdx))}
                   {hasWeekday && hasWeekend && (
-                    <td className="hidden md:table-cell px-0"><div className="w-px h-9 bg-gray-200 mx-auto" /></td>
+                    <td className="hiddenpx-0"><div className="w-px h-9 bg-gray-200 mx-auto" /></td>
                   )}
                   {weekendDays.map(day => renderDayCell(day, rowIdx))}
                   {hasWeekend && (
-                    <td className="hidden md:table-cell py-1 px-2 text-[10px] text-indigo-400 whitespace-nowrap text-right">
+                    <td className="hiddenpy-1 px-2 text-[10px] text-indigo-400 whitespace-nowrap text-right">
                       {weekendSlots[rowIdx]?.label || ''}
                     </td>
                   )}
