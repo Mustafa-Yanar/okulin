@@ -4,6 +4,7 @@ import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { classToGroup } from '@/lib/constants';
 import { normalizeTurkishMobile } from '@/lib/phone';
+import { logAudit, actorFrom } from '@/lib/audit';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -133,11 +134,23 @@ export async function DELETE(req) {
       pipeline.srem('students', sid);
     });
     await pipeline.exec();
+    await logAudit({
+      ...actorFrom(session),
+      action: 'student.bulkDelete',
+      detail: `${ids.length} öğrenci toplu silindi`,
+    });
     return NextResponse.json({ ok: true, deleted: ids.length });
   }
 
-  // Tekil silme
+  // Tekil silme — adı loglamak için önce oku
+  const student = await redis.get(`student:${id}`);
   await redis.del(`student:${id}`);
   await redis.srem('students', id);
+  await logAudit({
+    ...actorFrom(session),
+    action: 'student.delete',
+    target: { type: 'student', id, name: student?.name || id },
+    detail: `Öğrenci silindi: ${student?.name || id}${student?.cls ? ` (${student.cls})` : ''}`,
+  });
   return NextResponse.json({ ok: true });
 }

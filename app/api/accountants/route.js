@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
+import { logAudit, actorFrom } from '@/lib/audit';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -87,7 +88,14 @@ export async function DELETE(req) {
   }
 
   const { id } = await req.json();
+  const accountant = await redis.get(`accountant:${id}`);
   await redis.del(`accountant:${id}`);
   await redis.srem('accountants', id);
+  await logAudit({
+    ...actorFrom(session),
+    action: 'accountant.delete',
+    target: { type: 'accountant', id, name: accountant?.name || id },
+    detail: `Muhasebeci silindi: ${accountant?.name || id}`,
+  });
   return NextResponse.json({ ok: true });
 }

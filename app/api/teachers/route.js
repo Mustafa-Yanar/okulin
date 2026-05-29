@@ -5,6 +5,7 @@ import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { getWeekKey, initWeekForTeacher } from '@/lib/slots';
 import { normalizeTeacher } from '@/lib/teacherMigrate';
+import { logAudit, actorFrom } from '@/lib/audit';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -134,7 +135,14 @@ export async function DELETE(req) {
   }
 
   const { id } = await req.json();
+  const teacher = await redis.get(`teacher:${id}`);
   await redis.del(`teacher:${id}`);
   await redis.srem('teachers', id);
+  await logAudit({
+    ...actorFrom(session),
+    action: 'teacher.delete',
+    target: { type: 'teacher', id, name: teacher?.name || id },
+    detail: `Öğretmen silindi: ${teacher?.name || id}`,
+  });
   return NextResponse.json({ ok: true });
 }

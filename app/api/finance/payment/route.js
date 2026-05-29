@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
+import { logAudit, actorFrom } from '@/lib/audit';
 
 function canAccess(session) {
   return session && (session.role === 'director' || session.role === 'accountant');
@@ -77,6 +78,13 @@ export async function POST(req) {
   const updated = { ...record, payments, installments, balance };
   await redis.set(`finance:${studentId}`, updated);
 
+  await logAudit({
+    ...actorFrom(session),
+    action: 'finance.payment',
+    target: { type: 'student', id: studentId, name: record.studentName || studentId },
+    detail: `Ödeme alındı: ${record.studentName || studentId} — ${payAmount} TL (${method || 'Nakit'}), makbuz ${receiptNo}. Kalan bakiye: ${balance} TL`,
+  });
+
   return NextResponse.json({ ok: true, payment, balance, receiptNo });
 }
 
@@ -105,6 +113,13 @@ export async function DELETE(req) {
 
   const updated = { ...record, payments, installments, balance };
   await redis.set(`finance:${studentId}`, updated);
+
+  await logAudit({
+    ...actorFrom(session),
+    action: 'finance.paymentDelete',
+    target: { type: 'student', id: studentId, name: record.studentName || studentId },
+    detail: `Ödeme silindi: ${record.studentName || studentId} — ${payment.amount} TL (makbuz ${payment.receiptNo}). Yeni bakiye: ${balance} TL`,
+  });
 
   return NextResponse.json({ ok: true, balance });
 }

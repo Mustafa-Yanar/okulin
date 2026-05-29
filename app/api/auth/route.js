@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import redis from '@/lib/redis';
 import { getSession, setSession, clearSession } from '@/lib/auth';
 import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
+import { logAudit, actorFrom } from '@/lib/audit';
 
 export async function GET() {
   const session = await getSession();
@@ -189,6 +190,7 @@ export async function POST(req) {
       if (!t) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
       // Müdür sıfırladığında: hedef ilk girişte yine kendi şifresini belirleyecek
       await redis.set(`teacher:${targetId}`, { ...t, passwordHash: hash, mustChangePassword: true });
+      await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: 'teacher', id: targetId, name: t.name || targetId }, detail: `Öğretmen şifresi sıfırlandı: ${t.name || targetId}` });
       return NextResponse.json({ ok: true });
     }
 
@@ -196,6 +198,7 @@ export async function POST(req) {
       const s = await redis.get(`student:${targetId}`);
       if (!s) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
       await redis.set(`student:${targetId}`, { ...s, passwordHash: hash, mustChangePassword: true });
+      await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: 'student', id: targetId, name: s.name || targetId }, detail: `Öğrenci şifresi sıfırlandı: ${s.name || targetId}` });
       return NextResponse.json({ ok: true });
     }
 
@@ -203,6 +206,7 @@ export async function POST(req) {
       const a = await redis.get(`accountant:${targetId}`);
       if (!a) return NextResponse.json({ error: 'Muhasebeci bulunamadı' }, { status: 404 });
       await redis.set(`accountant:${targetId}`, { ...a, passwordHash: hash, mustChangePassword: true });
+      await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: 'accountant', id: targetId, name: a.name || targetId }, detail: `Muhasebeci şifresi sıfırlandı: ${a.name || targetId}` });
       return NextResponse.json({ ok: true });
     }
 

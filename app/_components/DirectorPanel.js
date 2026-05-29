@@ -2285,7 +2285,7 @@ export function DirectorSettingsModal({ current, onClose, onSave, showToast }) {
         </form>
       </div>
 
-      <div>
+      <div className="mb-5 pb-5 border-b border-gray-100">
         <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-2" style={{ fontWeight: 700 }}>Ders Saatleri</h4>
         {timesLoading ? (
           <div className="text-center py-6 text-gray-400 text-sm">Yükleniyor...</div>
@@ -2313,6 +2313,90 @@ export function DirectorSettingsModal({ current, onClose, onSave, showToast }) {
           </>
         )}
       </div>
+
+      <AuditLogSection showToast={showToast} />
     </Modal>
+  );
+}
+
+// ─── DENETİM KAYITLARI (AUDIT LOG) ──────────────────────────────────────────────
+function AuditLogSection({ showToast }) {
+  const [open, setOpen] = useState(false);
+  const [entries, setEntries] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const ACTION_LABELS = {
+    'student.delete': { label: 'Öğrenci silindi', color: '#dc2626' },
+    'student.bulkDelete': { label: 'Toplu öğrenci silme', color: '#dc2626' },
+    'teacher.delete': { label: 'Öğretmen silindi', color: '#dc2626' },
+    'accountant.delete': { label: 'Muhasebeci silindi', color: '#dc2626' },
+    'finance.payment': { label: 'Ödeme alındı', color: '#16a34a' },
+    'finance.paymentDelete': { label: 'Ödeme silindi', color: '#ea580c' },
+    'finance.create': { label: 'Finansal kayıt', color: '#6366f1' },
+    'finance.update': { label: 'Finansal güncelleme', color: '#6366f1' },
+    'finance.delete': { label: 'Finansal kayıt silindi', color: '#dc2626' },
+    'auth.resetPassword': { label: 'Şifre sıfırlandı', color: '#d97706' },
+  };
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await api('/api/audit');
+      setEntries(Array.isArray(data) ? data : []);
+    } catch (e) { showToast(e.message, 'error'); setEntries([]); }
+    finally { setLoading(false); }
+  };
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && entries === null) load();
+  };
+
+  const fmtTime = (iso) => {
+    try {
+      const d = new Date(iso);
+      const tr = new Date(d.getTime() + 3 * 60 * 60 * 1000);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(tr.getUTCDate())}.${pad(tr.getUTCMonth() + 1)}.${tr.getUTCFullYear()} ${pad(tr.getUTCHours())}:${pad(tr.getUTCMinutes())}`;
+    } catch { return iso; }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide" style={{ fontWeight: 700 }}>İşlem Kayıtları</h4>
+        <button onClick={toggle} className="btn-ghost !px-3 !py-1.5 text-xs flex items-center gap-1.5">
+          <Clock size={13} /> {open ? 'Gizle' : 'Göster'}
+        </button>
+      </div>
+      {open && (
+        <div className="mt-3">
+          {loading ? (
+            <div className="text-center py-6 text-gray-400 text-sm">Yükleniyor...</div>
+          ) : !entries || entries.length === 0 ? (
+            <div className="text-center py-6 text-gray-400 text-sm">Henüz kayıt yok</div>
+          ) : (
+            <div className="space-y-1.5 max-h-80 overflow-y-auto">
+              {entries.map((e, i) => {
+                const meta = ACTION_LABELS[e.action] || { label: e.action, color: '#6b7280' };
+                return (
+                  <div key={i} className="flex items-start gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+                    <span className="shrink-0 w-1.5 h-1.5 rounded-full mt-1.5" style={{ background: meta.color }} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs text-gray-700">{e.detail || meta.label}</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">
+                        {fmtTime(e.ts)} · {e.actorName} ({e.actorRole === 'director' ? 'Müdür' : e.actorRole === 'accountant' ? 'Muhasebeci' : e.actorRole})
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <p className="text-[10px] text-gray-400 mt-2">Son 500 kayıt gösterilir · kayıtlar 90 gün saklanır</p>
+        </div>
+      )}
+    </div>
   );
 }
