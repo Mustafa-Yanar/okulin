@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import * as XLSX from 'xlsx';
 import redis from '@/lib/redis';
-import { getSession } from '@/lib/auth';
+import { getSession, randomPassword } from '@/lib/auth';
 import { classToGroup } from '@/lib/constants';
 
 function makeId() {
@@ -18,13 +18,6 @@ function formatName(raw) {
     p.charAt(0).toLocaleUpperCase('tr-TR') + p.slice(1).toLocaleLowerCase('tr-TR')
   );
   return [...firstNames, surname].join(' ');
-}
-
-// "Ahmet Mehmet YILMAZ" → "Ahmet.123"
-function makePassword(formattedName) {
-  const parts = formattedName.split(/\s+/);
-  const firstName = parts[0].charAt(0).toLocaleUpperCase('tr-TR') + parts[0].slice(1).toLocaleLowerCase('tr-TR');
-  return `${firstName}.123`;
 }
 
 export async function POST(req) {
@@ -74,10 +67,13 @@ export async function POST(req) {
       continue;
     }
 
-    const password = makePassword(name);
+    const password = randomPassword(8);
     const hash = await bcrypt.hash(password, 10);
     const id = makeId();
-    const student = { id, name, username: name, passwordHash: hash, cls, group, phone, parentPhone };
+    const student = {
+      id, name, username: name, passwordHash: hash, cls, group, phone, parentPhone,
+      mustChangePassword: true,  // ilk girişte öğrenci kendi şifresini belirleyecek
+    };
     await redis.set(`student:${id}`, student);
     await redis.sadd('students', id);
     existingUsernames.add(name);

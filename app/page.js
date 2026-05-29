@@ -9,6 +9,7 @@ import TeacherPanel from './_components/TeacherPanel';
 import AccountantPanel from './_components/AccountantPanel';
 import DirectorPanel, { DirectorSettingsModal } from './_components/DirectorPanel';
 import ChangePasswordModal from './_components/ChangePasswordModal';
+import ForcedPasswordChange from './_components/ForcedPasswordChange';
 import { SlotTimesProvider, useSlotTimes } from './_components/SlotTimesContext';
 
 async function api(path, opts = {}) {
@@ -157,6 +158,19 @@ function AppContent() {
         updateSlotTimes(times);
       } catch {}
     }} showToast={showToast} /><Toast toast={toast} /></>
+  );
+
+  // Zorunlu şifre değiştirme: ilk giriş veya müdür sıfırlamasından sonra
+  if (session.mustChangePassword) return (
+    <>
+      <ForcedPasswordChange
+        session={session}
+        onDone={() => setSession(s => ({ ...s, mustChangePassword: false }))}
+        onLogout={logout}
+        showToast={showToast}
+      />
+      <Toast toast={toast} />
+    </>
   );
 
   const roleLabel = { director:'Müdür', teacher:'Öğretmen', student:'Öğrenci', accountant:'Muhasebeci' };

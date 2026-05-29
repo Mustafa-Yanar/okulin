@@ -56,7 +56,11 @@ export async function POST(req) {
 
   const id = makeId();
   const hash = await bcrypt.hash(password, 10);
-  const student = { id, name, username, passwordHash: hash, cls, group, phone: phone || '', parentPhone: parentPhone || '' };
+  const student = {
+    id, name, username, passwordHash: hash, cls, group,
+    phone: phone || '', parentPhone: parentPhone || '',
+    mustChangePassword: true,  // ilk girişte öğrenci kendi şifresini belirleyecek
+  };
   await redis.set(`student:${id}`, student);
   await redis.sadd('students', id);
 

@@ -34,8 +34,10 @@ export async function POST(req) {
         if (a && a.username === username) {
           const ok = await bcrypt.compare(password, a.passwordHash);
           if (ok) {
-            const res = NextResponse.json({ role: 'accountant', id: a.id, name: a.name });
-            await setSession(res, { role: 'accountant', id: a.id, name: a.name });
+            const mustChange = !!a.mustChangePassword;
+            const payload = { role: 'accountant', id: a.id, name: a.name, mustChangePassword: mustChange };
+            const res = NextResponse.json(payload);
+            await setSession(res, payload);
             return res;
           }
         }
@@ -55,8 +57,10 @@ export async function POST(req) {
           if (ok) {
             const branches = Array.isArray(t.branches) ? t.branches
               : [t.branch, ...(t.extraBranches || [])].filter(Boolean); // eski kayıt fallback
-            const res = NextResponse.json({ role: 'teacher', id: t.id, name: t.name, branches, allowedGroups: t.allowedGroups || [] });
-            await setSession(res, { role: 'teacher', id: t.id, name: t.name, branches, allowedGroups: t.allowedGroups || [] });
+            const mustChange = !!t.mustChangePassword;
+            const payload = { role: 'teacher', id: t.id, name: t.name, branches, allowedGroups: t.allowedGroups || [], mustChangePassword: mustChange };
+            const res = NextResponse.json(payload);
+            await setSession(res, payload);
             return res;
           }
         }
@@ -73,8 +77,10 @@ export async function POST(req) {
         if (s && s.username === username) {
           const ok = await bcrypt.compare(password, s.passwordHash);
           if (ok) {
-            const res = NextResponse.json({ role: 'student', id: s.id, name: s.name, cls: s.cls, group: s.group });
-            await setSession(res, { role: 'student', id: s.id, name: s.name, cls: s.cls, group: s.group });
+            const mustChange = !!s.mustChangePassword;
+            const payload = { role: 'student', id: s.id, name: s.name, cls: s.cls, group: s.group, mustChangePassword: mustChange };
+            const res = NextResponse.json(payload);
+            await setSession(res, payload);
             return res;
           }
         }
@@ -117,22 +123,30 @@ export async function POST(req) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
 
-    if (session.role === 'teacher') {
-      const t = await redis.get(`teacher:${session.id}`);
-      if (!t) return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
-      const ok = await bcrypt.compare(password, t.passwordHash);
+    // Şifre değiştirme yardımcısı — başarılı değişimde mustChangePassword:false setler
+    // ve session JWT'sini yeniler (frontend, yeni mustChange durumunu görsün).
+    async function updatePasswordFor(roleKey, sessionPayloadFields) {
+      const key = `${roleKey}:${session.id}`;
+      const user = await redis.get(key);
+      if (!user) return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
+      const ok = await bcrypt.compare(password, user.passwordHash);
       if (!ok) return NextResponse.json({ error: 'Mevcut şifre hatalı' }, { status: 400 });
-      await redis.set(`teacher:${session.id}`, { ...t, passwordHash: await bcrypt.hash(newPassword, 10) });
-      return NextResponse.json({ ok: true });
+      const newHash = await bcrypt.hash(newPassword, 10);
+      await redis.set(key, { ...user, passwordHash: newHash, mustChangePassword: false });
+      // Session JWT yenile: mustChangePassword:false olarak
+      const res = NextResponse.json({ ok: true });
+      await setSession(res, { ...session, mustChangePassword: false, ...sessionPayloadFields });
+      return res;
     }
 
+    if (session.role === 'teacher') {
+      return updatePasswordFor('teacher', { branches: session.branches, allowedGroups: session.allowedGroups });
+    }
     if (session.role === 'student') {
-      const s = await redis.get(`student:${session.id}`);
-      if (!s) return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
-      const ok = await bcrypt.compare(password, s.passwordHash);
-      if (!ok) return NextResponse.json({ error: 'Mevcut şifre hatalı' }, { status: 400 });
-      await redis.set(`student:${session.id}`, { ...s, passwordHash: await bcrypt.hash(newPassword, 10) });
-      return NextResponse.json({ ok: true });
+      return updatePasswordFor('student', { cls: session.cls, group: session.group });
+    }
+    if (session.role === 'accountant') {
+      return updatePasswordFor('accountant', {});
     }
 
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
@@ -150,14 +164,22 @@ export async function POST(req) {
     if (targetRole === 'teacher') {
       const t = await redis.get(`teacher:${targetId}`);
       if (!t) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
-      await redis.set(`teacher:${targetId}`, { ...t, passwordHash: hash });
+      // Müdür sıfırladığında: hedef ilk girişte yine kendi şifresini belirleyecek
+      await redis.set(`teacher:${targetId}`, { ...t, passwordHash: hash, mustChangePassword: true });
       return NextResponse.json({ ok: true });
     }
 
     if (targetRole === 'student') {
       const s = await redis.get(`student:${targetId}`);
       if (!s) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
-      await redis.set(`student:${targetId}`, { ...s, passwordHash: hash });
+      await redis.set(`student:${targetId}`, { ...s, passwordHash: hash, mustChangePassword: true });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (targetRole === 'accountant') {
+      const a = await redis.get(`accountant:${targetId}`);
+      if (!a) return NextResponse.json({ error: 'Muhasebeci bulunamadı' }, { status: 404 });
+      await redis.set(`accountant:${targetId}`, { ...a, passwordHash: hash, mustChangePassword: true });
       return NextResponse.json({ ok: true });
     }
 

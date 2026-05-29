@@ -52,7 +52,10 @@ export async function POST(req) {
 
   const id = makeId();
   const hash = await bcrypt.hash(password, 10);
-  const accountant = { id, name, username, passwordHash: hash };
+  const accountant = {
+    id, name, username, passwordHash: hash,
+    mustChangePassword: true,  // ilk girişte muhasebeci kendi şifresini belirleyecek
+  };
   await redis.set(`accountant:${id}`, accountant);
   await redis.sadd('accountants', id);
 
