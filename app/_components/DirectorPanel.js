@@ -2314,8 +2314,37 @@ export function DirectorSettingsModal({ current, onClose, onSave, showToast }) {
         )}
       </div>
 
-      <AuditLogSection showToast={showToast} />
+      <div className="mb-5 pb-5 border-b border-gray-100">
+        <AuditLogSection showToast={showToast} />
+      </div>
+
+      <PushTestSection showToast={showToast} />
     </Modal>
+  );
+}
+
+// ─── BİLDİRİM TESTİ ─────────────────────────────────────────────────────────────
+function PushTestSection({ showToast }) {
+  const [sending, setSending] = useState(false);
+
+  const sendTest = async () => {
+    setSending(true);
+    try {
+      const r = await api('/api/push', { method: 'POST', body: JSON.stringify({ action: 'test' }) });
+      if (r.sent > 0) showToast(`Test bildirimi gönderildi (${r.sent} cihaz)`);
+      else showToast('Kayıtlı cihaz yok — önce üstteki zil simgesinden bildirimleri aç', 'info');
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div>
+      <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-2" style={{ fontWeight: 700 }}>Bildirim Testi</h4>
+      <p className="text-xs text-gray-500 mb-2">Üstteki zil simgesinden bildirimleri açtıktan sonra kendine test bildirimi gönder.</p>
+      <button onClick={sendTest} disabled={sending} className="btn-ghost !px-4 !py-2 text-sm">
+        {sending ? 'Gönderiliyor…' : 'Kendime test bildirimi gönder'}
+      </button>
+    </div>
   );
 }
 

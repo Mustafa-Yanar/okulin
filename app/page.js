@@ -10,6 +10,7 @@ import AccountantPanel from './_components/AccountantPanel';
 import DirectorPanel, { DirectorSettingsModal } from './_components/DirectorPanel';
 import ChangePasswordModal from './_components/ChangePasswordModal';
 import ForcedPasswordChange from './_components/ForcedPasswordChange';
+import NotificationButton from './_components/NotificationButton';
 import { SlotTimesProvider, useSlotTimes } from './_components/SlotTimesContext';
 
 async function api(path, opts = {}) {
@@ -194,6 +195,7 @@ function AppContent() {
               <span className="text-sm font-600 text-gray-700" style={{ fontWeight:600 }}>{session.name}</span>
               <span className="text-sm font-500 text-gray-400" style={{ fontWeight:500 }}>{roleLabel[session.role]}</span>
             </div>
+            <NotificationButton showToast={showToast} />
             {(session.role === 'teacher' || session.role === 'student') && (
               <button onClick={() => setShowChangePassword(true)} title="Şifremi Değiştir" className="btn-ghost !px-3 !py-2">
                 <Settings size={14} />
