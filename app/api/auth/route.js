@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import redis from '@/lib/redis';
 import { getSession, setSession, clearSession } from '@/lib/auth';
+import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
 
 export async function GET() {
   const session = await getSession();
@@ -13,6 +14,17 @@ export async function POST(req) {
   const { action, username, password, newPassword, targetId, targetRole, name } = await req.json();
 
   if (action === 'login') {
+    // Rate limit kontrolü — IP + username birleşik key
+    const ip = getClientIp(req);
+    const rlKey = `${ip}:${(username || 'anon').toLowerCase()}`;
+    const { success, reset } = await loginRatelimit.limit(rlKey);
+    if (!success) {
+      return NextResponse.json(
+        { error: `Çok fazla başarısız deneme. Lütfen ${formatResetWait(reset)} tekrar deneyin.` },
+        { status: 429 }
+      );
+    }
+
     // Try director
     const director = await redis.get('director');
     if (director && director.username === username) {
@@ -122,6 +134,17 @@ export async function POST(req) {
   if (action === 'change_password') {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
+
+    // Rate limit — oturumu kapılmış birinin mevcut şifre tahminini yavaşlat
+    const ip = getClientIp(req);
+    const pwRlKey = `${ip}:${session.id}`;
+    const pwRl = await passwordChangeRatelimit.limit(pwRlKey);
+    if (!pwRl.success) {
+      return NextResponse.json(
+        { error: `Çok fazla deneme. Lütfen ${formatResetWait(pwRl.reset)} tekrar deneyin.` },
+        { status: 429 }
+      );
+    }
 
     // Şifre değiştirme yardımcısı — başarılı değişimde mustChangePassword:false setler
     // ve session JWT'sini yeniler (frontend, yeni mustChange durumunu görsün).
