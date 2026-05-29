@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { classToGroup } from '@/lib/constants';
+import { normalizeTurkishMobile } from '@/lib/phone';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -42,6 +43,18 @@ export async function POST(req) {
   const group = classToGroup(cls);
   if (!group) return NextResponse.json({ error: 'Geçersiz sınıf' }, { status: 400 });
 
+  // Telefon doğrulama (opsiyonel ama verilmişse geçerli Türk cep olmalı)
+  let normPhone = '';
+  if (phone) {
+    normPhone = normalizeTurkishMobile(phone);
+    if (!normPhone) return NextResponse.json({ error: 'Öğrenci telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
+  }
+  let normParentPhone = '';
+  if (parentPhone) {
+    normParentPhone = normalizeTurkishMobile(parentPhone);
+    if (!normParentPhone) return NextResponse.json({ error: 'Veli telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
+  }
+
   // Aynı isimde öğrenci var mı kontrol et
   const studentIds = await redis.smembers('students');
   if (studentIds && studentIds.length > 0) {
@@ -58,7 +71,7 @@ export async function POST(req) {
   const hash = await bcrypt.hash(password, 10);
   const student = {
     id, name, username, passwordHash: hash, cls, group,
-    phone: phone || '', parentPhone: parentPhone || '',
+    phone: normPhone, parentPhone: normParentPhone,
     mustChangePassword: true,  // ilk girişte öğrenci kendi şifresini belirleyecek
   };
   await redis.set(`student:${id}`, student);
@@ -79,8 +92,24 @@ export async function PUT(req) {
 
   const group = classToGroup(cls) || student.group;
   const updated = { ...student, name, username: name, cls, group };
-  if (phone !== undefined) updated.phone = phone || '';
-  if (parentPhone !== undefined) updated.parentPhone = parentPhone || '';
+  if (phone !== undefined) {
+    if (phone) {
+      const n = normalizeTurkishMobile(phone);
+      if (!n) return NextResponse.json({ error: 'Öğrenci telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
+      updated.phone = n;
+    } else {
+      updated.phone = '';
+    }
+  }
+  if (parentPhone !== undefined) {
+    if (parentPhone) {
+      const n = normalizeTurkishMobile(parentPhone);
+      if (!n) return NextResponse.json({ error: 'Veli telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
+      updated.parentPhone = n;
+    } else {
+      updated.parentPhone = '';
+    }
+  }
   if (password) {
     updated.passwordHash = await bcrypt.hash(password, 10);
   }

@@ -7,6 +7,7 @@ import {
   List, ClipboardList, Phone, Wallet
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
+import { isValidTurkishMobile, formatTurkishMobile } from '@/lib/phone';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import DirectorDenemeYonetimi from './rehberlik/DirectorDenemeYonetimi';
 import ProgramOlusturucu from './program/ProgramOlusturucu';
@@ -1031,11 +1032,21 @@ function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
   const [password, setPassword] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(initial?.group||'ortaokul');
   const [cls, setCls] = useState(initial?.cls||STUDENT_GROUPS.ortaokul.classes[0]);
-  const [phone, setPhone] = useState(initial?.phone||'');
-  const [parentPhone, setParentPhone] = useState(initial?.parentPhone||'');
+  const [phone, setPhone] = useState(initial?.phone ? formatTurkishMobile(initial.phone) : '');
+  const [parentPhone, setParentPhone] = useState(initial?.parentPhone ? formatTurkishMobile(initial.parentPhone) : '');
   const [loading, setLoading] = useState(false);
   useEffect(() => { if (!initial) setCls(STUDENT_GROUPS[selectedGroup].classes[0]); }, [selectedGroup]);
-  const submit = async e => { e.preventDefault(); setLoading(true); await onSave({name, username: name, password, cls, phone, parentPhone}); setLoading(false); };
+
+  const phoneInvalid = phone.trim() !== '' && !isValidTurkishMobile(phone);
+  const parentPhoneInvalid = parentPhone.trim() !== '' && !isValidTurkishMobile(parentPhone);
+
+  const submit = async e => {
+    e.preventDefault();
+    if (phoneInvalid || parentPhoneInvalid) return; // geçersiz telefonla gönderme
+    setLoading(true);
+    await onSave({ name, username: name, password, cls, phone, parentPhone });
+    setLoading(false);
+  };
   return (
     <Modal title={initial?'Öğrenci Düzenle':'Yeni Öğrenci'} onClose={onClose}>
       {!initial && onSwitchToImport && (
@@ -1063,13 +1074,15 @@ function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
           </select>
         </FormField>
         <FormField label="Öğrenci Telefonu">
-          <input className="input" type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={phone} onChange={e=>setPhone(e.target.value)} />
+          <input className={`input ${phoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={phone} onChange={e=>setPhone(e.target.value)} />
+          {phoneInvalid && <p className="text-xs text-red-500 mt-1">Geçersiz numara. Örnek: 0532 123 45 67</p>}
         </FormField>
         <FormField label="Veli Telefonu">
-          <input className="input" type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={parentPhone} onChange={e=>setParentPhone(e.target.value)} />
+          <input className={`input ${parentPhoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={parentPhone} onChange={e=>setParentPhone(e.target.value)} />
+          {parentPhoneInvalid && <p className="text-xs text-red-500 mt-1">Geçersiz numara. Örnek: 0532 123 45 67</p>}
         </FormField>
         <div className="flex gap-3 pt-2">
-          <button className="btn-primary flex-1" disabled={loading}>{loading?'Kaydediliyor...':'Kaydet'}</button>
+          <button className="btn-primary flex-1" disabled={loading || phoneInvalid || parentPhoneInvalid}>{loading?'Kaydediliyor...':'Kaydet'}</button>
           <button type="button" className="btn-ghost" onClick={onClose}>İptal</button>
         </div>
       </form>

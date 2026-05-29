@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import redis from '@/lib/redis';
 import { getSession, randomPassword } from '@/lib/auth';
 import { classToGroup } from '@/lib/constants';
+import { normalizeTurkishMobile } from '@/lib/phone';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -67,11 +68,24 @@ export async function POST(req) {
       continue;
     }
 
+    // Telefonları normalize et; geçersizse öğrenciyi atlamadan boş bırak ve uyar
+    let normPhone = '';
+    if (phone) {
+      normPhone = normalizeTurkishMobile(phone) || '';
+      if (!normPhone) results.errors.push(`${name}: öğrenci telefonu geçersiz ("${phone}"), boş bırakıldı`);
+    }
+    let normParentPhone = '';
+    if (parentPhone) {
+      normParentPhone = normalizeTurkishMobile(parentPhone) || '';
+      if (!normParentPhone) results.errors.push(`${name}: veli telefonu geçersiz ("${parentPhone}"), boş bırakıldı`);
+    }
+
     const password = randomPassword(8);
     const hash = await bcrypt.hash(password, 10);
     const id = makeId();
     const student = {
-      id, name, username: name, passwordHash: hash, cls, group, phone, parentPhone,
+      id, name, username: name, passwordHash: hash, cls, group,
+      phone: normPhone, parentPhone: normParentPhone,
       mustChangePassword: true,  // ilk girişte öğrenci kendi şifresini belirleyecek
     };
     await redis.set(`student:${id}`, student);
