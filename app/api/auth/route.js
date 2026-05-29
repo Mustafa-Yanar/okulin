@@ -5,6 +5,17 @@ import { getSession, setSession, clearSession } from '@/lib/auth';
 import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { lookupIndex } from '@/lib/userIndex';
+import { parseBody, z, zName, zPassword, zNewPassword, zId } from '@/lib/validate';
+
+// action'a göre ayrışan gövde — her işlemin yalnız kendi alanları doğrulanır.
+const AuthSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('login'), username: zName, password: zPassword }),
+  z.object({ action: z.literal('setup_director'), username: zName, password: zPassword, name: z.string().max(200).optional() }),
+  z.object({ action: z.literal('update_director_name'), name: zName }),
+  z.object({ action: z.literal('logout') }),
+  z.object({ action: z.literal('change_password'), password: zPassword, newPassword: zNewPassword }),
+  z.object({ action: z.literal('reset_password'), targetRole: z.enum(['teacher', 'student', 'accountant']), targetId: zId, newPassword: zNewPassword }),
+]);
 
 export async function GET() {
   const session = await getSession();
@@ -13,7 +24,9 @@ export async function GET() {
 }
 
 export async function POST(req) {
-  const { action, username, password, newPassword, targetId, targetRole, name } = await req.json();
+  const parsed = await parseBody(req, AuthSchema);
+  if (!parsed.ok) return parsed.response;
+  const { action, username, password, newPassword, targetId, targetRole, name } = parsed.data;
 
   if (action === 'login') {
     // Rate limit kontrolü — IP + username birleşik key

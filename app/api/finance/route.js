@@ -2,10 +2,24 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
+import { parseBody, z, zId, zMoney } from '@/lib/validate';
 
 function canAccess(session) {
   return session && (session.role === 'director' || session.role === 'accountant');
 }
+
+const FinanceSchema = z.object({
+  studentId: zId,
+  studentName: z.string().max(200).optional(),
+  studentCls: z.string().max(40).optional(),
+  totalFee: zMoney,
+  discount: zMoney.optional(),
+  paymentPlan: z.enum(['pesin', 'taksitli']).optional(),
+  installments: z.array(
+    z.object({ dueDate: z.string().max(40).optional(), amount: zMoney.optional() }).passthrough()
+  ).max(120).optional(),
+});
+const FinanceDeleteSchema = z.object({ studentId: zId });
 
 export async function GET(req) {
   const session = await getSession();
@@ -52,8 +66,10 @@ export async function POST(req) {
   const session = await getSession();
   if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
-  const { studentId, studentName, studentCls, totalFee, discount, paymentPlan, installments } = await req.json();
-  if (!studentId || !totalFee) {
+  const parsed = await parseBody(req, FinanceSchema);
+  if (!parsed.ok) return parsed.response;
+  const { studentId, studentName, studentCls, totalFee, discount, paymentPlan, installments } = parsed.data;
+  if (!totalFee) {
     return NextResponse.json({ error: 'Öğrenci ve ücret zorunlu' }, { status: 400 });
   }
 
@@ -109,7 +125,9 @@ export async function DELETE(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { studentId } = await req.json();
+  const parsed = await parseBody(req, FinanceDeleteSchema);
+  if (!parsed.ok) return parsed.response;
+  const { studentId } = parsed.data;
   const existing = await redis.get(`finance:${studentId}`);
   await redis.del(`finance:${studentId}`);
   await logAudit({

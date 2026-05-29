@@ -3,6 +3,11 @@ import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { slotsForDay, ALL_DAYS, MEZUN_ONLY_LESSON_SLOTS, STUDENT_GROUPS } from '@/lib/constants';
 import { getWeekKey, slotKey, isEditableWeek, initWeekForTeacher, slotStartTime, getSlotTimes } from '@/lib/slots';
+import { parseBody, z, zId } from '@/lib/validate';
+
+// Derin iç içe grid — üst seviye şekil doğrulanır, hücre mantığı aşağıda işlenir.
+const ProgramPostSchema = z.object({ teacherId: zId, weekKey: z.string().min(1).max(40), program: z.record(z.unknown()) });
+const ProgramDeleteSchema = z.object({ teacherId: zId });
 
 // program:{teacherId} → ŞABLON (sabit ders/etüt, her hafta tekrar eder)
 // entry: { type: 'ders'|'etut'|null, cls?, studentId?, ..., fixed: true }
@@ -99,10 +104,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { teacherId, weekKey, program } = await req.json();
-  if (!teacherId || !weekKey || !program) {
-    return NextResponse.json({ error: 'teacherId, weekKey ve program gerekli' }, { status: 400 });
-  }
+  const parsed = await parseBody(req, ProgramPostSchema);
+  if (!parsed.ok) return parsed.response;
+  const { teacherId, weekKey, program } = parsed.data;
 
   if (!isEditableWeek(weekKey)) {
     return NextResponse.json({ error: 'Geçmiş hafta düzenlenemez. Sadece mevcut hafta ve sonraki 2 hafta düzenlenebilir.' }, { status: 400 });
@@ -267,8 +271,9 @@ export async function DELETE(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { teacherId } = await req.json();
-  if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
+  const parsed = await parseBody(req, ProgramDeleteSchema);
+  if (!parsed.ok) return parsed.response;
+  const { teacherId } = parsed.data;
 
   await redis.del(programKey(teacherId));
   return NextResponse.json({ ok: true });

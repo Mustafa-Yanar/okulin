@@ -2,10 +2,21 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
+import { parseBody, z, zId, zMoney } from '@/lib/validate';
 
 function canAccess(session) {
   return session && (session.role === 'director' || session.role === 'accountant');
 }
+
+const PaymentSchema = z.object({
+  studentId: zId,
+  amount: zMoney.optional(),
+  date: z.string().max(40).optional(),
+  method: z.string().max(80).optional(),
+  note: z.string().max(1000).optional(),
+  installmentIdx: z.coerce.number().int().min(0).max(1000).nullable().optional(),
+});
+const PaymentDeleteSchema = z.object({ studentId: zId, paymentId: zId });
 
 // Makbuz numarası üret: MKB-YYYY-00001 formatı
 async function generateReceiptNo() {
@@ -18,10 +29,9 @@ export async function POST(req) {
   const session = await getSession();
   if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
-  const { studentId, amount, date, method, note, installmentIdx } = await req.json();
-  if (!studentId) {
-    return NextResponse.json({ error: 'Öğrenci gerekli' }, { status: 400 });
-  }
+  const parsed = await parseBody(req, PaymentSchema);
+  if (!parsed.ok) return parsed.response;
+  const { studentId, amount, date, method, note, installmentIdx } = parsed.data;
 
   const record = await redis.get(`finance:${studentId}`);
   if (!record) return NextResponse.json({ error: 'Finansal kayıt bulunamadı' }, { status: 404 });
@@ -92,7 +102,9 @@ export async function DELETE(req) {
   const session = await getSession();
   if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
-  const { studentId, paymentId } = await req.json();
+  const parsed = await parseBody(req, PaymentDeleteSchema);
+  if (!parsed.ok) return parsed.response;
+  const { studentId, paymentId } = parsed.data;
   const record = await redis.get(`finance:${studentId}`);
   if (!record) return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });
 

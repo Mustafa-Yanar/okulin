@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { getWeekKey } from '@/lib/slots';
+import { parseBody, z, zId } from '@/lib/validate';
+
+const GuidancePostSchema = z.object({ entries: z.record(z.unknown()) });
+const GuidanceReviewSchema = z.object({ studentId: zId, weekKey: z.string().min(1).max(40) });
 
 // guidance:{studentId}:{weekKey}
 // → { entries: { [subject]: { correct, wrong, empty } }, reviewed: bool, submittedAt, reviewedAt }
@@ -63,10 +67,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { entries } = await req.json();
-  if (!entries || typeof entries !== 'object') {
-    return NextResponse.json({ error: 'entries gerekli' }, { status: 400 });
-  }
+  const parsed = await parseBody(req, GuidancePostSchema);
+  if (!parsed.ok) return parsed.response;
+  const { entries } = parsed.data;
 
   // Sayısal değer doğrulama
   const cleaned = {};
@@ -99,10 +102,9 @@ export async function PUT(req) {
   if (!session || session.role !== 'director') {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
-  const { studentId, weekKey } = await req.json();
-  if (!studentId || !weekKey) {
-    return NextResponse.json({ error: 'studentId ve weekKey gerekli' }, { status: 400 });
-  }
+  const parsed = await parseBody(req, GuidanceReviewSchema);
+  if (!parsed.ok) return parsed.response;
+  const { studentId, weekKey } = parsed.data;
   const existing = await redis.get(key(studentId, weekKey));
   if (!existing) return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });
   const updated = { ...existing, reviewed: true, reviewedAt: new Date().toISOString() };

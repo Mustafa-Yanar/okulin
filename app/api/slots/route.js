@@ -3,6 +3,18 @@ import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { getWeekKey, getTeacherWeekSlots, slotKey, getAllTeachers, slotStartTime, getSlotTimes } from '@/lib/slots';
 import { ALL_DAYS, slotsForDay, MEZUN_FORBIDDEN_ETUT_SLOT, MATH_FAMILY, allowedBranchesForClass } from '@/lib/constants';
+import { parseBody, z, zId } from '@/lib/validate';
+
+const zDay = z.coerce.number().int().min(0).max(6);
+const zSlotId = z.string().min(1).max(20);
+const SlotBookSchema = z.object({
+  teacherId: zId, day: zDay, slotId: zSlotId,
+  studentId: zId.optional(), weekKey: z.string().max(40).optional(),
+  forceOpen: z.boolean().optional(), branch: z.string().max(100).optional(),
+});
+const SlotDeleteSchema = z.object({
+  teacherId: zId, day: zDay, slotId: zSlotId, weekKey: z.string().max(40).optional(),
+});
 
 // GET /api/slots?week=2024-W20&teacherId=xxx
 export async function GET(req) {
@@ -52,7 +64,9 @@ export async function POST(req) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
 
-  const { teacherId, day, slotId, studentId, weekKey: wk, forceOpen, branch } = await req.json();
+  const parsed = await parseBody(req, SlotBookSchema);
+  if (!parsed.ok) return parsed.response;
+  const { teacherId, day, slotId, studentId, weekKey: wk, forceOpen, branch } = parsed.data;
   const weekKey = wk || getWeekKey();
 
   const teacherRaw = await redis.get(`teacher:${teacherId}`);
@@ -191,7 +205,9 @@ export async function DELETE(req) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
 
-  const { teacherId, day, slotId, weekKey: wk } = await req.json();
+  const parsed = await parseBody(req, SlotDeleteSchema);
+  if (!parsed.ok) return parsed.response;
+  const { teacherId, day, slotId, weekKey: wk } = parsed.data;
   const weekKey = wk || getWeekKey();
   const key = slotKey(weekKey, teacherId, day, slotId);
 

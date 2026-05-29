@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { getWeekKey, getMondayOfWeek, initWeekForTeacher } from '@/lib/slots';
+import { parseBody, z } from '@/lib/validate';
+
+const WeekActionSchema = z.object({
+  action: z.enum(['advance', 'reset', 'reinit', 'reset-all']),
+  weekKey: z.string().max(40).optional(),
+});
 
 async function advanceWeek(currentWeek) {
   const ids = await redis.smembers('teachers');
@@ -37,7 +43,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { action, weekKey } = await req.json();
+  const parsed = await parseBody(req, WeekActionSchema);
+  if (!parsed.ok) return parsed.response;
+  const { action, weekKey } = parsed.data;
 
   if (action === 'advance') {
     const current = weekKey || getWeekKey();

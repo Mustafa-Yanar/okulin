@@ -7,10 +7,28 @@ import { getWeekKey, initWeekForTeacher } from '@/lib/slots';
 import { normalizeTeacher } from '@/lib/teacherMigrate';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
+import { parseBody, z, zName, zPassword, zId, zStringArray } from '@/lib/validate';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
+
+const zPhotoUrl = z.string().max(1_000_000).optional(); // base64 data URL (~400KB)
+const TeacherCreateSchema = z.object({
+  name: zName, password: zPassword,
+  branches: zStringArray.refine(a => a.length > 0, { message: 'En az bir branş gerekli' }),
+  allowedGroups: zStringArray.optional(), photoUrl: zPhotoUrl,
+});
+// PUT: ya toggle_off_day özel aksiyonu ya normal güncelleme.
+const TeacherUpdateSchema = z.union([
+  z.object({ action: z.literal('toggle_off_day'), id: zId, dayIndex: z.coerce.number().int().min(0).max(6), off: z.boolean() }),
+  z.object({
+    action: z.undefined().optional(), id: zId, name: zName,
+    password: z.string().max(200).optional(), branches: zStringArray.optional(),
+    allowedGroups: zStringArray.optional(), photoUrl: zPhotoUrl,
+  }),
+]);
+const TeacherDeleteSchema = z.object({ id: zId });
 
 export async function GET() {
   const session = await getSession();
@@ -36,10 +54,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { name, password, branches, allowedGroups, photoUrl } = await req.json();
-  if (!name || !password || !branches?.length) {
-    return NextResponse.json({ error: 'İsim, şifre ve en az bir branş gerekli' }, { status: 400 });
-  }
+  const parsed = await parseBody(req, TeacherCreateSchema);
+  if (!parsed.ok) return parsed.response;
+  const { name, password, branches, allowedGroups, photoUrl } = parsed.data;
 
   // İsim soyisim kullanıcı adı olarak kullanılır
   const username = name;
@@ -80,7 +97,9 @@ export async function PUT(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const body = await req.json();
+  const parsed = await parseBody(req, TeacherUpdateSchema);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
 
   // Özel aksiyon: bir günü izin/aktif yap. Şablonda o güne ait tüm entry'leri siler.
   if (body.action === 'toggle_off_day') {
@@ -138,7 +157,9 @@ export async function DELETE(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { id } = await req.json();
+  const parsed = await parseBody(req, TeacherDeleteSchema);
+  if (!parsed.ok) return parsed.response;
+  const { id } = parsed.data;
   const teacher = await redis.get(`teacher:${id}`);
   await redis.del(`teacher:${id}`);
   await redis.srem('teachers', id);

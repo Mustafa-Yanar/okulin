@@ -6,10 +6,27 @@ import { classToGroup } from '@/lib/constants';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
+import { parseBody, z, zName, zPassword, zId } from '@/lib/validate';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
+
+const zPhone = z.string().max(40).optional();
+const StudentCreateSchema = z.object({
+  name: zName, password: zPassword, cls: z.string().min(1).max(40),
+  phone: zPhone, parentPhone: zPhone,
+});
+const StudentUpdateSchema = z.object({
+  id: zId, name: zName, cls: z.string().min(1).max(40),
+  password: z.string().max(200).optional(),
+  phone: zPhone, parentPhone: zPhone,
+});
+// Tekil { id } veya toplu { ids:[...] } silme.
+const StudentDeleteSchema = z.object({
+  id: zId.optional(),
+  ids: z.array(zId).max(2000).optional(),
+}).refine(d => d.id || (d.ids && d.ids.length), { message: 'id veya ids gerekli' });
 
 export async function GET() {
   const session = await getSession();
@@ -34,10 +51,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { name, password, cls, phone, parentPhone } = await req.json();
-  if (!name || !password || !cls) {
-    return NextResponse.json({ error: 'Tüm alanlar gerekli' }, { status: 400 });
-  }
+  const parsed = await parseBody(req, StudentCreateSchema);
+  if (!parsed.ok) return parsed.response;
+  const { name, password, cls, phone, parentPhone } = parsed.data;
 
   // İsim soyisim kullanıcı adı olarak kullanılır
   const username = name;
@@ -89,7 +105,9 @@ export async function PUT(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { id, name, password, cls, phone, parentPhone } = await req.json();
+  const parsed = await parseBody(req, StudentUpdateSchema);
+  if (!parsed.ok) return parsed.response;
+  const { id, name, password, cls, phone, parentPhone } = parsed.data;
   const student = await redis.get(`student:${id}`);
   if (!student) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
 
@@ -128,7 +146,9 @@ export async function DELETE(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { id, ids } = await req.json();
+  const parsed = await parseBody(req, StudentDeleteSchema);
+  if (!parsed.ok) return parsed.response;
+  const { id, ids } = parsed.data;
 
   // Toplu silme — indeks temizliği için önce username'leri oku
   if (ids && Array.isArray(ids)) {

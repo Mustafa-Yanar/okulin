@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
+import { parseBody, z, zId } from '@/lib/validate';
+
+const LessonScheduleSchema = z.object({ teacherId: zId, schedule: z.record(z.unknown()) });
 
 // lesson_schedule:{teacherId} → { [dayIndex]: { [lessonNo]: cls | null } }
 // Hafta içi (0-4): 6 ders, hafta sonu (5-6): 8 ders
@@ -27,10 +30,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { teacherId, schedule } = await req.json();
-  if (!teacherId || !schedule) {
-    return NextResponse.json({ error: 'teacherId ve schedule gerekli' }, { status: 400 });
-  }
+  const parsed = await parseBody(req, LessonScheduleSchema);
+  if (!parsed.ok) return parsed.response;
+  const { teacherId, schedule } = parsed.data;
 
   await redis.set(scheduleKey(teacherId), schedule);
   return NextResponse.json({ ok: true });

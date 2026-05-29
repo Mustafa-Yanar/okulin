@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES } from '@/lib/constants';
+import { parseBody, z } from '@/lib/validate';
+
+// Şekil doğrulaması — saat/sıra mantığı aşağıda ayrıca kontrol edilir.
+const zSlotArr = z.array(z.object({ start: z.string().max(10), end: z.string().max(10) }).passthrough());
+const SlotTimesSchema = z.object({ weekday: zSlotArr, weekend: zSlotArr });
 
 // slot_times → { weekday: [{start, end}, ...], weekend: [{start, end}, ...] }
 
@@ -35,10 +40,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { weekday, weekend } = await req.json();
-  if (!Array.isArray(weekday) || !Array.isArray(weekend)) {
-    return NextResponse.json({ error: 'weekday ve weekend dizisi gerekli' }, { status: 400 });
-  }
+  const parsed = await parseBody(req, SlotTimesSchema);
+  if (!parsed.ok) return parsed.response;
+  const { weekday, weekend } = parsed.data;
   if (weekday.length !== 12 || weekend.length !== 12) {
     return NextResponse.json({ error: 'Her gün tipi için 12 slot olmalı' }, { status: 400 });
   }

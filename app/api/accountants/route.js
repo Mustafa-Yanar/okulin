@@ -4,10 +4,15 @@ import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
+import { parseBody, z, zName, zPassword, zId } from '@/lib/validate';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
+
+const AccountantCreateSchema = z.object({ name: zName, password: zPassword });
+const AccountantUpdateSchema = z.object({ id: zId, name: zName, password: z.string().max(200).optional() });
+const AccountantDeleteSchema = z.object({ id: zId });
 
 export async function GET() {
   const session = await getSession();
@@ -33,10 +38,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { name, password } = await req.json();
-  if (!name || !password) {
-    return NextResponse.json({ error: 'İsim ve şifre gerekli' }, { status: 400 });
-  }
+  const parsed = await parseBody(req, AccountantCreateSchema);
+  if (!parsed.ok) return parsed.response;
+  const { name, password } = parsed.data;
 
   const username = name;
 
@@ -71,7 +75,9 @@ export async function PUT(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { id, name, password } = await req.json();
+  const parsed = await parseBody(req, AccountantUpdateSchema);
+  if (!parsed.ok) return parsed.response;
+  const { id, name, password } = parsed.data;
   const accountant = await redis.get(`accountant:${id}`);
   if (!accountant) return NextResponse.json({ error: 'Muhasebeci bulunamadı' }, { status: 404 });
 
@@ -90,7 +96,9 @@ export async function DELETE(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const { id } = await req.json();
+  const parsed = await parseBody(req, AccountantDeleteSchema);
+  if (!parsed.ok) return parsed.response;
+  const { id } = parsed.data;
   const accountant = await redis.get(`accountant:${id}`);
   await redis.del(`accountant:${id}`);
   await redis.srem('accountants', id);

@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
+import { parseBody, z, zId } from '@/lib/validate';
 
 // topics:{studentId} -> { [subject]: { [topicIndex]: percent 0-100 } }
 const key = (studentId) => `topics:${studentId}`;
+
+const TopicsPostSchema = z.object({
+  studentId: zId.optional(),
+  subject: z.string().min(1).max(200),
+  topicIndex: z.union([z.string().max(20), z.number()]),
+  percent: z.union([z.string().max(20), z.number()]).optional(),
+});
 
 // GET /api/topics?studentId=...
 // Öğrenci kendi kaydını, müdür/öğretmen herhangi bir öğrencininkini görür.
@@ -33,8 +41,9 @@ export async function POST(req) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
 
-  const body = await req.json();
-  let { studentId, subject, topicIndex, percent } = body;
+  const parsed = await parseBody(req, TopicsPostSchema);
+  if (!parsed.ok) return parsed.response;
+  let { studentId, subject, topicIndex, percent } = parsed.data;
 
   if (session.role === 'student') {
     studentId = session.id;
@@ -44,9 +53,6 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  if (!subject || topicIndex === undefined) {
-    return NextResponse.json({ error: 'subject ve topicIndex gerekli' }, { status: 400 });
-  }
   const p = Math.max(0, Math.min(100, parseInt(percent) || 0));
   const idx = String(parseInt(topicIndex));
 
