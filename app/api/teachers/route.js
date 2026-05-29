@@ -6,6 +6,7 @@ import { getSession } from '@/lib/auth';
 import { getWeekKey, initWeekForTeacher } from '@/lib/slots';
 import { normalizeTeacher } from '@/lib/teacherMigrate';
 import { logAudit, actorFrom } from '@/lib/audit';
+import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -64,6 +65,7 @@ export async function POST(req) {
   };
   await redis.set(`teacher:${id}`, teacher);
   await redis.sadd('teachers', id);
+  await addToIndex(username, 'teacher', id);
 
   // Initialize current week slots
   const weekKey = getWeekKey();
@@ -125,6 +127,8 @@ export async function PUT(req) {
     updated.passwordHash = await bcrypt.hash(password, 10);
   }
   await redis.set(`teacher:${id}`, updated);
+  // İsim (=username) değiştiyse indeksi güncelle
+  await updateIndexUsername(teacher.username, name, 'teacher', id);
   return NextResponse.json({ ok: true });
 }
 
@@ -138,6 +142,7 @@ export async function DELETE(req) {
   const teacher = await redis.get(`teacher:${id}`);
   await redis.del(`teacher:${id}`);
   await redis.srem('teachers', id);
+  if (teacher?.username) await removeFromIndex(teacher.username, 'teacher', id);
   await logAudit({
     ...actorFrom(session),
     action: 'teacher.delete',

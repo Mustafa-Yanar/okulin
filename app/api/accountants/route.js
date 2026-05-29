@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import redis from '@/lib/redis';
 import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
+import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -59,6 +60,7 @@ export async function POST(req) {
   };
   await redis.set(`accountant:${id}`, accountant);
   await redis.sadd('accountants', id);
+  await addToIndex(username, 'accountant', id);
 
   return NextResponse.json({ id, name, username });
 }
@@ -78,6 +80,7 @@ export async function PUT(req) {
     updated.passwordHash = await bcrypt.hash(password, 10);
   }
   await redis.set(`accountant:${id}`, updated);
+  await updateIndexUsername(accountant.username, name, 'accountant', id);
   return NextResponse.json({ ok: true });
 }
 
@@ -91,6 +94,7 @@ export async function DELETE(req) {
   const accountant = await redis.get(`accountant:${id}`);
   await redis.del(`accountant:${id}`);
   await redis.srem('accountants', id);
+  if (accountant?.username) await removeFromIndex(accountant.username, 'accountant', id);
   await logAudit({
     ...actorFrom(session),
     action: 'accountant.delete',

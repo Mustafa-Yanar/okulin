@@ -5,6 +5,7 @@ import redis from '@/lib/redis';
 import { getSession, randomPassword } from '@/lib/auth';
 import { classToGroup } from '@/lib/constants';
 import { normalizeTurkishMobile } from '@/lib/phone';
+import { addToIndex } from '@/lib/userIndex';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -90,6 +91,7 @@ export async function POST(req) {
     };
     await redis.set(`student:${id}`, student);
     await redis.sadd('students', id);
+    await addToIndex(name, 'student', id);
     existingUsernames.add(name);
     results.added.push({ name, cls, password });
   }

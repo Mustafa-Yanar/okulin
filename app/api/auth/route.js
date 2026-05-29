@@ -4,6 +4,7 @@ import redis from '@/lib/redis';
 import { getSession, setSession, clearSession } from '@/lib/auth';
 import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
 import { logAudit, actorFrom } from '@/lib/audit';
+import { lookupIndex } from '@/lib/userIndex';
 
 export async function GET() {
   const session = await getSession();
@@ -26,7 +27,24 @@ export async function POST(req) {
       );
     }
 
-    // Try director
+    // Kayıttan oturum yanıtı üret (rol bazlı payload).
+    async function makeLoginResponse(role, rec) {
+      let payload;
+      if (role === 'teacher') {
+        const branches = Array.isArray(rec.branches) ? rec.branches
+          : [rec.branch, ...(rec.extraBranches || [])].filter(Boolean); // eski kayıt fallback
+        payload = { role: 'teacher', id: rec.id, name: rec.name, branches, allowedGroups: rec.allowedGroups || [], mustChangePassword: !!rec.mustChangePassword };
+      } else if (role === 'student') {
+        payload = { role: 'student', id: rec.id, name: rec.name, cls: rec.cls, group: rec.group, mustChangePassword: !!rec.mustChangePassword };
+      } else { // accountant
+        payload = { role: 'accountant', id: rec.id, name: rec.name, mustChangePassword: !!rec.mustChangePassword };
+      }
+      const res = NextResponse.json(payload);
+      await setSession(res, payload);
+      return res;
+    }
+
+    // Try director (zaten O(1))
     const director = await redis.get('director');
     if (director && director.username === username) {
       const ok = await bcrypt.compare(password, director.passwordHash);
@@ -37,67 +55,35 @@ export async function POST(req) {
       }
     }
 
-    // Try accountant
-    const accountantIds = await redis.smembers('accountants');
-    if (accountantIds && accountantIds.length > 0) {
-      const pipeline = redis.pipeline();
-      accountantIds.forEach(aid => pipeline.get(`accountant:${aid}`));
-      const accountants = await pipeline.exec();
-      for (const a of accountants) {
-        if (a && a.username === username) {
-          const ok = await bcrypt.compare(password, a.passwordHash);
-          if (ok) {
-            const mustChange = !!a.mustChangePassword;
-            const payload = { role: 'accountant', id: a.id, name: a.name, mustChangePassword: mustChange };
-            const res = NextResponse.json(payload);
-            await setSession(res, payload);
-            return res;
-          }
-        }
+    // HIZLI YOL: ters indeks (O(1)). Başarılı login burada döner, tarama yok.
+    const candidates = await lookupIndex(username);
+    for (const c of candidates) {
+      const rec = await redis.get(`${c.role}:${c.id}`);
+      if (rec && rec.username === username) {
+        const ok = await bcrypt.compare(password, rec.passwordHash);
+        if (ok) return makeLoginResponse(c.role, rec);
       }
     }
 
-
-    // Try teacher
-    const teacherIds = await redis.smembers('teachers');
-    if (teacherIds && teacherIds.length > 0) {
+    // GÜVENLİK AĞI: indeks eksik/stale ise eski lineer tarama (yalnız başarısız
+    // login'lerde çalışır — başarılılar yukarıda döndü; başarısızlar rate-limitli).
+    async function scanRole(role) {
+      const ids = await redis.smembers(`${role}s`);
+      if (!ids || ids.length === 0) return null;
       const pipeline = redis.pipeline();
-      teacherIds.forEach(tid => pipeline.get(`teacher:${tid}`));
-      const teachers = await pipeline.exec();
-      for (const t of teachers) {
-        if (t && t.username === username) {
-          const ok = await bcrypt.compare(password, t.passwordHash);
-          if (ok) {
-            const branches = Array.isArray(t.branches) ? t.branches
-              : [t.branch, ...(t.extraBranches || [])].filter(Boolean); // eski kayıt fallback
-            const mustChange = !!t.mustChangePassword;
-            const payload = { role: 'teacher', id: t.id, name: t.name, branches, allowedGroups: t.allowedGroups || [], mustChangePassword: mustChange };
-            const res = NextResponse.json(payload);
-            await setSession(res, payload);
-            return res;
-          }
+      ids.forEach(id => pipeline.get(`${role}:${id}`));
+      const recs = await pipeline.exec();
+      for (const rec of recs) {
+        if (rec && rec.username === username) {
+          const ok = await bcrypt.compare(password, rec.passwordHash);
+          if (ok) return makeLoginResponse(role, rec);
         }
       }
+      return null;
     }
-
-    // Try student
-    const studentIds = await redis.smembers('students');
-    if (studentIds && studentIds.length > 0) {
-      const pipeline = redis.pipeline();
-      studentIds.forEach(sid => pipeline.get(`student:${sid}`));
-      const students = await pipeline.exec();
-      for (const s of students) {
-        if (s && s.username === username) {
-          const ok = await bcrypt.compare(password, s.passwordHash);
-          if (ok) {
-            const mustChange = !!s.mustChangePassword;
-            const payload = { role: 'student', id: s.id, name: s.name, cls: s.cls, group: s.group, mustChangePassword: mustChange };
-            const res = NextResponse.json(payload);
-            await setSession(res, payload);
-            return res;
-          }
-        }
-      }
+    for (const role of ['accountant', 'teacher', 'student']) {
+      const res = await scanRole(role);
+      if (res) return res;
     }
 
     return NextResponse.json({ error: 'Kullanıcı adı veya şifre hatalı' }, { status: 401 });

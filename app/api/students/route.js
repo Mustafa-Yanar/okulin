@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth';
 import { classToGroup } from '@/lib/constants';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
+import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -77,6 +78,7 @@ export async function POST(req) {
   };
   await redis.set(`student:${id}`, student);
   await redis.sadd('students', id);
+  await addToIndex(username, 'student', id);
 
   return NextResponse.json({ id, name, username, cls, group });
 }
@@ -115,6 +117,8 @@ export async function PUT(req) {
     updated.passwordHash = await bcrypt.hash(password, 10);
   }
   await redis.set(`student:${id}`, updated);
+  // İsim (=username) değiştiyse indeksi güncelle
+  await updateIndexUsername(student.username, name, 'student', id);
   return NextResponse.json({ ok: true });
 }
 
@@ -126,14 +130,22 @@ export async function DELETE(req) {
 
   const { id, ids } = await req.json();
 
-  // Toplu silme
+  // Toplu silme — indeks temizliği için önce username'leri oku
   if (ids && Array.isArray(ids)) {
+    const readPipe = redis.pipeline();
+    ids.forEach(sid => readPipe.get(`student:${sid}`));
+    const recs = await readPipe.exec();
     const pipeline = redis.pipeline();
     ids.forEach(sid => {
       pipeline.del(`student:${sid}`);
       pipeline.srem('students', sid);
     });
     await pipeline.exec();
+    // İndeksten düşür
+    for (let i = 0; i < ids.length; i++) {
+      const rec = recs[i];
+      if (rec?.username) await removeFromIndex(rec.username, 'student', ids[i]);
+    }
     await logAudit({
       ...actorFrom(session),
       action: 'student.bulkDelete',
@@ -146,6 +158,7 @@ export async function DELETE(req) {
   const student = await redis.get(`student:${id}`);
   await redis.del(`student:${id}`);
   await redis.srem('students', id);
+  if (student?.username) await removeFromIndex(student.username, 'student', id);
   await logAudit({
     ...actorFrom(session),
     action: 'student.delete',
