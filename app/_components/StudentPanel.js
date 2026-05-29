@@ -10,6 +10,7 @@ import {
   MATH_FAMILY,
   classLabel,
   getWeekKey,
+  weekRangeLabel,
   ALL_DAYS
 } from '@/lib/constants';
 
@@ -51,21 +52,6 @@ function isSlotPast(weekKey, dayIndex, slotLabel) {
   const mm = parseInt(startStr[1] || '0');
   const slotStart = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + dayIndex, hh, mm);
   return slotStart.getTime() <= Date.now();
-}
-
-function weekRangeLabel(weekKey) {
-  const [year, wStr] = weekKey.split('-W');
-  const week = parseInt(wStr);
-  const jan4 = new Date(parseInt(year), 0, 4);
-  const dayOfWeek = jan4.getDay() || 7;
-  const monday = new Date(jan4);
-  monday.setDate(jan4.getDate() - dayOfWeek + 1 + (week - 1) * 7);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  const months = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
-  const startStr = `${monday.getDate()} ${months[monday.getMonth()]}`;
-  const endStr = `${sunday.getDate()} ${months[sunday.getMonth()]}`;
-  return { startStr, endStr };
 }
 
 function WeekNav({ weekKey, onPrev, onNext, canPrev = true, canNext = true }) {

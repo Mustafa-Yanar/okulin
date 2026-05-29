@@ -23,6 +23,7 @@ import {
   WEEKEND_SLOT_IDS,
   classLabel,
   getWeekKey,
+  weekRangeLabel,
   slotsForDay,
   branchesForGroups,
   makeSlots
@@ -84,25 +85,6 @@ function getAdjacentWeek(weekKey, delta) {
   }
 }
 
-function weekRangeLabel(weekKey) {
-  try {
-    const [year, wStr] = weekKey.split('-W');
-    const week = parseInt(wStr);
-    const jan4 = new Date(parseInt(year), 0, 4);
-    const dayOfWeek = jan4.getDay() || 7;
-    const monday = new Date(jan4);
-    monday.setDate(jan4.getDate() - dayOfWeek + 1 + (week - 1) * 7);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    const months = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
-    const startStr = `${monday.getDate()} ${months[monday.getMonth()]}`;
-    const endStr = `${sunday.getDate()} ${months[sunday.getMonth()]}`;
-    const yearStr = sunday.getFullYear();
-    return { startStr, endStr, yearStr };
-  } catch {
-    return { startStr: '', endStr: '', yearStr: '' };
-  }
-}
 
 function WeekNav({ weekKey, onPrev, onNext, canPrev = true, canNext = true }) {
   const { startStr, endStr } = weekRangeLabel(weekKey);
