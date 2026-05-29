@@ -16,3 +16,12 @@ app/page.backup.js
 architecture_analysis.md
 implementation_plan.md
 walkthrough.md
+
+# Kişisel doküman (telefon, e-posta — public repo'ya girmesin)
+CV.md
+RAKIP-ANALIZI-VE-YOL-HARITASI.md
+competitor_analysis_report.md
+
+# Şifre sıfırlama çıktıları (düz metin şifreler — ASLA git'e girmemeli)
+sifreler-*.csv
+scripts/*.csv
