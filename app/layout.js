@@ -21,7 +21,7 @@ export async function generateMetadata() {
   return {
     title: b.name,
     description: 'Etüt takip ve rezervasyon sistemi',
-    manifest: '/manifest.json',
+    manifest: '/api/manifest',
     appleWebApp: {
       capable: true,
       statusBarStyle: 'default',
