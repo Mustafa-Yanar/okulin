@@ -5,6 +5,7 @@ import {
   BookOpen, Calendar, Clock, Save, X, ClipboardList
 } from 'lucide-react';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
+import { useUrlTab } from './useUrlTab';
 import {
   allowedBranchesForClass,
   MATH_FAMILY,
@@ -462,7 +463,7 @@ export default function StudentPanel({ session, showToast }) {
   const [filterBranch, setFilterBranch] = useState('');
   const [filterTeacher, setFilterTeacher] = useState('');
   const [filterDay, setFilterDay] = useState('');
-  const [tab, setTab] = useState('available');
+  const [tab, setTab] = useUrlTab('available', ['available', 'myBookings', 'rehberlik']);
 
   const loadData = useCallback(async (wk) => {
     setLoading(true);

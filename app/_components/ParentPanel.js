@@ -8,6 +8,7 @@ import { StudentBookingsView } from './StudentPanel';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { guidanceSubjectsFor } from './director/shared';
+import { useUrlTab } from './useUrlTab';
 import { getWeekKey, weekRangeLabel, classLabel } from '@/lib/constants';
 
 async function api(path, opts = {}) {
@@ -149,7 +150,7 @@ function GuidanceView({ child }) {
 export default function ParentPanel({ session, showToast }) {
   const children = useMemo(() => Array.isArray(session.children) ? session.children : [], [session.children]);
   const [childId, setChildId] = useState(children[0]?.id || null);
-  const [tab, setTab] = useState('program');
+  const [tab, setTab] = useUrlTab('program', ['program', 'odeme', 'rehberlik']);
 
   const child = useMemo(() => children.find(c => c.id === childId) || children[0], [children, childId]);
 

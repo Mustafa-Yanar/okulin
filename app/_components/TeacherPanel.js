@@ -15,6 +15,7 @@ import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import SlotGrid from './SlotGrid';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { useSlotTimes } from './SlotTimesContext';
+import { useUrlTab } from './useUrlTab';
 
 // Helper API Fetcher
 async function api(path, opts = {}) {
@@ -627,7 +628,7 @@ export default function TeacherPanel({ session, showToast }) {
   const [program, setProgram] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('rezervasyon');
+  const [activeTab, setActiveTab] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama']);
   const [viewMode, setViewMode] = useState('table');
   const { slotTimes } = useSlotTimes();
 

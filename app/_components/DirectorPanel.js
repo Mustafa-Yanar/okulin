@@ -17,12 +17,13 @@ import DirectorMuhasebeTab from './director/MuhasebeTab';
 import HistoryModal from './director/HistoryModal';
 import { StudentList } from './director/StudentList';
 import ProgramEditor from './director/ProgramEditor';
+import { useUrlTab } from './useUrlTab';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
 export { DirectorSettingsModal } from './director/Settings';
 
 // ─── MAIN DIRECTOR PANEL ────────────────────────────────────────────────────────
 export default function DirectorPanel({ session, showToast }) {
-  const [tab, setTab] = useState('teachers');
+  const [tab, setTab] = useUrlTab('teachers', ['teachers', 'students', 'yoklama', 'muhasebe']);
   const [showProgramOlusturucuModal, setShowProgramOlusturucuModal] = useState(false);
   const [showDenemelerModal, setShowDenemelerModal] = useState(false);
   const [teachers, setTeachers] = useState([]);
