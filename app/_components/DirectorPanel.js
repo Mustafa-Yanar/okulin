@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   BookOpen, Users, Plus, Trash2, Edit3, Save, X, Search, Calendar, Clock, User, Check,
   BookMarked, GraduationCap, Shield, ChevronLeft, ChevronRight, Settings, Lock, LayoutGrid,
-  List, ClipboardList, Phone, Wallet, KeyRound
+  List, ClipboardList, Phone, Wallet
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
 import { isValidTurkishMobile, formatTurkishMobile } from '@/lib/phone';
@@ -32,7 +32,7 @@ import {
   GROUPS, api, Modal, Label, FormField,
   getAdjacentWeek, WeekNav, isSlotPast, guidanceSubjectsFor,
 } from './director/shared';
-import { TeacherForm, StudentForm, ImportModal, ResetPasswordModal } from './director/Forms';
+import { TeacherForm, StudentForm, ImportModal } from './director/Forms';
 import { DirectorAttendanceView, StudentAttendanceView } from './director/Attendance';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
 export { DirectorSettingsModal } from './director/Settings';
@@ -256,7 +256,7 @@ function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceRev
   );
 }
 
-function StudentList({ students, allSlots, weekKey, onCancelBooking, onEdit, onDelete, onDeleteClass, onReset, onHistory, pendingGuidance, onGuidanceReviewed }) {
+function StudentList({ students, allSlots, weekKey, onCancelBooking, onEdit, onDelete, onDeleteClass, onHistory, pendingGuidance, onGuidanceReviewed }) {
   const [searchQ, setSearchQ] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
   const [openCls, setOpenCls] = useState(null);
@@ -377,10 +377,7 @@ function StudentList({ students, allSlots, weekKey, onCancelBooking, onEdit, onD
                 <h3 className="font-700 text-base truncate" style={{ fontWeight: 700 }}>
                   {st.name} <span className="font-500 text-gray-400 text-sm" style={{ fontWeight: 500 }}>· {classLabel(st.cls)}</span>
                 </h3>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => onReset(st)} className="p-2 rounded-lg text-amber-500 hover:bg-amber-50" title="Şifre sıfırla"><KeyRound size={18} /></button>
-                  <button onClick={() => setExpandedId(null)} className="p-2 rounded-lg hover:bg-gray-100" title="Kapat"><X size={18} /></button>
-                </div>
+                <button onClick={() => setExpandedId(null)} className="p-2 rounded-lg hover:bg-gray-100 shrink-0" title="Kapat"><X size={18} /></button>
               </div>
               <div className="overflow-y-auto">
                 <StudentExpandedView student={st} allSlots={allSlots} onCancelBooking={onCancelBooking} onGuidanceReviewed={onGuidanceReviewed} />
@@ -1163,7 +1160,6 @@ export default function DirectorPanel({ session, showToast }) {
   const [selectedTeacherForSlots, setSelectedTeacherForSlots] = useState(null);
   const [teacherSlots, setTeacherSlots] = useState(null);
   const [programTeacher, setProgramTeacher] = useState(null);
-  const [resetTarget, setResetTarget] = useState(null);
   const [expandedTeacherId, setExpandedTeacherId] = useState(null);
   const [historyTarget, setHistoryTarget] = useState(null);
   const [pendingGuidance, setPendingGuidance] = useState({});
@@ -1291,7 +1287,6 @@ export default function DirectorPanel({ session, showToast }) {
                     </button>
                     <div className="flex gap-2 shrink-0">
                       <button className="btn-ghost !px-3 !py-2" onClick={() => { setEditTeacher(t); setShowTeacherForm(true); }}><Edit3 size={14} /></button>
-                      <button className="btn-ghost !px-3 !py-2 text-amber-500 hover:bg-amber-50" title="Şifre sıfırla" onClick={() => setResetTarget({ id: t.id, name: t.name, role: 'teacher' })}><KeyRound size={14} /></button>
                       <button className="btn-ghost !px-3 !py-2 text-red-400 hover:bg-red-50" onClick={async () => {
                         if (!confirm(`${t.name} silinsin mi?`)) return;
                         try { await api('/api/teachers',{method:'DELETE',body:JSON.stringify({id:t.id})}); showToast('Öğretmen silindi'); loadAll(weekKey); } catch(err){showToast(err.message,'error');}
@@ -1388,7 +1383,6 @@ export default function DirectorPanel({ session, showToast }) {
                 loadAll(weekKey);
               } catch(err) { showToast(err.message, 'error'); }
             }}
-            onReset={s => setResetTarget({ id: s.id, name: s.name, role: 'student' })}
             onHistory={s => setHistoryTarget({ type: 'student', id: s.id, name: s.name })}
             pendingGuidance={pendingGuidance}
             onGuidanceReviewed={loadPendingGuidance} />
@@ -1442,9 +1436,6 @@ export default function DirectorPanel({ session, showToast }) {
       {programTeacher && (
         <ProgramEditor teacher={programTeacher} students={students} showToast={showToast}
           onClose={() => { setProgramTeacher(null); loadAll(weekKey); }} />
-      )}
-      {resetTarget && (
-        <ResetPasswordModal target={resetTarget} targetRole={resetTarget.role} onClose={() => setResetTarget(null)} showToast={showToast} />
       )}
       {showImport && (
         <ImportModal onClose={() => setShowImport(false)} showToast={showToast} onDone={() => { setShowImport(false); loadAll(weekKey); }} />

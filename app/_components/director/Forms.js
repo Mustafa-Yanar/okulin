@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, Check, BookOpen } from 'lucide-react';
 import { STUDENT_GROUPS, classLabel, branchesForGroups } from '@/lib/constants';
 import { isValidTurkishMobile, formatTurkishMobile } from '@/lib/phone';
-import { GROUPS, api, Modal, Label, FormField } from './shared';
+import { GROUPS, Modal, Label, FormField } from './shared';
 
 export function TeacherForm({ initial, onClose, onSave }) {
   const [name, setName] = useState(initial?.name||'');
@@ -227,41 +227,6 @@ export function ImportModal({ onClose, showToast, onDone }) {
           <button className="btn-primary w-full" onClick={onDone}>Kapat</button>
         </div>
       )}
-    </Modal>
-  );
-}
-
-export function ResetPasswordModal({ target, targetRole, onClose, showToast }) {
-  const [newPass, setNewPass] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const submit = async e => {
-    e.preventDefault();
-    if (newPass.length < 4) { showToast('Şifre en az 4 karakter olmalı', 'error'); return; }
-    setLoading(true);
-    try {
-      await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'reset_password', targetId: target.id, targetRole, newPassword: newPass }) });
-      showToast(`${target.name} şifresi sıfırlandı`);
-      onClose();
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Modal title={`Şifre Sıfırla: ${target.name}`} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
-        <p className="text-sm text-gray-500">Yeni şifreyi belirleyin ve kullanıcıya bildirin.</p>
-        <FormField label="Yeni Şifre">
-          <input className="input" type="text" value={newPass} onChange={e => setNewPass(e.target.value)} required autoFocus placeholder="En az 4 karakter" />
-        </FormField>
-        <div className="flex gap-3 pt-2">
-          <button className="btn-primary flex-1" disabled={loading}>{loading ? 'Kaydediliyor...' : 'Sıfırla'}</button>
-          <button type="button" className="btn-ghost" onClick={onClose}>İptal</button>
-        </div>
-      </form>
     </Modal>
   );
 }
