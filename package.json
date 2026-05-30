@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@upstash/ratelimit": "2.0.8",
@@ -20,7 +22,7 @@
     "recharts": "3.8.1",
     "web-push": "3.6.7",
     "xlsx": "0.18.5",
-    "zod": "^3.25.76"
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "autoprefixer": "10.4.19",
@@ -28,6 +30,7 @@
     "eslint-config-next": "14.2.5",
     "postcss": "8.4.39",
     "sharp": "0.34.5",
-    "tailwindcss": "3.4.6"
+    "tailwindcss": "3.4.6",
+    "vitest": "2.1.9"
   }
 }
