@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { v4 as uuid } from 'crypto';
-import redis from '@/lib/redis';
+import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { getWeekKey, initWeekForTeacher } from '@/lib/slots';
 import { normalizeTeacher } from '@/lib/teacherMigrate';

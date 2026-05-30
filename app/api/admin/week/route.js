@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/redis';
+import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { getWeekKey, getMondayOfWeek, initWeekForTeacher } from '@/lib/slots';
 import { parseBody, z } from '@/lib/validate';

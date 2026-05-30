@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import * as XLSX from 'xlsx';
-import redis from '@/lib/redis';
+import redis from '@/lib/db';
 import { getSession, randomPassword } from '@/lib/auth';
 import { classToGroup } from '@/lib/constants';
 import { normalizeTurkishMobile } from '@/lib/phone';

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/redis';
+import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { getWeekKey } from '@/lib/slots';
 import { parseBody, z, zId } from '@/lib/validate';

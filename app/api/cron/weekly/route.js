@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/redis';
+import redis from '@/lib/db';
 import { getWeekKey, getMondayOfWeek, initWeekForTeacher, slotKey, getSlotTimes } from '@/lib/slots';
 import { ALL_DAYS, slotsForDay } from '@/lib/constants';
 
