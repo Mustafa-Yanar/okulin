@@ -1,0 +1,264 @@
+'use client';
+
+// Öğrenci/öğretmen etüt geçmişi modalı (arşiv) + öğrenci devamsızlık sekmesi + yazdırma.
+import React, { useState, useEffect, useMemo } from 'react';
+import { BookOpen, ClipboardList, Clock } from 'lucide-react';
+import { api, Modal } from './shared';
+
+export default function HistoryModal({ target, onClose, currentWeekKey, currentEntries }) {
+  const isStudent = target.type === 'student';
+  const [activeTab, setActiveTab] = useState('etut');
+  const [weeks, setWeeks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [attendance, setAttendance] = useState(null);
+  const [attLoading, setAttLoading] = useState(false);
+  const printRef = React.useRef();
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await api(`/api/archive?type=${target.type}&id=${target.id}`);
+        setWeeks(data.weeks || []);
+      } catch {}
+      setLoading(false);
+    })();
+  }, [target.id, target.type]);
+
+  useEffect(() => {
+    if (!isStudent || activeTab !== 'devamsizlik' || attendance !== null) return;
+    (async () => {
+      setAttLoading(true);
+      try {
+        const data = await api(`/api/attendance/student?studentId=${target.id}`);
+        setAttendance(data);
+      } catch {
+        setAttendance({ entries: [], summary: { yok: 0, gec: 0 } });
+      }
+      setAttLoading(false);
+    })();
+  }, [activeTab, isStudent, target.id, attendance]);
+
+  const allWeeks = useMemo(() => {
+    const result = [];
+    if (currentEntries && currentEntries.length > 0) {
+      result.push({ weekKey: currentWeekKey, entries: currentEntries, isCurrent: true });
+    }
+    result.push(...weeks);
+    return result;
+  }, [weeks, currentEntries, currentWeekKey]);
+
+  const handlePrint = () => {
+    const s = {
+      body: 'font-family:Arial,sans-serif;font-size:13px;color:#111;padding:24px;',
+      h1: 'font-size:18px;margin:0 0 4px;',
+      sub: 'color:#666;font-size:12px;margin-bottom:20px;',
+      week: 'margin-bottom:24px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;',
+      weekTitle: 'font-size:13px;font-weight:bold;background-color:#f3f4f6;padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#1f2937;',
+      dayTitle: 'font-size:11px;font-weight:bold;color:#4f46e5;margin:10px 0 4px 4px;',
+      entry: 'display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background-color:#f9fafb;border:1px solid #f3f4f6;border-radius:6px;margin-bottom:4px;',
+      entryLeft: 'font-size:12px;font-weight:600;color:#1f2937;',
+      entryRight: 'font-size:11px;color:#6b7280;',
+    };
+    let html = `<html><head><title>${target.name} – Etüt Geçmişi</title>
+    <style>* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }</style>
+    </head><body style="${s.body}">`;
+    html += `<h1 style="${s.h1}">${target.name}</h1><div style="${s.sub}">Etüt Geçmişi</div>`;
+    allWeeks.forEach(week => {
+      const badge = week.isCurrent ? ' <span style="font-size:10px;background-color:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:99px;font-weight:normal;margin-left:6px;">Bu Hafta</span>' : '';
+      html += `<div style="${s.week}"><div style="${s.weekTitle}">${weekLabel(week.weekKey)}${badge}</div><div style="padding:8px 10px;">`;
+      const byDay = {};
+      week.entries.forEach(e => {
+        if (!byDay[e.day]) byDay[e.day] = { dayLabel: e.dayLabel, entries: [] };
+        byDay[e.day].entries.push(e);
+      });
+      Object.values(byDay).sort((a,b) => a.entries[0].day - b.entries[0].day).forEach(day => {
+        html += `<div style="${s.dayTitle}">${day.dayLabel}</div>`;
+        day.entries.sort((a,b) => a.slotId.localeCompare(b.slotId)).forEach(e => {
+          const right = target.type === 'teacher'
+            ? `${e.studentName} · ${(e.studentCls||'').toUpperCase()}`
+            : `${e.teacherName} · ${e.branch}`;
+          html += `<div style="${s.entry}"><span style="${s.entryLeft}">${e.slotLabel}</span><span style="${s.entryRight}">${right}</span></div>`;
+        });
+      });
+      html += `</div></div>`;
+    });
+    html += '</body></html>';
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 300);
+  };
+
+  const weekLabel = wk => {
+    try {
+      const [year, week] = wk.split('-W');
+      const jan4 = new Date(parseInt(year), 0, 4);
+      const dayOfWeek = jan4.getDay() || 7;
+      const monday = new Date(jan4);
+      monday.setDate(jan4.getDate() - dayOfWeek + 1 + (parseInt(week) - 1) * 7);
+      const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+      const fmt = d => d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
+      return `${fmt(monday)} – ${fmt(sunday)} ${year}`;
+    } catch { return wk; }
+  };
+
+  const modalTitle = isStudent
+    ? `${target.name} – Geçmiş`
+    : `${target.name} – Geçmiş Etütler`;
+
+  const etutContent = (
+    loading ? (
+      <div className="py-12 text-center text-gray-400">Yükleniyor...</div>
+    ) : allWeeks.length === 0 ? (
+      <div className="py-12 text-center text-gray-400">
+        <Clock size={32} className="mx-auto mb-2 opacity-30" />
+        <p>Henüz etüt yok</p>
+        <p className="text-xs mt-1 text-gray-300">Geçmiş haftalar her Pazar arşivlenir</p>
+      </div>
+    ) : (
+      <>
+        <div className="flex justify-end mb-4">
+          <button onClick={handlePrint} className="btn-ghost !px-4 !py-2 flex items-center gap-2 text-sm text-indigo-600">
+            <BookOpen size={14} /> PDF / Yazdır
+          </button>
+        </div>
+        <div className="space-y-4" ref={printRef}>
+          {allWeeks.map(week => {
+              const byDay = {};
+              week.entries.forEach(e => {
+                if (!byDay[e.day]) byDay[e.day] = { dayLabel: e.dayLabel, entries: [] };
+                byDay[e.day].entries.push(e);
+              });
+              const sortedDays = Object.values(byDay).sort((a,b) => a.entries[0].day - b.entries[0].day);
+              return (
+                <div key={week.weekKey} className="card overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                    <span className="font-700 text-sm text-gray-800" style={{ fontWeight: 700 }}>{weekLabel(week.weekKey)}</span>
+                    {week.isCurrent && <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600 font-600" style={{ fontWeight: 600 }}>Bu Hafta</span>}
+                  </div>
+                  <div className="p-3 space-y-3">
+                    {sortedDays.map(day => (
+                      <div key={day.dayLabel}>
+                        <div className="text-xs font-700 text-indigo-600 mb-1.5 px-1" style={{ fontWeight: 700 }}>{day.dayLabel}</div>
+                        <div className="space-y-1">
+                          {day.entries.sort((a,b) => a.slotId.localeCompare(b.slotId)).map((e,i) => (
+                            <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-100 text-sm">
+                              <div className="flex items-center gap-2">
+                                <Clock size={12} className="text-indigo-400 shrink-0" />
+                                <span className="font-600 text-gray-800 text-xs" style={{ fontWeight: 600 }}>{e.slotLabel}</span>
+                              </div>
+                              <span className="text-xs text-gray-500">
+                                {target.type === 'teacher'
+                                  ? `${e.studentName} · ${(e.studentCls||'').toUpperCase()}`
+                                  : `${e.teacherName} · ${e.branch}`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )
+    );
+
+  const devamsizlikContent = (
+    attLoading || attendance === null ? (
+      <div className="py-12 text-center text-gray-400">Yükleniyor...</div>
+    ) : attendance.entries.length === 0 ? (
+      <div className="py-12 text-center text-gray-400">
+        <ClipboardList size={32} className="mx-auto mb-2 opacity-30" />
+        <p>Devamsızlık kaydı yok</p>
+        <p className="text-xs mt-1 text-gray-300">Yok veya geç olarak işaretlenmiş ders bulunmuyor</p>
+      </div>
+    ) : (
+      <>
+        <div className="flex items-center gap-2 mb-4">
+          {attendance.summary.yok > 0 && (
+            <span className="text-xs px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-600" style={{ fontWeight: 600 }}>
+              {attendance.summary.yok} Yok
+            </span>
+          )}
+          {attendance.summary.gec > 0 && (
+            <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-600" style={{ fontWeight: 600 }}>
+              {attendance.summary.gec} Geç
+            </span>
+          )}
+          <span className="text-xs text-gray-400 ml-1">Toplam {attendance.entries.length} kayıt</span>
+        </div>
+        <div className="space-y-1.5">
+          {(() => {
+            const byDate = {};
+            for (const e of attendance.entries) {
+              if (!byDate[e.date]) byDate[e.date] = [];
+              byDate[e.date].push(e);
+            }
+            return Object.entries(byDate).map(([date, items]) => {
+              const d = new Date(date);
+              const fmtDate = d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+              return (
+                <div key={date} className="card overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                    <div>
+                      <span className="font-700 text-sm text-gray-800" style={{ fontWeight: 700 }}>{fmtDate}</span>
+                      <span className="text-xs text-gray-400 ml-2">{items[0].dayLabel}</span>
+                    </div>
+                  </div>
+                  <div className="p-2 space-y-1">
+                    {items.map((e, i) => {
+                      const statusClass = e.status === 'yok'
+                        ? 'bg-red-50 border-red-100 text-red-700'
+                        : 'bg-amber-50 border-amber-100 text-amber-700';
+                      return (
+                        <div key={i} className={`flex items-center justify-between px-3 py-2 rounded-lg border text-sm ${statusClass}`}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-700 shrink-0 ${e.status === 'yok' ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`} style={{ fontWeight: 700 }}>
+                              {e.status === 'yok' ? 'YOK' : 'GEÇ'}
+                            </span>
+                            <span className="text-xs font-600 shrink-0" style={{ fontWeight: 600 }}>{e.lessonNo}. Ders</span>
+                            {e.slotLabel && <span className="text-xs opacity-70 shrink-0">({e.slotLabel})</span>}
+                          </div>
+                          <span className="text-xs opacity-70 text-right truncate ml-2">
+                            {e.teacherName}{(e.subBranch || e.branch) ? ` · ${e.subBranch || e.branch}` : ''}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            });
+          })()}
+        </div>
+      </>
+    )
+  );
+
+  return (
+    <Modal title={modalTitle} onClose={onClose} wide>
+      {isStudent && (
+        <div className="flex rounded-xl border border-gray-200 overflow-hidden mb-4 w-fit">
+          <button
+            onClick={() => setActiveTab('etut')}
+            className={`px-4 py-2 text-xs flex items-center gap-1.5 transition-colors ${activeTab === 'etut' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+            style={{ fontWeight: 600 }}>
+            <Clock size={13} /> Geçmiş Etütler
+          </button>
+          <button
+            onClick={() => setActiveTab('devamsizlik')}
+            className={`px-4 py-2 text-xs flex items-center gap-1.5 transition-colors ${activeTab === 'devamsizlik' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+            style={{ fontWeight: 600 }}>
+            <ClipboardList size={13} /> Devamsızlık Bilgisi
+          </button>
+        </div>
+      )}
+      {(!isStudent || activeTab === 'etut') && etutContent}
+      {isStudent && activeTab === 'devamsizlik' && devamsizlikContent}
+    </Modal>
+  );
+}
