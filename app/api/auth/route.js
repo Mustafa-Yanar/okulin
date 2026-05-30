@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import redis from '@/lib/redis';
+import { tenantRedis } from '@/lib/tenant';
 import { getSession, setSession, clearSession } from '@/lib/auth';
 import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
 import { logAudit, actorFrom } from '@/lib/audit';
@@ -18,12 +18,14 @@ const AuthSchema = z.discriminatedUnion('action', [
 ]);
 
 export async function GET() {
+  const redis = tenantRedis();
   const session = await getSession();
   const directorExists = await redis.exists('director');
   return NextResponse.json({ session, directorExists: !!directorExists });
 }
 
 export async function POST(req) {
+  const redis = tenantRedis();
   const parsed = await parseBody(req, AuthSchema);
   if (!parsed.ok) return parsed.response;
   const { action, username, password, newPassword, targetId, targetRole, name } = parsed.data;
