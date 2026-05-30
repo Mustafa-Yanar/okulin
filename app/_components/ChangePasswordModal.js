@@ -29,12 +29,21 @@ function Modal({ title, onClose, children, wide, xwide }) {
   );
 }
 
-function Label({ children }) {
-  return <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>{children}</label>;
+function Label({ children, htmlFor }) {
+  return <label htmlFor={htmlFor} className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>{children}</label>;
 }
 
 function FormField({ label, children }) {
-  return <div className="mb-4"><Label>{label}</Label>{children}</div>;
+  const id = React.useId();
+  let associatedId;
+  const content = React.Children.map(children, child => {
+    if (!associatedId && React.isValidElement(child) && !child.props.id) {
+      associatedId = id;
+      return React.cloneElement(child, { id });
+    }
+    return child;
+  });
+  return <div className="mb-4"><Label htmlFor={associatedId}>{label}</Label>{content}</div>;
 }
 
 export default function ChangePasswordModal({ onClose, showToast }) {

@@ -145,6 +145,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
                       onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                       className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
                       placeholder="Örn: Ayşe Yılmaz"
+                      aria-label="Muhasebeci adı soyadı"
                       required autoFocus
                     />
                     <p className="text-[10px] text-gray-400 mt-1">Kullanıcı adı olarak da kullanılacak</p>
@@ -159,6 +160,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
                       onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                       className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
                       placeholder={editAcc ? 'Yeni şifre (opsiyonel)' : 'Şifre girin'}
+                      aria-label="Muhasebeci şifresi"
                       required={!editAcc}
                     />
                   </div>

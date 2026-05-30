@@ -88,8 +88,8 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
   return (
     <div>
       <div className="flex gap-2 mb-4">
-        <input className="input text-sm" placeholder="İsim, sınıf..." value={searchQ} onChange={e => setSearchQ(e.target.value)} />
-        <select className="input !w-auto text-sm" value={filterGroup} onChange={e => setFilterGroup(e.target.value)}>
+        <input className="input text-sm" placeholder="İsim, sınıf..." aria-label="Öğrenci ara" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
+        <select className="input !w-auto text-sm" aria-label="Gruba göre filtrele" value={filterGroup} onChange={e => setFilterGroup(e.target.value)}>
           <option value="">Tüm Gruplar</option>
           {Object.entries(GROUPS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
         </select>

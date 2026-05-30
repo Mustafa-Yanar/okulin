@@ -68,6 +68,7 @@ export default function ForcedPasswordChange({ session, onDone, onLogout, showTo
               value={current}
               onChange={(e) => setCurrent(e.target.value)}
               placeholder="Karttaki / liste şifresi"
+              aria-label="Sana verilen geçici şifre"
               required
               autoFocus
               autoComplete="current-password"
@@ -84,6 +85,7 @@ export default function ForcedPasswordChange({ session, onDone, onLogout, showTo
               value={next}
               onChange={(e) => setNext(e.target.value)}
               placeholder="En az 6 karakter"
+              aria-label="Yeni şifre"
               required
               minLength={6}
               autoComplete="new-password"
@@ -100,6 +102,7 @@ export default function ForcedPasswordChange({ session, onDone, onLogout, showTo
               value={next2}
               onChange={(e) => setNext2(e.target.value)}
               placeholder="Aynısını tekrar yaz"
+              aria-label="Yeni şifre (tekrar)"
               required
               minLength={6}
               autoComplete="new-password"

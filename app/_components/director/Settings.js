@@ -123,7 +123,7 @@ export function DirectorSettingsModal({ current, onClose, onSave, showToast }) {
         <form onSubmit={submitName} className="flex gap-2 items-end">
           <div className="flex-1">
             <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Ad Soyad</label>
-            <input className="input" value={name} onChange={e => setName(e.target.value)} required />
+            <input className="input" aria-label="Müdür ad soyad" value={name} onChange={e => setName(e.target.value)} required />
           </div>
           <button type="submit" className="btn-primary !px-4 !py-2 text-sm" disabled={savingName}>
             {savingName ? 'Kaydediliyor…' : 'Güncelle'}

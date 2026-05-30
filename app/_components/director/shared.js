@@ -36,12 +36,23 @@ export function Modal({ title, onClose, children, wide, xwide, lockClose }) {
   );
 }
 
-export function Label({ children }) {
-  return <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>{children}</label>;
+export function Label({ children, htmlFor }) {
+  return <label htmlFor={htmlFor} className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>{children}</label>;
 }
 
+// label'ı ilk form elemanı child'ına useId ile bağlar (ekran okuyucu + otomatik doldurma).
+// Birden çok / element olmayan child varsa güvenle olduğu gibi bırakır.
 export function FormField({ label, children }) {
-  return <div className="mb-4"><Label>{label}</Label>{children}</div>;
+  const id = React.useId();
+  let associatedId;
+  const content = React.Children.map(children, child => {
+    if (!associatedId && React.isValidElement(child) && !child.props.id) {
+      associatedId = id;
+      return React.cloneElement(child, { id });
+    }
+    return child;
+  });
+  return <div className="mb-4"><Label htmlFor={associatedId}>{label}</Label>{content}</div>;
 }
 
 export function getAdjacentWeek(weekKey, delta) {
