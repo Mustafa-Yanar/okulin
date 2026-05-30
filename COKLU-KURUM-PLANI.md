@@ -115,11 +115,11 @@ Faz A'dan başla (temel + Çözüm migration). Diğer fazlar bunun üstüne kade
 - SMS/WhatsApp: en son (kurum-başına ayar). Web Push zaten var.
 - "Tek URL" = aslında app'te routing yokluğuydu (ayrı konu); landing kök domain'e düşer.
 
-## DURUM: Faz A BİTTİ (2026-05-30, canlıda doğrulandı)
-- A1 tenant çekirdeği · A2 auth org-aware · A3 lib'ler scoped · A4 route'lar scoped (lib/db proxy) · A5 reset+tohumla.
-- Scoped redis çalışıyor: yeni veri `t:cozum:main:*`'e gidiyor, izolasyon kanıtlı. App boş (Mustafa öğrenci/öğretmen ekleyecek).
+## DURUM: Faz A + B BİTTİ (2026-05-30, canlıda)
+- **Faz A** — A1 tenant çekirdeği · A2 auth org-aware · A3 lib'ler scoped · A4 route'lar scoped (lib/db proxy) · A5 reset+tohumla. Scoped redis çalışıyor: veri `t:cozum:main:*`, izolasyon kanıtlı.
+- **Faz B (markalama)** — marka `org:<slug>`'de (`{name,shortName,logoUrl,themeColor}`). `lib/branding.js` saf yardımcılar; `/api/org` GET/POST; `/api/auth` GET branding; `layout.js` dinamik metadata/viewport; `page.js` login+header+`--brand`; Settings'e "Kurum Markası" düzenleme + canlı önizleme. Sabit "Akyazı Çözüm"/#6366f1 kaldırıldı, cozum'a eşdeğer marka atandı (görünüm aynı). PWA manifest.json hâlâ statik (sonraya).
 - Detay: hafıza `multi-tenant.md`.
 
 ## SIRADA
-1. **Mustafa**: domain al + Vercel'e `*.etuttakip.app` wildcard bağla → bana söyle, `APP_DOMAIN` env'i ekleyip subdomain'i aktive edeyim.
-2. Faz B (markalama), C (süper-admin), D (şube/zincir), E (özel domain) — yukarıdaki plana göre.
+1. **Mustafa**: ürün ismi seç (`eduhane`/`etudio`/`edutakip` önerildi) → domain al (`.app`) + Vercel'e `*.<domain>` wildcard bağla → bana söyle, `APP_DOMAIN` env'i ekleyip subdomain'i aktive edeyim.
+2. Faz C (süper-admin: kurum+müdür oluştur, `seed-org.mjs` tabanlı), D (şube/zincir), E (özel domain) + landing / veli paneli / SMS.
