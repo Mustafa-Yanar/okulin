@@ -84,14 +84,14 @@ function WeekNav({ weekKey, onPrev, onNext, canPrev = true, canNext = true }) {
 
   return (
     <div className="flex items-center gap-1">
-      <button onClick={onPrev} disabled={!canPrev}
+      <button onClick={onPrev} disabled={!canPrev} aria-label="Önceki hafta"
         className={`btn-ghost !p-2 ${!canPrev ? 'opacity-30 cursor-not-allowed' : ''}`}>
         <ChevronLeft size={16} />
       </button>
       <span className="text-xs text-gray-700 text-center whitespace-nowrap">
         {startStr} – {endStr}
       </span>
-      <button onClick={onNext} disabled={!canNext}
+      <button onClick={onNext} disabled={!canNext} aria-label="Sonraki hafta"
         className={`btn-ghost !p-2 ${!canNext ? 'opacity-30 cursor-not-allowed' : ''}`}>
         <ChevronRight size={16} />
       </button>

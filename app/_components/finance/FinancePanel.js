@@ -49,7 +49,7 @@ function ReceiptPrintArea({ data, onClose }) {
             >
               <Printer size={14} /> Yazdır
             </button>
-            <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+            <button onClick={onClose} aria-label="Kapat" className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
               <X size={16} />
             </button>
           </div>
@@ -131,7 +131,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-slide-in">
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>Ödeme Ekle — {studentName}</h3>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Kapat" className="p-2 rounded-lg hover:bg-gray-100"><X size={16} /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-4">
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center justify-between">
@@ -294,7 +294,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>
             {existing ? 'Kaydı Güncelle' : 'Finansal Kayıt Oluştur'} — {student.name || student.studentName}
           </h3>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Kapat" className="p-2 rounded-lg hover:bg-gray-100"><X size={16} /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">

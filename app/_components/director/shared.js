@@ -28,7 +28,7 @@ export function Modal({ title, onClose, children, wide, xwide, lockClose }) {
       <div className={`card-elevated w-full ${xwide ? 'max-w-5xl' : wide ? 'max-w-3xl' : 'max-w-lg'} animate-slide-in max-h-[90vh] overflow-y-auto`}>
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>{title}</h3>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Kapat" className="p-2 rounded-lg hover:bg-gray-100 transition-colors"><X size={16} /></button>
         </div>
         <div className="p-5">{children}</div>
       </div>
@@ -79,14 +79,14 @@ export function WeekNav({ weekKey, onPrev, onNext, canPrev = true, canNext = tru
   const { startStr, endStr } = weekRangeLabel(weekKey);
   return (
     <div className="flex items-center gap-1">
-      <button onClick={onPrev} disabled={!canPrev}
+      <button onClick={onPrev} disabled={!canPrev} aria-label="Önceki hafta"
         className={`btn-ghost !p-2 ${!canPrev ? 'opacity-30 cursor-not-allowed' : ''}`}>
         <ChevronLeft size={16} />
       </button>
       <span className="text-xs text-gray-700 text-center whitespace-nowrap">
         {startStr} – {endStr}
       </span>
-      <button onClick={onNext} disabled={!canNext}
+      <button onClick={onNext} disabled={!canNext} aria-label="Sonraki hafta"
         className={`btn-ghost !p-2 ${!canNext ? 'opacity-30 cursor-not-allowed' : ''}`}>
         <ChevronRight size={16} />
       </button>

@@ -219,7 +219,7 @@ function AppContent() {
                 <Settings size={14} />
               </button>
             )}
-            <button onClick={logout} className="btn-ghost !px-3 !py-2"><LogOut size={14} /></button>
+            <button onClick={logout} aria-label="Çıkış yap" title="Çıkış yap" className="btn-ghost !px-3 !py-2"><LogOut size={14} /></button>
           </div>
         </div>
       </header>
