@@ -109,6 +109,12 @@ body {
 .input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); background: #fff; }
 .input::placeholder { color: #9ca3af; }
 
+/* Klavye odağı için belirgin halka — yalnız klavyeyle gezilince görünür,
+   fare tıklamasında çıkmaz (:focus-visible). Erişilebilirlik için şart. */
+:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 6px; }
+/* .input kendi box-shadow halkasını kullanır; çift halka olmasın */
+.input:focus-visible { outline: none; }
+
 .badge {
   display: inline-flex;
   align-items: center;
