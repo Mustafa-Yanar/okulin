@@ -23,11 +23,33 @@ export async function api(path, opts = {}) {
 }
 
 export function Modal({ title, onClose, children, wide, xwide, lockClose }) {
+  const titleId = React.useId();
+  const dialogRef = React.useRef(null);
+  // onClose/lockClose en güncel hâliyle okunsun ama effect her render tekrar kurulmasın.
+  const onCloseRef = React.useRef(onClose); onCloseRef.current = onClose;
+  const lockRef = React.useRef(lockClose); lockRef.current = lockClose;
+
+  React.useEffect(() => {
+    const prevFocus = document.activeElement;
+    // İçeride zaten odaklı bir öğe yoksa (autoFocus input'unu çalma) modalı odakla.
+    if (!dialogRef.current?.contains(document.activeElement)) dialogRef.current?.focus();
+    const onKey = (e) => { if (e.key === 'Escape' && !lockRef.current) onCloseRef.current(); };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      // Kapanışta odağı tetikleyen öğeye geri ver — hâlâ DOM'daysa.
+      if (prevFocus && typeof prevFocus.focus === 'function' && document.contains(prevFocus)) {
+        prevFocus.focus();
+      }
+    };
+  }, []);
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={lockClose ? undefined : (e => e.target === e.currentTarget && onClose())}>
-      <div className={`card-elevated w-full ${xwide ? 'max-w-5xl' : wide ? 'max-w-3xl' : 'max-w-lg'} animate-slide-in max-h-[90vh] overflow-y-auto`}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
+        className={`card-elevated w-full ${xwide ? 'max-w-5xl' : wide ? 'max-w-3xl' : 'max-w-lg'} animate-slide-in max-h-[90vh] overflow-y-auto outline-none`}>
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
-          <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>{title}</h3>
+          <h3 id={titleId} className="font-700 text-lg" style={{ fontWeight: 700 }}>{title}</h3>
           <button onClick={onClose} aria-label="Kapat" className="p-2 rounded-lg hover:bg-gray-100 transition-colors"><X size={16} /></button>
         </div>
         <div className="p-5">{children}</div>

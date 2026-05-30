@@ -168,7 +168,7 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
         if (!st) return null;
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in">
+            <div role="dialog" aria-modal="true" aria-label="Öğrenci detayı" className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in">
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 shrink-0">
                 <h3 className="font-700 text-base truncate" style={{ fontWeight: 700 }}>
                   {st.name} <span className="font-500 text-gray-400 text-sm" style={{ fontWeight: 500 }}>· {classLabel(st.cls)}</span>
