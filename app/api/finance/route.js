@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, canReadStudent } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId, zMoney } from '@/lib/validate';
 
@@ -23,10 +23,19 @@ const FinanceDeleteSchema = z.object({ studentId: zId });
 
 export async function GET(req) {
   const session = await getSession();
-  if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
   const { searchParams } = new URL(req.url);
   const studentId = searchParams.get('studentId');
+
+  // Veli: yalnız kendi çocuğunun finansal kaydını görür (salt-okunur).
+  if (session && session.role === 'parent') {
+    if (!canReadStudent(session, studentId)) {
+      return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+    }
+    const record = await redis.get(`finance:${studentId}`);
+    return NextResponse.json(record || null);
+  }
+
+  if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   if (studentId) {
     // Tek öğrenci finansal kaydı

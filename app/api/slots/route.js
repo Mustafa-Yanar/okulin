@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, canReadStudent } from '@/lib/auth';
 import { getWeekKey, getTeacherWeekSlots, slotKey, getAllTeachers, slotStartTime, getSlotTimes } from '@/lib/slots';
 import { ALL_DAYS, slotsForDay, MEZUN_FORBIDDEN_ETUT_SLOT, MATH_FAMILY, allowedBranchesForClass } from '@/lib/constants';
 import { parseBody, z, zId } from '@/lib/validate';
@@ -54,6 +54,16 @@ export async function GET(req) {
         });
       }
     }
+  }
+
+  // Veli: yalnız kendi çocuğunun rezervasyonlarını görür (diğer öğrencilerin adı sızmaz).
+  if (session.role === 'parent') {
+    const childId = searchParams.get('studentId');
+    if (!canReadStudent(session, childId)) {
+      return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+    }
+    const mine = allSlots.filter(s => s.booked && s.studentId === childId);
+    return NextResponse.json({ weekKey, slots: mine });
   }
 
   return NextResponse.json({ weekKey, slots: allSlots });

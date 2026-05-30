@@ -6,6 +6,7 @@ import { getSession, setSession, clearSession } from '@/lib/auth';
 import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { lookupIndex } from '@/lib/userIndex';
+import { normalizeTurkishMobile } from '@/lib/phone';
 import { parseBody, z, zName, zPassword, zNewPassword, zId } from '@/lib/validate';
 
 // action'a göre ayrışan gövde — her işlemin yalnız kendi alanları doğrulanır.
@@ -54,6 +55,10 @@ export async function POST(req) {
         payload = { role: 'teacher', id: rec.id, name: rec.name, branches, allowedGroups: rec.allowedGroups || [], mustChangePassword: !!rec.mustChangePassword };
       } else if (role === 'student') {
         payload = { role: 'student', id: rec.id, name: rec.name, cls: rec.cls, group: rec.group, mustChangePassword: !!rec.mustChangePassword };
+      } else if (role === 'parent') {
+        const children = Array.isArray(rec.children) ? rec.children : [];
+        const name = children.length === 1 ? `${children[0].name} (Veli)` : 'Veli';
+        payload = { role: 'parent', id: rec.id, name, children, mustChangePassword: !!rec.mustChangePassword };
       } else { // accountant
         payload = { role: 'accountant', id: rec.id, name: rec.name, mustChangePassword: !!rec.mustChangePassword };
       }
@@ -74,10 +79,16 @@ export async function POST(req) {
     }
 
     // HIZLI YOL: ters indeks (O(1)). Başarılı login burada döner, tarama yok.
+    // Veli kullanıcı adı = telefon → "0532..." girilse de kanonik forma normalize edip
+    // hem ham hem normalize adayları dener (veli telefonu kanonik kayıtlı).
+    const normPhone = normalizeTurkishMobile(username);
     const candidates = await lookupIndex(username);
+    if (normPhone && normPhone !== username) {
+      candidates.push(...await lookupIndex(normPhone));
+    }
     for (const c of candidates) {
       const rec = await redis.get(`${c.role}:${c.id}`);
-      if (rec && rec.username === username) {
+      if (rec && (rec.username === username || (normPhone && rec.username === normPhone))) {
         const ok = await bcrypt.compare(password, rec.passwordHash);
         if (ok) return makeLoginResponse(c.role, rec);
       }
@@ -175,6 +186,9 @@ export async function POST(req) {
     }
     if (session.role === 'accountant') {
       return updatePasswordFor('accountant', {});
+    }
+    if (session.role === 'parent') {
+      return updatePasswordFor('parent', { children: session.children });
     }
 
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, canReadStudent } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
 
 // topics:{studentId} -> { [subject]: { [topicIndex]: percent 0-100 } }
@@ -24,6 +24,8 @@ export async function GET(req) {
 
   if (session.role === 'student') {
     studentId = session.id;
+  } else if (session.role === 'parent') {
+    if (!canReadStudent(session, studentId)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   } else if (session.role !== 'director' && session.role !== 'teacher') {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }

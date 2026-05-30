@@ -3,10 +3,11 @@
 // Müdür ayarlar modalı (isim + ders saatleri) ve içindeki bölümler:
 // bildirim testi, denetim kayıtları (audit log), hata kayıtları (error log).
 import React, { useState, useEffect, useMemo } from 'react';
-import { Clock, AlertTriangle, Palette } from 'lucide-react';
+import { Clock, AlertTriangle, Palette, Users } from 'lucide-react';
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
+import { formatTurkishMobile } from '@/lib/phone';
 
 export function DirectorSettingsModal({ current, onClose, onSave, onBranding, showToast }) {
   const [name, setName] = useState(current || '');
@@ -134,6 +135,10 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
 
       <div className="mb-5 pb-5 border-b border-gray-100">
         <BrandingSection showToast={showToast} onBranding={onBranding} />
+      </div>
+
+      <div className="mb-5 pb-5 border-b border-gray-100">
+        <ParentAccessSection showToast={showToast} />
       </div>
 
       <div className="mb-5 pb-5 border-b border-gray-100">
@@ -266,6 +271,89 @@ function BrandingSection({ showToast, onBranding }) {
   );
 }
 
+// ─── VELİ ERİŞİMİ ───────────────────────────────────────────────────────────────
+function ParentAccessSection({ showToast }) {
+  const [open, setOpen] = useState(false);
+  const [parents, setParents] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try { const d = await api('/api/parents'); setParents(d.parents || []); }
+    catch (e) { showToast(e.message, 'error'); setParents([]); }
+    finally { setLoading(false); }
+  };
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && parents === null) load();
+  };
+
+  const sync = async () => {
+    setSyncing(true);
+    try {
+      const r = await api('/api/parents', { method: 'POST', body: JSON.stringify({ action: 'sync' }) });
+      showToast(`Veli erişimi güncellendi: ${r.created} yeni, ${r.updated} mevcut${r.removed ? `, ${r.removed} kaldırıldı` : ''} · ${r.totalParents} veli / ${r.totalChildren} öğrenci${r.studentsWithoutPhone ? ` (${r.studentsWithoutPhone} öğrencinin veli telefonu yok)` : ''}`);
+      await load();
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { setSyncing(false); }
+  };
+
+  const reset = async (phone) => {
+    try {
+      await api('/api/parents', { method: 'POST', body: JSON.stringify({ action: 'reset', phone }) });
+      showToast('Veli şifresi sıfırlandı (telefon = geçici şifre)');
+      await load();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+          <Users size={13} className="text-pink-500" /> Veli Erişimi
+        </h4>
+        <button onClick={toggle} className="btn-ghost !px-3 !py-1.5 text-xs">{open ? 'Gizle' : 'Göster'}</button>
+      </div>
+
+      {open && (
+        <div className="mt-3">
+          <p className="text-xs text-gray-500 mb-3">
+            Veliler, öğrenci kaydındaki <b>veli telefonu</b> ile giriş yapar. İlk şifre = telefonun kendisi; veli ilk girişte kendi şifresini belirler. Aynı telefona bağlı kardeşler tek girişte görünür. Öğrenci ekledikten sonra tekrar senkronize et.
+          </p>
+          <button onClick={sync} disabled={syncing} className="btn-primary !px-4 !py-2 text-sm mb-3">
+            {syncing ? 'Senkronize ediliyor…' : 'Veli erişimini senkronize et'}
+          </button>
+
+          {loading ? (
+            <div className="text-center py-4 text-gray-400 text-sm">Yükleniyor...</div>
+          ) : !parents || parents.length === 0 ? (
+            <div className="text-center py-4 text-gray-400 text-sm">Henüz veli hesabı yok — yukarıdaki düğmeyle oluştur.</div>
+          ) : (
+            <div className="space-y-1.5 max-h-72 overflow-y-auto">
+              {parents.map((p) => (
+                <div key={p.phone} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+                  <div className="min-w-0">
+                    <div className="text-xs font-600 text-gray-800 flex items-center gap-1.5" style={{ fontWeight: 600 }}>
+                      {formatTurkishMobile(p.phone)}
+                      {p.mustChangePassword && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-600 font-600" style={{ fontWeight: 600 }}>ilk giriş bekliyor</span>}
+                    </div>
+                    <div className="text-[11px] text-gray-500 truncate">{p.childrenNames.join(', ')}</div>
+                  </div>
+                  <button onClick={() => reset(p.phone)} className="btn-ghost !px-2.5 !py-1.5 text-[11px] shrink-0">Şifre sıfırla</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[10px] text-gray-400 mt-2">{parents?.length ? `${parents.length} veli hesabı` : ''}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── BİLDİRİM TESTİ ─────────────────────────────────────────────────────────────
 function PushTestSection({ showToast }) {
   const [sending, setSending] = useState(false);
@@ -309,6 +397,8 @@ function AuditLogSection({ showToast }) {
     'finance.delete': { label: 'Finansal kayıt silindi', color: '#dc2626' },
     'auth.resetPassword': { label: 'Şifre sıfırlandı', color: '#d97706' },
     'org.brandingUpdate': { label: 'Kurum markası güncellendi', color: '#6366f1' },
+    'parent.sync': { label: 'Veli erişimi senkronize edildi', color: '#db2777' },
+    'parent.reset': { label: 'Veli şifresi sıfırlandı', color: '#d97706' },
   };
 
   const load = async () => {

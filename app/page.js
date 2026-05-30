@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  BookOpen, LogOut, User, BookMarked, GraduationCap, Shield, Settings, Wallet
+  BookOpen, LogOut, User, BookMarked, GraduationCap, Shield, Settings, Wallet, Users
 } from 'lucide-react';
 import StudentPanel from './_components/StudentPanel';
 import TeacherPanel from './_components/TeacherPanel';
 import AccountantPanel from './_components/AccountantPanel';
+import ParentPanel from './_components/ParentPanel';
 import DirectorPanel, { DirectorSettingsModal } from './_components/DirectorPanel';
 import ChangePasswordModal from './_components/ChangePasswordModal';
 import ForcedPasswordChange from './_components/ForcedPasswordChange';
@@ -201,9 +202,9 @@ function AppContent() {
     </>
   );
 
-  const roleLabel = { director:'Müdür', teacher:'Öğretmen', student:'Öğrenci', accountant:'Muhasebeci' };
-  const roleColor = { director:'#6366f1', teacher:'#22c55e', student:'#f59e0b', accountant:'#0891b2' };
-  const RoleIcon = { director:Shield, teacher:BookMarked, student:GraduationCap, accountant:Wallet };
+  const roleLabel = { director:'Müdür', teacher:'Öğretmen', student:'Öğrenci', accountant:'Muhasebeci', parent:'Veli' };
+  const roleColor = { director:'#6366f1', teacher:'#22c55e', student:'#f59e0b', accountant:'#0891b2', parent:'#db2777' };
+  const RoleIcon = { director:Shield, teacher:BookMarked, student:GraduationCap, accountant:Wallet, parent:Users };
   const Icon = RoleIcon[session.role] || User;
 
   return (
@@ -229,7 +230,7 @@ function AppContent() {
               <span className="text-sm font-500 text-gray-400" style={{ fontWeight:500 }}>{roleLabel[session.role]}</span>
             </div>
             <NotificationButton showToast={showToast} />
-            {(session.role === 'teacher' || session.role === 'student') && (
+            {(session.role === 'teacher' || session.role === 'student' || session.role === 'parent') && (
               <button onClick={() => setShowChangePassword(true)} title="Şifremi Değiştir" className="btn-ghost !px-3 !py-2">
                 <Settings size={14} />
               </button>
@@ -248,6 +249,7 @@ function AppContent() {
         {session.role==='teacher' && <TeacherPanel session={session} showToast={showToast} />}
         {session.role==='student' && <StudentPanel session={session} showToast={showToast} />}
         {session.role==='accountant' && <AccountantPanel session={session} showToast={showToast} />}
+        {session.role==='parent' && <ParentPanel session={session} showToast={showToast} />}
       </main>
       {showChangePassword && (
         <ChangePasswordModal showToast={showToast} onClose={() => setShowChangePassword(false)} />
