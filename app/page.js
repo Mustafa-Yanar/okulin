@@ -13,6 +13,7 @@ import ForcedPasswordChange from './_components/ForcedPasswordChange';
 import NotificationButton from './_components/NotificationButton';
 import { SlotTimesProvider, useSlotTimes } from './_components/SlotTimesContext';
 import { ErrorBoundary, GlobalErrorListener } from './_components/ErrorBoundary';
+import { BRANDING_DEFAULTS, brandGradient } from '@/lib/branding';
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -52,7 +53,7 @@ function FormField({ label, children }) {
 }
 
 // ─── LOGIN SCREEN ──────────────────────────────────────────────────────────────
-function LoginScreen({ onLogin, directorExists, showToast }) {
+function LoginScreen({ onLogin, directorExists, showToast, branding }) {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -83,10 +84,16 @@ function LoginScreen({ onLogin, directorExists, showToast }) {
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="card-elevated w-full max-w-sm p-8">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)' }}>
-            <BookOpen size={28} color="white" />
-          </div>
-          <h1 className="text-2xl font-800 text-gray-900" style={{ fontWeight: 800 }}>Etüt Takip</h1>
+          {branding?.logoUrl ? (
+            <img src={branding.logoUrl} alt={branding.name}
+              className="h-16 w-auto object-contain mx-auto mb-4"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          ) : (
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: brandGradient(branding?.themeColor) }}>
+              <BookOpen size={28} color="white" />
+            </div>
+          )}
+          <h1 className="text-2xl font-800 text-gray-900" style={{ fontWeight: 800 }}>{branding?.shortName || 'Etüt Takip'}</h1>
           <p className="text-sm text-gray-500 mt-1">{mode === 'setup' ? 'Müdür hesabı oluşturun' : 'Hesabınıza giriş yapın'}</p>
         </div>
         <form onSubmit={submit} className="space-y-4">
@@ -127,6 +134,7 @@ function AppContent() {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
   const [directorExists, setDirectorExists] = useState(false);
+  const [branding, setBranding] = useState(BRANDING_DEFAULTS);
   const [toast, setToast] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showDirectorName, setShowDirectorName] = useState(false);
@@ -137,6 +145,12 @@ function AppContent() {
       try {
         const status = await api('/api/auth');
         setDirectorExists(status.directorExists);
+        if (status.branding) {
+          setBranding(status.branding);
+          if (status.branding.themeColor) {
+            document.documentElement.style.setProperty('--brand', status.branding.themeColor);
+          }
+        }
         if (status.session) {
           setSession(status.session);
           // Slot saatlerini Context'e yükle
@@ -165,7 +179,7 @@ function AppContent() {
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-gray-400 text-sm">Yükleniyor...</div></div>;
 
   if (!session) return (
-    <><LoginScreen directorExists={directorExists} onLogin={async (s) => {
+    <><LoginScreen directorExists={directorExists} branding={branding} onLogin={async (s) => {
       setSession(s);
       try {
         const times = await api('/api/slot-times');
@@ -197,10 +211,16 @@ function AppContent() {
       <header className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
-            <img src="/logo.png" alt="Akyazı Çözüm Özel Öğretim Kursu"
-              className="h-[52px] w-auto object-contain shrink-0"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-            <span className="font-800 text-gray-900 text-sm sm:text-base leading-tight truncate" style={{ fontWeight:800 }}>Akyazı Çözüm Özel Öğretim Kursu</span>
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt={branding.name}
+                className="h-[52px] w-auto object-contain shrink-0"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+            ) : (
+              <div className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: brandGradient(branding.themeColor) }}>
+                <BookOpen size={18} color="white" />
+              </div>
+            )}
+            <span className="font-800 text-gray-900 text-sm sm:text-base leading-tight truncate" style={{ fontWeight:800 }}>{branding.name}</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background:'#f3f4f6' }}>
@@ -235,7 +255,11 @@ function AppContent() {
       {showDirectorName && (
         <DirectorSettingsModal current={session.name} showToast={showToast}
           onClose={() => setShowDirectorName(false)}
-          onSave={newName => setSession(s => ({ ...s, name: newName }))} />
+          onSave={newName => setSession(s => ({ ...s, name: newName }))}
+          onBranding={(b) => {
+            setBranding(b);
+            if (b.themeColor) document.documentElement.style.setProperty('--brand', b.themeColor);
+          }} />
       )}
       <Toast toast={toast} />
     </div>

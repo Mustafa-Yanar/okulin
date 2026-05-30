@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { tenantRedis } from '@/lib/tenant';
+import { tenantRedis, rawRedis, currentOrg } from '@/lib/tenant';
+import { normalizeBranding } from '@/lib/branding';
 import { getSession, setSession, clearSession } from '@/lib/auth';
 import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
 import { logAudit, actorFrom } from '@/lib/audit';
@@ -21,7 +22,9 @@ export async function GET() {
   const redis = tenantRedis();
   const session = await getSession();
   const directorExists = await redis.exists('director');
-  return NextResponse.json({ session, directorExists: !!directorExists });
+  // Marka (org kaydı global — t: prefix YOK) — login ekranı + header bunu kullanır.
+  const orgRec = await rawRedis.get(`org:${currentOrg()}`);
+  return NextResponse.json({ session, directorExists: !!directorExists, branding: normalizeBranding(orgRec) });
 }
 
 export async function POST(req) {

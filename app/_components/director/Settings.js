@@ -3,11 +3,12 @@
 // Müdür ayarlar modalı (isim + ders saatleri) ve içindeki bölümler:
 // bildirim testi, denetim kayıtları (audit log), hata kayıtları (error log).
 import React, { useState, useEffect, useMemo } from 'react';
-import { Clock, AlertTriangle } from 'lucide-react';
+import { Clock, AlertTriangle, Palette } from 'lucide-react';
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal } from './shared';
+import { brandGradient } from '@/lib/branding';
 
-export function DirectorSettingsModal({ current, onClose, onSave, showToast }) {
+export function DirectorSettingsModal({ current, onClose, onSave, onBranding, showToast }) {
   const [name, setName] = useState(current || '');
   const [savingName, setSavingName] = useState(false);
 
@@ -132,6 +133,10 @@ export function DirectorSettingsModal({ current, onClose, onSave, showToast }) {
       </div>
 
       <div className="mb-5 pb-5 border-b border-gray-100">
+        <BrandingSection showToast={showToast} onBranding={onBranding} />
+      </div>
+
+      <div className="mb-5 pb-5 border-b border-gray-100">
         <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-2" style={{ fontWeight: 700 }}>Ders Saatleri</h4>
         {timesLoading ? (
           <div className="text-center py-6 text-gray-400 text-sm">Yükleniyor...</div>
@@ -170,6 +175,94 @@ export function DirectorSettingsModal({ current, onClose, onSave, showToast }) {
 
       <PushTestSection showToast={showToast} />
     </Modal>
+  );
+}
+
+// ─── KURUM MARKASI ──────────────────────────────────────────────────────────────
+function BrandingSection({ showToast, onBranding }) {
+  const [name, setName] = useState('');
+  const [shortName, setShortName] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [themeColor, setThemeColor] = useState('#6366f1');
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { branding } = await api('/api/org');
+        setName(branding.name || '');
+        setShortName(branding.shortName === branding.name ? '' : (branding.shortName || ''));
+        setLogoUrl(branding.logoUrl || '');
+        setThemeColor(branding.themeColor || '#6366f1');
+      } catch (e) { showToast(e.message, 'error'); }
+      setLoaded(true);
+    })();
+  }, []);
+
+  const save = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) { showToast('Kurum adı boş olamaz', 'error'); return; }
+    setSaving(true);
+    try {
+      const res = await api('/api/org', {
+        method: 'POST',
+        body: JSON.stringify({ name: name.trim(), shortName: shortName.trim(), logoUrl: logoUrl.trim(), themeColor }),
+      });
+      showToast('Kurum markası güncellendi');
+      if (onBranding && res.branding) onBranding(res.branding);
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div>
+      <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-2 flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+        <Palette size={13} className="text-indigo-500" /> Kurum Markası
+      </h4>
+      {!loaded ? (
+        <div className="text-center py-6 text-gray-400 text-sm">Yükleniyor...</div>
+      ) : (
+        <form onSubmit={save} className="space-y-3">
+          <div className="grid md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Kurum Adı</label>
+              <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Akyazı Çözüm" required />
+            </div>
+            <div>
+              <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Kısa Ad (sekme/PWA)</label>
+              <input className="input" value={shortName} onChange={e => setShortName(e.target.value)} placeholder="(boşsa kurum adı kullanılır)" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Logo Adresi</label>
+            <input className="input" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="/logo.png veya https://..." />
+            <p className="text-[10px] text-gray-400 mt-1">Boş bırakılırsa marka ikonu (renkli simge) gösterilir.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div>
+              <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Tema Rengi</label>
+              <input type="color" value={themeColor} onChange={e => setThemeColor(e.target.value)}
+                className="h-9 w-14 rounded border border-gray-200 bg-white cursor-pointer" aria-label="Tema rengi" />
+            </div>
+            <div className="flex items-center gap-2 mt-4">
+              <span className="text-[11px] text-gray-400">Önizleme:</span>
+              {logoUrl.trim() ? (
+                <img src={logoUrl} alt="" className="h-9 w-auto object-contain" onError={e => { e.currentTarget.style.display = 'none'; }} />
+              ) : (
+                <div className="h-9 w-9 rounded-xl" style={{ background: brandGradient(themeColor) }} />
+              )}
+              <span className="font-800 text-gray-900 text-sm" style={{ fontWeight: 800 }}>{name || 'Kurum'}</span>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button type="submit" className="btn-primary !px-4 !py-2 text-sm" disabled={saving}>
+              {saving ? 'Kaydediliyor…' : 'Markayı Kaydet'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
   );
 }
 
@@ -215,6 +308,7 @@ function AuditLogSection({ showToast }) {
     'finance.update': { label: 'Finansal güncelleme', color: '#6366f1' },
     'finance.delete': { label: 'Finansal kayıt silindi', color: '#dc2626' },
     'auth.resetPassword': { label: 'Şifre sıfırlandı', color: '#d97706' },
+    'org.brandingUpdate': { label: 'Kurum markası güncellendi', color: '#6366f1' },
   };
 
   const load = async () => {
