@@ -1,9 +1,9 @@
 'use client';
 
 // Müdür ayarlar modalı (isim + ders saatleri) ve içindeki bölümler:
-// bildirim testi, denetim kayıtları (audit log).
+// bildirim testi, denetim kayıtları (audit log), hata kayıtları (error log).
 import React, { useState, useEffect, useMemo } from 'react';
-import { Clock } from 'lucide-react';
+import { Clock, AlertTriangle } from 'lucide-react';
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal } from './shared';
 
@@ -164,6 +164,10 @@ export function DirectorSettingsModal({ current, onClose, onSave, showToast }) {
         <AuditLogSection showToast={showToast} />
       </div>
 
+      <div className="mb-5 pb-5 border-b border-gray-100">
+        <ErrorLogSection showToast={showToast} />
+      </div>
+
       <PushTestSection showToast={showToast} />
     </Modal>
   );
@@ -270,6 +274,100 @@ function AuditLogSection({ showToast }) {
             </div>
           )}
           <p className="text-[10px] text-gray-400 mt-2">Son 500 kayıt gösterilir · kayıtlar 90 gün saklanır</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── HATA KAYITLARI (ERROR LOG) ─────────────────────────────────────────────────
+function ErrorLogSection({ showToast }) {
+  const [open, setOpen] = useState(false);
+  const [entries, setEntries] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(null);
+
+  const SOURCE_LABELS = {
+    window: { label: 'Tarayıcı', color: '#dc2626' },
+    unhandledrejection: { label: 'Promise', color: '#ea580c' },
+    react: { label: 'Arayüz', color: '#7c3aed' },
+    manual: { label: 'Bildirilen', color: '#6b7280' },
+  };
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const data = await api('/api/log');
+      setEntries(Array.isArray(data) ? data : []);
+    } catch (e) { showToast(e.message, 'error'); setEntries([]); }
+    finally { setLoading(false); }
+  };
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && entries === null) load();
+  };
+
+  const fmtTime = (iso) => {
+    try {
+      const d = new Date(iso);
+      const tr = new Date(d.getTime() + 3 * 60 * 60 * 1000);
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(tr.getUTCDate())}.${pad(tr.getUTCMonth() + 1)}.${tr.getUTCFullYear()} ${pad(tr.getUTCHours())}:${pad(tr.getUTCMinutes())}`;
+    } catch { return iso; }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+          <AlertTriangle size={13} className="text-amber-500" /> Hata Kayıtları
+        </h4>
+        <div className="flex items-center gap-2">
+          {open && entries && (
+            <button onClick={load} className="btn-ghost !px-2.5 !py-1.5 text-xs" title="Yenile">Yenile</button>
+          )}
+          <button onClick={toggle} className="btn-ghost !px-3 !py-1.5 text-xs">
+            {open ? 'Gizle' : 'Göster'}
+          </button>
+        </div>
+      </div>
+      {open && (
+        <div className="mt-3">
+          {loading ? (
+            <div className="text-center py-6 text-gray-400 text-sm">Yükleniyor...</div>
+          ) : !entries || entries.length === 0 ? (
+            <div className="text-center py-6 text-emerald-600 text-sm">Hata kaydı yok — her şey yolunda.</div>
+          ) : (
+            <div className="space-y-1.5 max-h-80 overflow-y-auto">
+              {entries.map((e, i) => {
+                const meta = SOURCE_LABELS[e.source] || SOURCE_LABELS.manual;
+                const isOpen = expanded === i;
+                return (
+                  <div key={i} className="px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
+                    <button className="flex items-start gap-2 w-full text-left" onClick={() => setExpanded(isOpen ? null : i)}>
+                      <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded font-700 mt-0.5" style={{ background: meta.color + '22', color: meta.color, fontWeight: 700 }}>{meta.label}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs text-gray-800 break-words">{e.message}</div>
+                        <div className="text-[10px] text-gray-400 mt-0.5">
+                          {fmtTime(e.ts)}
+                          {e.userName ? ` · ${e.userName} (${e.role || '?'})` : ' · anonim'}
+                          {e.url ? ` · ${e.url}` : ''}
+                        </div>
+                      </div>
+                    </button>
+                    {isOpen && (e.stack || e.componentStack) && (
+                      <pre className="mt-2 text-[10px] text-gray-500 bg-white border border-gray-100 rounded p-2 overflow-x-auto whitespace-pre-wrap break-words max-h-48">
+{e.stack || ''}{e.componentStack ? `\n--- Bileşen ---${e.componentStack}` : ''}
+                      </pre>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <p className="text-[10px] text-gray-400 mt-2">Son 500 hata · kayıtlar 30 gün saklanır · satıra tıkla → ayrıntı</p>
         </div>
       )}
     </div>

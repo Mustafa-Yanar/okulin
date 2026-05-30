@@ -12,6 +12,7 @@ import ChangePasswordModal from './_components/ChangePasswordModal';
 import ForcedPasswordChange from './_components/ForcedPasswordChange';
 import NotificationButton from './_components/NotificationButton';
 import { SlotTimesProvider, useSlotTimes } from './_components/SlotTimesContext';
+import { ErrorBoundary, GlobalErrorListener } from './_components/ErrorBoundary';
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -104,9 +105,12 @@ function LoginScreen({ onLogin, directorExists, showToast }) {
 // ─── APP ROOT ──────────────────────────────────────────────────────────────────
 export default function App() {
   return (
-    <SlotTimesProvider>
-      <AppContent />
-    </SlotTimesProvider>
+    <ErrorBoundary>
+      <GlobalErrorListener />
+      <SlotTimesProvider>
+        <AppContent />
+      </SlotTimesProvider>
+    </ErrorBoundary>
   );
 }
 
