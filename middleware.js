@@ -1,66 +1,51 @@
 import { NextResponse } from 'next/server';
+import { resolveOrg } from './lib/org';
 
-// ── CSRF koruması (Madde 12) ──────────────────────────────────────────────
-// Mutasyon yapan tüm /api isteklerinde (POST/PUT/DELETE/PATCH) isteğin
-// uygulamanın kendi origin'inden geldiğini doğrular. sameSite:lax cookie'nin
-// üstüne ikinci savunma katmanı (OWASP önerisi).
-//
-// İzin verilenler:
-//  - Mutasyon olmayan metodlar (GET/HEAD/OPTIONS) — serbest
-//  - Authorization: Bearer ... — sunucu-sunucu (cron, backup). Kendi
-//    secret'larıyla zaten korunuyor; bu istekler tarayıcıdan gelmez.
-//  - Origin (yoksa Referer) host'u, isteğin host'u ile eşleşiyorsa
-//
-// Reddedilenler: çapraz-site form/fetch saldırıları → 403.
+// ── Multi-tenant kurum çözümleme + CSRF koruması ──────────────────────────
+// 1) host'tan kurumu (org) bul, request'e `x-org` header'ı olarak SUNUCU otoritesiyle
+//    yaz. Client'ın gönderdiği x-org YOK SAYILIR (güvenlik) — downstream route'lar ve
+//    tenantRedis() bu header'dan kurumu okur.
+// 2) Mutasyon isteklerinde (POST/PUT/DELETE/PATCH) origin/referer host'u doğrula (CSRF).
+//    Bearer (cron/backup, sunucu-sunucu) muaf.
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
 
-export function middleware(req) {
-  if (!MUTATING_METHODS.has(req.method)) {
-    return NextResponse.next();
-  }
-
-  // Sunucu-sunucu çağrılar (cron/backup) Bearer ile korunuyor, tarayıcı kaynaklı değil
-  const authHeader = req.headers.get('authorization');
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    return NextResponse.next();
-  }
-
-  const host = req.headers.get('host');
-  const origin = req.headers.get('origin');
-  const referer = req.headers.get('referer');
-
-  // Origin öncelikli — modern tarayıcılar mutasyon isteklerinde her zaman gönderir
-  const source = origin || referer;
-  if (!source) {
-    return NextResponse.json(
-      { error: 'İstek kaynağı doğrulanamadı (CSRF koruması)' },
-      { status: 403 }
-    );
-  }
-
-  let sourceHost;
-  try {
-    sourceHost = new URL(source).host;
-  } catch {
-    return NextResponse.json(
-      { error: 'Geçersiz istek kaynağı (CSRF koruması)' },
-      { status: 403 }
-    );
-  }
-
-  if (sourceHost !== host) {
-    return NextResponse.json(
-      { error: 'Geçersiz istek kaynağı (CSRF koruması)' },
-      { status: 403 }
-    );
-  }
-
-  return NextResponse.next();
+function csrfFail() {
+  return NextResponse.json(
+    { error: 'Geçersiz istek kaynağı (CSRF koruması)' },
+    { status: 403 }
+  );
 }
 
-// Sadece API rotalarına uygula. /solve (Python çözücü) /api altında olmadığı
-// için zaten kapsam dışı.
+export function middleware(req) {
+  const host = req.headers.get('host');
+  const org = resolveOrg(host);
+
+  // İsteğe x-org'u otoriter olarak yaz (client değeri ezilir).
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set('x-org', org);
+
+  // CSRF — yalnız mutasyon metodlarında
+  if (MUTATING_METHODS.has(req.method)) {
+    const authHeader = req.headers.get('authorization');
+    const isBearer = authHeader && authHeader.startsWith('Bearer ');
+    if (!isBearer) {
+      const source = req.headers.get('origin') || req.headers.get('referer');
+      if (!source) return csrfFail();
+      let sourceHost;
+      try {
+        sourceHost = new URL(source).host;
+      } catch {
+        return csrfFail();
+      }
+      if (sourceHost !== host) return csrfFail();
+    }
+  }
+
+  return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
+// Sadece API rotalarına uygula. /solve (Python çözücü) /api altında olmadığı için kapsam dışı.
 export const config = {
   matcher: '/api/:path*',
 };
