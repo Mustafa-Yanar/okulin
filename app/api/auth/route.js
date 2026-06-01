@@ -11,7 +11,7 @@ import { parseBody, z, zName, zPassword, zNewPassword, zId } from '@/lib/validat
 
 // action'a göre ayrışan gövde — her işlemin yalnız kendi alanları doğrulanır.
 const AuthSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('login'), username: zName, password: zPassword }),
+  z.object({ action: z.literal('login'), username: zName, password: zPassword, role: z.enum(['student', 'parent', 'teacher', 'management']).optional() }),
   z.object({ action: z.literal('setup_director'), username: zName, password: zPassword, name: z.string().max(200).optional() }),
   z.object({ action: z.literal('update_director_name'), name: zName }),
   z.object({ action: z.literal('logout') }),
@@ -46,8 +46,31 @@ export async function POST(req) {
       );
     }
 
+    // Katı rol seçimi + akıllı yönlendirme. Kullanıcı bir rol kartı seçer; bilgileri
+    // doğru ama seçtiği rol hesabın gerçek rolüyle uyuşmuyorsa, doğru girişe yönlendir.
+    // selectedRole yoksa (eski client) kapı devre dışı — geri uyumlu.
+    const selectedRole = parsed.data.role;
+    const CATEGORY_LABEL = { student: 'Öğrenci', parent: 'Veli', teacher: 'Öğretmen', management: 'Yönetim' };
+    function roleCategory(role) {
+      if (role === 'student') return 'student';
+      if (role === 'parent') return 'parent';
+      if (role === 'teacher') return 'teacher';
+      return 'management'; // director, accountant, org_admin, superadmin
+    }
+    function gateMismatch(actualRole) {
+      if (!selectedRole) return null;
+      const actualCat = roleCategory(actualRole);
+      if (actualCat === selectedRole) return null;
+      return NextResponse.json({
+        error: `Bu bilgiler ${CATEGORY_LABEL[actualCat]} hesabına ait. Lütfen "${CATEGORY_LABEL[actualCat]}" girişini kullanın.`,
+        correctRole: actualCat,
+      }, { status: 403 });
+    }
+
     // Kayıttan oturum yanıtı üret (rol bazlı payload).
     async function makeLoginResponse(role, rec) {
+      const gate = gateMismatch(role);
+      if (gate) return gate;
       let payload;
       if (role === 'teacher') {
         const branches = Array.isArray(rec.branches) ? rec.branches
@@ -72,6 +95,7 @@ export async function POST(req) {
     if (superadmin && superadmin.username === username) {
       const ok = await bcrypt.compare(password, superadmin.passwordHash);
       if (ok) {
+        const gate = gateMismatch('superadmin'); if (gate) return gate;
         const res = NextResponse.json({ role: 'superadmin', name: superadmin.name });
         await setSession(res, { role: 'superadmin', id: 'superadmin', name: superadmin.name });
         return res;
@@ -84,6 +108,7 @@ export async function POST(req) {
     if (orgAdmin && orgAdmin.username === username) {
       const ok = await bcrypt.compare(password, orgAdmin.passwordHash);
       if (ok) {
+        const gate = gateMismatch('org_admin'); if (gate) return gate;
         const res = NextResponse.json({ role: 'org_admin', name: orgAdmin.name });
         await setSession(res, { role: 'org_admin', id: 'org_admin', name: orgAdmin.name });
         return res;
@@ -95,6 +120,7 @@ export async function POST(req) {
     if (director && director.username === username) {
       const ok = await bcrypt.compare(password, director.passwordHash);
       if (ok) {
+        const gate = gateMismatch('director'); if (gate) return gate;
         const res = NextResponse.json({ role: 'director', name: director.name });
         await setSession(res, { role: 'director', id: 'director', name: director.name });
         return res;

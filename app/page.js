@@ -56,26 +56,50 @@ function FormField({ label, children }) {
 }
 
 // ─── LOGIN SCREEN ──────────────────────────────────────────────────────────────
+// Katı rol seçimli giriş: kullanıcı önce kim olduğunu seçer (Öğrenci/Veli/Öğretmen/
+// Yönetim), sonra bilgilerini girer. Yanlış rol seçilirse arka uç doğru girişe yönlendirir.
+const LOGIN_ROLES = [
+  { key: 'student',    label: 'Öğrenci',  desc: 'Öğrenci girişi',   icon: GraduationCap, field: 'Kullanıcı Adı', placeholder: 'kullanici_adi',  type: 'text' },
+  { key: 'parent',     label: 'Veli',     desc: 'Veli girişi',      icon: Users,         field: 'Telefon',       placeholder: '05XX XXX XX XX', type: 'tel'  },
+  { key: 'teacher',    label: 'Öğretmen', desc: 'Öğretmen girişi',  icon: BookMarked,    field: 'Kullanıcı Adı', placeholder: 'kullanici_adi',  type: 'text' },
+  { key: 'management', label: 'Yönetim',  desc: 'Müdür / Muhasebe',  icon: Shield,        field: 'Kullanıcı Adı', placeholder: 'kullanici_adi',  type: 'text' },
+];
+
+function BrandHeader({ branding, subtitle }) {
+  return (
+    <div className="text-center mb-7">
+      {branding?.logoUrl ? (
+        <img src={branding.logoUrl} alt={branding.name}
+          className="h-16 w-auto object-contain mx-auto mb-4"
+          onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+      ) : (
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: brandGradient(branding?.themeColor) }}>
+          <BookOpen size={28} color="white" />
+        </div>
+      )}
+      <h1 className="text-2xl font-800 text-gray-900" style={{ fontWeight: 800 }}>{branding?.shortName || 'Etüt Takip'}</h1>
+      <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+    </div>
+  );
+}
+
 function LoginScreen({ onLogin, directorExists, showToast, branding }) {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [mode] = useState(directorExists ? 'login' : 'setup');
+  const [selectedRole, setSelectedRole] = useState(null); // null → rol seçim ekranı
+  const isSetup = !directorExists;
+  const current = LOGIN_ROLES.find(r => r.key === selectedRole);
 
-  const submit = async (e) => {
+  const submitSetup = async (e) => {
     e.preventDefault();
     setLoading(true);
     try {
-      if (mode === 'setup') {
-        await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'setup_director', username, password, name }) });
-        showToast('Müdür hesabı oluşturuldu');
-        const status = await api('/api/auth');
-        onLogin(status.session);
-      } else {
-        const data = await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'login', username, password }) });
-        onLogin(data);
-      }
+      await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'setup_director', username, password, name }) });
+      showToast('Müdür hesabı oluşturuldu');
+      const status = await api('/api/auth');
+      onLogin(status.session);
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -83,38 +107,111 @@ function LoginScreen({ onLogin, directorExists, showToast, branding }) {
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="card-elevated w-full max-w-sm p-8">
-        <div className="text-center mb-8">
-          {branding?.logoUrl ? (
-            <img src={branding.logoUrl} alt={branding.name}
-              className="h-16 w-auto object-contain mx-auto mb-4"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-          ) : (
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: brandGradient(branding?.themeColor) }}>
-              <BookOpen size={28} color="white" />
-            </div>
-          )}
-          <h1 className="text-2xl font-800 text-gray-900" style={{ fontWeight: 800 }}>{branding?.shortName || 'Etüt Takip'}</h1>
-          <p className="text-sm text-gray-500 mt-1">{mode === 'setup' ? 'Müdür hesabı oluşturun' : 'Hesabınıza giriş yapın'}</p>
-        </div>
-        <form onSubmit={submit} className="space-y-4">
-          {mode === 'setup' && (
+  const submitLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ action: 'login', username, password, role: selectedRole }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Yanlış rol → doğru karta geç (bilgiler korunur), kullanıcı tekrar dener.
+        if (data.correctRole && data.correctRole !== selectedRole) {
+          setSelectedRole(data.correctRole);
+        }
+        throw new Error(data.error || 'Giriş başarısız');
+      }
+      onLogin(data);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── İlk kurulum: müdür hesabı oluştur (rol seçimi yok) ──
+  if (isSetup) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="card-elevated w-full max-w-sm p-8">
+          <BrandHeader branding={branding} subtitle="Müdür hesabı oluşturun" />
+          <form onSubmit={submitSetup} className="space-y-4">
             <FormField label="Ad Soyad">
               <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Gökhan Özyurt" required />
             </FormField>
-          )}
-          <FormField label="Kullanıcı Adı">
-            <input className="input" value={username} onChange={e => setUsername(e.target.value)} placeholder="kullanici_adi" required />
+            <FormField label="Kullanıcı Adı">
+              <input className="input" value={username} onChange={e => setUsername(e.target.value)} placeholder="kullanici_adi" required />
+            </FormField>
+            <FormField label="Şifre">
+              <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
+            </FormField>
+            <button className="btn-primary w-full mt-2" disabled={loading}>
+              {loading ? 'Lütfen bekleyin...' : 'Hesap Oluştur'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Rol seçim ekranı ──
+  if (!selectedRole) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="card-elevated w-full max-w-md p-8">
+          <BrandHeader branding={branding} subtitle="Giriş için kim olduğunuzu seçin" />
+          <div className="grid grid-cols-2 gap-3">
+            {LOGIN_ROLES.map(r => {
+              const Icon = r.icon;
+              return (
+                <button key={r.key} onClick={() => { setSelectedRole(r.key); setUsername(''); setPassword(''); }}
+                  className="group flex flex-col items-center gap-2 p-5 rounded-2xl border-2 border-gray-100 hover:border-indigo-400 hover:bg-indigo-50/40 transition-all">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white transition-transform group-hover:scale-105"
+                    style={{ background: brandGradient(branding?.themeColor) }}>
+                    <Icon size={22} />
+                  </div>
+                  <span className="font-700 text-gray-800 text-sm" style={{ fontWeight: 700 }}>{r.label}</span>
+                  <span className="text-[11px] text-gray-400 -mt-1">{r.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Seçili rol için kimlik bilgisi girişi ──
+  const Icon = current.icon;
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="card-elevated w-full max-w-sm p-8">
+        <BrandHeader branding={branding} subtitle={`${current.label} girişi`} />
+        <div className="flex items-center justify-center gap-2 mb-5">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white" style={{ background: brandGradient(branding?.themeColor) }}>
+            <Icon size={17} />
+          </div>
+          <span className="font-700 text-gray-700" style={{ fontWeight: 700 }}>{current.label}</span>
+        </div>
+        <form onSubmit={submitLogin} className="space-y-4">
+          <FormField label={current.field}>
+            <input className="input" type={current.type} value={username} onChange={e => setUsername(e.target.value)} placeholder={current.placeholder} required autoFocus />
           </FormField>
           <FormField label="Şifre">
             <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
           </FormField>
           <button className="btn-primary w-full mt-2" disabled={loading}>
-            {loading ? 'Lütfen bekleyin...' : mode === 'setup' ? 'Hesap Oluştur' : 'Giriş Yap'}
+            {loading ? 'Lütfen bekleyin...' : 'Giriş Yap'}
           </button>
         </form>
+        <button onClick={() => setSelectedRole(null)}
+          className="mt-4 w-full text-center text-xs text-gray-400 hover:text-gray-600 transition-colors">
+          ← Farklı rolle giriş
+        </button>
       </div>
     </div>
   );
