@@ -8,6 +8,10 @@
     {
       "path": "/api/backup",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/payment-reminders",
+      "schedule": "0 6 * * *"
     }
   ],
   "functions": {
