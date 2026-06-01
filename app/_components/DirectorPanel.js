@@ -18,12 +18,13 @@ import HistoryModal from './director/HistoryModal';
 import { StudentList } from './director/StudentList';
 import ProgramEditor from './director/ProgramEditor';
 import { useUrlTab } from './useUrlTab';
+import OptikFormTab from './director/OptikFormTab';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
 export { DirectorSettingsModal } from './director/Settings';
 
 // ─── MAIN DIRECTOR PANEL ────────────────────────────────────────────────────────
 export default function DirectorPanel({ session, showToast }) {
-  const [tab, setTab] = useUrlTab('teachers', ['teachers', 'students', 'yoklama', 'muhasebe']);
+  const [tab, setTab] = useUrlTab('teachers', ['teachers', 'students', 'yoklama', 'muhasebe', 'optik']);
   const [showProgramOlusturucuModal, setShowProgramOlusturucuModal] = useState(false);
   const [showDenemelerModal, setShowDenemelerModal] = useState(false);
   const [teachers, setTeachers] = useState([]);
@@ -118,7 +119,7 @@ export default function DirectorPanel({ session, showToast }) {
   return (
     <div>
       <div className="flex gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">
-        {[['teachers','Öğretmenler'],['students','Rehberlik'],['yoklama','Yoklama'],['muhasebe','💰 Muhasebe']].map(([key,label]) => (
+        {[['teachers','Öğretmenler'],['students','Rehberlik'],['yoklama','Yoklama'],['muhasebe','💰 Muhasebe'],['optik','Optik Form']].map(([key,label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${tab===key?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
             style={{ fontWeight:600 }}>{label}</button>
@@ -289,6 +290,9 @@ export default function DirectorPanel({ session, showToast }) {
 
       {tab === 'muhasebe' && (
         <DirectorMuhasebeTab session={session} showToast={showToast} />
+      )}
+      {tab === 'optik' && (
+        <OptikFormTab showToast={showToast} />
       )}
 
       {/* Modals */}
