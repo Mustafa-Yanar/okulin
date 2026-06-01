@@ -20,6 +20,7 @@ import ProgramEditor from './director/ProgramEditor';
 import { useUrlTab } from './useUrlTab';
 import OptikFormTab from './director/OptikFormTab';
 import ResourceLibrary from './library/ResourceLibrary';
+import { AnnouncementSender } from './announcements/Announcements';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
 export { DirectorSettingsModal } from './director/Settings';
 
@@ -28,8 +29,8 @@ export default function DirectorPanel({ session, showToast }) {
   // Rehber (counselor) = müdür paneli EKSİ muhasebe. Sekme listesi role göre.
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
-    ? ['teachers', 'students', 'yoklama', 'kutuphane']
-    : ['teachers', 'students', 'yoklama', 'muhasebe', 'kutuphane'];
+    ? ['teachers', 'students', 'yoklama', 'kutuphane', 'duyurular']
+    : ['teachers', 'students', 'yoklama', 'muhasebe', 'kutuphane', 'duyurular'];
   const [tab, setTab] = useUrlTab('teachers', validTabs);
   const [showProgramOlusturucuModal, setShowProgramOlusturucuModal] = useState(false);
   const [showDenemelerModal, setShowDenemelerModal] = useState(false);
@@ -126,7 +127,7 @@ export default function DirectorPanel({ session, showToast }) {
   return (
     <div>
       <div className="flex gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">
-        {[['teachers','Öğretmenler'],['students','Rehberlik'],['yoklama','Yoklama'],...(isCounselor ? [] : [['muhasebe','💰 Muhasebe']]),['kutuphane','Kütüphane']].map(([key,label]) => (
+        {[['teachers','Öğretmenler'],['students','Rehberlik'],['yoklama','Yoklama'],...(isCounselor ? [] : [['muhasebe','💰 Muhasebe']]),['kutuphane','Kütüphane'],['duyurular','📢 Duyurular']].map(([key,label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${tab===key?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
             style={{ fontWeight:600 }}>{label}</button>
@@ -301,6 +302,10 @@ export default function DirectorPanel({ session, showToast }) {
       {tab === 'kutuphane' && (
         <ResourceLibrary canManage userRole="director" userId="director"
           branches={allBranches()} showToast={showToast} />
+      )}
+
+      {tab === 'duyurular' && (
+        <AnnouncementSender showToast={showToast} />
       )}
 
       {/* Modals */}

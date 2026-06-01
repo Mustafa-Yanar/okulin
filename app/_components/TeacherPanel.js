@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Calendar, ClipboardList, User, ChevronRight, Users, LayoutGrid, List, GraduationCap, Clock, X, BookOpen
+  Calendar, ClipboardList, User, ChevronRight, Users, LayoutGrid, List, GraduationCap, Clock, X, BookOpen, Megaphone
 } from 'lucide-react';
 import {
   ALL_DAYS,
@@ -14,6 +14,7 @@ import { subjectMatchesBranch } from '@/lib/deneme/branch';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import SlotGrid from './SlotGrid';
 import ResourceLibrary from './library/ResourceLibrary';
+import { AnnouncementInbox } from './announcements/Announcements';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { useSlotTimes } from './SlotTimesContext';
 import { useUrlTab } from './useUrlTab';
@@ -629,7 +630,7 @@ export default function TeacherPanel({ session, showToast }) {
   const [program, setProgram] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama', 'ogrenciler', 'kutuphane']);
+  const [activeTab, setActiveTab] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama', 'ogrenciler', 'kutuphane', 'duyurular']);
   const [viewMode, setViewMode] = useState('table');
   const { slotTimes } = useSlotTimes();
 
@@ -742,6 +743,12 @@ export default function TeacherPanel({ session, showToast }) {
           style={{ fontWeight: 600 }}>
           <BookOpen size={13} /> Kütüphane
         </button>
+        <button
+          onClick={() => setActiveTab('duyurular')}
+          className={`px-4 py-2 text-xs flex items-center gap-1.5 transition-colors font-600 ${activeTab === 'duyurular' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+          style={{ fontWeight: 600 }}>
+          <Megaphone size={13} /> Duyurular
+        </button>
       </div>
 
       {activeTab === 'rezervasyon' && (
@@ -796,6 +803,10 @@ export default function TeacherPanel({ session, showToast }) {
       {activeTab === 'kutuphane' && (
         <ResourceLibrary canManage userRole="teacher" userId={session.id}
           branches={session.branches || []} showToast={showToast} />
+      )}
+
+      {activeTab === 'duyurular' && (
+        <AnnouncementInbox showToast={showToast} />
       )}
     </div>
   );

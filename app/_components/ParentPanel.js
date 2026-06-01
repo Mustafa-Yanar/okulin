@@ -3,12 +3,13 @@
 // Veli paneli — telefon-bazlı: bir veli, parentPhone'u eşleşen tüm çocuklarını görür.
 // Tümü SALT-OKUNUR. Sekmeler: Program (etütler), Ödeme, Rehberlik (konu+deneme+çözülen).
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Calendar, Wallet, BarChart3, ChevronLeft, ChevronRight, Users } from 'lucide-react';
+import { Calendar, Wallet, BarChart3, ChevronLeft, ChevronRight, Users, Megaphone } from 'lucide-react';
 import { StudentBookingsView } from './StudentPanel';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { guidanceSubjectsFor } from './director/shared';
 import { useUrlTab } from './useUrlTab';
+import { AnnouncementInbox } from './announcements/Announcements';
 import { getWeekKey, weekRangeLabel, classLabel } from '@/lib/constants';
 
 async function api(path, opts = {}) {
@@ -150,7 +151,7 @@ function GuidanceView({ child }) {
 export default function ParentPanel({ session, showToast }) {
   const children = useMemo(() => Array.isArray(session.children) ? session.children : [], [session.children]);
   const [childId, setChildId] = useState(children[0]?.id || null);
-  const [tab, setTab] = useUrlTab('program', ['program', 'odeme', 'rehberlik']);
+  const [tab, setTab] = useUrlTab('program', ['program', 'odeme', 'rehberlik', 'duyurular']);
 
   const child = useMemo(() => children.find(c => c.id === childId) || children[0], [children, childId]);
 
@@ -168,6 +169,7 @@ export default function ParentPanel({ session, showToast }) {
     ['program', 'Program', Calendar],
     ['odeme', 'Ödeme', Wallet],
     ['rehberlik', 'Rehberlik', BarChart3],
+    ['duyurular', 'Duyurular', Megaphone],
   ];
 
   return (
@@ -204,6 +206,7 @@ export default function ParentPanel({ session, showToast }) {
       {tab === 'program' && <ProgramView key={child.id} child={child} />}
       {tab === 'odeme' && <PaymentView key={child.id} child={child} />}
       {tab === 'rehberlik' && <GuidanceView key={child.id} child={child} />}
+      {tab === 'duyurular' && <AnnouncementInbox showToast={showToast} />}
     </div>
   );
 }
