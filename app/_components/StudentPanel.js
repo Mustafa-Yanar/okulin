@@ -5,6 +5,7 @@ import {
   BookOpen, Calendar, Clock, Save, X, ClipboardList
 } from 'lucide-react';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
+import ResourceLibrary from './library/ResourceLibrary';
 import { useUrlTab } from './useUrlTab';
 import {
   allowedBranchesForClass,
@@ -463,7 +464,7 @@ export default function StudentPanel({ session, showToast }) {
   const [filterBranch, setFilterBranch] = useState('');
   const [filterTeacher, setFilterTeacher] = useState('');
   const [filterDay, setFilterDay] = useState('');
-  const [tab, setTab] = useUrlTab('available', ['available', 'myBookings', 'rehberlik']);
+  const [tab, setTab] = useUrlTab('available', ['available', 'myBookings', 'rehberlik', 'kutuphane']);
 
   const loadData = useCallback(async (wk) => {
     setLoading(true);
@@ -540,7 +541,7 @@ export default function StudentPanel({ session, showToast }) {
       </div>
 
       <div className="flex gap-1 mb-4 p-1 bg-gray-100 rounded-xl w-fit">
-        {[['available','Müsait Etütler'],['myBookings','Etütlerim'],['rehberlik','Rehberlik']].map(([key,label]) => (
+        {[['available','Müsait Etütler'],['myBookings','Etütlerim'],['rehberlik','Rehberlik'],['kutuphane','Kütüphane']].map(([key,label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${tab===key?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
             style={{ fontWeight: 600 }}>
@@ -559,6 +560,8 @@ export default function StudentPanel({ session, showToast }) {
         />
       ) : tab === 'myBookings' ? (
         <StudentBookingsView student={{ id: session.id }} allSlots={allSlots} onCancel={handleCancel} />
+      ) : tab === 'kutuphane' ? (
+        <ResourceLibrary canManage={false} userRole="student" userId={session.id} showToast={showToast} />
       ) : (
         <div>
           {/* Filters Bar */}

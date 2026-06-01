@@ -9,7 +9,7 @@ import DirectorDenemeYonetimi from './rehberlik/DirectorDenemeYonetimi';
 import ProgramOlusturucu from './program/ProgramOlusturucu';
 import { TeacherBookingsList } from './TeacherPanel';
 
-import { ALL_DAYS, classLabel, getWeekKey, slotsForDay } from '@/lib/constants';
+import { ALL_DAYS, classLabel, getWeekKey, slotsForDay, allBranches } from '@/lib/constants';
 import { GROUPS, api, Modal, getAdjacentWeek, WeekNav } from './director/shared';
 import { TeacherForm, StudentForm, ImportModal } from './director/Forms';
 import { DirectorAttendanceView } from './director/Attendance';
@@ -19,12 +19,13 @@ import { StudentList } from './director/StudentList';
 import ProgramEditor from './director/ProgramEditor';
 import { useUrlTab } from './useUrlTab';
 import OptikFormTab from './director/OptikFormTab';
+import ResourceLibrary from './library/ResourceLibrary';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
 export { DirectorSettingsModal } from './director/Settings';
 
 // ─── MAIN DIRECTOR PANEL ────────────────────────────────────────────────────────
 export default function DirectorPanel({ session, showToast }) {
-  const [tab, setTab] = useUrlTab('teachers', ['teachers', 'students', 'yoklama', 'muhasebe', 'optik']);
+  const [tab, setTab] = useUrlTab('teachers', ['teachers', 'students', 'yoklama', 'muhasebe', 'optik', 'kutuphane']);
   const [showProgramOlusturucuModal, setShowProgramOlusturucuModal] = useState(false);
   const [showDenemelerModal, setShowDenemelerModal] = useState(false);
   const [teachers, setTeachers] = useState([]);
@@ -119,7 +120,7 @@ export default function DirectorPanel({ session, showToast }) {
   return (
     <div>
       <div className="flex gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">
-        {[['teachers','Öğretmenler'],['students','Rehberlik'],['yoklama','Yoklama'],['muhasebe','💰 Muhasebe'],['optik','Optik Form']].map(([key,label]) => (
+        {[['teachers','Öğretmenler'],['students','Rehberlik'],['yoklama','Yoklama'],['muhasebe','💰 Muhasebe'],['optik','Optik Form'],['kutuphane','Kütüphane']].map(([key,label]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${tab===key?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
             style={{ fontWeight:600 }}>{label}</button>
@@ -293,6 +294,10 @@ export default function DirectorPanel({ session, showToast }) {
       )}
       {tab === 'optik' && (
         <OptikFormTab showToast={showToast} />
+      )}
+      {tab === 'kutuphane' && (
+        <ResourceLibrary canManage userRole="director" userId="director"
+          branches={allBranches()} showToast={showToast} />
       )}
 
       {/* Modals */}
