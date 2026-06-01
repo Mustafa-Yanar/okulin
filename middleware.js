@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { resolveOrg } from './lib/org';
+import { resolveOrg, resolveBranch } from './lib/org';
 
 // ── Multi-tenant kurum çözümleme + CSRF koruması ──────────────────────────
 // 1) host'tan kurumu (org) bul, request'e `x-org` header'ı olarak SUNUCU otoritesiyle
@@ -20,10 +20,12 @@ function csrfFail() {
 export function middleware(req) {
   const host = req.headers.get('host');
   const org = resolveOrg(host);
+  const branch = resolveBranch(host);
 
-  // İsteğe x-org'u otoriter olarak yaz (client değeri ezilir).
+  // İsteğe x-org + x-branch'i otoriter olarak yaz (client değeri ezilir).
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set('x-org', org);
+  requestHeaders.set('x-branch', branch);
 
   // CSRF — yalnız mutasyon metodlarında
   if (MUTATING_METHODS.has(req.method)) {
