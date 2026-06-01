@@ -7,7 +7,7 @@ import { getSession } from '@/lib/auth';
 // Döndürür: { [studentId]: count }
 export async function GET() {
   const session = await getSession();
-  if (!session || session.role !== 'director') {
+  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

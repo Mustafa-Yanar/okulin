@@ -8,7 +8,7 @@ import { rankedList } from '@/lib/deneme/analysis';
 export async function GET(_req, { params }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-  if (session.role !== 'director' && session.role !== 'teacher') {
+  if ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'teacher') {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
@@ -31,7 +31,7 @@ export async function GET(_req, { params }) {
 // Deneme sil (müdür)
 export async function DELETE(_req, { params }) {
   const session = await getSession();
-  if (!session || session.role !== 'director') {
+  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
   await redis.del(dkeys.exam(params.id));

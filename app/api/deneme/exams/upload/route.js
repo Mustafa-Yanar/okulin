@@ -14,7 +14,7 @@ function uuid() {
 // Müdür Excel yükler: parse + isim eşleştirme + deneme kaydı. (Şimdilik TYT)
 export async function POST(req) {
   const session = await getSession();
-  if (!session || session.role !== 'director') {
+  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

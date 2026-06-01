@@ -3,7 +3,7 @@
 // Müdür ayarlar modalı (isim + ders saatleri) ve içindeki bölümler:
 // bildirim testi, denetim kayıtları (audit log), hata kayıtları (error log).
 import React, { useState, useEffect, useMemo } from 'react';
-import { Clock, AlertTriangle, Palette, Users } from 'lucide-react';
+import { Clock, AlertTriangle, Palette, Users, Compass, Plus, Trash2, KeyRound } from 'lucide-react';
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
@@ -142,6 +142,10 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
       </div>
 
       <div className="mb-5 pb-5 border-b border-gray-100">
+        <CounselorSection showToast={showToast} />
+      </div>
+
+      <div className="mb-5 pb-5 border-b border-gray-100">
         <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-2" style={{ fontWeight: 700 }}>Ders Saatleri</h4>
         {timesLoading ? (
           <div className="text-center py-6 text-gray-400 text-sm">Yükleniyor...</div>
@@ -180,6 +184,88 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
 
       <PushTestSection showToast={showToast} />
     </Modal>
+  );
+}
+
+// ─── REHBER PERSONELİ ─────────────────────────────────────────────────────────
+// Müdür rehber hesaplarını oluşturur/siler. Rehber = müdür yetkileri eksi muhasebe.
+function CounselorSection({ showToast }) {
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ name: '', password: '' });
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try { const d = await api('/api/counselors'); setList(Array.isArray(d) ? d : []); }
+    catch { /* sessiz */ } finally { setLoading(false); }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function add(e) {
+    e.preventDefault();
+    if (!form.name.trim() || !form.password) { showToast('İsim ve şifre gerekli', 'error'); return; }
+    setSaving(true);
+    try {
+      await api('/api/counselors', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), password: form.password }) });
+      showToast('Rehber eklendi'); setForm({ name: '', password: '' }); load();
+    } catch (e) { showToast(e.message, 'error'); } finally { setSaving(false); }
+  }
+  async function remove(c) {
+    if (!confirm(`"${c.name}" rehberi silinsin mi?`)) return;
+    try { await api('/api/counselors', { method: 'DELETE', body: JSON.stringify({ id: c.id }) }); showToast('Rehber silindi'); load(); }
+    catch (e) { showToast(e.message, 'error'); }
+  }
+  async function resetPw(c) {
+    const pw = prompt(`${c.name} için yeni şifre (en az 6 karakter):`);
+    if (!pw) return;
+    try {
+      await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'reset_password', targetRole: 'counselor', targetId: c.id, newPassword: pw }) });
+      showToast('Şifre sıfırlandı — rehber ilk girişte değiştirecek');
+    } catch (e) { showToast(e.message, 'error'); }
+  }
+
+  return (
+    <div>
+      <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-1 flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+        <Compass size={13} /> Rehber Personeli
+      </h4>
+      <p className="text-[11px] text-gray-400 mb-3">Rehber, <b>muhasebe hariç</b> müdür yetkilerine sahiptir (program, öğrenci, deneme, optik, rehberlik).</p>
+
+      <form onSubmit={add} className="flex gap-2 items-end mb-3 flex-wrap">
+        <div className="flex-1 min-w-[120px]">
+          <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Ad Soyad</label>
+          <input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Örn: Ayşe Kaya" />
+        </div>
+        <div className="flex-1 min-w-[120px]">
+          <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Şifre</label>
+          <input className="input" type="text" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Şifre" autoComplete="new-password" />
+        </div>
+        <button type="submit" className="btn-primary !px-4 !py-2 text-sm flex items-center gap-1.5" disabled={saving}>
+          <Plus size={13} /> {saving ? 'Ekleniyor…' : 'Ekle'}
+        </button>
+      </form>
+
+      {loading ? (
+        <p className="text-xs text-gray-400">Yükleniyor…</p>
+      ) : list.length === 0 ? (
+        <p className="text-xs text-gray-400">Henüz rehber eklenmemiş.</p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {list.map(c => (
+            <div key={c.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+              <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-700 shrink-0"
+                style={{ background: 'linear-gradient(135deg,#8b5cf6,#6d28d9)', fontWeight: 700 }}>
+                {c.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+              </span>
+              <span className="flex-1 text-sm font-600 text-gray-700 truncate" style={{ fontWeight: 600 }}>{c.name}</span>
+              <button onClick={() => resetPw(c)} title="Şifre sıfırla" className="p-1.5 rounded hover:bg-amber-50 text-amber-600"><KeyRound size={14} /></button>
+              <button onClick={() => remove(c)} title="Sil" className="p-1.5 rounded hover:bg-red-50 text-red-500"><Trash2 size={14} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

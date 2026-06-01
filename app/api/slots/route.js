@@ -95,7 +95,7 @@ export async function POST(req) {
   const existing = await redis.get(key);
   if (existing && existing.disabled) {
     // Müdür forceOpen ile kapalı slotu bu hafta için açıp rezerve edebilir
-    if (!forceOpen || session.role !== 'director') {
+    if (!forceOpen || (session.role !== 'director' && session.role !== 'counselor')) {
       return NextResponse.json({ error: 'Bu saat dilimi kapalıdır' }, { status: 400 });
     }
   }
@@ -126,7 +126,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Sadece kendi slotlarınıza rezervasyon yapabilirsiniz' }, { status: 403 });
     }
     targetStudent = await redis.get(`student:${studentId}`);
-  } else if (session.role === 'director') {
+  } else if ((session.role === 'director' || session.role === 'counselor')) {
     targetStudent = await redis.get(`student:${studentId}`);
   }
 
@@ -179,7 +179,7 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Bu öğrenci aynı gün aynı saatte başka bir etüde kayıtlı' }, { status: 400 });
   }
 
-  if (session.role !== 'director') {
+  if ((session.role !== 'director' && session.role !== 'counselor')) {
     // Kural 2: Aynı dersten (branş) ikinci etüt — müdür bypass edebilir
     const branchConflict = studentSlots.some(s => s.data.branch === bookingBranch);
     if (branchConflict) {

@@ -12,7 +12,7 @@ const DAY_NAMES_TR = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma
 
 export async function GET(req) {
   const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'teacher')) {
+  if (!session || ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'teacher')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

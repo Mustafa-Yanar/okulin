@@ -26,7 +26,7 @@ export async function GET(req) {
 
 export async function POST(req) {
   const session = await getSession();
-  if (!session || session.role !== 'director') {
+  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

@@ -9,7 +9,7 @@ import { getWeekKey, slotKey, getSlotTimes } from '@/lib/slots';
 
 export async function GET(req) {
   const session = await getSession();
-  if (!session || session.role !== 'director') {
+  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

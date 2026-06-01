@@ -15,7 +15,7 @@ const MatchSchema = z.object({
 // body: { matches: [{ excelName, studentId }] }  (boş studentId = eşleşmeyi kaldır)
 export async function POST(req, { params }) {
   const session = await getSession();
-  if (!session || session.role !== 'director') {
+  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

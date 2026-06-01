@@ -26,7 +26,7 @@ export async function GET(req) {
     studentId = session.id;
   } else if (session.role === 'parent') {
     if (!canReadStudent(session, studentId)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  } else if (session.role !== 'director' && session.role !== 'teacher') {
+  } else if ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'teacher') {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
   if (!studentId) return NextResponse.json({ error: 'studentId gerekli' }, { status: 400 });
@@ -49,7 +49,7 @@ export async function POST(req) {
 
   if (session.role === 'student') {
     studentId = session.id;
-  } else if (session.role === 'director') {
+  } else if ((session.role === 'director' || session.role === 'counselor')) {
     if (!studentId) return NextResponse.json({ error: 'studentId gerekli' }, { status: 400 });
   } else {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });

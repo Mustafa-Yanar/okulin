@@ -100,7 +100,7 @@ export async function GET(req) {
 // null veya undefined entry: o slotu temizle (hem şablon hem grid)
 export async function POST(req) {
   const session = await getSession();
-  if (!session || session.role !== 'director') {
+  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
@@ -267,7 +267,7 @@ export async function POST(req) {
 // DELETE /api/program — bir öğretmenin şablon programını tamamen siler
 export async function DELETE(req) {
   const session = await getSession();
-  if (!session || session.role !== 'director') {
+  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

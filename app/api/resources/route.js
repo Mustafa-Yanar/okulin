@@ -37,7 +37,7 @@ export async function GET() {
   let resources = recs;
   if (session.role === 'student') {
     resources = recs.filter(r => Array.isArray(r.classes) && r.classes.includes(session.cls));
-  } else if (session.role !== 'director' && session.role !== 'teacher') {
+  } else if ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'teacher') {
     resources = []; // diğer roller (parent vb.) şimdilik kütüphane görmez
   }
 
@@ -48,7 +48,7 @@ export async function GET() {
 // POST /api/resources — kaynak ekle (director veya teacher)
 export async function POST(req) {
   const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'teacher')) {
+  if (!session || ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'teacher')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
@@ -79,7 +79,7 @@ export async function POST(req) {
 // DELETE /api/resources?id=xxx — kaynak sil (director hepsini, teacher kendininkini)
 export async function DELETE(req) {
   const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'teacher')) {
+  if (!session || ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'teacher')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

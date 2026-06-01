@@ -16,7 +16,7 @@ const AuthSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('update_director_name'), name: zName }),
   z.object({ action: z.literal('logout') }),
   z.object({ action: z.literal('change_password'), password: zPassword, newPassword: zNewPassword }),
-  z.object({ action: z.literal('reset_password'), targetRole: z.enum(['teacher', 'student', 'accountant']), targetId: zId, newPassword: zNewPassword }),
+  z.object({ action: z.literal('reset_password'), targetRole: z.enum(['teacher', 'student', 'accountant', 'counselor']), targetId: zId, newPassword: zNewPassword }),
 ]);
 
 export async function GET() {
@@ -82,8 +82,8 @@ export async function POST(req) {
         const children = Array.isArray(rec.children) ? rec.children : [];
         const name = children.length === 1 ? `${children[0].name} (Veli)` : 'Veli';
         payload = { role: 'parent', id: rec.id, name, children, mustChangePassword: !!rec.mustChangePassword };
-      } else { // accountant
-        payload = { role: 'accountant', id: rec.id, name: rec.name, mustChangePassword: !!rec.mustChangePassword };
+      } else { // accountant veya counselor (rehber) — aynı şekil
+        payload = { role, id: rec.id, name: rec.name, mustChangePassword: !!rec.mustChangePassword };
       }
       const res = NextResponse.json(payload);
       await setSession(res, payload);
@@ -159,7 +159,7 @@ export async function POST(req) {
       }
       return null;
     }
-    for (const role of ['accountant', 'teacher', 'student']) {
+    for (const role of ['accountant', 'counselor', 'teacher', 'student']) {
       const res = await scanRole(role);
       if (res) return res;
     }
@@ -236,6 +236,9 @@ export async function POST(req) {
     if (session.role === 'accountant') {
       return updatePasswordFor('accountant', {});
     }
+    if (session.role === 'counselor') {
+      return updatePasswordFor('counselor', {});
+    }
     if (session.role === 'parent') {
       return updatePasswordFor('parent', { children: session.children });
     }
@@ -274,6 +277,14 @@ export async function POST(req) {
       if (!a) return NextResponse.json({ error: 'Muhasebeci bulunamadı' }, { status: 404 });
       await redis.set(`accountant:${targetId}`, { ...a, passwordHash: hash, mustChangePassword: true });
       await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: 'accountant', id: targetId, name: a.name || targetId }, detail: `Muhasebeci şifresi sıfırlandı: ${a.name || targetId}` });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (targetRole === 'counselor') {
+      const c = await redis.get(`counselor:${targetId}`);
+      if (!c) return NextResponse.json({ error: 'Rehber bulunamadı' }, { status: 404 });
+      await redis.set(`counselor:${targetId}`, { ...c, passwordHash: hash, mustChangePassword: true });
+      await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: 'counselor', id: targetId, name: c.name || targetId }, detail: `Rehber şifresi sıfırlandı: ${c.name || targetId}` });
       return NextResponse.json({ ok: true });
     }
 

@@ -27,7 +27,7 @@ function cleanJson(raw) {
 
 export async function POST(req) {
   const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'superadmin')) {
+  if (!session || ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'superadmin')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

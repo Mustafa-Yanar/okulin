@@ -30,7 +30,7 @@ export async function GET(req) {
     studentId = session.id;
   } else if (session.role === 'parent') {
     if (!canReadStudent(session, studentId)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  } else if (session.role !== 'director' && session.role !== 'teacher') {
+  } else if ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'teacher') {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
   if (!studentId) return NextResponse.json({ error: 'studentId gerekli' }, { status: 400 });
@@ -101,7 +101,7 @@ export async function POST(req) {
 // Müdür onaylar
 export async function PUT(req) {
   const session = await getSession();
-  if (!session || session.role !== 'director') {
+  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
   const parsed = await parseBody(req, GuidanceReviewSchema);

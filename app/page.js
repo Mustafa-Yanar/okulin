@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  BookOpen, LogOut, User, BookMarked, GraduationCap, Shield, Settings, Wallet, Users
+  BookOpen, LogOut, User, BookMarked, GraduationCap, Shield, Settings, Wallet, Users, Compass
 } from 'lucide-react';
 import StudentPanel from './_components/StudentPanel';
 import TeacherPanel from './_components/TeacherPanel';
@@ -317,9 +317,9 @@ function AppContent() {
     </>
   );
 
-  const roleLabel = { director:'Müdür', teacher:'Öğretmen', student:'Öğrenci', accountant:'Muhasebeci', parent:'Veli' };
-  const roleColor = { director:'#6366f1', teacher:'#22c55e', student:'#f59e0b', accountant:'#0891b2', parent:'#db2777' };
-  const RoleIcon = { director:Shield, teacher:BookMarked, student:GraduationCap, accountant:Wallet, parent:Users };
+  const roleLabel = { director:'Müdür', teacher:'Öğretmen', student:'Öğrenci', accountant:'Muhasebeci', parent:'Veli', counselor:'Rehber' };
+  const roleColor = { director:'#6366f1', teacher:'#22c55e', student:'#f59e0b', accountant:'#0891b2', parent:'#db2777', counselor:'#8b5cf6' };
+  const RoleIcon = { director:Shield, teacher:BookMarked, student:GraduationCap, accountant:Wallet, parent:Users, counselor:Compass };
   const Icon = RoleIcon[session.role] || User;
 
   return (
@@ -345,7 +345,7 @@ function AppContent() {
               <span className="text-sm font-500 text-gray-400" style={{ fontWeight:500 }}>{roleLabel[session.role]}</span>
             </div>
             <NotificationButton showToast={showToast} />
-            {(session.role === 'teacher' || session.role === 'student' || session.role === 'parent') && (
+            {(session.role === 'teacher' || session.role === 'student' || session.role === 'parent' || session.role === 'counselor' || session.role === 'accountant') && (
               <button onClick={() => setShowChangePassword(true)} title="Şifremi Değiştir" className="btn-ghost !px-3 !py-2">
                 <Settings size={14} />
               </button>
@@ -360,7 +360,7 @@ function AppContent() {
         </div>
       </header>
       <main className="max-w-5xl mx-auto px-4 py-6">
-        {session.role==='director' && <DirectorPanel session={session} showToast={showToast} />}
+        {(session.role==='director' || session.role==='counselor') && <DirectorPanel session={session} showToast={showToast} />}
         {session.role==='teacher' && <TeacherPanel session={session} showToast={showToast} />}
         {session.role==='student' && <StudentPanel session={session} showToast={showToast} />}
         {session.role==='accountant' && <AccountantPanel session={session} showToast={showToast} />}
