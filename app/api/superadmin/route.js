@@ -74,7 +74,7 @@ const CreateOrgSchema = z.object({
 
 const UpdateOrgSchema = z.object({
   action: z.enum(['toggle_active', 'reset_director', 'rename', 'change_own_password']),
-  slug: z.string().min(2).max(40),
+  slug: z.string().min(2).max(40).optional(),
   // toggle_active: ilave alan yok
   // reset_director / change_own_password:
   currentPassword: zPassword.optional(),
@@ -187,6 +187,7 @@ export async function PATCH(req) {
   if (!parsed.ok) return parsed.response;
   const { action, slug, newPassword, name, shortName } = parsed.data;
 
+  if (!slug) return NextResponse.json({ error: 'slug gerekli' }, { status: 400 });
   const orgRec = await rawRedis.get(`org:${slug}`);
   if (!orgRec) return NextResponse.json({ error: 'Kurum bulunamadı' }, { status: 404 });
 
