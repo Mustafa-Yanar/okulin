@@ -58,5 +58,23 @@ Her özellik/düzeltme tamamlanınca onay beklemeden: değişen dosyaları `git 
 - macOS'ta `timeout` komutu yok; `vercel logs` için arka plan + dosya yönlendirme kullan.
 - Mock/test endpoint prod'da bırakma. Auth token client'a expose etme. `.env.local`/credentials commit etme.
 
+## Sonradan Eklenen Büyük Özellikler (2026-05/06)
+
+Aşağıdaki özellikler projeye eklendi — detay hafıza dosyalarında (`~/.claude/projects/.../memory/`).
+
+- **Multi-tenant:** `t:<org>:<branch>:` Redis prefix. `lib/tenant.js` + `lib/db.js` (Proxy). `lib/org.js` host→org/branch. Middleware x-org/x-branch header. Şu an tek kurum (cozum/main), altyapı hazır.
+- **Roller:** director, counselor (rehber = müdür eksi muhasebe), teacher, student, parent, accountant, org_admin, superadmin. `isManager(session)` = director||counselor. `lib/auth.js`.
+- **Veli paneli:** telefon-bazlı, salt-okunur (program/ödeme/rehberlik/duyurular). İlk şifre = telefon.
+- **Muhasebe:** `app/api/finance/` — öğrenci tahsilatı + `expense/` (kurum giderleri + personel maaş/ek ödeme). `app/_components/finance/`.
+- **LMS Kütüphane:** PDF/video/link kaynakları, Vercel Blob, sınıf bazlı hedefleme. `app/api/resources/`.
+- **Duyuru sistemi:** müdür/rehber → rol×kapsam hedefleme, okundu takibi, push bildirimi. `app/api/announcements/`.
+- **Ödeme altyapısı (PayTR):** BYO-keys model (her kurum kendi hesabını bağlar). `lib/payment/crypto.js` (AES-256-GCM), `lib/payment/paytr.js` (createToken/verifyCallback), `lib/payment/index.js` (sağlayıcı soyutlaması — iyzico sonra eklenir). `lib/finance.js` `applyInstallmentPayment` ortak helper. `app/api/payment/config|start|callback`. Veli panelinde "Öde" butonu + iframe modal. Canlıda test edildi (2026-06-01). **Gerçek PayTR hesabı bekleniyor.**
+- **Cron:** haftalık slot (`0 8 * * 0`), günlük yedek (`0 0 * * *`), günlük ödeme hatırlatma push'u (`0 6 * * *`). `vercel.json`.
+- **Web Push:** `lib/push.js` `sendPushToUser(role, userId, payload)`. VAPID.
+- **Kurum markalama:** `api/org` → `org:<slug>` global kayıt (renk/logo/isim). Dinamik PWA manifest.
+- **`lib/finance.js`:** applyInstallmentPayment — manuel ödeme + online callback ortak helper (çift kredilendirme yok).
+
 ## Mevcut açık işler (Mustafa elle yapacak)
 - Migration sonrası bazı öğretmenlerde fazla branş kaldı (örn matematik öğretmenlerine 4 mat branşı birden; Feyznur Pekin'de eski Sosyal Bilgiler). TeacherForm'dan temizlenmeli.
+- Gerçek PayTR mağaza hesabı aç → Settings'e gir → test_mode'da dene → active aç.
+- Mali müşavire danış: GVK 20/B istisna mı, şahıs şirketi mi (lisans geliri modeli).
