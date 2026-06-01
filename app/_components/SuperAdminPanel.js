@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Trash2, Lock } from 'lucide-react';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -232,6 +232,61 @@ function RenameModal({ org, onClose, onDone }) {
   );
 }
 
+// ── Kendi Şifresini Değiştir Modalı ─────────────────────────────────────────
+
+function ChangeOwnPasswordModal({ onClose, onDone }) {
+  const [form, setForm] = useState({ current: '', next: '', confirm: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  function set(k, v) { setForm(prev => ({ ...prev, [k]: v })); }
+
+  async function submit(e) {
+    e.preventDefault();
+    if (form.next !== form.confirm) { setError('Yeni şifreler eşleşmiyor'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/superadmin', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'change_own_password', currentPassword: form.current, newPassword: form.next }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Hata'); return; }
+      onDone();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="chpw-title">
+        <h2 id="chpw-title" className="text-base font-semibold mb-4">Şifremi Değiştir</h2>
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          <Field label="Mevcut Şifre *" id="cp-current">
+            <Input id="cp-current" required type="password" value={form.current} onChange={e => set('current', e.target.value)} autoComplete="current-password" />
+          </Field>
+          <Field label="Yeni Şifre *" id="cp-next">
+            <Input id="cp-next" required type="password" value={form.next} onChange={e => set('next', e.target.value)} autoComplete="new-password" />
+          </Field>
+          <Field label="Yeni Şifre (Tekrar) *" id="cp-confirm">
+            <Input id="cp-confirm" required type="password" value={form.confirm} onChange={e => set('confirm', e.target.value)} autoComplete="new-password" />
+          </Field>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex gap-2 justify-end mt-1">
+            <button type="button" onClick={onClose} className="px-3 py-1.5 rounded text-sm text-slate-600 hover:bg-slate-100">İptal</button>
+            <button type="submit" disabled={loading} className="px-4 py-1.5 rounded text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
+              {loading ? 'Kaydediliyor…' : 'Değiştir'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Kurum Sil Onay Modalı ────────────────────────────────────────────────────
 
 function DeleteConfirmModal({ org, onClose, onDone }) {
@@ -323,13 +378,22 @@ export default function SuperAdminPanel({ session, onLogout }) {
           <span className="font-semibold">Süper Admin</span>
           <span className="text-indigo-300 text-sm ml-2">— {session?.name}</span>
         </div>
-        <button
-          onClick={onLogout}
-          aria-label="Çıkış yap"
-          className="flex items-center gap-1.5 text-sm text-indigo-200 hover:text-white"
-        >
-          <LogOut size={16} /> Çıkış
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setModal({ type: 'chpw' })}
+            title="Şifremi değiştir"
+            className="flex items-center gap-1.5 text-sm text-indigo-200 hover:text-white"
+          >
+            <Lock size={15} /> Şifre
+          </button>
+          <button
+            onClick={onLogout}
+            aria-label="Çıkış yap"
+            className="flex items-center gap-1.5 text-sm text-indigo-200 hover:text-white"
+          >
+            <LogOut size={16} /> Çıkış
+          </button>
+        </div>
       </header>
 
       <main className="max-w-3xl mx-auto p-4">
@@ -441,6 +505,9 @@ export default function SuperAdminPanel({ session, onLogout }) {
       )}
       {modal?.type === 'delete' && (
         <DeleteConfirmModal org={modal.org} onClose={closeModal} onDone={afterAction} />
+      )}
+      {modal?.type === 'chpw' && (
+        <ChangeOwnPasswordModal onClose={closeModal} onDone={() => { setModal(null); }} />
       )}
     </div>
   );

@@ -73,10 +73,11 @@ const CreateOrgSchema = z.object({
 });
 
 const UpdateOrgSchema = z.object({
-  action: z.enum(['toggle_active', 'reset_director', 'rename']),
+  action: z.enum(['toggle_active', 'reset_director', 'rename', 'change_own_password']),
   slug: z.string().min(2).max(40),
   // toggle_active: ilave alan yok
-  // reset_director:
+  // reset_director / change_own_password:
+  currentPassword: zPassword.optional(),
   newPassword: zPassword.optional(),
   // rename:
   name: z.string().min(1).max(120).optional(),
@@ -209,6 +210,18 @@ export async function PATCH(req) {
     const next = { ...orgRec, name };
     if (shortName !== undefined) next.shortName = shortName || undefined;
     await rawRedis.set(`org:${slug}`, next);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (action === 'change_own_password') {
+    const { currentPassword, newPassword: newPw } = parsed.data;
+    if (!currentPassword || !newPw) return NextResponse.json({ error: 'currentPassword ve newPassword gerekli' }, { status: 400 });
+    const sa = await rawRedis.get('superadmin');
+    if (!sa) return NextResponse.json({ error: 'Superadmin kaydı bulunamadı' }, { status: 404 });
+    const ok = await bcrypt.compare(currentPassword, sa.passwordHash);
+    if (!ok) return NextResponse.json({ error: 'Mevcut şifre yanlış' }, { status: 401 });
+    const passwordHash = await bcrypt.hash(newPw, 10);
+    await rawRedis.set('superadmin', { ...sa, passwordHash });
     return NextResponse.json({ ok: true });
   }
 
