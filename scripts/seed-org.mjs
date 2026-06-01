@@ -1,13 +1,18 @@
-// Kurum (org) tohumlama scripti — Faz A reset + ileride yeni kurum açma.
-// Upstash REST env'inden okur (URL/TOKEN). Şifre CLI'dan gelir, dosyada DURMAZ.
+// Kurum (org) tohumlama scripti — Faz A reset + yeni kurum açma.
+// Upstash REST env'inden okur (URL/TOKEN). Şifreler CLI'dan gelir, dosyada DURMAZ.
 //
-// Kullanım:
-//   UPSTASH_REDIS_REST_URL=... UPSTASH_REDIS_REST_TOKEN=... \
+// Kullanım (tek şube):
 //   node scripts/seed-org.mjs --org=cozum --name="Akyazı Çözüm" \
-//     --director-user="..." --director-pass="..." --director-name="..." [--force] [--clean-legacy]
+//     --director-user="..." --director-pass="..." [--force] [--clean-legacy]
+//
+// Kullanım (çok şubeli + org_admin):
+//   node scripts/seed-org.mjs --org=final --name="Final Dershanesi" --type=multi \
+//     --director-user="..." --director-pass="..." \
+//     --orgadmin-user="..." --orgadmin-pass="..." [--orgadmin-name="..."]
 //
 // - org registry: `orgs` (set) + `org:<slug>` (global)
 // - director:     `t:<slug>:main:director` (scoped)
+// - org_admin:    `orgadmin:<slug>` (global, yalnız --type=multi)
 // - --clean-legacy: t:/org/orgs dışındaki eski düz anahtarları siler (Faz A temizliği)
 
 import { Redis } from '@upstash/redis';
@@ -25,6 +30,7 @@ const args = Object.fromEntries(process.argv.slice(2).map(a => {
 
 const org = args.org || 'cozum';
 const name = args.name || 'Kurum';
+const type = args.type || 'single';
 const prefix = `t:${org}:main:`;
 
 async function cleanLegacy() {
@@ -42,9 +48,10 @@ async function main() {
   if (args['clean-legacy']) await cleanLegacy();
 
   // org kaydı (global)
+  const createdAt = new Date().toISOString();
   await redis.sadd('orgs', org);
-  await redis.set(`org:${org}`, { slug: org, name, active: true, createdAt: new Date().toISOString() });
-  console.log('org kaydı:', org, '→', name);
+  await redis.set(`org:${org}`, { slug: org, name, active: true, type, createdAt });
+  console.log('org kaydı:', org, '→', name, `[${type}]`);
 
   // director (scoped)
   if (args['director-user'] && args['director-pass']) {
@@ -61,6 +68,30 @@ async function main() {
       console.log('director tohumlandı:', args['director-user']);
     }
   }
+  // Çok şubeli: org_admin + 'main' branch metadata
+  if (type === 'multi') {
+    if (args['orgadmin-user'] && args['orgadmin-pass']) {
+      const orgAdminExists = await redis.exists(`orgadmin:${org}`);
+      if (orgAdminExists && !args.force) {
+        console.log('orgadmin zaten var — atlandı (--force ile ez).');
+      } else {
+        const adminHash = await bcrypt.hash(String(args['orgadmin-pass']), 10);
+        await redis.set(`orgadmin:${org}`, {
+          username: args['orgadmin-user'],
+          passwordHash: adminHash,
+          name: args['orgadmin-name'] || name,
+        });
+        console.log('orgadmin tohumlandı:', args['orgadmin-user']);
+      }
+    } else {
+      console.warn('UYARI: --type=multi verildi ama --orgadmin-user/pass eksik — org_admin oluşturulmadı.');
+    }
+    // Ana şube metadata
+    await redis.sadd(`org:${org}:branches`, 'main');
+    await redis.set(`org:${org}:branch:main`, { slug: 'main', name: 'Ana Şube', active: true, createdAt });
+    console.log('Ana şube (main) kaydı oluşturuldu.');
+  }
+
   console.log('TAMAM. prefix:', prefix);
 }
 

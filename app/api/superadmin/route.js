@@ -38,14 +38,21 @@ export async function GET() {
       themeColor: rec.themeColor || null,
       active: rec.active !== false,
       createdAt: rec.createdAt || null,
+    type: rec.type || 'single',
     };
   }).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
 
-  // Her org için müdür kullanıcı adını al
+  // Her org için müdür kullanıcı adı ve (multi ise) branch sayısını al
   const dPipeline = rawRedis.pipeline();
-  orgs.forEach(o => dPipeline.get(`t:${o.slug}:main:director`));
-  const directors = await dPipeline.exec();
-  orgs.forEach((o, i) => { o.directorUsername = directors[i]?.username || null; });
+  orgs.forEach(o => {
+    dPipeline.get(`t:${o.slug}:main:director`);
+    dPipeline.scard(`org:${o.slug}:branches`);
+  });
+  const dResults = await dPipeline.exec();
+  orgs.forEach((o, i) => {
+    o.directorUsername = dResults[i * 2]?.username || null;
+    o.branchCount = dResults[i * 2 + 1] || (o.type === 'multi' ? 0 : 1);
+  });
 
   return NextResponse.json({ orgs });
 }
@@ -55,9 +62,14 @@ const CreateOrgSchema = z.object({
   slug: z.string().min(2).max(40),
   name: z.string().min(1).max(120),
   shortName: z.string().max(60).optional(),
+  type: z.enum(['single', 'multi']).optional(),
   directorUsername: zName,
   directorPassword: zPassword,
   directorName: z.string().max(200).optional(),
+  // multi-type için org_admin bilgileri
+  orgAdminUsername: zName.optional(),
+  orgAdminPassword: zPassword.optional(),
+  orgAdminName: z.string().max(200).optional(),
 });
 
 const UpdateOrgSchema = z.object({
@@ -78,10 +90,15 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, CreateOrgSchema);
   if (!parsed.ok) return parsed.response;
-  const { slug, name, shortName, directorUsername, directorPassword, directorName } = parsed.data;
+  const { slug, name, shortName, type, directorUsername, directorPassword, directorName,
+    orgAdminUsername, orgAdminPassword, orgAdminName } = parsed.data;
 
   if (!isValidSlug(slug)) {
     return NextResponse.json({ error: 'Geçersiz slug — küçük harf, rakam ve tire, min 2 karakter' }, { status: 400 });
+  }
+  const orgType = type || 'single';
+  if (orgType === 'multi' && (!orgAdminUsername || !orgAdminPassword)) {
+    return NextResponse.json({ error: 'Çok şubeli kurum için org_admin bilgileri zorunlu' }, { status: 400 });
   }
 
   // Çakışma kontrolü
@@ -90,15 +107,17 @@ export async function POST(req) {
 
   // org kaydı (global)
   await rawRedis.sadd('orgs', slug);
+  const createdAt = new Date().toISOString();
   await rawRedis.set(`org:${slug}`, {
     slug,
     name,
     shortName: shortName || undefined,
     active: true,
-    createdAt: new Date().toISOString(),
+    type: orgType,
+    createdAt,
   });
 
-  // müdür (scoped)
+  // Ana şube müdürü (scoped)
   const passwordHash = await bcrypt.hash(directorPassword, 10);
   await rawRedis.set(`t:${slug}:main:director`, {
     username: directorUsername,
@@ -106,7 +125,21 @@ export async function POST(req) {
     name: directorName || name,
   });
 
-  return NextResponse.json({ ok: true, slug });
+  // Çok şubeli: org_admin + 'main' şube metadata
+  if (orgType === 'multi') {
+    const adminHash = await bcrypt.hash(orgAdminPassword, 10);
+    await rawRedis.set(`orgadmin:${slug}`, {
+      username: orgAdminUsername,
+      passwordHash: adminHash,
+      name: orgAdminName || name,
+    });
+    await rawRedis.sadd(`org:${slug}:branches`, 'main');
+    await rawRedis.set(`org:${slug}:branch:main`, {
+      slug: 'main', name: 'Ana Şube', active: true, createdAt,
+    });
+  }
+
+  return NextResponse.json({ ok: true, slug, type: orgType });
 }
 
 // PATCH /api/superadmin — kurum güncelle (aktif/pasif, müdür şifresi, ad)

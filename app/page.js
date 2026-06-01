@@ -9,6 +9,7 @@ import TeacherPanel from './_components/TeacherPanel';
 import AccountantPanel from './_components/AccountantPanel';
 import ParentPanel from './_components/ParentPanel';
 import SuperAdminPanel from './_components/SuperAdminPanel';
+import OrgAdminPanel from './_components/OrgAdminPanel';
 import DirectorPanel, { DirectorSettingsModal } from './_components/DirectorPanel';
 import ChangePasswordModal from './_components/ChangePasswordModal';
 import ForcedPasswordChange from './_components/ForcedPasswordChange';
@@ -188,6 +189,14 @@ function AppContent() {
         updateSlotTimes(times);
       } catch {}
     }} showToast={showToast} /><Toast toast={toast} /></>
+  );
+
+  // Org_admin (genel merkez): kendi layout'u var.
+  if (session.role === 'org_admin') return (
+    <>
+      <OrgAdminPanel session={session} onLogout={logout} />
+      <Toast toast={toast} />
+    </>
   );
 
   // Superadmin: kendi layout'u var, normal header/panel atlanır.

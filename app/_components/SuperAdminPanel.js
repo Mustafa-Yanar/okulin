@@ -34,8 +34,9 @@ function Input({ id, ...props }) {
 
 function NewOrgModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
-    name: '', slug: '', shortName: '',
+    name: '', slug: '', shortName: '', type: 'single',
     directorUsername: '', directorPassword: '', directorName: '',
+    orgAdminUsername: '', orgAdminPassword: '', orgAdminName: '',
   });
   const [slugManual, setSlugManual] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -68,8 +69,8 @@ function NewOrgModal({ onClose, onCreated }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" role="dialog" aria-modal="true" aria-labelledby="new-org-title">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 my-4" role="dialog" aria-modal="true" aria-labelledby="new-org-title">
         <h2 id="new-org-title" className="text-lg font-semibold mb-4">Yeni Kurum Ekle</h2>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <Field label="Kurum Adı *" id="org-name">
@@ -85,8 +86,15 @@ function NewOrgModal({ onClose, onCreated }) {
           <Field label="Kısa Ad" id="org-short">
             <Input id="org-short" value={form.shortName} onChange={e => set('shortName', e.target.value)} placeholder="Çözüm" />
           </Field>
+          <Field label="Kurum Tipi" id="org-type">
+            <select id="org-type" value={form.type} onChange={e => set('type', e.target.value)}
+              className="border border-slate-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <option value="single">Tek Şube (yerel/bağımsız)</option>
+              <option value="multi">Çok Şube (zincir/kurumsal)</option>
+            </select>
+          </Field>
           <hr className="border-slate-200" />
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Müdür Hesabı</p>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Ana Şube Müdürü</p>
           <Field label="Kullanıcı Adı *" id="dir-user">
             <Input id="dir-user" required value={form.directorUsername} onChange={e => set('directorUsername', e.target.value)} />
           </Field>
@@ -96,6 +104,22 @@ function NewOrgModal({ onClose, onCreated }) {
           <Field label="Şifre *" id="dir-pass">
             <Input id="dir-pass" required type="text" value={form.directorPassword} onChange={e => set('directorPassword', e.target.value)} autoComplete="new-password" />
           </Field>
+
+          {form.type === 'multi' && (
+            <>
+              <hr className="border-slate-200" />
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Genel Merkez Hesabı (org_admin)</p>
+              <Field label="Kullanıcı Adı *" id="oa-user">
+                <Input id="oa-user" required value={form.orgAdminUsername} onChange={e => set('orgAdminUsername', e.target.value)} />
+              </Field>
+              <Field label="Ad Soyad" id="oa-name">
+                <Input id="oa-name" value={form.orgAdminName} onChange={e => set('orgAdminName', e.target.value)} />
+              </Field>
+              <Field label="Şifre *" id="oa-pass">
+                <Input id="oa-pass" required type="text" value={form.orgAdminPassword} onChange={e => set('orgAdminPassword', e.target.value)} autoComplete="new-password" />
+              </Field>
+            </>
+          )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -298,6 +322,10 @@ export default function SuperAdminPanel({ session, onLogout }) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium text-slate-800 truncate">{org.name}</span>
                     {org.shortName && <span className="text-xs text-slate-400">({org.shortName})</span>}
+                    {org.type === 'multi'
+                      ? <span className="text-xs bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">Çok Şube</span>
+                      : <span className="text-xs bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded">Tek Şube</span>
+                    }
                     {!org.active && (
                       <span className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">Pasif</span>
                     )}
@@ -305,6 +333,7 @@ export default function SuperAdminPanel({ session, onLogout }) {
                   <div className="text-xs text-slate-400 mt-0.5 flex gap-3 flex-wrap">
                     <span>slug: <code className="font-mono">{org.slug}</code></span>
                     {org.directorUsername && <span>müdür: {org.directorUsername}</span>}
+                    {org.type === 'multi' && <span>{org.branchCount} şube</span>}
                     {org.createdAt && <span>{new Date(org.createdAt).toLocaleDateString('tr-TR')}</span>}
                   </div>
                 </div>

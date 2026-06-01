@@ -78,6 +78,18 @@ export async function POST(req) {
       }
     }
 
+    // Org_admin (kurum-geneli, şube-bağımsız) — rawRedis'te orgadmin:<org> anahtarı.
+    const org = currentOrg();
+    const orgAdmin = await rawRedis.get(`orgadmin:${org}`);
+    if (orgAdmin && orgAdmin.username === username) {
+      const ok = await bcrypt.compare(password, orgAdmin.passwordHash);
+      if (ok) {
+        const res = NextResponse.json({ role: 'org_admin', name: orgAdmin.name });
+        await setSession(res, { role: 'org_admin', id: 'org_admin', name: orgAdmin.name });
+        return res;
+      }
+    }
+
     // Try director (zaten O(1))
     const director = await redis.get('director');
     if (director && director.username === username) {
