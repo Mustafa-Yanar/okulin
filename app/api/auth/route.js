@@ -67,6 +67,17 @@ export async function POST(req) {
       return res;
     }
 
+    // Superadmin (global, kurum-bağımsız) — tenantRedis yerine rawRedis.
+    const superadmin = await rawRedis.get('superadmin');
+    if (superadmin && superadmin.username === username) {
+      const ok = await bcrypt.compare(password, superadmin.passwordHash);
+      if (ok) {
+        const res = NextResponse.json({ role: 'superadmin', name: superadmin.name });
+        await setSession(res, { role: 'superadmin', id: 'superadmin', name: superadmin.name });
+        return res;
+      }
+    }
+
     // Try director (zaten O(1))
     const director = await redis.get('director');
     if (director && director.username === username) {

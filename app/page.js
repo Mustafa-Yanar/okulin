@@ -8,6 +8,7 @@ import StudentPanel from './_components/StudentPanel';
 import TeacherPanel from './_components/TeacherPanel';
 import AccountantPanel from './_components/AccountantPanel';
 import ParentPanel from './_components/ParentPanel';
+import SuperAdminPanel from './_components/SuperAdminPanel';
 import DirectorPanel, { DirectorSettingsModal } from './_components/DirectorPanel';
 import ChangePasswordModal from './_components/ChangePasswordModal';
 import ForcedPasswordChange from './_components/ForcedPasswordChange';
@@ -187,6 +188,14 @@ function AppContent() {
         updateSlotTimes(times);
       } catch {}
     }} showToast={showToast} /><Toast toast={toast} /></>
+  );
+
+  // Superadmin: kendi layout'u var, normal header/panel atlanır.
+  if (session.role === 'superadmin') return (
+    <>
+      <SuperAdminPanel session={session} onLogout={logout} />
+      <Toast toast={toast} />
+    </>
   );
 
   // Zorunlu şifre değiştirme: ilk giriş veya müdür sıfırlamasından sonra
