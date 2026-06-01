@@ -1,51 +1,53 @@
 'use client';
 import { useState, useRef } from 'react';
-import { Upload, ScanLine, Copy, Check } from 'lucide-react';
+import { Upload, ScanLine, Copy, Check, FileText, Image } from 'lucide-react';
 
 const CHOICES = ['A', 'B', 'C', 'D', 'E'];
 
-async function api(path, opts = {}) {
-  const res = await fetch(path, { ...opts, credentials: 'same-origin' });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'İşlem başarısız');
-  return data;
-}
-
 export default function OptikFormTab({ showToast }) {
-  const [preview, setPreview] = useState(null);   // data URL
+  const [preview, setPreview] = useState(null);   // data URL (sadece görüntü için)
+  const [isPdf, setIsPdf] = useState(false);
+  const [fileName, setFileName] = useState('');
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [answers, setAnswers] = useState(null);   // string[] | null
+  const [forms, setForms] = useState(null);       // [{page, answers, total}]
   const [raw, setRaw] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copiedIdx, setCopiedIdx] = useState(null);
   const inputRef = useRef(null);
 
   function onFileChange(e) {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > 5 * 1024 * 1024) { showToast('Dosya 5 MB\'dan büyük', 'error'); return; }
+    if (f.size > 20 * 1024 * 1024) { showToast('Dosya 20 MB\'dan büyük', 'error'); return; }
+    const pdf = f.type === 'application/pdf';
     setFile(f);
-    setAnswers(null);
+    setIsPdf(pdf);
+    setFileName(f.name);
+    setForms(null);
     setRaw('');
-    const reader = new FileReader();
-    reader.onload = ev => setPreview(ev.target.result);
-    reader.readAsDataURL(f);
+    if (!pdf) {
+      const reader = new FileReader();
+      reader.onload = ev => setPreview(ev.target.result);
+      reader.readAsDataURL(f);
+    } else {
+      setPreview(null);
+    }
   }
 
   async function readForm() {
     if (!file) return;
     setLoading(true);
-    setAnswers(null);
+    setForms(null);
     setRaw('');
     try {
-      const form = new FormData();
-      form.append('image', file);
-      const res = await fetch('/api/optik', { method: 'POST', body: form, credentials: 'same-origin' });
+      const fd = new FormData();
+      fd.append('image', file);
+      const res = await fetch('/api/optik', { method: 'POST', body: fd, credentials: 'same-origin' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Hata');
-      if (data.answers) {
-        setAnswers(data.answers);
-        showToast(`${data.total} soru okundu`);
+      if (data.forms) {
+        setForms(data.forms);
+        showToast(`${data.pageCount} form okundu`);
       } else {
         setRaw(data.raw || 'Cevap parse edilemedi');
         showToast('Form okundu ama parse edilemedi — ham çıktıya bakın', 'error');
@@ -57,21 +59,30 @@ export default function OptikFormTab({ showToast }) {
     }
   }
 
-  function setAnswer(idx, val) {
-    setAnswers(prev => { const next = [...prev]; next[idx] = val || null; return next; });
+  function setAnswer(formIdx, ansIdx, val) {
+    setForms(prev => prev.map((f, i) => {
+      if (i !== formIdx) return f;
+      const answers = [...f.answers];
+      answers[ansIdx] = val || null;
+      return { ...f, answers };
+    }));
   }
 
-  async function copyToClipboard() {
-    if (!answers) return;
-    const text = answers.map((a, i) => `${i + 1}. ${a ?? '-'}`).join('\n');
+  async function copyForm(idx) {
+    const f = forms[idx];
+    const text = f.answers.map((a, i) => `${i + 1}. ${a ?? '-'}`).join('\n');
     await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 2000);
   }
 
-  // 5'erli gruplar halinde render
-  function renderAnswerGrid() {
-    if (!answers) return null;
+  function reset() {
+    setFile(null); setPreview(null); setIsPdf(false); setFileName('');
+    setForms(null); setRaw('');
+    if (inputRef.current) inputRef.current.value = '';
+  }
+
+  function renderAnswerGrid(formIdx, answers) {
     const rows = [];
     for (let i = 0; i < answers.length; i += 10) {
       const chunk = answers.slice(i, i + 10);
@@ -84,7 +95,7 @@ export default function OptikFormTab({ showToast }) {
                 <span className="text-xs text-slate-400 w-5 shrink-0 text-right">{idx + 1}.</span>
                 <select
                   value={ans ?? ''}
-                  onChange={e => setAnswer(idx, e.target.value)}
+                  onChange={e => setAnswer(formIdx, idx, e.target.value)}
                   className="flex-1 text-xs border border-slate-200 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
                 >
                   <option value="">—</option>
@@ -113,14 +124,24 @@ export default function OptikFormTab({ showToast }) {
       >
         {preview ? (
           <img src={preview} alt="Form önizleme" className="max-h-48 mx-auto rounded object-contain" />
+        ) : isPdf ? (
+          <div className="flex flex-col items-center gap-2 text-indigo-500">
+            <FileText size={36} />
+            <p className="text-sm font-medium text-slate-700">{fileName}</p>
+            <p className="text-xs text-slate-400">PDF — tarayıcı çıktısı desteklenir, çok sayfalı toplu okuma</p>
+          </div>
         ) : (
           <div className="flex flex-col items-center gap-2 text-slate-400">
             <Upload size={32} />
-            <p className="text-sm">Optik form fotoğrafını seç</p>
-            <p className="text-xs">jpg, png, webp — max 5 MB</p>
+            <p className="text-sm">Optik form yükle</p>
+            <p className="text-xs flex items-center gap-3">
+              <span className="flex items-center gap-1"><FileText size={12} /> PDF (tarayıcı/MFP)</span>
+              <span className="flex items-center gap-1"><Image size={12} /> JPG/PNG (fotoğraf)</span>
+            </p>
+            <p className="text-xs text-slate-300">Maks 20 MB</p>
           </div>
         )}
-        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onFileChange} />
+        <input ref={inputRef} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="hidden" onChange={onFileChange} />
       </div>
 
       <div className="flex gap-2 mb-6">
@@ -132,11 +153,8 @@ export default function OptikFormTab({ showToast }) {
           <ScanLine size={15} />
           {loading ? 'Okunuyor…' : 'Formu Oku'}
         </button>
-        {preview && (
-          <button
-            onClick={() => { setFile(null); setPreview(null); setAnswers(null); setRaw(''); if (inputRef.current) inputRef.current.value = ''; }}
-            className="px-4 py-2 text-sm text-slate-600 rounded hover:bg-slate-100"
-          >
+        {file && (
+          <button onClick={reset} className="px-4 py-2 text-sm text-slate-600 rounded hover:bg-slate-100">
             Temizle
           </button>
         )}
@@ -150,23 +168,27 @@ export default function OptikFormTab({ showToast }) {
         </div>
       )}
 
-      {/* Cevap tablosu */}
-      {answers && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-600 text-slate-700" style={{ fontWeight: 600 }}>
-              {answers.length} soru — yanlış okunanları düzeltebilirsiniz
-            </p>
-            <button
-              onClick={copyToClipboard}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-slate-100 text-slate-600"
-            >
-              {copied ? <><Check size={13} className="text-green-600" /> Kopyalandı</> : <><Copy size={13} /> Kopyala</>}
-            </button>
-          </div>
-          <div className="flex flex-col gap-2">
-            {renderAnswerGrid()}
-          </div>
+      {/* Form listesi */}
+      {forms && (
+        <div className="flex flex-col gap-6">
+          {forms.map((f, formIdx) => (
+            <div key={formIdx} className="border border-slate-200 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-600 text-slate-700" style={{ fontWeight: 600 }}>
+                  {forms.length > 1 ? `Form ${f.page ?? formIdx + 1}` : 'Cevaplar'} — {f.answers.length} soru
+                </p>
+                <button
+                  onClick={() => copyForm(formIdx)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded hover:bg-slate-100 text-slate-600"
+                >
+                  {copiedIdx === formIdx ? <><Check size={13} className="text-green-600" /> Kopyalandı</> : <><Copy size={13} /> Kopyala</>}
+                </button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {renderAnswerGrid(formIdx, f.answers)}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
