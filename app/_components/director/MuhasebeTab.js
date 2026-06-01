@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Wallet, Edit3, Trash2, X } from 'lucide-react';
 import FinancePanel from '../finance/FinancePanel';
+import ExpensePanel from '../finance/ExpensePanel';
 
 export default function DirectorMuhasebeTab({ session, showToast }) {
   const [subTab, setSubTab] = useState('finance');
@@ -71,7 +72,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
   return (
     <div>
       <div className="flex gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit">
-        {[['finance', '📊 Öğrenci Ödemeleri'], ['accountants', '👤 Muhasebeciler']].map(([k, l]) => (
+        {[['finance', '📊 Öğrenci Ödemeleri'], ['expenses', '💸 Giderler'], ['accountants', '👤 Muhasebeciler']].map(([k, l]) => (
           <button key={k} onClick={() => setSubTab(k)}
             className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${subTab === k ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
             style={{ fontWeight: 600 }}>{l}</button>
@@ -79,6 +80,8 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
       </div>
 
       {subTab === 'finance' && <FinancePanel session={session} showToast={showToast} />}
+
+      {subTab === 'expenses' && <ExpensePanel session={session} showToast={showToast} />}
 
       {subTab === 'accountants' && (
         <div>
