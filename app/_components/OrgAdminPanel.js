@@ -1,8 +1,32 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Users, GraduationCap } from 'lucide-react';
+import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Users, GraduationCap, Copy, Check, Link2 } from 'lucide-react';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+// Şube giriş adresi: main → kurum.domain, diğer → şube.kurum.domain (iki seviyeli).
+// appDomain boşsa (domain bağlı değil) null döner.
+function buildBranchUrl(org, slug, appDomain) {
+  if (!appDomain) return null;
+  const host = slug === 'main' ? `${org}.${appDomain}` : `${slug}.${org}.${appDomain}`;
+  return `https://${host}`;
+}
+
+// Kopyalanabilir link rozeti.
+function CopyableUrl({ url }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
+  }
+  return (
+    <button onClick={copy} title="Linki kopyala"
+      className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 max-w-full">
+      <Link2 size={12} className="shrink-0" />
+      <span className="font-mono truncate">{url.replace(/^https:\/\//, '')}</span>
+      {copied ? <Check size={12} className="text-green-600 shrink-0" /> : <Copy size={12} className="shrink-0" />}
+    </button>
+  );
+}
 
 function Field({ label, id, children }) {
   return (
@@ -25,7 +49,7 @@ function Input({ id, ...props }) {
 
 // ── Yeni Şube Modalı ─────────────────────────────────────────────────────────
 
-function NewBranchModal({ onClose, onCreated }) {
+function NewBranchModal({ onClose, onCreated, org, appDomain }) {
   const [form, setForm] = useState({
     branchSlug: '', name: '',
     directorUsername: '', directorPassword: '', directorName: '',
@@ -63,6 +87,11 @@ function NewBranchModal({ onClose, onCreated }) {
               onChange={e => set('branchSlug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
               placeholder="ankara" />
             <p className="text-xs text-slate-400">Küçük harf, rakam, tire. Örn: ankara, izmir-merkez</p>
+            {form.branchSlug && buildBranchUrl(org, form.branchSlug, appDomain) && (
+              <p className="text-xs text-indigo-600 mt-0.5">
+                Giriş adresi: <code className="font-mono">{buildBranchUrl(org, form.branchSlug, appDomain).replace(/^https:\/\//, '')}</code>
+              </p>
+            )}
           </Field>
           <Field label="Şube Adı *" id="b-name">
             <Input id="b-name" required value={form.name} onChange={e => set('name', e.target.value)} placeholder="Ankara Şubesi" />
@@ -262,6 +291,12 @@ export default function OrgAdminPanel({ session, onLogout }) {
           </div>
         )}
 
+        {!loading && data && !data.appDomain && (
+          <div className="mb-4 text-xs text-slate-500 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Domain henüz bağlı değil. Bağlandığında (APP_DOMAIN) her şubenin dağıtılabilir giriş linki burada görünecek.
+          </div>
+        )}
+
         {/* Toolbar */}
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-base font-semibold text-slate-700">Şubeler</h1>
@@ -307,6 +342,11 @@ export default function OrgAdminPanel({ session, onLogout }) {
                     <span className="flex items-center gap-1"><GraduationCap size={11} /> {branch.studentCount}</span>
                     <span className="flex items-center gap-1"><Users size={11} /> {branch.teacherCount}</span>
                   </div>
+                  {buildBranchUrl(data.org, branch.slug, data.appDomain) && (
+                    <div className="mt-1">
+                      <CopyableUrl url={buildBranchUrl(data.org, branch.slug, data.appDomain)} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Aksiyonlar */}
@@ -346,7 +386,7 @@ export default function OrgAdminPanel({ session, onLogout }) {
 
       {/* Modaller */}
       {modal?.type === 'new' && (
-        <NewBranchModal onClose={closeModal} onCreated={afterAction} />
+        <NewBranchModal onClose={closeModal} onCreated={afterAction} org={data?.org} appDomain={data?.appDomain} />
       )}
       {modal?.type === 'reset' && (
         <ResetPasswordModal branch={modal.branch} onClose={closeModal} onDone={afterAction} />

@@ -67,7 +67,10 @@ export async function GET() {
 
   const orgRec = await rawRedis.get(`org:${org}`);
 
-  return NextResponse.json({ org, orgName: orgRec?.name || org, branches });
+  // Şube giriş linklerini panelde göstermek için public domain (boşsa link gösterilmez).
+  const appDomain = process.env.APP_DOMAIN || '';
+
+  return NextResponse.json({ org, orgName: orgRec?.name || org, branches, appDomain });
 }
 
 const HQActionSchema = z.discriminatedUnion('action', [
