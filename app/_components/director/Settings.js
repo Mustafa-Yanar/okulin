@@ -3,7 +3,7 @@
 // Müdür ayarlar modalı (isim + ders saatleri) ve içindeki bölümler:
 // bildirim testi, denetim kayıtları (audit log), hata kayıtları (error log).
 import React, { useState, useEffect, useMemo } from 'react';
-import { Clock, AlertTriangle, Palette, Users, Compass, Plus, Trash2, KeyRound } from 'lucide-react';
+import { Clock, AlertTriangle, Palette, Users, Compass, Plus, Trash2, KeyRound, CreditCard } from 'lucide-react';
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
@@ -146,6 +146,10 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
       </div>
 
       <div className="mb-5 pb-5 border-b border-gray-100">
+        <PaymentSection showToast={showToast} />
+      </div>
+
+      <div className="mb-5 pb-5 border-b border-gray-100">
         <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-2" style={{ fontWeight: 700 }}>Ders Saatleri</h4>
         {timesLoading ? (
           <div className="text-center py-6 text-gray-400 text-sm">Yükleniyor...</div>
@@ -264,6 +268,103 @@ function CounselorSection({ showToast }) {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ONLİNE ÖDEME (PayTR) ───────────────────────────────────────────────────────
+// Kurum kendi PayTR mağaza kimlik bilgilerini girer. Para %100 doğrudan kuruma gider.
+// Gizli anahtarlar sunucuda ŞİFRELİ saklanır; burada yalnız "tanımlı mı" gösterilir.
+function PaymentSection({ showToast }) {
+  const [cfg, setCfg] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [merchantId, setMerchantId] = useState('');
+  const [merchantKey, setMerchantKey] = useState('');
+  const [merchantSalt, setMerchantSalt] = useState('');
+  const [testMode, setTestMode] = useState(true);
+  const [active, setActive] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    try {
+      const d = await api('/api/payment/config');
+      setCfg(d);
+      setMerchantId(d.merchantId || '');
+      setTestMode(d.testMode ?? true);
+      setActive(!!d.active);
+    } catch (e) { showToast(e.message, 'error'); }
+    setLoaded(true);
+  };
+  useEffect(() => { load(); }, []);
+
+  const save = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const body = { merchantId: merchantId.trim(), testMode, active };
+      if (merchantKey.trim()) body.merchantKey = merchantKey.trim();
+      if (merchantSalt.trim()) body.merchantSalt = merchantSalt.trim();
+      const r = await api('/api/payment/config', { method: 'POST', body: JSON.stringify(body) });
+      setCfg(r.config);
+      setMerchantKey(''); setMerchantSalt(''); // ekranda secret tutma
+      showToast('Online ödeme ayarları kaydedildi');
+    } catch (err) { showToast(err.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div>
+      <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-1 flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+        <CreditCard size={13} className="text-emerald-600" /> Online Ödeme (PayTR)
+      </h4>
+      <p className="text-[11px] text-gray-400 mb-3">
+        Kurumun <b>kendi PayTR mağaza hesabını</b> bağlar — para doğrudan kuruma gider. Kimlik bilgileri PayTR panelinde <i>Destek &amp; Kurulum → Entegrasyon Bilgileri</i>'nde. Bildirim URL'ini panelde <code>{`${typeof window !== 'undefined' ? window.location.origin : ''}`}/api/payment/callback</code> olarak ayarlayın.
+      </p>
+
+      {!loaded ? (
+        <div className="text-center py-4 text-gray-400 text-sm">Yükleniyor...</div>
+      ) : (
+        <form onSubmit={save} className="space-y-3">
+          <div>
+            <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Merchant ID</label>
+            <input className="input" value={merchantId} onChange={e => setMerchantId(e.target.value)} placeholder="PayTR Mağaza No" />
+          </div>
+          <div className="grid md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>
+                Merchant Key {cfg?.hasKey && <span className="text-emerald-600 normal-case">· kayıtlı</span>}
+              </label>
+              <input className="input" type="password" value={merchantKey} onChange={e => setMerchantKey(e.target.value)}
+                placeholder={cfg?.hasKey ? '•••••• (değiştirmek için yaz)' : 'Merchant Key'} autoComplete="new-password" />
+            </div>
+            <div>
+              <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>
+                Merchant Salt {cfg?.hasSalt && <span className="text-emerald-600 normal-case">· kayıtlı</span>}
+              </label>
+              <input className="input" type="password" value={merchantSalt} onChange={e => setMerchantSalt(e.target.value)}
+                placeholder={cfg?.hasSalt ? '•••••• (değiştirmek için yaz)' : 'Merchant Salt'} autoComplete="new-password" />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+              <input type="checkbox" checked={testMode} onChange={e => setTestMode(e.target.checked)} className="accent-emerald-600" />
+              Test modu (gerçek tahsilat yapmaz)
+            </label>
+            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+              <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} className="accent-emerald-600" />
+              Veli ödemesini aç
+            </label>
+          </div>
+          {active && !testMode && (
+            <p className="text-[11px] text-amber-600">Canlı mod açık — veliler gerçek kart ödemesi yapabilir.</p>
+          )}
+          <div className="flex justify-end">
+            <button type="submit" className="btn-primary !px-4 !py-2 text-sm" disabled={saving}>
+              {saving ? 'Kaydediliyor…' : 'Ödeme Ayarlarını Kaydet'}
+            </button>
+          </div>
+        </form>
       )}
     </div>
   );

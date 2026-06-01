@@ -3,6 +3,7 @@ import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId, zMoney } from '@/lib/validate';
+import { applyInstallmentPayment } from '@/lib/finance';
 
 function canAccess(session) {
   return session && (session.role === 'director' || session.role === 'accountant');
@@ -18,13 +19,6 @@ const PaymentSchema = z.object({
 });
 const PaymentDeleteSchema = z.object({ studentId: zId, paymentId: zId });
 
-// Makbuz numarası üret: MKB-YYYY-00001 formatı
-async function generateReceiptNo() {
-  const year = new Date().getFullYear();
-  const count = await redis.incr('receipt_counter');
-  return `MKB-${year}-${String(count).padStart(5, '0')}`;
-}
-
 export async function POST(req) {
   const session = await getSession();
   if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
@@ -33,66 +27,17 @@ export async function POST(req) {
   if (!parsed.ok) return parsed.response;
   const { studentId, amount, date, method, note, installmentIdx } = parsed.data;
 
-  const record = await redis.get(`finance:${studentId}`);
-  if (!record) return NextResponse.json({ error: 'Finansal kayıt bulunamadı' }, { status: 404 });
+  const result = await applyInstallmentPayment(redis, {
+    studentId, amount, installmentIdx, method, note, date, recordedBy: session.name,
+  });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status || 400 });
 
-  const installments = [...(record.installments || [])];
-
-  // Hedef taksiti belirle: açıkça seçilen ya da (genel ödemede) ilk ödenmemiş.
-  const explicit = installmentIdx !== null && installmentIdx !== undefined && installmentIdx >= 0;
-  let targetIdx = explicit ? installmentIdx : null;
-  if (!explicit && installments.length > 0) {
-    targetIdx = installments.findIndex(inst => !inst.paid);
-  }
-  const targetInst = (targetIdx !== null && targetIdx >= 0) ? installments[targetIdx] : null;
-
-  // Taksit AÇIKÇA seçildiyse HER ZAMAN taksitin tamamı ödenir (kısmi ödeme yok).
-  // Genel ödemede kullanıcının girdiği tutar kullanılır.
-  const payAmount = (explicit && targetInst) ? (parseFloat(targetInst.amount) || 0) : parseFloat(amount);
-  if (!payAmount || payAmount <= 0) {
-    return NextResponse.json({ error: 'Geçersiz ödeme tutarı' }, { status: 400 });
-  }
-
-  const receiptNo = await generateReceiptNo();
-  const paymentDate = date || new Date().toISOString().slice(0, 10);
-
-  const payment = {
-    id: Math.random().toString(36).slice(2, 10),
-    date: paymentDate,
-    amount: payAmount,
-    method: method || 'Nakit',
-    note: note || '',
-    receiptNo,
-    recordedBy: session.name,
-  };
-
-  const payments = [...(record.payments || []), payment];
-  const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
-  const balance = record.netFee - totalPaid;
-
-  // Taksiti "ödendi" işaretle: açık seçimde her zaman; genel ödemede yalnız tam karşılanıyorsa.
-  if (targetInst) {
-    const due = parseFloat(targetInst.amount) || 0;
-    if (explicit || due <= 0 || payAmount + 0.01 >= due) {
-      installments[targetIdx] = {
-        ...targetInst,
-        paid: true,
-        paidDate: paymentDate,
-        paidAmount: payAmount,
-        method: method || 'Nakit',
-        receiptNo,
-      };
-    }
-  }
-
-  const updated = { ...record, payments, installments, balance };
-  await redis.set(`finance:${studentId}`, updated);
-
+  const { record, payment, balance, receiptNo } = result;
   await logAudit({
     ...actorFrom(session),
     action: 'finance.payment',
     target: { type: 'student', id: studentId, name: record.studentName || studentId },
-    detail: `Ödeme alındı: ${record.studentName || studentId} — ${payAmount} TL (${method || 'Nakit'}), makbuz ${receiptNo}. Kalan bakiye: ${balance} TL`,
+    detail: `Ödeme alındı: ${record.studentName || studentId} — ${payment.amount} TL (${method || 'Nakit'}), makbuz ${receiptNo}. Kalan bakiye: ${balance} TL`,
   });
 
   return NextResponse.json({ ok: true, payment, balance, receiptNo });
