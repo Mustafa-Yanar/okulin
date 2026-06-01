@@ -31,7 +31,10 @@ export function middleware(req) {
   if (MUTATING_METHODS.has(req.method)) {
     const authHeader = req.headers.get('authorization');
     const isBearer = authHeader && authHeader.startsWith('Bearer ');
-    if (!isBearer) {
+    // Ödeme sağlayıcı callback'i (PayTR) server-to-server gelir, Origin yok —
+    // HMAC hash ile doğrulanır, CSRF'ten muaf.
+    const isPaymentCallback = req.nextUrl.pathname === '/api/payment/callback';
+    if (!isBearer && !isPaymentCallback) {
       const source = req.headers.get('origin') || req.headers.get('referer');
       if (!source) return csrfFail();
       let sourceHost;
