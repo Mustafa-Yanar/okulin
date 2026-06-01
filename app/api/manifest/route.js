@@ -11,6 +11,19 @@ export async function GET() {
   const rec = await rawRedis.get(`org:${org}`);
   const b = normalizeBranding(rec);
 
+  // Kuruma özel ikon: iconUrl (varsa) > logoUrl > varsayılan. Custom ikon arbitrer
+  // görsel olabildiğinden (kare olmayabilir) purpose 'any' — maskable kırpma yok.
+  const customIcon = (rec?.iconUrl || rec?.logoUrl || '').trim();
+  const icons = customIcon
+    ? [
+        { src: customIcon, sizes: '192x192', purpose: 'any' },
+        { src: customIcon, sizes: '512x512', purpose: 'any' },
+      ]
+    : [
+        { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+        { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      ];
+
   const manifest = {
     name: b.name,
     short_name: b.shortName,
@@ -20,11 +33,7 @@ export async function GET() {
     background_color: '#f8fafc',
     theme_color: b.themeColor,
     orientation: 'portrait',
-    // İkonlar şimdilik varsayılan (kuruma özel ikon yüklemesi ileride — ad/renk dinamik yeter).
-    icons: [
-      { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
-      { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
-    ],
+    icons,
   };
 
   return new Response(JSON.stringify(manifest), {

@@ -18,10 +18,16 @@ const getBranding = cache(async () => {
 
 export async function generateMetadata() {
   const b = await getBranding();
+  // Kuruma özel ikon: logo varsa onu kullan (iOS apple-touch + genel), yoksa varsayılan.
+  const icon = b.logoUrl || '';
   return {
     title: b.name,
     description: 'Etüt takip ve rezervasyon sistemi',
     manifest: '/api/manifest',
+    icons: {
+      icon: icon || '/icon-192.png',
+      apple: icon || '/apple-touch-icon.png',
+    },
     appleWebApp: {
       capable: true,
       statusBarStyle: 'default',
@@ -47,7 +53,6 @@ export default function RootLayout({ children }) {
   return (
     <html lang="tr">
       <head>
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <script dangerouslySetInnerHTML={{
           __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js')); }`
         }} />
