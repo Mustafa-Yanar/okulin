@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil } from 'lucide-react';
+import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Trash2 } from 'lucide-react';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -232,6 +232,56 @@ function RenameModal({ org, onClose, onDone }) {
   );
 }
 
+// ── Kurum Sil Onay Modalı ────────────────────────────────────────────────────
+
+function DeleteConfirmModal({ org, onClose, onDone }) {
+  const [confirm, setConfirm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(e) {
+    e.preventDefault();
+    if (confirm !== org.slug) { setError('Slug eşleşmiyor'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/superadmin', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: org.slug }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || 'Hata'); return; }
+      onDone();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+        <h2 id="delete-title" className="text-base font-semibold text-red-600 mb-1">Kurumu Sil</h2>
+        <p className="text-sm text-slate-600 mb-1"><strong>{org.name}</strong> kurumu ve tüm verisi kalıcı olarak silinecek.</p>
+        <p className="text-sm text-slate-500 mb-4">Bu işlem <strong>geri alınamaz</strong>. Onaylamak için slug'ı yazın:</p>
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          <Field label={`Slug: ${org.slug}`} id="del-confirm">
+            <Input id="del-confirm" required value={confirm} onChange={e => setConfirm(e.target.value)} placeholder={org.slug} />
+          </Field>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex gap-2 justify-end mt-1">
+            <button type="button" onClick={onClose} className="px-3 py-1.5 rounded text-sm text-slate-600 hover:bg-slate-100">İptal</button>
+            <button type="submit" disabled={loading || confirm !== org.slug}
+              className="px-4 py-1.5 rounded text-sm bg-red-600 text-white hover:bg-red-700 disabled:opacity-40">
+              {loading ? 'Siliniyor…' : 'Kalıcı Sil'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Ana Panel ────────────────────────────────────────────────────────────────
 
 export default function SuperAdminPanel({ session, onLogout }) {
@@ -360,9 +410,17 @@ export default function SuperAdminPanel({ session, onLogout }) {
                     onClick={() => toggleActive(org)}
                     title={org.active ? 'Pasife al' : 'Aktif et'}
                     aria-label={org.active ? `${org.name} pasife al` : `${org.name} aktif et`}
-                    className={`p-1.5 rounded ${org.active ? 'hover:bg-red-50 text-red-500' : 'hover:bg-green-50 text-green-600'}`}
+                    className={`p-1.5 rounded ${org.active ? 'hover:bg-orange-50 text-orange-500' : 'hover:bg-green-50 text-green-600'}`}
                   >
                     {org.active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                  </button>
+                  <button
+                    onClick={() => setModal({ type: 'delete', org })}
+                    title="Kurumu sil"
+                    aria-label={`${org.name} sil`}
+                    className="p-1.5 rounded hover:bg-red-50 text-red-500"
+                  >
+                    <Trash2 size={15} />
                   </button>
                 </div>
               </div>
@@ -380,6 +438,9 @@ export default function SuperAdminPanel({ session, onLogout }) {
       )}
       {modal?.type === 'rename' && (
         <RenameModal org={modal.org} onClose={closeModal} onDone={afterAction} />
+      )}
+      {modal?.type === 'delete' && (
+        <DeleteConfirmModal org={modal.org} onClose={closeModal} onDone={afterAction} />
       )}
     </div>
   );

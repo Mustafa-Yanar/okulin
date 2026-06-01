@@ -142,6 +142,41 @@ export async function POST(req) {
   return NextResponse.json({ ok: true, slug, type: orgType });
 }
 
+// DELETE /api/superadmin — kurumu ve tüm verisini kalıcı sil
+export async function DELETE(req) {
+  const session = await getSession();
+  if (!requireSuperadmin(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+
+  const parsed = await parseBody(req, z.object({ slug: z.string().min(2).max(40) }));
+  if (!parsed.ok) return parsed.response;
+  const { slug } = parsed.data;
+
+  const exists = await rawRedis.sismember('orgs', slug);
+  if (!exists) return NextResponse.json({ error: 'Kurum bulunamadı' }, { status: 404 });
+
+  // Tüm t:<slug>:* anahtarlarını tara + sil
+  let cursor = '0';
+  let deleted = 0;
+  do {
+    const [next, keys] = await rawRedis.scan(cursor, { match: `t:${slug}:*`, count: 200 });
+    cursor = String(next);
+    if (keys && keys.length > 0) {
+      await rawRedis.del(...keys);
+      deleted += keys.length;
+    }
+  } while (cursor !== '0');
+
+  // Şube metadata anahtarlarını sil
+  const branchMembers = await rawRedis.smembers(`org:${slug}:branches`) || [];
+  const branchKeys = branchMembers.map(b => `org:${slug}:branch:${b}`);
+
+  const globalKeys = [`org:${slug}`, `orgadmin:${slug}`, `org:${slug}:branches`, ...branchKeys];
+  if (globalKeys.length > 0) await rawRedis.del(...globalKeys);
+  await rawRedis.srem('orgs', slug);
+
+  return NextResponse.json({ ok: true, deleted });
+}
+
 // PATCH /api/superadmin — kurum güncelle (aktif/pasif, müdür şifresi, ad)
 export async function PATCH(req) {
   const session = await getSession();
