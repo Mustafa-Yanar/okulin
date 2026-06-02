@@ -349,7 +349,7 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
   const labelCls = 'text-label block mb-1.5';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
       <div role="dialog" aria-modal="true" className="modal w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 sticky top-0 bg-white">
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>

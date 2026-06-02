@@ -136,8 +136,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
           )}
 
           {showForm && (
-            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-              onClick={e => e.target === e.currentTarget && setShowForm(false)}>
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
               <div role="dialog" aria-modal="true" aria-label={editAcc ? 'Muhasebeci düzenle' : 'Yeni muhasebeci'} className="modal w-full max-w-sm">
                 <div className="flex items-center justify-between p-5 border-b border-gray-100">
                   <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>

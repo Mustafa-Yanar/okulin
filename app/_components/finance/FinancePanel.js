@@ -128,7 +128,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" >
       <div role="dialog" aria-modal="true" aria-label="Ödeme ekle" className="modal w-full max-w-md animate-modal-in">
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>Ödeme Ekle — {studentName}</h3>
@@ -288,7 +288,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" >
       <div role="dialog" aria-modal="true" aria-label="Finansal kayıt" className="modal w-full max-w-lg animate-modal-in max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>
