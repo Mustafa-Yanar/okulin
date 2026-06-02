@@ -59,7 +59,7 @@ export function Modal({ title, onClose, children, wide, xwide, lockClose }) {
 }
 
 export function Label({ children, htmlFor }) {
-  return <label htmlFor={htmlFor} className="block text-xs uppercase tracking-wide mb-1.5" style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{children}</label>;
+  return <label htmlFor={htmlFor} className="text-label block mb-1.5">{children}</label>;
 }
 
 // label'ı ilk form elemanı child'ına useId ile bağlar (ekran okuyucu + otomatik doldurma).
@@ -105,7 +105,7 @@ export function WeekNav({ weekKey, onPrev, onNext, canPrev = true, canNext = tru
         className={`btn-ghost !p-2 ${!canPrev ? 'opacity-30 cursor-not-allowed' : ''}`}>
         <ChevronLeft size={16} />
       </button>
-      <span className="text-xs text-gray-700 text-center whitespace-nowrap">
+      <span className="text-caption text-center whitespace-nowrap">
         {startStr} – {endStr}
       </span>
       <button onClick={onNext} disabled={!canNext} aria-label="Sonraki hafta"

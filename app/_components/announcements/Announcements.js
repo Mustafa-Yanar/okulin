@@ -45,23 +45,23 @@ export function AnnouncementSender({ showToast }) {
     <div className="max-w-2xl">
       <Composer showToast={showToast} onSent={load} />
 
-      <h4 className="text-sm font-700 text-gray-700 mt-7 mb-3" style={{ fontWeight: 700 }}>Gönderilen Duyurular</h4>
+      <h4 className="text-subheading mt-7 mb-3">Gönderilen Duyurular</h4>
       {loading ? (
-        <p className="text-sm text-gray-400 py-6 text-center">Yükleniyor…</p>
+        <p className="text-caption py-6 text-center">Yükleniyor…</p>
       ) : list.length === 0 ? (
-        <p className="text-sm text-gray-400 py-6 text-center">Henüz duyuru gönderilmedi.</p>
+        <p className="text-caption py-6 text-center">Henüz duyuru gönderilmedi.</p>
       ) : (
         <div className="flex flex-col gap-2">
           {list.map(a => (
             <div key={a.id} className="border border-gray-200 rounded-xl p-3.5">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-600 text-gray-800 truncate" style={{ fontWeight: 600 }}>{a.title}</p>
-                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{a.body}</p>
+                  <p className="font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{a.title}</p>
+                  <p className="text-body-sm mt-0.5 line-clamp-2">{a.body}</p>
                 </div>
                 <button onClick={() => remove(a)} className="text-gray-300 hover:text-rose-500 shrink-0"><Trash2 size={15} /></button>
               </div>
-              <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-400 flex-wrap">
+              <div className="flex items-center gap-3 mt-2 text-caption flex-wrap">
                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded">{a.audienceLabel}</span>
                 <span className="flex items-center gap-1"><Users size={11} /> {a.recipientCount}</span>
                 <button onClick={() => setDetail(a)} className="flex items-center gap-1 text-indigo-600 hover:underline">
@@ -199,12 +199,12 @@ function ReadDetailModal({ ann, onClose }) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <div className="min-w-0">
             <p className="font-700 truncate" style={{ fontWeight: 700 }}>{ann.title}</p>
-            {data && <p className="text-xs text-gray-400">{readCount}/{data.recipients.length} okudu</p>}
+            {data && <p className="text-caption">{readCount}/{data.recipients.length} okudu</p>}
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
         </div>
         <div className="overflow-y-auto p-2">
-          {!data ? <p className="text-sm text-gray-400 p-3">Yükleniyor…</p> :
+          {!data ? <p className="text-caption p-3">Yükleniyor…</p> :
             data.recipients.map(r => (
               <div key={r.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
                 {r.read ? <MailOpen size={14} className="text-green-600 shrink-0" /> : <Mail size={14} className="text-gray-300 shrink-0" />}
@@ -240,7 +240,7 @@ export function AnnouncementInbox({ showToast }) {
     }
   }
 
-  if (loading) return <p className="text-sm text-gray-400 py-8 text-center">Yükleniyor…</p>;
+  if (loading) return <p className="text-caption py-8 text-center">Yükleniyor…</p>;
   if (list.length === 0) return (
     <div className="text-center py-12 text-gray-400">
       <Megaphone size={36} className="mx-auto mb-2 opacity-40" />
@@ -257,8 +257,8 @@ export function AnnouncementInbox({ showToast }) {
             <button onClick={() => toggle(a)} className="w-full flex items-center gap-2.5 px-4 py-3 text-left">
               {!a.read && <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />}
               <div className="min-w-0 flex-1">
-                <p className={`text-sm truncate ${a.read ? 'font-500 text-gray-700' : 'font-700 text-gray-900'}`} style={{ fontWeight: a.read ? 500 : 700 }}>{a.title}</p>
-                <p className="text-[11px] text-gray-400">{a.senderName} · {fmtDate(a.createdAt)}</p>
+                <p className={`text-sm truncate ${a.read ? 'font-500' : 'font-700'}`} style={{ fontWeight: a.read ? 500 : 700, color: 'var(--text-primary)' }}>{a.title}</p>
+                <p className="text-caption">{a.senderName} · {fmtDate(a.createdAt)}</p>
               </div>
               {open ? <ChevronUp size={16} className="text-gray-400 shrink-0" /> : <ChevronDown size={16} className="text-gray-400 shrink-0" />}
             </button>

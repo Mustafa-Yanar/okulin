@@ -183,7 +183,7 @@ export default function ExpensePanel({ session, showToast }) {
 
       {/* Liste */}
       {loading ? (
-        <p className="text-sm text-gray-400 py-10 text-center">Yükleniyor…</p>
+        <p className="text-caption py-10 text-center">Yükleniyor…</p>
       ) : filteredExpenses.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           {view === 'personnel' ? <Users size={36} className="mx-auto mb-2 opacity-40" /> : <Receipt size={36} className="mx-auto mb-2 opacity-40" />}
@@ -224,8 +224,8 @@ function PersonnelList({ items, onEdit, onDelete }) {
               {(e.personnelName || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-600 text-gray-800 truncate" style={{ fontWeight: 600 }}>{e.personnelName}</div>
-              <div className="text-xs text-gray-400">
+              <div className="font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{e.personnelName}</div>
+              <div className="text-caption">
                 Dönem: {e.period} · Maaş ₺{fmt(e.salary)}
                 {extrasTotal > 0 && <> · Ek ödeme ₺{fmt(extrasTotal)}</>}
                 {e.description && <> · {e.description}</>}
@@ -261,14 +261,14 @@ function GeneralList({ items, onEdit, onDelete }) {
     <div className="grid gap-2">
       {items.map(e => (
         <div key={e.id} className="card px-4 py-3 flex items-center gap-3 hover:shadow-md transition-all">
-          <span className="text-[11px] px-2.5 py-1 rounded-lg font-600 shrink-0" style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 12%, transparent)', color: 'var(--brand,#6366f1)', fontWeight: 600 }}>
+          <span className="badge shrink-0" style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 12%, transparent)', color: 'var(--brand,#6366f1)' }}>
             {e.category}
           </span>
           <div className="flex-1 min-w-0">
-            <div className="font-600 text-gray-800 truncate" style={{ fontWeight: 600 }}>{e.description || e.category}</div>
-            <div className="text-xs text-gray-400">{e.date}</div>
+            <div className="font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{e.description || e.category}</div>
+            <div className="text-caption">{e.date}</div>
           </div>
-          <div className="font-800 text-gray-900 shrink-0" style={{ fontWeight: 800 }}>₺{fmt(e.amount)}</div>
+          <div className="font-800 shrink-0" style={{ fontWeight: 800, color: 'var(--text-primary)' }}>₺{fmt(e.amount)}</div>
           <div className="flex gap-1 shrink-0">
             <button onClick={() => onEdit(e)} className="p-2 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600" title="Düzenle"><Edit3 size={14} /></button>
             <button onClick={() => onDelete(e)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500" title="Sil"><Trash2 size={14} /></button>
@@ -346,7 +346,7 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
     }
   }
 
-  const labelCls = 'block text-xs font-600 text-gray-500 mb-1.5';
+  const labelCls = 'text-label block mb-1.5';
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -362,7 +362,7 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
           {type === 'personnel' ? (
             <>
               <div>
-                <label className={labelCls} style={{ fontWeight: 600 }}>Personel</label>
+                <label className={labelCls}>Personel</label>
                 <input value={personnelName} onChange={e => setPersonnelName(e.target.value)}
                   list="staff-suggestions" placeholder="İsim seç veya yaz"
                   className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
@@ -374,12 +374,12 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelCls} style={{ fontWeight: 600 }}>Dönem (ay)</label>
+                  <label className={labelCls}>Dönem (ay)</label>
                   <input type="month" value={period} onChange={e => setPeriod(e.target.value)}
                     className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
                 </div>
                 <div>
-                  <label className={labelCls} style={{ fontWeight: 600 }}>Maaş (₺)</label>
+                  <label className={labelCls}>Maaş (₺)</label>
                   <input type="number" inputMode="decimal" value={salary} onChange={e => setSalary(e.target.value)} placeholder="0"
                     className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
                 </div>
@@ -388,12 +388,12 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
               {/* Ek ödemeler */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className={labelCls + ' !mb-0'} style={{ fontWeight: 600 }}>Ek Ödemeler</label>
+                  <label className={labelCls + ' !mb-0'}>Ek Ödemeler</label>
                   <button type="button" onClick={addExtra} className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
                     <Plus size={12} /> Satır ekle
                   </button>
                 </div>
-                {extras.length === 0 && <p className="text-[11px] text-gray-400">Prim, avans, ikramiye… (opsiyonel)</p>}
+                {extras.length === 0 && <p className="text-caption">Prim, avans, ikramiye… (opsiyonel)</p>}
                 <div className="space-y-2">
                   {extras.map((x, i) => (
                     <div key={i} className="flex gap-2">
@@ -415,14 +415,14 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
           ) : (
             <>
               <div>
-                <label className={labelCls} style={{ fontWeight: 600 }}>Kategori</label>
+                <label className={labelCls}>Kategori</label>
                 <select value={category} onChange={e => setCategory(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none">
                   {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
-                <label className={labelCls} style={{ fontWeight: 600 }}>Tutar (₺)</label>
+                <label className={labelCls}>Tutar (₺)</label>
                 <input type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0"
                   className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
               </div>
@@ -431,12 +431,12 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls} style={{ fontWeight: 600 }}>Tarih</label>
+              <label className={labelCls}>Tarih</label>
               <input type="date" value={date} onChange={e => setDate(e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
             </div>
             <div>
-              <label className={labelCls} style={{ fontWeight: 600 }}>Açıklama</label>
+              <label className={labelCls}>Açıklama</label>
               <input value={description} onChange={e => setDescription(e.target.value)} placeholder="Opsiyonel"
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
             </div>

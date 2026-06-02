@@ -35,10 +35,10 @@ export default function KonuTakibi({ subjects, editable, studentId }) {
     });
   }
 
-  if (loading) return <div className="text-gray-400 text-sm py-4">Yükleniyor...</div>;
+  if (loading) return <div className="text-caption py-4">Yükleniyor...</div>;
 
   if (!subjects || subjects.length === 0) {
-    return <div className="text-gray-400 text-sm py-4">Bu öğrenci için ders bulunamadı.</div>;
+    return <div className="text-caption py-4">Bu öğrenci için ders bulunamadı.</div>;
   }
 
   return (
@@ -57,7 +57,7 @@ export default function KonuTakibi({ subjects, editable, studentId }) {
               onClick={() => setOpenSubject(open ? null : subject)}
               className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
             >
-              <span className="text-sm font-600 text-gray-700" style={{ fontWeight: 600 }}>
+              <span className="text-sm font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                 {subject}
               </span>
               <span className="flex items-center gap-2">

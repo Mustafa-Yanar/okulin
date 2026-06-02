@@ -28,10 +28,10 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
   return (
     <Modal title="Ayarlar" onClose={onClose} wide>
       <div className="mb-5 pb-5 border-b border-gray-100">
-        <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-2" style={{ fontWeight: 700 }}>Müdür Bilgisi</h4>
+        <h4 className="text-label mb-2">Müdür Bilgisi</h4>
         <form onSubmit={submitName} className="flex gap-2 items-end">
           <div className="flex-1">
-            <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Ad Soyad</label>
+            <label className="text-label block mb-1">Ad Soyad</label>
             <input className="input" aria-label="Müdür ad soyad" value={name} onChange={e => setName(e.target.value)} required />
           </div>
           <button type="submit" className="btn-primary !px-4 !py-2 text-sm" disabled={savingName}>
@@ -109,18 +109,18 @@ function CounselorSection({ showToast }) {
 
   return (
     <div>
-      <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-1 flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+      <h4 className="text-label mb-1 flex items-center gap-1.5">
         <Compass size={13} /> Rehber Personeli
       </h4>
-      <p className="text-[11px] text-gray-400 mb-3">Rehber, <b>muhasebe hariç</b> müdür yetkilerine sahiptir (program, öğrenci, deneme, optik, rehberlik).</p>
+      <p className="text-caption mb-3">Rehber, <b>muhasebe hariç</b> müdür yetkilerine sahiptir (program, öğrenci, deneme, optik, rehberlik).</p>
 
       <form onSubmit={add} className="flex gap-2 items-end mb-3 flex-wrap">
         <div className="flex-1 min-w-[120px]">
-          <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Ad Soyad</label>
+          <label className="text-label block mb-1">Ad Soyad</label>
           <input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Örn: Ayşe Kaya" />
         </div>
         <div className="flex-1 min-w-[120px]">
-          <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Şifre</label>
+          <label className="text-label block mb-1">Şifre</label>
           <input className="input" type="text" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Şifre" autoComplete="new-password" />
         </div>
         <button type="submit" className="btn-primary !px-4 !py-2 text-sm flex items-center gap-1.5" disabled={saving}>
@@ -129,9 +129,9 @@ function CounselorSection({ showToast }) {
       </form>
 
       {loading ? (
-        <p className="text-xs text-gray-400">Yükleniyor…</p>
+        <p className="text-caption">Yükleniyor…</p>
       ) : list.length === 0 ? (
-        <p className="text-xs text-gray-400">Henüz rehber eklenmemiş.</p>
+        <p className="text-caption">Henüz rehber eklenmemiş.</p>
       ) : (
         <div className="flex flex-col gap-1.5">
           {list.map(c => (
@@ -140,7 +140,7 @@ function CounselorSection({ showToast }) {
                 style={{ background: 'linear-gradient(135deg,#8b5cf6,#6d28d9)', fontWeight: 700 }}>
                 {c.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
               </span>
-              <span className="flex-1 text-sm font-600 text-gray-700 truncate" style={{ fontWeight: 600 }}>{c.name}</span>
+              <span className="flex-1 text-sm font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</span>
               <button onClick={() => resetPw(c)} title="Şifre sıfırla" className="p-1.5 rounded hover:bg-amber-50 text-amber-600"><KeyRound size={14} /></button>
               <button onClick={() => remove(c)} title="Sil" className="p-1.5 rounded hover:bg-red-50 text-red-500"><Trash2 size={14} /></button>
             </div>
@@ -193,43 +193,43 @@ function PaymentSection({ showToast }) {
 
   return (
     <div>
-      <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-1 flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+      <h4 className="text-label mb-1 flex items-center gap-1.5">
         <CreditCard size={13} className="text-emerald-600" /> Online Ödeme (PayTR)
       </h4>
-      <p className="text-[11px] text-gray-400 mb-3">
+      <p className="text-caption mb-3">
         Kurumun <b>kendi PayTR mağaza hesabını</b> bağlar — para doğrudan kuruma gider. Kimlik bilgileri PayTR panelinde <i>Destek &amp; Kurulum → Entegrasyon Bilgileri</i>'nde. Bildirim URL'ini panelde <code>{`${typeof window !== 'undefined' ? window.location.origin : ''}`}/api/payment/callback</code> olarak ayarlayın.
       </p>
 
       {!loaded ? (
-        <div className="text-center py-4 text-gray-400 text-sm">Yükleniyor...</div>
+        <div className="text-center py-4 text-caption">Yükleniyor...</div>
       ) : (
         <form onSubmit={save} className="space-y-3">
           <div>
-            <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Merchant ID</label>
+            <label className="text-label block mb-1">Merchant ID</label>
             <input className="input" value={merchantId} onChange={e => setMerchantId(e.target.value)} placeholder="PayTR Mağaza No" />
           </div>
           <div className="grid md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>
-                Merchant Key {cfg?.hasKey && <span className="text-emerald-600 normal-case">· kayıtlı</span>}
+              <label className="text-label block mb-1">
+                Merchant Key {cfg?.hasKey && <span className="text-emerald-600 normal-case font-400">· kayıtlı</span>}
               </label>
               <input className="input" type="password" value={merchantKey} onChange={e => setMerchantKey(e.target.value)}
                 placeholder={cfg?.hasKey ? '•••••• (değiştirmek için yaz)' : 'Merchant Key'} autoComplete="new-password" />
             </div>
             <div>
-              <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>
-                Merchant Salt {cfg?.hasSalt && <span className="text-emerald-600 normal-case">· kayıtlı</span>}
+              <label className="text-label block mb-1">
+                Merchant Salt {cfg?.hasSalt && <span className="text-emerald-600 normal-case font-400">· kayıtlı</span>}
               </label>
               <input className="input" type="password" value={merchantSalt} onChange={e => setMerchantSalt(e.target.value)}
                 placeholder={cfg?.hasSalt ? '•••••• (değiştirmek için yaz)' : 'Merchant Salt'} autoComplete="new-password" />
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-4">
-            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+            <label className="flex items-center gap-2 text-body-sm cursor-pointer">
               <input type="checkbox" checked={testMode} onChange={e => setTestMode(e.target.checked)} className="accent-emerald-600" />
               Test modu (gerçek tahsilat yapmaz)
             </label>
-            <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+            <label className="flex items-center gap-2 text-body-sm cursor-pointer">
               <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} className="accent-emerald-600" />
               Veli ödemesini aç
             </label>
@@ -287,42 +287,42 @@ function BrandingSection({ showToast, onBranding }) {
 
   return (
     <div>
-      <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-2 flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+      <h4 className="text-label mb-2 flex items-center gap-1.5">
         <Palette size={13} className="text-indigo-500" /> Kurum Markası
       </h4>
       {!loaded ? (
-        <div className="text-center py-6 text-gray-400 text-sm">Yükleniyor...</div>
+        <div className="text-center py-6 text-caption">Yükleniyor...</div>
       ) : (
         <form onSubmit={save} className="space-y-3">
           <div className="grid md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Kurum Adı</label>
+              <label className="text-label block mb-1">Kurum Adı</label>
               <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Akyazı Çözüm" required />
             </div>
             <div>
-              <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Kısa Ad (sekme/PWA)</label>
+              <label className="text-label block mb-1">Kısa Ad (sekme/PWA)</label>
               <input className="input" value={shortName} onChange={e => setShortName(e.target.value)} placeholder="(boşsa kurum adı kullanılır)" />
             </div>
           </div>
           <div>
-            <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Logo Adresi</label>
+            <label className="text-label block mb-1">Logo Adresi</label>
             <input className="input" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="/logo.png veya https://..." />
-            <p className="text-[10px] text-gray-400 mt-1">Boş bırakılırsa marka ikonu (renkli simge) gösterilir.</p>
+            <p className="text-caption mt-1">Boş bırakılırsa marka ikonu (renkli simge) gösterilir.</p>
           </div>
           <div className="flex items-center gap-3">
             <div>
-              <label className="block text-[10px] font-600 text-gray-400 uppercase tracking-wide mb-1" style={{ fontWeight: 600 }}>Tema Rengi</label>
+              <label className="text-label block mb-1">Tema Rengi</label>
               <input type="color" value={themeColor} onChange={e => setThemeColor(e.target.value)}
                 className="h-9 w-14 rounded border border-gray-200 bg-white cursor-pointer" aria-label="Tema rengi" />
             </div>
             <div className="flex items-center gap-2 mt-4">
-              <span className="text-[11px] text-gray-400">Önizleme:</span>
+              <span className="text-caption">Önizleme:</span>
               {logoUrl.trim() ? (
                 <img src={logoUrl} alt="" className="h-9 w-auto object-contain" onError={e => { e.currentTarget.style.display = 'none'; }} />
               ) : (
                 <div className="h-9 w-9 rounded-xl" style={{ background: brandGradient(themeColor) }} />
               )}
-              <span className="font-800 text-gray-900 text-sm" style={{ fontWeight: 800 }}>{name || 'Kurum'}</span>
+              <span className="font-800 text-sm" style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{name || 'Kurum'}</span>
             </div>
           </div>
           <div className="flex justify-end">
@@ -377,7 +377,7 @@ function ParentAccessSection({ showToast }) {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+        <h4 className="text-label flex items-center gap-1.5">
           <Users size={13} className="text-pink-500" /> Veli Erişimi
         </h4>
         <button onClick={toggle} className="btn-ghost !px-3 !py-1.5 text-xs">{open ? 'Gizle' : 'Göster'}</button>
@@ -385,7 +385,7 @@ function ParentAccessSection({ showToast }) {
 
       {open && (
         <div className="mt-3">
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="text-body-sm mb-3">
             Veliler, öğrenci kaydındaki <b>veli telefonu</b> ile giriş yapar. İlk şifre = telefonun kendisi; veli ilk girişte kendi şifresini belirler. Aynı telefona bağlı kardeşler tek girişte görünür. Öğrenci ekledikten sonra tekrar senkronize et.
           </p>
           <button onClick={sync} disabled={syncing} className="btn-primary !px-4 !py-2 text-sm mb-3">
@@ -393,26 +393,26 @@ function ParentAccessSection({ showToast }) {
           </button>
 
           {loading ? (
-            <div className="text-center py-4 text-gray-400 text-sm">Yükleniyor...</div>
+            <div className="text-center py-4 text-caption">Yükleniyor...</div>
           ) : !parents || parents.length === 0 ? (
-            <div className="text-center py-4 text-gray-400 text-sm">Henüz veli hesabı yok — yukarıdaki düğmeyle oluştur.</div>
+            <div className="text-center py-4 text-caption">Henüz veli hesabı yok — yukarıdaki düğmeyle oluştur.</div>
           ) : (
             <div className="space-y-1.5 max-h-72 overflow-y-auto">
               {parents.map((p) => (
                 <div key={p.phone} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
                   <div className="min-w-0">
-                    <div className="text-xs font-600 text-gray-800 flex items-center gap-1.5" style={{ fontWeight: 600 }}>
+                    <div className="text-xs font-600 flex items-center gap-1.5" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                       {formatTurkishMobile(p.phone)}
-                      {p.mustChangePassword && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-600 font-600" style={{ fontWeight: 600 }}>ilk giriş bekliyor</span>}
+                      {p.mustChangePassword && <span className="badge badge-warning text-[9px]">ilk giriş bekliyor</span>}
                     </div>
-                    <div className="text-[11px] text-gray-500 truncate">{p.childrenNames.join(', ')}</div>
+                    <div className="text-caption truncate">{p.childrenNames.join(', ')}</div>
                   </div>
                   <button onClick={() => reset(p.phone)} className="btn-ghost !px-2.5 !py-1.5 text-[11px] shrink-0">Şifre sıfırla</button>
                 </div>
               ))}
             </div>
           )}
-          <p className="text-[10px] text-gray-400 mt-2">{parents?.length ? `${parents.length} veli hesabı` : ''}</p>
+          <p className="text-caption mt-2">{parents?.length ? `${parents.length} veli hesabı` : ''}</p>
         </div>
       )}
     </div>
@@ -435,8 +435,8 @@ function PushTestSection({ showToast }) {
 
   return (
     <div>
-      <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-2" style={{ fontWeight: 700 }}>Bildirim Testi</h4>
-      <p className="text-xs text-gray-500 mb-2">Üstteki zil simgesinden bildirimleri açtıktan sonra kendine test bildirimi gönder.</p>
+      <h4 className="text-label mb-2">Bildirim Testi</h4>
+      <p className="text-body-sm mb-2">Üstteki zil simgesinden bildirimleri açtıktan sonra kendine test bildirimi gönder.</p>
       <button onClick={sendTest} disabled={sending} className="btn-ghost !px-4 !py-2 text-sm">
         {sending ? 'Gönderiliyor…' : 'Kendime test bildirimi gönder'}
       </button>
@@ -493,7 +493,7 @@ function AuditLogSection({ showToast }) {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide" style={{ fontWeight: 700 }}>İşlem Kayıtları</h4>
+        <h4 className="text-label">İşlem Kayıtları</h4>
         <button onClick={toggle} className="btn-ghost !px-3 !py-1.5 text-xs flex items-center gap-1.5">
           <Clock size={13} /> {open ? 'Gizle' : 'Göster'}
         </button>
@@ -501,9 +501,9 @@ function AuditLogSection({ showToast }) {
       {open && (
         <div className="mt-3">
           {loading ? (
-            <div className="text-center py-6 text-gray-400 text-sm">Yükleniyor...</div>
+            <div className="text-center py-6 text-caption">Yükleniyor...</div>
           ) : !entries || entries.length === 0 ? (
-            <div className="text-center py-6 text-gray-400 text-sm">Henüz kayıt yok</div>
+            <div className="text-center py-6 text-caption">Henüz kayıt yok</div>
           ) : (
             <div className="space-y-1.5 max-h-80 overflow-y-auto">
               {entries.map((e, i) => {
@@ -512,8 +512,8 @@ function AuditLogSection({ showToast }) {
                   <div key={i} className="flex items-start gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
                     <span className="shrink-0 w-1.5 h-1.5 rounded-full mt-1.5" style={{ background: meta.color }} />
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs text-gray-700">{e.detail || meta.label}</div>
-                      <div className="text-[10px] text-gray-400 mt-0.5">
+                      <div className="text-xs" style={{ color: 'var(--text-primary)' }}>{e.detail || meta.label}</div>
+                      <div className="text-caption mt-0.5">
                         {fmtTime(e.ts)} · {e.actorName} ({e.actorRole === 'director' ? 'Müdür' : e.actorRole === 'accountant' ? 'Muhasebeci' : e.actorRole})
                       </div>
                     </div>
@@ -522,7 +522,7 @@ function AuditLogSection({ showToast }) {
               })}
             </div>
           )}
-          <p className="text-[10px] text-gray-400 mt-2">Son 500 kayıt gösterilir · kayıtlar 90 gün saklanır</p>
+          <p className="text-caption mt-2">Son 500 kayıt gösterilir · kayıtlar 90 gün saklanır</p>
         </div>
       )}
     </div>
@@ -570,7 +570,7 @@ function ErrorLogSection({ showToast }) {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide flex items-center gap-1.5" style={{ fontWeight: 700 }}>
+        <h4 className="text-label flex items-center gap-1.5">
           <AlertTriangle size={13} className="text-amber-500" /> Hata Kayıtları
         </h4>
         <div className="flex items-center gap-2">
@@ -585,9 +585,9 @@ function ErrorLogSection({ showToast }) {
       {open && (
         <div className="mt-3">
           {loading ? (
-            <div className="text-center py-6 text-gray-400 text-sm">Yükleniyor...</div>
+            <div className="text-center py-6 text-caption">Yükleniyor...</div>
           ) : !entries || entries.length === 0 ? (
-            <div className="text-center py-6 text-emerald-600 text-sm">Hata kaydı yok — her şey yolunda.</div>
+            <div className="text-center py-6 text-sm" style={{ color: 'var(--color-success)' }}>Hata kaydı yok — her şey yolunda.</div>
           ) : (
             <div className="space-y-1.5 max-h-80 overflow-y-auto">
               {entries.map((e, i) => {
@@ -598,8 +598,8 @@ function ErrorLogSection({ showToast }) {
                     <button className="flex items-start gap-2 w-full text-left" onClick={() => setExpanded(isOpen ? null : i)}>
                       <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded font-700 mt-0.5" style={{ background: meta.color + '22', color: meta.color, fontWeight: 700 }}>{meta.label}</span>
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs text-gray-800 break-words">{e.message}</div>
-                        <div className="text-[10px] text-gray-400 mt-0.5">
+                        <div className="text-xs break-words" style={{ color: 'var(--text-primary)' }}>{e.message}</div>
+                        <div className="text-caption mt-0.5">
                           {fmtTime(e.ts)}
                           {e.userName ? ` · ${e.userName} (${e.role || '?'})` : ' · anonim'}
                           {e.url ? ` · ${e.url}` : ''}
@@ -616,7 +616,7 @@ function ErrorLogSection({ showToast }) {
               })}
             </div>
           )}
-          <p className="text-[10px] text-gray-400 mt-2">Son 500 hata · kayıtlar 30 gün saklanır · satıra tıkla → ayrıntı</p>
+          <p className="text-caption mt-2">Son 500 hata · kayıtlar 30 gün saklanır · satıra tıkla → ayrıntı</p>
         </div>
       )}
     </div>

@@ -70,13 +70,13 @@ function AttendanceSummaryModal({ cls, date, onClose }) {
             const hasLate = lesson.late.length > 0;
             if (!lesson.attendanceTaken) return (
               <div key={lesson.lessonNo} className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3">
-                <div className="text-xs font-600 text-amber-700 mb-1" style={{ fontWeight: 600 }}>{lesson.lessonNo}. Ders <span className="text-amber-500 font-400">· {lesson.teacherName}</span></div>
+                <div className="text-xs font-600 text-amber-700 mb-1" style={{ fontWeight: 600 }}>{lesson.lessonNo}. Ders <span className="font-400 text-amber-500">· {lesson.teacherName}</span></div>
                 <p className="text-xs text-amber-600">Yoklama henüz alınmamış.</p>
               </div>
             );
             if (!hasAbsent && !hasLate) return (
               <div key={lesson.lessonNo} className="rounded-xl bg-gray-50 px-4 py-3">
-                <div className="text-xs font-600 text-gray-600 mb-1" style={{ fontWeight: 600 }}>{lesson.lessonNo}. Ders <span className="text-gray-400 font-400">· {lesson.teacherName}</span></div>
+                <div className="text-xs font-600 mb-1" style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{lesson.lessonNo}. Ders <span className="font-400" style={{ color: 'var(--text-muted)' }}>· {lesson.teacherName}</span></div>
                 <p className="text-xs text-emerald-600">Tüm öğrenciler mevcut.</p>
               </div>
             );
@@ -165,7 +165,7 @@ export function DirectorAttendanceView({ showToast }) {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-40 text-gray-400">Yükleniyor...</div>
+        <div className="flex items-center justify-center h-40 text-caption">Yükleniyor...</div>
       ) : clsList.length === 0 ? (
         <div className="card p-10 text-center text-gray-400">
           <ClipboardList size={32} className="mx-auto mb-2 opacity-30" />
@@ -228,7 +228,7 @@ export function StudentAttendanceView({ studentId }) {
     })();
   }, [studentId]);
 
-  if (loading) return <div className="py-8 text-center text-gray-400 text-sm">Yükleniyor...</div>;
+  if (loading) return <div className="py-8 text-center text-caption">Yükleniyor...</div>;
   if (!data || data.entries.length === 0) return (
     <div className="py-8 text-center text-gray-400">
       <ClipboardList size={28} className="mx-auto mb-2 opacity-30" />
@@ -246,16 +246,16 @@ export function StudentAttendanceView({ studentId }) {
     <>
       <div className="flex items-center gap-2 mb-3">
         {data.summary.yok > 0 && (
-          <span className="text-xs px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-600" style={{ fontWeight: 600 }}>
+          <span className="badge badge-danger">
             {data.summary.yok} Yok
           </span>
         )}
         {data.summary.gec > 0 && (
-          <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-600" style={{ fontWeight: 600 }}>
+          <span className="badge badge-warning">
             {data.summary.gec} Geç
           </span>
         )}
-        <span className="text-xs text-gray-400 ml-1">Toplam {data.entries.length} kayıt</span>
+        <span className="text-caption ml-1">Toplam {data.entries.length} kayıt</span>
       </div>
       <div className="space-y-1.5">
         {Object.entries(byDate).map(([date, items]) => {
@@ -264,8 +264,8 @@ export function StudentAttendanceView({ studentId }) {
           return (
             <div key={date} className="card overflow-hidden">
               <div className="px-3 py-2 bg-gray-50 border-b border-gray-100">
-                <span className="font-700 text-sm text-gray-800" style={{ fontWeight: 700 }}>{fmtDate}</span>
-                <span className="text-xs text-gray-400 ml-2">{items[0].dayLabel}</span>
+                <span className="font-700 text-sm" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{fmtDate}</span>
+                <span className="text-caption ml-2">{items[0].dayLabel}</span>
               </div>
               <div className="p-2 space-y-1">
                 {items.map((e, i) => {

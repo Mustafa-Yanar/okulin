@@ -93,7 +93,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center h-32 text-gray-400">Yükleniyor...</div>
+            <div className="flex items-center justify-center h-32 text-caption">Yükleniyor...</div>
           ) : accountants.length === 0 ? (
             <div className="text-center py-12">
               <Wallet size={40} className="mx-auto mb-3 text-gray-300" />
@@ -111,10 +111,10 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
                     {a.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-600 text-gray-800" style={{ fontWeight: 600 }}>{a.name}</div>
-                    <div className="text-xs text-gray-400">Kullanıcı adı: <span className="text-gray-600 font-500">{a.username}</span></div>
+                    <div className="font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{a.name}</div>
+                    <div className="text-caption">Kullanıcı adı: <span className="font-500" style={{ color: 'var(--text-secondary)' }}>{a.username}</span></div>
                   </div>
-                  <span className="text-[11px] px-2.5 py-1 rounded-lg font-600" style={{ background: 'color-mix(in srgb, #0891b2 12%, transparent)', color: '#0891b2', fontWeight: 600 }}>
+                  <span className="badge" style={{ background: 'color-mix(in srgb, #0891b2 12%, transparent)', color: '#0891b2' }}>
                     Muhasebeci
                   </span>
                   <div className="flex gap-1 shrink-0">
@@ -142,7 +142,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
                 </div>
                 <form onSubmit={handleSave} className="p-5 space-y-4">
                   <div>
-                    <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>Ad Soyad</label>
+                    <label className="text-label block mb-1.5">Ad Soyad</label>
                     <input
                       value={form.name}
                       onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -151,11 +151,11 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
                       aria-label="Muhasebeci adı soyadı"
                       required autoFocus
                     />
-                    <p className="text-[10px] text-gray-400 mt-1">Kullanıcı adı olarak da kullanılacak</p>
+                    <p className="text-caption mt-1">Kullanıcı adı olarak da kullanılacak</p>
                   </div>
                   <div>
-                    <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>
-                      Şifre {editAcc && <span className="normal-case text-gray-400 font-400">(boş bırakırsan değişmez)</span>}
+                    <label className="text-label block mb-1.5">
+                      Şifre {editAcc && <span className="normal-case font-400" style={{ color: 'var(--text-muted)' }}>(boş bırakırsan değişmez)</span>}
                     </label>
                     <input
                       type="password"

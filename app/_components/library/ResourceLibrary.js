@@ -76,7 +76,7 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
         <div className="flex items-center gap-2">
           <BookOpen size={20} className="text-indigo-600" />
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>Kütüphane</h3>
-          <span className="text-xs text-slate-400">({resources.length})</span>
+          <span className="text-caption">({resources.length})</span>
         </div>
         {canManage && (
           <button
@@ -106,9 +106,9 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-400 py-8 text-center">Yükleniyor…</p>
+        <p className="text-caption py-8 text-center">Yükleniyor…</p>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-12 text-slate-400">
+        <div className="text-center py-12 text-caption">
           <BookOpen size={36} className="mx-auto mb-2 opacity-40" />
           <p className="text-sm">{resources.length === 0 ? 'Henüz kaynak eklenmemiş.' : 'Filtreye uygun kaynak yok.'}</p>
         </div>
@@ -124,8 +124,8 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
                     <Icon size={18} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-600 text-slate-800 leading-tight break-words" style={{ fontWeight: 600 }}>{r.title}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{r.branch}{r.topic ? ` · ${r.topic}` : ''}</p>
+                    <p className="text-sm font-600 leading-tight break-words" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.title}</p>
+                    <p className="text-body-sm mt-0.5">{r.branch}{r.topic ? ` · ${r.topic}` : ''}</p>
                   </div>
                   {canManage && canDelete(r) && (
                     <button onClick={() => handleDelete(r.id)} className="text-slate-300 hover:text-rose-500 shrink-0">
@@ -144,7 +144,7 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
                 </div>
 
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-[11px] text-slate-400 truncate">{r.uploadedByName}</span>
+                  <span className="text-caption truncate">{r.uploadedByName}</span>
                   {r.type === 'video' && embedUrl(r.url) ? (
                     <button onClick={() => setVideo({ url: embedUrl(r.url), title: r.title })}
                       className="flex items-center gap-1 text-xs text-indigo-600 hover:underline shrink-0">
@@ -277,7 +277,7 @@ function ResourceForm({ branches, onClose, onSaved, showToast }) {
         <div className="p-5 flex flex-col gap-3.5">
           {/* Tür */}
           <div>
-            <label className="text-xs font-600 text-slate-600 block mb-1.5" style={{ fontWeight: 600 }}>Tür</label>
+            <label className="text-label block mb-1.5">Tür</label>
             <div className="flex gap-2">
               {Object.entries(TYPE_META).map(([key, m]) => {
                 const Icon = m.icon;
@@ -293,14 +293,14 @@ function ResourceForm({ branches, onClose, onSaved, showToast }) {
           </div>
 
           <div>
-            <label className="text-xs font-600 text-slate-600 block mb-1.5" style={{ fontWeight: 600 }}>Başlık</label>
+            <label className="text-label block mb-1.5">Başlık</label>
             <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Örn: Türev Föyü - 1"
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-600 text-slate-600 block mb-1.5" style={{ fontWeight: 600 }}>Ders</label>
+              <label className="text-label block mb-1.5">Ders</label>
               <select value={branch} onChange={e => setBranch(e.target.value)}
                 className="w-full text-sm border border-slate-200 rounded-lg px-2 py-2 bg-white">
                 {branches.length === 0 && <option value="">—</option>}
@@ -308,7 +308,7 @@ function ResourceForm({ branches, onClose, onSaved, showToast }) {
               </select>
             </div>
             <div>
-              <label className="text-xs font-600 text-slate-600 block mb-1.5" style={{ fontWeight: 600 }}>Konu <span className="text-slate-300">(ops.)</span></label>
+              <label className="text-label block mb-1.5">Konu <span className="font-400" style={{ color: 'var(--text-muted)' }}>(ops.)</span></label>
               <input value={topic} onChange={e => setTopic(e.target.value)} placeholder="Örn: Türev"
                 className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
             </div>
@@ -317,7 +317,7 @@ function ResourceForm({ branches, onClose, onSaved, showToast }) {
           {/* PDF dosya veya URL */}
           {type === 'pdf' ? (
             <div>
-              <label className="text-xs font-600 text-slate-600 block mb-1.5" style={{ fontWeight: 600 }}>PDF Dosyası</label>
+              <label className="text-label block mb-1.5">PDF Dosyası</label>
               <div onClick={() => fileRef.current?.click()}
                 className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30">
                 {file ? (
@@ -331,7 +331,7 @@ function ResourceForm({ branches, onClose, onSaved, showToast }) {
             </div>
           ) : (
             <div>
-              <label className="text-xs font-600 text-slate-600 block mb-1.5" style={{ fontWeight: 600 }}>
+              <label className="text-label block mb-1.5">
                 {type === 'video' ? 'Video Linki (YouTube/Vimeo)' : 'Web Adresi'}
               </label>
               <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://…"
@@ -341,8 +341,8 @@ function ResourceForm({ branches, onClose, onSaved, showToast }) {
 
           {/* Sınıf hedefleme */}
           <div>
-            <label className="text-xs font-600 text-slate-600 block mb-1.5" style={{ fontWeight: 600 }}>
-              Hedef Sınıflar <span className="text-slate-400">({classes.size} seçili)</span>
+            <label className="text-label block mb-1.5">
+              Hedef Sınıflar <span className="font-400" style={{ color: 'var(--text-muted)' }}>({classes.size} seçili)</span>
             </label>
             <div className="border border-slate-200 rounded-lg p-2 max-h-52 overflow-y-auto flex flex-col gap-2.5">
               {Object.entries(STUDENT_GROUPS).map(([gKey, g]) => {

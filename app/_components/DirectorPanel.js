@@ -151,7 +151,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     } catch (err) { showToast(err.message, 'error'); }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Yükleniyor...</div>;
+  if (loading) return <div className="flex items-center justify-center h-64 text-caption">Yükleniyor...</div>;
 
   return (
     <div>
@@ -187,7 +187,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="font-600" style={{ fontWeight:600 }}>{t.name}</div>
-                        <div className="text-xs text-gray-500">{(t.branches||[]).join(', ')}</div>
+                        <div className="text-caption">{(t.branches||[]).join(', ')}</div>
                         <div className="flex gap-1 mt-1 flex-wrap">
                           {(t.allowedGroups||[]).map(g => <span key={g} className="badge" style={{ background:'#e0e7ff',color:'#4338ca' }}>{GROUPS[g]}</span>)}
                           {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'#f3f4f6',color:'#9ca3af' }}>Tüm gruplar</span>}
@@ -245,7 +245,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                           canCancelAll
                         />
                       ) : (
-                        <div className="text-center py-6 text-gray-400 text-sm">Yükleniyor...</div>
+                        <div className="text-center py-6 text-caption">Yükleniyor...</div>
                       )}
                     </div>
                   )}
@@ -358,7 +358,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
             </div>
           </div>
           {slotTimesLoading ? (
-            <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>Yükleniyor...</div>
+            <div className="text-center py-12 text-caption">Yükleniyor...</div>
           ) : (
             <>
               <SlotTimeEditor

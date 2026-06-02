@@ -62,7 +62,7 @@ function ReceiptPrintArea({ data, onClose }) {
             <div className="text-sm text-gray-500">{dershane.address}</div>
           </div>
           <div className="text-center mb-4">
-            <div className="text-xs uppercase tracking-widest text-gray-400 font-600" style={{ fontWeight: 600 }}>Ödeme Makbuzu</div>
+            <div className="text-label">Ödeme Makbuzu</div>
             <div className="text-2xl font-800 text-indigo-600 mt-1" style={{ fontWeight: 800 }}>{payment.receiptNo}</div>
           </div>
           <table className="w-full text-sm mb-4">
@@ -141,7 +141,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
 
           {unpaidInstallments.length > 0 && (
             <div>
-              <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>Taksit Seç (opsiyonel)</label>
+              <label className="text-label block mb-1.5">Taksit Seç (opsiyonel)</label>
               <select
                 value={installmentIdx}
                 onChange={e => {
@@ -165,7 +165,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
           )}
 
           <div>
-            <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>Tutar (₺)</label>
+            <label className="text-label block mb-1.5">Tutar (₺)</label>
             <input
               type="number" min="0.01" step="0.01"
               value={amount} onChange={e => setAmount(e.target.value)}
@@ -174,12 +174,12 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
               placeholder="0,00" required autoFocus={installmentIdx === ''}
             />
             {installmentIdx !== '' && (
-              <p className="text-[11px] text-gray-400 mt-1">Taksitin tamamı ödenir — kısmi ödeme alınmaz.</p>
+              <p className="text-caption mt-1">Taksitin tamamı ödenir — kısmi ödeme alınmaz.</p>
             )}
           </div>
 
           <div>
-            <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>Tarih</label>
+            <label className="text-label block mb-1.5">Tarih</label>
             <input
               type="date" value={date} onChange={e => setDate(e.target.value)}
               className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
@@ -187,7 +187,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
           </div>
 
           <div>
-            <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>Ödeme Yöntemi</label>
+            <label className="text-label block mb-1.5">Ödeme Yöntemi</label>
             <div className="flex gap-2">
               {METHODS.map(m => (
                 <button
@@ -201,7 +201,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
           </div>
 
           <div>
-            <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>Not (opsiyonel)</label>
+            <label className="text-label block mb-1.5">Not (opsiyonel)</label>
             <input
               type="text" value={note} onChange={e => setNote(e.target.value)}
               className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
@@ -299,13 +299,13 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
         <form onSubmit={submit} className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>Toplam Ücret (₺)</label>
+              <label className="text-label block mb-1.5">Toplam Ücret (₺)</label>
               <input type="number" min="0" step="0.01" value={totalFee} onChange={e => setTotalFee(e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
                 placeholder="0,00" required />
             </div>
             <div>
-              <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>İndirim (₺)</label>
+              <label className="text-label block mb-1.5">İndirim (₺)</label>
               <input type="number" min="0" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
                 placeholder="0,00" />
@@ -320,7 +320,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
           )}
 
           <div>
-            <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>Ödeme Planı</label>
+            <label className="text-label block mb-1.5">Ödeme Planı</label>
             <div className="flex gap-2">
               {[['pesin', 'Peşin'], ['taksitli', 'Taksitli']].map(([v, l]) => (
                 <button key={v} type="button" onClick={() => setPlan(v)}
@@ -333,7 +333,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
           {plan === 'taksitli' && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-600 text-gray-500 uppercase tracking-wide" style={{ fontWeight: 600 }}>Taksit Sayısı</label>
+                <label className="text-label">Taksit Sayısı</label>
                 <select value={installmentCount} onChange={e => setInstallmentCount(parseInt(e.target.value))}
                   className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white focus:border-indigo-400 focus:outline-none">
                   {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => <option key={n} value={n}>{n} Taksit</option>)}
@@ -425,10 +425,10 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
 
           {/* İsim ve sınıf */}
           <div className="flex-1 min-w-0">
-            <div className="font-600 text-gray-800" style={{ fontWeight: 600 }}>{studentName}</div>
-            <div className="text-xs text-gray-500">{studentCls?.toUpperCase()}</div>
+            <div className="font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{studentName}</div>
+            <div className="text-body-sm">{studentCls?.toUpperCase()}</div>
             {overdueInstallments.length > 0 && (
-              <div className="flex items-center gap-1 text-[10px] text-red-500 mt-0.5">
+              <div className="flex items-center gap-1 text-caption mt-0.5" style={{ color: 'var(--color-danger)' }}>
                 <AlertCircle size={10} />
                 {overdueInstallments.length} vadesi geçmiş taksit
               </div>
@@ -438,7 +438,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
           {/* Finansal özet */}
           {finance ? (
             <div className="text-right shrink-0">
-              <div className="text-xs text-gray-400">Toplam / Kalan</div>
+              <div className="text-caption">Toplam / Kalan</div>
               <div className="text-sm font-700 text-gray-800" style={{ fontWeight: 700 }}>
                 ₺{fmt(finance.netFee)} / <span className={finance.balance > 0 ? 'text-red-500' : 'text-green-600'}>₺{fmt(finance.balance)}</span>
               </div>
@@ -452,7 +452,11 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
           )}
 
           {/* Durum badge */}
-          <span className={`px-2.5 py-1 rounded-lg text-xs font-600 ${sc.color} shrink-0`} style={{ fontWeight: 600 }}>
+          <span className={`badge shrink-0 ${
+            status === 'paid' ? 'badge-success' :
+            status === 'partial' ? 'badge-warning' :
+            status === 'unpaid' ? 'badge-danger' : ''
+          }`} style={status === 'unregistered' ? { background: 'var(--bg-muted)', color: 'var(--text-muted)' } : {}}>
             {sc.label}
           </span>
 
@@ -474,7 +478,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
                 { label: 'Kalan Borç', value: `₺${fmt(finance.balance)}`, color: finance.balance > 0 ? 'text-red-600' : 'text-green-600' },
               ].map(item => (
                 <div key={item.label} className="bg-white rounded-xl p-3 text-center shadow-sm">
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1 font-600" style={{ fontWeight: 600 }}>{item.label}</div>
+                  <div className="text-label mb-1">{item.label}</div>
                   <div className={`text-base font-800 ${item.color}`} style={{ fontWeight: 800 }}>{item.value}</div>
                 </div>
               ))}
@@ -483,7 +487,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
             {/* Taksit takvimi */}
             {finance.installments && finance.installments.length > 0 && (
               <div className="p-4 border-b border-gray-100">
-                <div className="text-xs font-700 text-gray-500 uppercase tracking-wide mb-2" style={{ fontWeight: 700 }}>Taksit Takvimi</div>
+                <div className="text-label mb-2">Taksit Takvimi</div>
                 <div className="space-y-1.5">
                   {finance.installments.map((inst, i) => {
                     const overdue = !inst.paid && isOverdue(inst.dueDate);
@@ -509,7 +513,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
             {/* Ödeme geçmişi */}
             <div className="p-4">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-xs font-700 text-gray-500 uppercase tracking-wide" style={{ fontWeight: 700 }}>
+                <div className="text-label">
                   Ödeme Geçmişi ({(finance.payments || []).length})
                 </div>
                 <div className="flex gap-2">
@@ -528,18 +532,18 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
                 </div>
               </div>
               {(finance.payments || []).length === 0 ? (
-                <div className="text-center py-4 text-gray-400 text-xs">Henüz ödeme yok</div>
+                <div className="text-center py-4 text-caption">Henüz ödeme yok</div>
               ) : (
                 <div className="space-y-1.5">
                   {[...(finance.payments || [])].reverse().map(p => (
                     <div key={p.id} className="flex items-center gap-3 bg-white border border-gray-200 rounded-lg px-3 py-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-600 text-gray-700" style={{ fontWeight: 600 }}>{p.date}</span>
-                          <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{p.method}</span>
-                          <span className="text-[10px] text-indigo-400">{p.receiptNo}</span>
+                          <span className="text-xs font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.date}</span>
+                          <span className="text-caption px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-muted)' }}>{p.method}</span>
+                          <span className="text-caption" style={{ color: 'var(--color-info)' }}>{p.receiptNo}</span>
                         </div>
-                        {p.note && <div className="text-[10px] text-gray-400 mt-0.5">{p.note}</div>}
+                        {p.note && <div className="text-caption mt-0.5">{p.note}</div>}
                       </div>
                       <span className="font-800 text-green-600 text-sm shrink-0" style={{ fontWeight: 800 }}>+₺{fmt(p.amount)}</span>
                       <button
@@ -712,7 +716,7 @@ export default function FinancePanel({ session, showToast }) {
     return true;
   });
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Yükleniyor...</div>;
+  if (loading) return <div className="flex items-center justify-center h-64 text-caption">Yükleniyor...</div>;
 
   return (
     <div>
@@ -750,7 +754,7 @@ export default function FinancePanel({ session, showToast }) {
       {/* Liste */}
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <div className="text-center py-12 text-gray-400 text-sm">
+          <div className="text-center py-12 text-caption">
             {search || filterStatus !== 'all' ? 'Eşleşen öğrenci bulunamadı' : 'Henüz öğrenci kaydı yok'}
           </div>
         ) : (

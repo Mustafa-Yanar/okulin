@@ -91,7 +91,7 @@ function WeekNav({ weekKey, onPrev, onNext, canPrev = true, canNext = true }) {
         className={`btn-ghost !p-2 ${!canPrev ? 'opacity-30 cursor-not-allowed' : ''}`}>
         <ChevronLeft size={16} />
       </button>
-      <span className="text-xs text-gray-700 text-center whitespace-nowrap">
+      <span className="text-caption text-center whitespace-nowrap">
         {startStr} – {endStr}
       </span>
       <button onClick={onNext} disabled={!canNext} aria-label="Sonraki hafta"
@@ -205,8 +205,8 @@ export function TeacherBookingsList({ bookedList, listColorMap, onCancel, canCan
                   <Calendar size={16} />
                 </div>
                 <div className="text-left">
-                  <div className="font-700 text-gray-900 text-sm" style={{ fontWeight: 700 }}>{day.dayLabel}</div>
-                  <div className="text-xs text-gray-500">{day.items.length} öğrenci</div>
+                  <div className="font-700 text-sm" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{day.dayLabel}</div>
+                  <div className="text-caption">{day.items.length} öğrenci</div>
                 </div>
               </div>
               <ChevronRight size={16} className="text-gray-400 shrink-0 transition-transform" style={{ transform: dOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
@@ -221,13 +221,13 @@ export function TeacherBookingsList({ bookedList, listColorMap, onCancel, canCan
                       <div className="flex items-center gap-3 min-w-0">
                         <Clock size={13} className="text-indigo-400 shrink-0" />
                         <div className="min-w-0">
-                          <div className="text-xs font-600 text-gray-800" style={{ fontWeight: 600 }}>{item.slotLabel}</div>
-                          <div className="text-[11px] text-gray-500 truncate">{item.studentName} · {item.studentCls}</div>
+                          <div className="text-xs font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.slotLabel}</div>
+                          <div className="text-caption truncate">{item.studentName} · {item.studentCls}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0 ml-2">
                         {item.fixed && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-600 bg-violet-100 text-violet-600" style={{ fontWeight: 600 }}>Sabit</span>
+                          <span className="badge" style={{ background: 'color-mix(in srgb, #7c3aed 12%, transparent)', color: '#7c3aed' }}>Sabit</span>
                         )}
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-500 ${c.badge}`} style={{ fontWeight: 500 }}>{c.label}</span>
                         {canCancel && (

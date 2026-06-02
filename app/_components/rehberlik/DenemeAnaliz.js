@@ -28,7 +28,7 @@ export default function DenemeAnaliz({ studentId }) {
     [points, examType]
   );
 
-  if (loading) return <div className="text-gray-400 text-sm py-4">Yükleniyor...</div>;
+  if (loading) return <div className="text-caption py-4">Yükleniyor...</div>;
 
   return (
     <div className="space-y-4">
@@ -68,7 +68,7 @@ export default function DenemeAnaliz({ studentId }) {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="text-gray-400 text-sm py-6 text-center">
+        <div className="text-caption py-6 text-center">
           {examType} için henüz sonuç yok.
         </div>
       ) : tab === 'liste' ? (
@@ -93,20 +93,20 @@ function ExamList({ points }) {
               className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
             >
               <div className="text-left">
-                <div className="text-sm font-600 text-gray-700" style={{ fontWeight: 600 }}>
+                <div className="text-sm font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                   {p.name}
                 </div>
-                <div className="text-xs text-gray-400">{p.fullDate}</div>
+                <div className="text-caption">{p.fullDate}</div>
               </div>
               <div className="flex items-center gap-3">
                 <div className="text-right">
-                  <div className="text-[10px] text-gray-400">Sıra</div>
-                  <div className="text-sm font-700 text-gray-700" style={{ fontWeight: 700 }}>
+                  <div className="text-caption">Sıra</div>
+                  <div className="text-sm font-700" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                     {p.rank}/{p.total}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] text-gray-400">Net</div>
+                  <div className="text-caption">Net</div>
                   <div className="text-base font-800 text-indigo-600" style={{ fontWeight: 800 }}>
                     {p.toplamNet.toFixed(2)}
                   </div>

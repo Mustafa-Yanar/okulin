@@ -171,7 +171,7 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
             <div role="dialog" aria-modal="true" aria-label="Öğrenci detayı" className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in">
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 shrink-0">
                 <h3 className="font-700 text-base truncate" style={{ fontWeight: 700 }}>
-                  {st.name} <span className="font-500 text-gray-400 text-sm" style={{ fontWeight: 500 }}>· {classLabel(st.cls)}</span>
+                  {st.name} <span className="font-500 text-sm" style={{ fontWeight: 500, color: 'var(--text-muted)' }}>· {classLabel(st.cls)}</span>
                 </h3>
                 <button onClick={() => setExpandedId(null)} className="p-2 rounded-lg hover:bg-gray-100 shrink-0" title="Kapat"><X size={18} /></button>
               </div>
@@ -237,7 +237,7 @@ function ClassScheduleModal({ cls, onClose }) {
   return (
     <Modal title={`${cls.toUpperCase()} – Ders Programı`} onClose={onClose} wide>
       {loading ? (
-        <div className="flex items-center justify-center h-32 text-gray-400">Yükleniyor...</div>
+        <div className="flex items-center justify-center h-32 text-caption">Yükleniyor...</div>
       ) : visibleDays.length === 0 ? (
         <div className="py-8 text-center text-gray-400">
           <Calendar size={28} className="mx-auto mb-2 opacity-30" />

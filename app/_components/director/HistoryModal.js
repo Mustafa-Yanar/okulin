@@ -109,12 +109,12 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
 
   const etutContent = (
     loading ? (
-      <div className="py-12 text-center text-gray-400">Yükleniyor...</div>
+      <div className="py-12 text-center text-caption">Yükleniyor...</div>
     ) : allWeeks.length === 0 ? (
       <div className="py-12 text-center text-gray-400">
         <Clock size={32} className="mx-auto mb-2 opacity-30" />
         <p>Henüz etüt yok</p>
-        <p className="text-xs mt-1 text-gray-300">Geçmiş haftalar her Pazar arşivlenir</p>
+        <p className="text-caption mt-1">Geçmiş haftalar her Pazar arşivlenir</p>
       </div>
     ) : (
       <>
@@ -169,27 +169,27 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
 
   const devamsizlikContent = (
     attLoading || attendance === null ? (
-      <div className="py-12 text-center text-gray-400">Yükleniyor...</div>
+      <div className="py-12 text-center text-caption">Yükleniyor...</div>
     ) : attendance.entries.length === 0 ? (
-      <div className="py-12 text-center text-gray-400">
+      <div className="py-12 text-center text-caption">
         <ClipboardList size={32} className="mx-auto mb-2 opacity-30" />
         <p>Devamsızlık kaydı yok</p>
-        <p className="text-xs mt-1 text-gray-300">Yok veya geç olarak işaretlenmiş ders bulunmuyor</p>
+        <p className="text-caption mt-1">Yok veya geç olarak işaretlenmiş ders bulunmuyor</p>
       </div>
     ) : (
       <>
         <div className="flex items-center gap-2 mb-4">
           {attendance.summary.yok > 0 && (
-            <span className="text-xs px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-600" style={{ fontWeight: 600 }}>
+            <span className="badge badge-danger">
               {attendance.summary.yok} Yok
             </span>
           )}
           {attendance.summary.gec > 0 && (
-            <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 font-600" style={{ fontWeight: 600 }}>
+            <span className="badge badge-warning">
               {attendance.summary.gec} Geç
             </span>
           )}
-          <span className="text-xs text-gray-400 ml-1">Toplam {attendance.entries.length} kayıt</span>
+          <span className="text-caption ml-1">Toplam {attendance.entries.length} kayıt</span>
         </div>
         <div className="space-y-1.5">
           {(() => {
@@ -205,8 +205,8 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
                 <div key={date} className="card overflow-hidden">
                   <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                     <div>
-                      <span className="font-700 text-sm text-gray-800" style={{ fontWeight: 700 }}>{fmtDate}</span>
-                      <span className="text-xs text-gray-400 ml-2">{items[0].dayLabel}</span>
+                      <span className="font-700 text-sm" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{fmtDate}</span>
+                      <span className="text-caption ml-2">{items[0].dayLabel}</span>
                     </div>
                   </div>
                   <div className="p-2 space-y-1">

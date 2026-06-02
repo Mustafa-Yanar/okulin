@@ -44,7 +44,7 @@ function Modal({ title, onClose, children, wide, xwide }) {
 }
 
 function Label({ children, htmlFor }) {
-  return <label htmlFor={htmlFor} className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>{children}</label>;
+  return <label htmlFor={htmlFor} className="text-label block mb-1.5">{children}</label>;
 }
 
 function FormField({ label, children }) {

@@ -65,7 +65,7 @@ function ProgramView({ child }) {
         </div>
       </div>
       {loading ? (
-        <div className="text-center py-8 text-gray-400">Yükleniyor...</div>
+        <div className="text-center py-8 text-caption">Yükleniyor...</div>
       ) : (
         <StudentBookingsView student={{ id: child.id }} allSlots={allSlots} />
       )}
@@ -92,7 +92,7 @@ function PaymentView({ child, showToast }) {
     })();
   }, []);
 
-  if (rec === undefined) return <div className="text-center py-8 text-gray-400">Yükleniyor...</div>;
+  if (rec === undefined) return <div className="text-center py-8 text-caption">Yükleniyor...</div>;
   if (!rec) return <div className="text-center py-8 text-gray-400"><Wallet size={28} className="mx-auto mb-2 opacity-30" /><p>Henüz ödeme kaydı yok</p></div>;
 
   const netFee = rec.netFee || 0;
@@ -104,15 +104,15 @@ function PaymentView({ child, showToast }) {
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2">
         <div className="card p-3 text-center">
-          <div className="text-[11px] text-gray-400 mb-0.5">Net Ücret</div>
+          <div className="text-caption mb-0.5">Net Ücret</div>
           <div className="font-800 text-gray-900 text-sm" style={{ fontWeight: 800 }}>{tl(rec.netFee)}</div>
         </div>
         <div className="card p-3 text-center">
-          <div className="text-[11px] text-gray-400 mb-0.5">Ödenen</div>
+          <div className="text-caption mb-0.5">Ödenen</div>
           <div className="font-800 text-emerald-600 text-sm" style={{ fontWeight: 800 }}>{tl(paid)}</div>
         </div>
         <div className="card p-3 text-center">
-          <div className="text-[11px] text-gray-400 mb-0.5">Kalan</div>
+          <div className="text-caption mb-0.5">Kalan</div>
           <div className="font-800 text-sm" style={{ fontWeight: 800, color: balance > 0 ? '#dc2626' : '#16a34a' }}>{tl(balance)}</div>
         </div>
       </div>
@@ -123,29 +123,29 @@ function PaymentView({ child, showToast }) {
 
       {installments.length > 0 && (
         <div>
-          <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-2" style={{ fontWeight: 700 }}>Taksitler</h4>
+          <h4 className="text-label mb-2">Taksitler</h4>
           <div className="space-y-1.5">
             {installments.map((inst, i) => (
               <div key={i} className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-100">
                 <div className="min-w-0">
-                  <div className="text-xs font-600 text-gray-800" style={{ fontWeight: 600 }}>{i + 1}. Taksit · {tl(inst.amount)}</div>
-                  {inst.dueDate && <div className="text-[11px] text-gray-500">Vade: {inst.dueDate}</div>}
+                  <div className="text-xs font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{i + 1}. Taksit · {tl(inst.amount)}</div>
+                  {inst.dueDate && <div className="text-caption">Vade: {inst.dueDate}</div>}
                 </div>
                 {inst.paid ? (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-600 bg-emerald-100 text-emerald-600 shrink-0" style={{ fontWeight: 600 }}>Ödendi</span>
+                  <span className="badge badge-success shrink-0">Ödendi</span>
                 ) : payEnabled ? (
                   <button onClick={() => setPayTarget({ idx: i, inst })}
                     className="text-[11px] px-3 py-1.5 rounded-lg font-700 bg-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-1 shrink-0" style={{ fontWeight: 700 }}>
                     <CreditCard size={12} /> Öde
                   </button>
                 ) : (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-600 bg-amber-100 text-amber-600 shrink-0" style={{ fontWeight: 600 }}>Bekliyor</span>
+                  <span className="badge badge-warning shrink-0">Bekliyor</span>
                 )}
               </div>
             ))}
           </div>
           {payEnabled && (
-            <p className="text-[10px] text-gray-400 mt-2">Online ödeme güvenli kart altyapısı (PayTR) ile alınır.</p>
+            <p className="text-caption mt-2">Online ödeme güvenli kart altyapısı (PayTR) ile alınır.</p>
           )}
         </div>
       )}
@@ -280,7 +280,7 @@ export default function ParentPanel({ session, showToast, externalTab, onExterna
         </div>
       )}
 
-      <p className="text-sm text-gray-500 mb-4">{child.name} · {classLabel(child.cls)}</p>
+      <p className="text-body-sm mb-4">{child.name} · {classLabel(child.cls)}</p>
 
       {/* child.id değişince alt bileşenler remount olsun diye key */}
       {tab === 'program' && <ProgramView key={child.id} child={child} />}

@@ -69,7 +69,7 @@ export function TeacherForm({ initial, onClose, onSave }) {
         </FormField>
         <div>
           <Label>Hangi gruplara ders girebilir?</Label>
-          <p className="text-xs text-gray-400 mb-2">Hiç seçilmezse tüm gruplara açık. Branş listesi buna göre belirlenir.</p>
+          <p className="text-caption mb-2">Hiç seçilmezse tüm gruplara açık. Branş listesi buna göre belirlenir.</p>
           <div className="flex gap-2 flex-wrap">
             {Object.entries(GROUPS).map(([key,label]) => (
               <button key={key} type="button" onClick={() => toggleGroup(key)}
@@ -82,7 +82,7 @@ export function TeacherForm({ initial, onClose, onSave }) {
         </div>
         <div>
           <Label>Branşlar <span className="text-gray-400 font-400" style={{fontWeight:400}}>(verebildiği dersler)</span></Label>
-          <p className="text-xs text-gray-400 mb-2">Öğretmenin girebileceği dersleri işaretleyin. Sadece işaretli dersler atanabilir.</p>
+          <p className="text-caption mb-2">Öğretmenin girebileceği dersleri işaretleyin. Sadece işaretli dersler atanabilir.</p>
           <div className="flex gap-2 flex-wrap">
             {visibleBranches.map(b => (
               <button key={b} type="button" onClick={() => toggleBranch(b)}
@@ -92,7 +92,7 @@ export function TeacherForm({ initial, onClose, onSave }) {
               </button>
             ))}
           </div>
-          {branches.length === 0 && <p className="text-xs text-amber-600 mt-2">En az bir branş seçin.</p>}
+          {branches.length === 0 && <p className="text-xs mt-2" style={{ color: 'var(--color-warning)' }}>En az bir branş seçin.</p>}
         </div>
         <div className="flex gap-3 pt-2">
           <button className="btn-primary flex-1" disabled={loading}>{loading?'Kaydediliyor...':'Kaydet'}</button>
