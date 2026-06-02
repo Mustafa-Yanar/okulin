@@ -114,7 +114,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
                     <div className="font-600 text-gray-800" style={{ fontWeight: 600 }}>{a.name}</div>
                     <div className="text-xs text-gray-400">Kullanıcı adı: <span className="text-gray-600 font-500">{a.username}</span></div>
                   </div>
-                  <span className="text-[11px] px-2.5 py-1 rounded-lg font-600" style={{ background: '#e0f2fe', color: '#0369a1', fontWeight: 600 }}>
+                  <span className="text-[11px] px-2.5 py-1 rounded-lg font-600" style={{ background: 'color-mix(in srgb, #0891b2 12%, transparent)', color: '#0891b2', fontWeight: 600 }}>
                     Muhasebeci
                   </span>
                   <div className="flex gap-1 shrink-0">

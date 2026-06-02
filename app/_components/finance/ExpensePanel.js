@@ -261,7 +261,7 @@ function GeneralList({ items, onEdit, onDelete }) {
     <div className="grid gap-2">
       {items.map(e => (
         <div key={e.id} className="card px-4 py-3 flex items-center gap-3 hover:shadow-md transition-all">
-          <span className="text-[11px] px-2.5 py-1 rounded-lg font-600 shrink-0" style={{ background: '#eef2ff', color: '#4338ca', fontWeight: 600 }}>
+          <span className="text-[11px] px-2.5 py-1 rounded-lg font-600 shrink-0" style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 12%, transparent)', color: 'var(--brand,#6366f1)', fontWeight: 600 }}>
             {e.category}
           </span>
           <div className="flex-1 min-w-0">
