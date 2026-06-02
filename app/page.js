@@ -94,6 +94,10 @@ function LoginScreen({ onLogin, directorExists, showToast, branding }) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [maskedPhone, setMaskedPhone] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
   const isSetup = !directorExists;
   const current = LOGIN_ROLES.find(r => r.key === selectedRole);
 
@@ -129,11 +133,45 @@ function LoginScreen({ onLogin, directorExists, showToast, branding }) {
         }
         throw new Error(data.error || 'Giriş başarısız');
       }
+      if (data.needsOtp) {
+        setMaskedPhone(data.phone || '');
+        setOtpStep(true);
+        return;
+      }
       onLogin(data);
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const submitOtp = async (e) => {
+    e.preventDefault();
+    setOtpLoading(true);
+    try {
+      const verifyRes = await fetch('/api/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ code: otpCode, username, role: selectedRole }),
+      });
+      const verifyData = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok) throw new Error(verifyData.error || 'Kod yanlış');
+      // OTP doğruysa tekrar login dene — artık device_token cookie var
+      const loginRes = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ action: 'login', username, password, role: selectedRole }),
+      });
+      const loginData = await loginRes.json().catch(() => ({}));
+      if (!loginRes.ok) throw new Error(loginData.error || 'Giriş başarısız');
+      onLogin(loginData);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setOtpLoading(false);
     }
   };
 
@@ -156,6 +194,47 @@ function LoginScreen({ onLogin, directorExists, showToast, branding }) {
               {loading ? 'Giriş yapılıyor…' : 'Hesap Oluştur'}
             </button>
           </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedRole && otpStep) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="card-elevated w-full max-w-sm p-8">
+          <BrandHeader branding={branding} subtitle="Kimliğini doğrula" />
+          <div className="text-center mb-6">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 15%, transparent)' }}>
+              <span style={{ fontSize: 28 }}>📱</span>
+            </div>
+            <p className="text-body-sm">
+              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{maskedPhone}</span> numaralı telefona SMS gönderdik.
+            </p>
+            <p className="text-caption mt-1">Gelen kodu girin</p>
+          </div>
+          <form onSubmit={submitOtp} className="space-y-4">
+            <input
+              className="input text-center text-2xl tracking-widest"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="000000"
+              maxLength={6}
+              value={otpCode}
+              onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+              autoFocus
+              required
+            />
+            <button className="btn-primary w-full" disabled={otpLoading || otpCode.length < 4}>
+              {otpLoading ? 'Doğrulanıyor…' : 'Doğrula ve Giriş Yap'}
+            </button>
+          </form>
+          <button onClick={() => { setOtpStep(false); setOtpCode(''); }}
+            className="mt-4 w-full text-center text-xs text-gray-400 hover:text-gray-600 transition-colors">
+            ← Geri dön
+          </button>
         </div>
       </div>
     );

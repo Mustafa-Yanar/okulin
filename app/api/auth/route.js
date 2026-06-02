@@ -8,6 +8,13 @@ import { logAudit, actorFrom } from '@/lib/audit';
 import { lookupIndex } from '@/lib/userIndex';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { parseBody, z, zName, zPassword, zNewPassword, zId } from '@/lib/validate';
+import { sendOtp } from '@/lib/sms';
+
+// Telefon numarasının ortasını maskele: "0532***67"
+function maskPhone(phone) {
+  if (!phone || phone.length < 7) return '***';
+  return phone.slice(0, 4) + '***' + phone.slice(-2);
+}
 
 // action'a göre ayrışan gövde — her işlemin yalnız kendi alanları doğrulanır.
 const AuthSchema = z.discriminatedUnion('action', [
@@ -67,10 +74,35 @@ export async function POST(req) {
       }, { status: 403 });
     }
 
+    // Cihaz tanıma: güvenilir cihaz cookie'si var ve Redis'te geçerliyse OTP atlanır.
+    const deviceToken = req.cookies.get('device_token')?.value;
+    async function isKnownDevice(roleCategory) {
+      if (!deviceToken) return false;
+      const key = `device:${roleCategory}:${username}:${deviceToken}`;
+      const data = await redis.get(key);
+      return !!data;
+    }
+
+    // Cihaz tanınmadığında OTP akışını başlat (telefon varsa SMS gönder).
+    async function maybeOtp(roleCategory, phone) {
+      const known = await isKnownDevice(roleCategory);
+      if (known) return null; // null = OTP yok, normal login devam etsin
+      if (!phone) return null; // telefon kayıtlı değil → OTP atla (geri uyumluluk)
+      try { await sendOtp(phone); } catch { /* SMS hatası login'i engellemesin */ }
+      return NextResponse.json({ needsOtp: true, phone: maskPhone(phone) }, { status: 200 });
+    }
+
     // Kayıttan oturum yanıtı üret (rol bazlı payload).
     async function makeLoginResponse(role, rec) {
       const gate = gateMismatch(role);
       if (gate) return gate;
+
+      // Cihaz tanıma — roleCategory = selectedRole varsa o, yoksa gerçek rolden türetilir
+      const cat = selectedRole || roleCategory(role);
+      const phone = rec.phone || null;
+      const otpRes = await maybeOtp(cat, phone);
+      if (otpRes) return otpRes;
+
       let payload;
       if (role === 'teacher') {
         const branches = Array.isArray(rec.branches) ? rec.branches
@@ -80,8 +112,8 @@ export async function POST(req) {
         payload = { role: 'student', id: rec.id, name: rec.name, cls: rec.cls, group: rec.group, mustChangePassword: !!rec.mustChangePassword };
       } else if (role === 'parent') {
         const children = Array.isArray(rec.children) ? rec.children : [];
-        const name = children.length === 1 ? `${children[0].name} (Veli)` : 'Veli';
-        payload = { role: 'parent', id: rec.id, name, children, mustChangePassword: !!rec.mustChangePassword };
+        const pName = children.length === 1 ? `${children[0].name} (Veli)` : 'Veli';
+        payload = { role: 'parent', id: rec.id, name: pName, children, mustChangePassword: !!rec.mustChangePassword };
       } else { // accountant veya counselor (rehber) — aynı şekil
         payload = { role, id: rec.id, name: rec.name, mustChangePassword: !!rec.mustChangePassword };
       }
@@ -96,6 +128,7 @@ export async function POST(req) {
       const ok = await bcrypt.compare(password, superadmin.passwordHash);
       if (ok) {
         const gate = gateMismatch('superadmin'); if (gate) return gate;
+        // Superadmin için cihaz tanıma yok — yönetim hesabı, direkt giriş
         const res = NextResponse.json({ role: 'superadmin', name: superadmin.name });
         await setSession(res, { role: 'superadmin', id: 'superadmin', name: superadmin.name });
         return res;
@@ -109,6 +142,7 @@ export async function POST(req) {
       const ok = await bcrypt.compare(password, orgAdmin.passwordHash);
       if (ok) {
         const gate = gateMismatch('org_admin'); if (gate) return gate;
+        // Org admin için cihaz tanıma yok
         const res = NextResponse.json({ role: 'org_admin', name: orgAdmin.name });
         await setSession(res, { role: 'org_admin', id: 'org_admin', name: orgAdmin.name });
         return res;
@@ -121,6 +155,9 @@ export async function POST(req) {
       const ok = await bcrypt.compare(password, director.passwordHash);
       if (ok) {
         const gate = gateMismatch('director'); if (gate) return gate;
+        // Director: cihaz tanıma uygula
+        const otpRes = await maybeOtp('management', director.phone || null);
+        if (otpRes) return otpRes;
         const res = NextResponse.json({ role: 'director', name: director.name });
         await setSession(res, { role: 'director', id: 'director', name: director.name });
         return res;
