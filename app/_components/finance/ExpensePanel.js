@@ -218,7 +218,7 @@ function PersonnelList({ items, onEdit, onDelete }) {
       {items.map(e => {
         const extrasTotal = (e.extras || []).reduce((s, x) => s + (x.amount || 0), 0);
         return (
-          <div key={e.id} className="card px-4 py-3 flex items-center gap-3 hover:shadow-md transition-all">
+          <div key={e.id} className="card card-interactive px-4 py-3 flex items-center gap-3">
             <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-white font-700 text-sm"
               style={{ background: 'linear-gradient(135deg,#6366f1,#4338ca)', fontWeight: 700 }}>
               {(e.personnelName || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
@@ -260,7 +260,7 @@ function GeneralList({ items, onEdit, onDelete }) {
   return (
     <div className="grid gap-2">
       {items.map(e => (
-        <div key={e.id} className="card px-4 py-3 flex items-center gap-3 hover:shadow-md transition-all">
+        <div key={e.id} className="card card-interactive px-4 py-3 flex items-center gap-3">
           <span className="badge shrink-0" style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 12%, transparent)', color: 'var(--brand,#6366f1)' }}>
             {e.category}
           </span>

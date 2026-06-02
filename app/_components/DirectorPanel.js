@@ -174,7 +174,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
             {teachers.map(t => {
               const isOpen = expandedTeacherId === t.id;
               return (
-                <div key={t.id} className={`card overflow-hidden transition-all duration-200 ${isOpen ? '' : 'hover:shadow-lg hover:border-indigo-400 hover:-translate-y-px hover:bg-indigo-50/30'}`}>
+                <div key={t.id} className={`card overflow-hidden ${isOpen ? '' : 'card-interactive'}`}>
                   <div className="flex items-center justify-between px-4 py-3.5">
                     <button className="flex items-center gap-3 text-left flex-1 min-w-0" onClick={async () => {
                       if (isOpen) { setExpandedTeacherId(null); return; }

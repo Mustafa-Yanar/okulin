@@ -9,7 +9,7 @@ function fmt(n) {
 
 function KPICard({ icon: Icon, label, value, sub, color, loading }) {
   return (
-    <div className="card p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
+    <div className="card card-hover p-5 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{label}</span>
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${color.bg}`}>

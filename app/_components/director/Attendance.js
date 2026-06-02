@@ -183,7 +183,7 @@ export function DirectorAttendanceView({ showToast }) {
             const allTaken = takenCount === totalCount;
             return (
               <button key={cls} onClick={() => setSelectedCls(cls)}
-                className="card aspect-square flex flex-col items-center justify-center gap-1.5 hover:shadow-lg hover:border-indigo-400 hover:-translate-y-px hover:bg-indigo-50/30 transition-all duration-200 cursor-pointer p-3">
+                className="card card-interactive aspect-square flex flex-col items-center justify-center gap-1.5 cursor-pointer p-3">
                 <GraduationCap size={20} className="text-indigo-400" />
                 <span className="text-sm font-700 text-gray-900" style={{ fontWeight: 700 }}>{cls.toUpperCase()}</span>
                 <div className="flex flex-wrap gap-1 justify-center">

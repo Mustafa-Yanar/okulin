@@ -129,7 +129,7 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
               {isOpen && (
                 <div className="grid gap-1.5 mt-1.5 ml-2">
                   {grp.students.map(s => (
-                    <div key={s.id} className={`card overflow-hidden text-sm transition-all duration-200 ${expandedId === s.id ? '' : 'hover:shadow-lg hover:border-indigo-400 hover:-translate-y-px hover:bg-indigo-50/30'}`}>
+                    <div key={s.id} className={`card overflow-hidden text-sm ${expandedId === s.id ? '' : 'card-interactive'}`}>
                       <div className="flex items-center justify-between px-3 py-3">
                         <button className="flex items-center gap-3 flex-1 min-w-0 text-left" onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}>
                           <div className="relative shrink-0">
@@ -168,7 +168,7 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
         if (!st) return null;
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div role="dialog" aria-modal="true" aria-label="Öğrenci detayı" className="modal w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in">
+            <div role="dialog" aria-modal="true" aria-label="Öğrenci detayı" className="modal w-full max-w-2xl max-h-[90vh] flex flex-col animate-modal-in">
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 shrink-0">
                 <h3 className="font-700 text-base truncate" style={{ fontWeight: 700 }}>
                   {st.name} <span className="font-500 text-sm" style={{ fontWeight: 500, color: 'var(--text-muted)' }}>· {classLabel(st.cls)}</span>

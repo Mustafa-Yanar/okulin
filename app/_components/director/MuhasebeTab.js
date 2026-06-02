@@ -71,11 +71,16 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
 
   return (
     <div>
-      <div className="flex gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit">
-        {[['finance', '📊 Öğrenci Ödemeleri'], ['expenses', '💸 Giderler'], ['accountants', '👤 Muhasebeciler']].map(([k, l]) => (
-          <button key={k} onClick={() => setSubTab(k)}
-            className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${subTab === k ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-            style={{ fontWeight: 600 }}>{l}</button>
+      <div className="flex gap-1 mb-6 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)' }}>
+        {[['finance', 'Öğrenci Ödemeleri'], ['expenses', 'Giderler'], ['accountants', 'Muhasebeciler']].map(([k, l]) => (
+          <button key={k} onClick={() => setSubTab(k)} className="press-effect"
+            style={{
+              padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+              transition: 'all var(--transition-base)',
+              background: subTab === k ? 'var(--bg-surface)' : 'transparent',
+              color: subTab === k ? 'var(--text-primary)' : 'var(--text-secondary)',
+              boxShadow: subTab === k ? 'var(--shadow-sm)' : 'none',
+            }}>{l}</button>
         ))}
       </div>
 
@@ -105,7 +110,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
           ) : (
             <div className="grid gap-2">
               {accountants.map(a => (
-                <div key={a.id} className="card flex items-center px-4 py-3.5 gap-3 hover:shadow-md transition-all">
+                <div key={a.id} className="card card-interactive flex items-center px-4 py-3.5 gap-3">
                   <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-white font-700 text-sm"
                     style={{ background: 'linear-gradient(135deg,#0891b2,#0284c7)', fontWeight: 700 }}>
                     {a.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
