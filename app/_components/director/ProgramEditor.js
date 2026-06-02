@@ -12,6 +12,69 @@ import {
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal, getAdjacentWeek, isSlotPast } from './shared';
 
+function EtutPanel({ dayIndex, slotId, getEntry, setEntry, clearEntry, setActiveCell, allowedStudents, slotTimes }) {
+  const existing = getEntry(dayIndex, slotId);
+  const [studentId, setStudentId] = useState(existing?.studentId || '');
+  const [studentName, setStudentName] = useState(existing?.studentName || '');
+  const [studentCls, setStudentCls] = useState(existing?.studentCls || '');
+  const [fixed, setFixed] = useState(existing?.fixed !== false);
+  const [studentSearch, setStudentSearch] = useState('');
+
+  function saveEtut() {
+    setEntry(dayIndex, slotId, { type: 'etut', studentId, studentName, studentCls, fixed });
+    setActiveCell(null);
+  }
+
+  return (
+    <div className="p-4 border-t border-gray-100 bg-gray-50">
+      <div className="text-xs font-600 text-gray-500 mb-2" style={{ fontWeight: 600 }}>
+        {ALL_DAYS.find(d => d.index === dayIndex)?.label} – {slotsForDay(dayIndex, slotTimes).find(s => s.id === slotId)?.label}
+      </div>
+      <div className="flex gap-2 mb-3">
+        <button onClick={() => { clearEntry(dayIndex, slotId); setActiveCell(null); }}
+          className="px-3 py-1.5 rounded-lg text-xs font-600 border bg-white border-gray-200 text-gray-500 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all"
+          style={{ fontWeight: 600 }}>Slotu Kapat</button>
+        <button onClick={() => { setEntry(dayIndex, slotId, { type: 'etut', studentId: '', studentName: '', studentCls: '', fixed: true }); setActiveCell(null); }}
+          className="px-3 py-1.5 rounded-lg text-xs font-600 border bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition-all"
+          style={{ fontWeight: 600 }}>Açık Etüt</button>
+      </div>
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Sabit öğrenci rezervasyonu (opsiyonel)</label>
+        <input className="input text-xs mb-1" placeholder="İsim veya sınıf ara..." value={studentSearch}
+          onChange={e => setStudentSearch(e.target.value)} />
+        <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-lg bg-white">
+          <button onClick={() => { setStudentId(''); setStudentName(''); setStudentCls(''); setStudentSearch(''); }}
+            className={`w-full text-left px-3 py-2 text-xs transition-colors ${!studentId ? 'bg-emerald-50 text-emerald-700 font-600' : 'text-gray-400 hover:bg-gray-50'}`}
+            style={{ fontWeight: !studentId ? 600 : 400 }}>— Açık slot —</button>
+          {allowedStudents.filter(s => {
+            const q = studentSearch.toLowerCase();
+            return !q || s.name.toLowerCase().includes(q) || s.cls.toLowerCase().includes(q);
+          }).slice(0, 20).map(s => (
+            <button key={s.id} onClick={() => { setStudentId(s.id); setStudentName(s.name); setStudentCls(s.cls); setStudentSearch(''); }}
+              className={`w-full text-left px-3 py-2 text-xs transition-colors ${studentId === s.id ? 'bg-emerald-50 text-emerald-700 font-600' : 'hover:bg-gray-50 text-gray-700'}`}
+              style={{ fontWeight: studentId === s.id ? 600 : 400 }}>
+              <span className="font-600" style={{ fontWeight: 600 }}>{s.name}</span>
+              <span className="text-gray-400 ml-1.5">{classLabel(s.cls)}</span>
+            </button>
+          ))}
+        </div>
+        {studentId && (
+          <label className="flex items-center gap-2 cursor-pointer select-none mt-2">
+            <input type="checkbox" checked={fixed} onChange={e => setFixed(e.target.checked)}
+              className="w-4 h-4 rounded accent-indigo-600" />
+            <span className="text-xs text-gray-700">Sabit rezervasyon (her hafta tekrar)</span>
+          </label>
+        )}
+        {studentId && (
+          <button onClick={saveEtut}
+            className="mt-2 px-4 py-1.5 rounded-lg text-xs font-600 bg-indigo-600 text-white hover:bg-indigo-700 transition-all"
+            style={{ fontWeight: 600 }}>Kaydet</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ProgramEditor({ teacher, onClose, showToast, students, inline = false }) {
   const currentWeek = getWeekKey();
   const maxWeek = getAdjacentWeek(getAdjacentWeek(currentWeek, 1), 1);
@@ -141,69 +204,6 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     } else if (entry.type === 'etut') {
       setActiveCell(prev => prev?.slotId === slotId && prev?.dayIndex === dayIndex ? null : { dayIndex, slotId });
     }
-  }
-
-  function EtutPanel({ dayIndex, slotId }) {
-    const existing = getEntry(dayIndex, slotId);
-    const [studentId, setStudentId] = useState(existing?.studentId || '');
-    const [studentName, setStudentName] = useState(existing?.studentName || '');
-    const [studentCls, setStudentCls] = useState(existing?.studentCls || '');
-    const [fixed, setFixed] = useState(existing?.fixed !== false);
-    const [studentSearch, setStudentSearch] = useState('');
-
-    function saveEtut() {
-      setEntry(dayIndex, slotId, { type: 'etut', studentId, studentName, studentCls, fixed });
-      setActiveCell(null);
-    }
-
-    return (
-      <div className="p-4 border-t border-gray-100 bg-gray-50">
-        <div className="text-xs font-600 text-gray-500 mb-2" style={{ fontWeight: 600 }}>
-          {ALL_DAYS.find(d => d.index === dayIndex)?.label} – {slotsForDay(dayIndex, slotTimes).find(s => s.id === slotId)?.label}
-        </div>
-        <div className="flex gap-2 mb-3">
-          <button onClick={() => { clearEntry(dayIndex, slotId); setActiveCell(null); }}
-            className="px-3 py-1.5 rounded-lg text-xs font-600 border bg-white border-gray-200 text-gray-500 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all"
-            style={{ fontWeight: 600 }}>Slotu Kapat</button>
-          <button onClick={() => { setEntry(dayIndex, slotId, { type: 'etut', studentId: '', studentName: '', studentCls: '', fixed: true }); setActiveCell(null); }}
-            className="px-3 py-1.5 rounded-lg text-xs font-600 border bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition-all"
-            style={{ fontWeight: 600 }}>Açık Etüt</button>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Sabit öğrenci rezervasyonu (opsiyonel)</label>
-          <input className="input text-xs mb-1" placeholder="İsim veya sınıf ara..." value={studentSearch}
-            onChange={e => setStudentSearch(e.target.value)} />
-          <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-lg bg-white">
-            <button onClick={() => { setStudentId(''); setStudentName(''); setStudentCls(''); setStudentSearch(''); }}
-              className={`w-full text-left px-3 py-2 text-xs transition-colors ${!studentId ? 'bg-emerald-50 text-emerald-700 font-600' : 'text-gray-400 hover:bg-gray-50'}`}
-              style={{ fontWeight: !studentId ? 600 : 400 }}>— Açık slot —</button>
-            {allowedStudents.filter(s => {
-              const q = studentSearch.toLowerCase();
-              return !q || s.name.toLowerCase().includes(q) || s.cls.toLowerCase().includes(q);
-            }).slice(0, 20).map(s => (
-              <button key={s.id} onClick={() => { setStudentId(s.id); setStudentName(s.name); setStudentCls(s.cls); setStudentSearch(''); }}
-                className={`w-full text-left px-3 py-2 text-xs transition-colors ${studentId === s.id ? 'bg-emerald-50 text-emerald-700 font-600' : 'hover:bg-gray-50 text-gray-700'}`}
-                style={{ fontWeight: studentId === s.id ? 600 : 400 }}>
-                <span className="font-600" style={{ fontWeight: 600 }}>{s.name}</span>
-                <span className="text-gray-400 ml-1.5">{classLabel(s.cls)}</span>
-              </button>
-            ))}
-          </div>
-          {studentId && (
-            <label className="flex items-center gap-2 cursor-pointer select-none mt-2">
-              <input type="checkbox" checked={fixed} onChange={e => setFixed(e.target.checked)}
-                className="w-4 h-4 rounded accent-indigo-600" />
-              <span className="text-xs text-gray-700">Sabit rezervasyon (her hafta tekrar)</span>
-            </label>
-          )}
-          {studentId && (
-            <button onClick={saveEtut}
-              className="mt-2 px-4 py-1.5 rounded-lg text-xs font-600 bg-indigo-600 text-white hover:bg-indigo-700 transition-all"
-              style={{ fontWeight: 600 }}>Kaydet</button>
-          )}
-        </div>
-      </div>
-    );
   }
 
   const weekNav = (
@@ -391,7 +391,16 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
       </div>
 
       {activeCell && (getEntry(activeCell.dayIndex, activeCell.slotId)?.type === 'available' || getEntry(activeCell.dayIndex, activeCell.slotId)?.type === 'etut') && (
-        <EtutPanel dayIndex={activeCell.dayIndex} slotId={activeCell.slotId} />
+        <EtutPanel
+          dayIndex={activeCell.dayIndex}
+          slotId={activeCell.slotId}
+          getEntry={getEntry}
+          setEntry={setEntry}
+          clearEntry={clearEntry}
+          setActiveCell={setActiveCell}
+          allowedStudents={allowedStudents}
+          slotTimes={slotTimes}
+        />
       )}
 
       <div className="flex gap-3 mt-4">
