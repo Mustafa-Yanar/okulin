@@ -636,7 +636,7 @@ function FilterDropdown({ value, onChange }) {
 
       {open && (
         <div
-          className="absolute right-0 top-full mt-1.5 z-30 rounded-xl overflow-hidden animate-slide-in"
+          className="absolute left-0 top-full mt-1.5 z-30 rounded-xl overflow-hidden animate-slide-in"
           style={{
             background: 'var(--bg-surface)',
             border: '1px solid var(--border-subtle)',
