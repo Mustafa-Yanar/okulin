@@ -70,6 +70,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [teacherSlots, setTeacherSlots] = useState(null);
   const [programTeacher, setProgramTeacher] = useState(null);
   const [expandedTeacherId, setExpandedTeacherId] = useState(null);
+  const [expandedTeacherTab, setExpandedTeacherTab] = useState('etutler');
   const [historyTarget, setHistoryTarget] = useState(null);
   const [pendingGuidance, setPendingGuidance] = useState({});
 
@@ -179,6 +180,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                     <button className="flex items-center gap-3 text-left flex-1 min-w-0" onClick={async () => {
                       if (isOpen) { setExpandedTeacherId(null); return; }
                       setExpandedTeacherId(t.id);
+                      setExpandedTeacherTab('etutler');
                       await loadTeacherSlots(t);
                     }}>
                       <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
@@ -205,48 +207,76 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                     </div>
                   </div>
                   {isOpen && (
-                    <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">
+                    <div className="border-t px-4 py-3" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-surface-2)' }}>
+                      {/* Sekme başlığı + tarih nav */}
                       <div className="flex items-center justify-between gap-2 mb-3">
-                        <WeekNav weekKey={weekKey} onPrev={() => handleWeekChange(getAdjacentWeek(weekKey,-1))} onNext={() => handleWeekChange(getAdjacentWeek(weekKey,1))} />
-                        <div className="flex gap-2 shrink-0">
-                          <button className="btn-ghost !px-2.5 !py-1.5 text-gray-600" onClick={() => setHistoryTarget({ type: 'teacher', id: t.id, name: t.name })} title="Geçmiş etütler">
-                            <Clock size={14} />
-                          </button>
-                          <button className="btn-primary !px-3 !py-1.5 flex items-center gap-1.5 text-sm" onClick={() => setProgramTeacher(t)}>
-                            <LayoutGrid size={13} /> Program
-                          </button>
+                        <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)' }}>
+                          {[['etutler','Etütler'],['gecmis','Etüt Geçmişi'],['program','Program']].map(([k,l]) => (
+                            <button key={k} onClick={() => setExpandedTeacherTab(k)} className="press-effect"
+                              style={{
+                                padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                                transition: 'all var(--transition-base)',
+                                background: expandedTeacherTab === k ? 'var(--bg-surface)' : 'transparent',
+                                color: expandedTeacherTab === k ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                boxShadow: expandedTeacherTab === k ? 'var(--shadow-sm)' : 'none',
+                                whiteSpace: 'nowrap',
+                              }}>{l}</button>
+                          ))}
                         </div>
+                        <WeekNav weekKey={weekKey} onPrev={() => handleWeekChange(getAdjacentWeek(weekKey,-1))} onNext={() => handleWeekChange(getAdjacentWeek(weekKey,1))} />
                       </div>
-                      {selectedTeacherForSlots?.id === t.id && teacherSlots ? (
-                        <TeacherBookingsList
-                          bookedList={(() => {
-                            const items = [];
-                            ALL_DAYS.forEach(day => {
-                              slotsForDay(day.index, slotTimes).forEach((slot, slotIdx) => {
-                                const sd = teacherSlots[day.index]?.[slotIdx];
-                                if (sd?.booked) items.push({
-                                  dayIndex: day.index, dayLabel: day.label,
-                                  slotId: slot.id, slotLabel: slot.label, slotIdx,
-                                  studentName: sd.studentName,
-                                  studentCls: (sd.studentCls||'').toUpperCase(),
-                                  studentId: sd.studentId,
-                                  bookedBy: sd.bookedBy || 'student',
-                                  fixed: !!sd.fixed,
+
+                      {/* Etütler sekmesi */}
+                      {expandedTeacherTab === 'etutler' && (
+                        selectedTeacherForSlots?.id === t.id && teacherSlots ? (
+                          <TeacherBookingsList
+                            bookedList={(() => {
+                              const items = [];
+                              ALL_DAYS.forEach(day => {
+                                slotsForDay(day.index, slotTimes).forEach((slot, slotIdx) => {
+                                  const sd = teacherSlots[day.index]?.[slotIdx];
+                                  if (sd?.booked) items.push({
+                                    dayIndex: day.index, dayLabel: day.label,
+                                    slotId: slot.id, slotLabel: slot.label, slotIdx,
+                                    studentName: sd.studentName,
+                                    studentCls: (sd.studentCls||'').toUpperCase(),
+                                    studentId: sd.studentId,
+                                    bookedBy: sd.bookedBy || 'student',
+                                    fixed: !!sd.fixed,
+                                  });
                                 });
                               });
-                            });
-                            return items;
-                          })()}
-                          listColorMap={{
-                            student: { bg:'bg-indigo-50', border:'border-indigo-100', day:'text-indigo-700', time:'text-indigo-400', div:'bg-indigo-200', badge:'bg-indigo-100 text-indigo-500', label:'Öğrenci' },
-                            teacher: { bg:'bg-emerald-50', border:'border-emerald-100', day:'text-emerald-700', time:'text-emerald-400', div:'bg-emerald-200', badge:'bg-emerald-100 text-emerald-600', label:'Öğretmen' },
-                            director: { bg:'bg-amber-50', border:'border-amber-100', day:'text-amber-700', time:'text-amber-400', div:'bg-amber-200', badge:'bg-amber-100 text-amber-600', label:'Müdür' },
-                          }}
-                          onCancel={item => handleCancel({ teacherId: t.id, day: item.dayIndex, slotId: item.slotId })}
-                          canCancelAll
-                        />
-                      ) : (
-                        <LoadingBox height="h-24" />
+                              return items;
+                            })()}
+                            listColorMap={{
+                              student: { bg:'bg-indigo-50', border:'border-indigo-100', day:'text-indigo-700', time:'text-indigo-400', div:'bg-indigo-200', badge:'bg-indigo-100 text-indigo-500', label:'Öğrenci' },
+                              teacher: { bg:'bg-emerald-50', border:'border-emerald-100', day:'text-emerald-700', time:'text-emerald-400', div:'bg-emerald-200', badge:'bg-emerald-100 text-emerald-600', label:'Öğretmen' },
+                              director: { bg:'bg-amber-50', border:'border-amber-100', day:'text-amber-700', time:'text-amber-400', div:'bg-amber-200', badge:'bg-amber-100 text-amber-600', label:'Müdür' },
+                            }}
+                            onCancel={item => handleCancel({ teacherId: t.id, day: item.dayIndex, slotId: item.slotId })}
+                            canCancelAll
+                          />
+                        ) : (
+                          <LoadingBox height="h-24" />
+                        )
+                      )}
+
+                      {/* Etüt Geçmişi sekmesi */}
+                      {expandedTeacherTab === 'gecmis' && (
+                        <div className="py-2">
+                          <button className="btn-ghost !px-3 !py-2 flex items-center gap-2 text-sm" onClick={() => setHistoryTarget({ type: 'teacher', id: t.id, name: t.name })}>
+                            <Clock size={14} /> {t.name} — Geçmiş Etütleri Göster
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Program sekmesi */}
+                      {expandedTeacherTab === 'program' && (
+                        <div className="py-2">
+                          <button className="btn-primary !px-3 !py-2 flex items-center gap-2 text-sm" onClick={() => setProgramTeacher(t)}>
+                            <LayoutGrid size={13} /> {t.name} — Ders Programını Düzenle
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
