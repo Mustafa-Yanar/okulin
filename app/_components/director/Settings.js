@@ -71,7 +71,7 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
 
 // ─── REHBER PERSONELİ ─────────────────────────────────────────────────────────
 // Müdür rehber hesaplarını oluşturur/siler. Rehber = müdür yetkileri eksi muhasebe.
-function CounselorSection({ showToast }) {
+export function CounselorSection({ showToast }) {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: '', password: '' });
@@ -110,9 +110,9 @@ function CounselorSection({ showToast }) {
   return (
     <div>
       <h4 className="text-label mb-1 flex items-center gap-1.5">
-        <Compass size={13} /> Rehber Personeli
+        <Compass size={13} /> Rehberlik Öğretmeni Ekle
       </h4>
-      <p className="text-caption mb-3">Rehber, <b>muhasebe hariç</b> müdür yetkilerine sahiptir (program, öğrenci, deneme, optik, rehberlik).</p>
+      <p className="text-caption mb-3">Rehberlik öğretmeni, <b>muhasebe hariç</b> müdür yetkilerine sahiptir (program, öğrenci, deneme, optik, rehberlik).</p>
 
       <form onSubmit={add} className="flex gap-2 items-end mb-3 flex-wrap">
         <div className="flex-1 min-w-[120px]">

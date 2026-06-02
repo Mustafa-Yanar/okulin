@@ -26,6 +26,7 @@ import SlotTimeEditor from './director/SlotTimeEditor';
 import { useSlotTimes as useSlotTimesCtx } from './SlotTimesContext';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
 export { DirectorSettingsModal } from './director/Settings';
+import { CounselorSection } from './director/Settings';
 
 // ─── MAIN DIRECTOR PANEL ────────────────────────────────────────────────────────
 export default function DirectorPanel({ session, showToast, externalTab, onExternalTabChange }) {
@@ -348,6 +349,9 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
             onHistory={s => setHistoryTarget({ type: 'student', id: s.id, name: s.name })}
             pendingGuidance={pendingGuidance}
             onGuidanceReviewed={loadPendingGuidance} />
+          <div className="mt-6 card p-5">
+            <CounselorSection showToast={showToast} />
+          </div>
         </div>
       )}
 
