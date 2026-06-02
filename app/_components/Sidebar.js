@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import {
   Home, Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
   BarChart2, CreditCard, TrendingDown, ChevronLeft, ChevronRight,
-  X, BookMarked, Calendar, GraduationCap, Star,
+  BookMarked, Calendar, GraduationCap, Star,
 } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
 import ThemeToggle from './ThemeToggle';
@@ -148,17 +148,6 @@ export default function Sidebar({
               {branding?.shortName || 'Etüt Takip'}
             </span>
             <NotificationButton showToast={showToast} />
-            {/* X butonu yalnız mobil drawer'da görünür */}
-            {onMobileClose && (
-              <button
-                onClick={onMobileClose}
-                aria-label="Menüyü kapat"
-                className="md:hidden p-1.5 rounded-lg hover:bg-[var(--bg-muted)] shrink-0"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                <X size={16} />
-              </button>
-            )}
           </>
         )}
       </div>
