@@ -667,7 +667,17 @@ export default function FinancePanel({ session, showToast }) {
             placeholder="İsim veya sınıf ara..."
           />
         </div>
-        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto">
+        {/* Mobilde dropdown, masaüstünde buton grubu */}
+        <select
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value)}
+          className="sm:hidden input !py-2.5 !text-sm"
+        >
+          {[['all','Tümü'],['unpaid','🔴 Ödenmedi'],['partial','🟡 Kısmen Ödendi'],['paid','🟢 Ödendi'],['overdue','⚠ Vadesi Geçmiş'],['unregistered','Kayıtsız']].map(([v,l]) => (
+            <option key={v} value={v}>{l}</option>
+          ))}
+        </select>
+        <div className="hidden sm:flex gap-1 p-1 bg-gray-100 rounded-xl">
           {[
             ['all', 'Tümü'],
             ['unpaid', '🔴 Ödenmedi'],
