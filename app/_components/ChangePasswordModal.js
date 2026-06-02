@@ -33,9 +33,9 @@ function Modal({ title, onClose, children, wide, xwide }) {
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => e.target === e.currentTarget && onClose()}>
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
         className={`card-elevated w-full ${xwide ? 'max-w-5xl' : wide ? 'max-w-3xl' : 'max-w-lg'} animate-slide-in max-h-[90vh] overflow-y-auto outline-none`}>
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
-          <h3 id={titleId} className="font-700 text-lg" style={{ fontWeight: 700 }}>{title}</h3>
-          <button onClick={onClose} aria-label="Kapat" className="p-2 rounded-lg hover:bg-gray-100 transition-colors"><X size={16} /></button>
+        <div className="flex items-center justify-between p-5" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+          <h3 id={titleId} className="text-lg" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h3>
+          <button onClick={onClose} aria-label="Kapat" className="p-2 rounded-lg transition-colors hover:bg-[var(--bg-muted)]" style={{ color: 'var(--text-secondary)' }}><X size={16} /></button>
         </div>
         <div className="p-5">{children}</div>
       </div>

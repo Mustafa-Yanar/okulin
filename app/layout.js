@@ -53,6 +53,10 @@ export default function RootLayout({ children }) {
   return (
     <html lang="tr">
       <head>
+        {/* Tema FOUC önleyici — ilk boyamadan önce dark class'ı uygular */}
+        <script dangerouslySetInnerHTML={{
+          __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}}catch(e){}})();`
+        }} />
         <script dangerouslySetInnerHTML={{
           __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js')); }`
         }} />

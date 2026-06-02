@@ -50,8 +50,8 @@ export default function ForcedPasswordChange({ session, onDone, onLogout, showTo
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)' }}>
             <ShieldCheck size={28} color="white" />
           </div>
-          <h1 className="text-xl font-800 text-gray-900" style={{ fontWeight: 800 }}>Hoş geldin, {session.name}</h1>
-          <p className="text-sm text-gray-500 mt-2 leading-relaxed">
+          <h1 className="text-xl" style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Hoş geldin, {session.name}</h1>
+          <p className="text-sm mt-2 leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
             Devam etmeden önce kendine ait yeni bir şifre belirlemen gerekiyor.
             Bu adımı atlayamazsın — yeni şifreni iki kez yazıp kaydet.
           </p>
@@ -59,7 +59,7 @@ export default function ForcedPasswordChange({ session, onDone, onLogout, showTo
 
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>
+            <label className="block text-xs uppercase tracking-wide mb-1.5" style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
               Sana verilen geçici şifre
             </label>
             <input
@@ -76,7 +76,7 @@ export default function ForcedPasswordChange({ session, onDone, onLogout, showTo
           </div>
 
           <div>
-            <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>
+            <label className="block text-xs uppercase tracking-wide mb-1.5" style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
               Yeni şifre
             </label>
             <input
@@ -93,7 +93,7 @@ export default function ForcedPasswordChange({ session, onDone, onLogout, showTo
           </div>
 
           <div>
-            <label className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>
+            <label className="block text-xs uppercase tracking-wide mb-1.5" style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
               Yeni şifre (tekrar)
             </label>
             <input
@@ -119,11 +119,12 @@ export default function ForcedPasswordChange({ session, onDone, onLogout, showTo
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-gray-100 text-center">
-          <p className="text-xs text-gray-400 mb-2">Şifreni bilmiyorsan ya da bir sorun yaşıyorsan</p>
+        <div className="mt-6 pt-4 text-center" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+          <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>Şifreni bilmiyorsan ya da bir sorun yaşıyorsan</p>
           <button
             onClick={onLogout}
-            className="text-xs text-gray-500 hover:text-gray-700 inline-flex items-center gap-1"
+            className="text-xs inline-flex items-center gap-1 hover:opacity-75 transition-opacity"
+            style={{ color: 'var(--text-secondary)' }}
           >
             <LogOut size={12} />
             Çıkış yap ve müdüre başvur

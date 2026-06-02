@@ -366,7 +366,7 @@ function AppContent() {
     const RIcon = RoleIcon[session.role] || User;
 
     return (
-      <div className="flex h-screen overflow-hidden bg-gray-50">
+      <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
         <Sidebar
           session={session}
           branding={branding}
@@ -382,27 +382,27 @@ function AppContent() {
 
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
           {/* TopBar */}
-          <header className="bg-white border-b border-gray-100 h-14 flex items-center justify-between px-4 shrink-0 z-20">
+          <header className="h-14 flex items-center justify-between px-4 shrink-0 z-20"
+            style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' }}>
             {/* Sol: hamburger (mobil) + kurum adı */}
             <div className="flex items-center gap-3 min-w-0">
               <button
-                className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+                className="md:hidden p-2 rounded-lg hover:bg-[var(--bg-muted)]"
+                style={{ color: 'var(--text-secondary)' }}
                 onClick={() => setMobileSidebarOpen(true)}
                 aria-label="Menüyü aç"
               >
                 <Menu size={20} />
               </button>
-              {/* Masaüstünde logo gösterme (sidebar'da zaten var) */}
-              <span className="hidden md:block font-700 text-gray-900 text-sm truncate" style={{ fontWeight: 700 }}>
+              <span className="hidden md:block text-sm truncate" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                 {branding.name}
               </span>
-              {/* Mobilde logo göster */}
               {branding.logoUrl ? (
                 <img src={branding.logoUrl} alt={branding.name}
                   className="md:hidden h-8 w-auto object-contain"
                   onError={e => { e.currentTarget.style.display = 'none'; }} />
               ) : (
-                <span className="md:hidden font-700 text-gray-900 text-sm truncate" style={{ fontWeight: 700 }}>
+                <span className="md:hidden text-sm truncate" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                   {branding.shortName || 'Etüt Takip'}
                 </span>
               )}
@@ -410,10 +410,10 @@ function AppContent() {
 
             {/* Sağ: user chip + bildirim + ayarlar + çıkış */}
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
                 <RIcon size={13} style={{ color: roleColor[session.role] }} />
-                <span className="text-sm font-600 text-gray-700 hidden sm:inline" style={{ fontWeight: 600 }}>{session.name}</span>
-                <span className="text-xs font-500 text-gray-400" style={{ fontWeight: 500 }}>{roleLabel[session.role]}</span>
+                <span className="text-sm hidden sm:inline" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{session.name}</span>
+                <span className="text-xs" style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{roleLabel[session.role]}</span>
               </div>
               <NotificationButton showToast={showToast} />
               <button onClick={() => setShowDirectorName(true)} title="Ayarlar" className="btn-ghost !px-2.5 !py-2">
@@ -470,7 +470,8 @@ function AppContent() {
 
   return (
     <div className="min-h-screen">
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
+      <header className="sticky top-0 z-30 shadow-sm"
+        style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' }}>
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0">
             {branding.logoUrl ? (
@@ -482,13 +483,13 @@ function AppContent() {
                 <BookOpen size={18} color="white" />
               </div>
             )}
-            <span className="font-800 text-gray-900 text-sm sm:text-base leading-tight truncate" style={{ fontWeight: 800 }}>{branding.name}</span>
+            <span className="text-sm sm:text-base leading-tight truncate" style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{branding.name}</span>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: '#f3f4f6' }}>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
               <Icon2 size={14} style={{ color: roleColor[session.role] }} />
-              <span className="text-sm font-600 text-gray-700" style={{ fontWeight: 600 }}>{session.name}</span>
-              <span className="text-sm font-500 text-gray-400" style={{ fontWeight: 500 }}>{roleLabel[session.role]}</span>
+              <span className="text-sm" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{session.name}</span>
+              <span className="text-sm" style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{roleLabel[session.role]}</span>
             </div>
             <NotificationButton showToast={showToast} />
             <button onClick={() => setShowChangePassword(true)} title="Şifremi Değiştir" className="btn-ghost !px-3 !py-2">

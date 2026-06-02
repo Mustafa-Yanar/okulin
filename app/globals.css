@@ -4,31 +4,58 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
+/* ─── Tema değişkenleri ──────────────────────────────────────────────────────── */
+:root {
+  --bg-base:        #f0f2f7;
+  --bg-surface:     #ffffff;
+  --bg-surface-2:   #f8f9fc;
+  --bg-muted:       #f3f4f6;
+  --border-subtle:  rgba(0,0,0,0.07);
+  --border-light:   rgba(0,0,0,0.1);
+  --text-primary:   #1a1d2e;
+  --text-secondary: #6b7280;
+  --text-muted:     #9ca3af;
+  --shadow-inset:   rgba(255,255,255,0.9);
+}
+
+html.dark {
+  --bg-base:        #0f1117;
+  --bg-surface:     #1a1d2e;
+  --bg-surface-2:   #252836;
+  --bg-muted:       #2d3144;
+  --border-subtle:  rgba(255,255,255,0.07);
+  --border-light:   rgba(255,255,255,0.1);
+  --text-primary:   #e8eaf0;
+  --text-secondary: #9ca3af;
+  --text-muted:     #6b7280;
+  --shadow-inset:   rgba(255,255,255,0.04);
+}
+
 * { box-sizing: border-box; }
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background: #f0f2f7;
-  color: #1a1d2e;
+  background: var(--bg-base);
+  color: var(--text-primary);
   min-height: 100vh;
 }
 
 .card {
-  background: #ffffff;
-  border: 1px solid rgba(0,0,0,0.07);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 16px;
   box-shadow:
-    0 1px 0 rgba(255,255,255,0.9) inset,
+    0 1px 0 var(--shadow-inset) inset,
     0 2px 4px rgba(0,0,0,0.06),
     0 8px 20px rgba(0,0,0,0.07);
 }
 
 .card-elevated {
-  background: #ffffff;
-  border: 1px solid rgba(0,0,0,0.06);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 20px;
   box-shadow:
-    0 1px 0 rgba(255,255,255,1) inset,
+    0 1px 0 var(--shadow-inset) inset,
     0 4px 8px rgba(0,0,0,0.08),
     0 20px 40px rgba(0,0,0,0.1);
 }
@@ -82,9 +109,9 @@ body {
 .btn-danger:disabled { opacity: 0.5; transform: none; cursor: not-allowed; }
 
 .btn-ghost {
-  background: rgba(0,0,0,0.05);
-  color: #6b7280;
-  border: 1px solid rgba(0,0,0,0.08);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
   border-radius: 10px;
   padding: 10px 20px;
   font-weight: 500;
@@ -92,27 +119,25 @@ body {
   cursor: pointer;
   transition: all 0.15s ease;
 }
-.btn-ghost:hover { background: rgba(0,0,0,0.09); color: #374151; }
+.btn-ghost:hover { filter: brightness(0.95); color: var(--text-primary); }
 
 .input {
   width: 100%;
-  background: #f8f9fc;
-  border: 1px solid rgba(0,0,0,0.1);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-light);
   border-radius: 10px;
   padding: 11px 14px;
-  color: #1a1d2e;
+  color: var(--text-primary);
   font-size: 14px;
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-.input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); background: #fff; }
-.input::placeholder { color: #9ca3af; }
+.input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); background: var(--bg-surface); }
+.input::placeholder { color: var(--text-muted); }
 
-/* Klavye odağı için belirgin halka — yalnız klavyeyle gezilince görünür,
-   fare tıklamasında çıkmaz (:focus-visible). Erişilebilirlik için şart. */
+/* Klavye odağı için belirgin halka */
 :focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 6px; }
-/* .input kendi box-shadow halkasını kullanır; çift halka olmasın */
 .input:focus-visible { outline: none; }
 
 .badge {
@@ -139,16 +164,17 @@ body {
 
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 3px; }
+html.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
 
-/* ─── Sidebar ─────────────────────────────────────────────────────────────── */
+/* ─── Sidebar ────────────────────────────────────────────────────────────────── */
 .sidebar { transition: width 0.2s ease; }
 
 .nav-item-active {
   background: color-mix(in srgb, var(--brand, #6366f1) 12%, transparent);
   color: var(--brand, #6366f1);
   border-left: 2px solid var(--brand, #6366f1);
-  padding-left: calc(0.75rem - 2px); /* sol border'ı telafi et */
+  padding-left: calc(0.75rem - 2px);
 }
 
 @keyframes slide-in-left {
@@ -161,28 +187,23 @@ body {
   .no-print { display: none !important; }
   .print-page { page-break-after: always; }
 
-  /* Force browsers to print backgrounds and text colors accurately */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
-  /* Hide header from print */
   header {
     display: none !important;
   }
 
-  /* Robust nested printing: hide body branches that do not contain the print container */
   body:has(#print-preview) > *:not(:has(#print-preview)) {
     display: none !important;
   }
 
-  /* Hide main panel branches that do not contain the print container */
   main:has(#print-preview) > *:not(:has(#print-preview)) {
     display: none !important;
   }
 
-  /* Print preview container styling */
   #print-preview {
     position: static !important;
     overflow: visible !important;

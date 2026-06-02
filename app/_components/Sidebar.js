@@ -4,9 +4,10 @@ import React, { useEffect } from 'react';
 import {
   Home, Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
   BarChart2, CreditCard, TrendingDown, ChevronLeft, ChevronRight,
-  X, BookMarked, Shield,
+  X, BookMarked,
 } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
+import ThemeToggle from './ThemeToggle';
 
 // ─── Sekme tanımları ────────────────────────────────────────────────────────────
 
@@ -29,7 +30,6 @@ const ACCOUNTANT_ITEMS = [
 
 function buildItems(role) {
   if (role === 'accountant') return ACCOUNTANT_ITEMS;
-  // director ya da counselor
   return DIRECTOR_ITEMS.filter(i => !i.directorOnly || role === 'director');
 }
 
@@ -44,10 +44,16 @@ function NavItem({ item, active, collapsed, onClick }) {
       aria-current={active ? 'page' : undefined}
       className={`
         w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-500 transition-all
-        ${active ? 'nav-item-active' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}
+        ${active
+          ? 'nav-item-active'
+          : 'hover:bg-[var(--bg-muted)]'
+        }
         ${collapsed ? 'justify-center' : ''}
       `}
-      style={{ fontWeight: 500 }}
+      style={{
+        fontWeight: 500,
+        color: active ? undefined : 'var(--text-secondary)',
+      }}
     >
       <Icon size={18} className="shrink-0" />
       {!collapsed && <span className="truncate">{item.label}</span>}
@@ -62,8 +68,6 @@ export default function Sidebar({
   branding,
   activeTab,
   onTabChange,
-  onLogout,
-  onSettings,
   collapsed,
   onCollapse,
   mobileOpen,
@@ -93,9 +97,12 @@ export default function Sidebar({
   }
 
   const sidebarContent = (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" style={{ background: 'var(--bg-surface)' }}>
       {/* Logo / kurum adı */}
-      <div className={`flex items-center gap-2.5 px-4 h-14 border-b border-gray-100 shrink-0 ${collapsed ? 'justify-center' : ''}`}>
+      <div
+        className={`flex items-center gap-2.5 px-4 h-14 shrink-0 ${collapsed ? 'justify-center' : ''}`}
+        style={{ borderBottom: '1px solid var(--border-subtle)' }}
+      >
         {branding?.logoUrl ? (
           <img
             src={branding.logoUrl}
@@ -112,7 +119,10 @@ export default function Sidebar({
           </div>
         )}
         {!collapsed && (
-          <span className="font-700 text-gray-900 text-sm leading-tight truncate" style={{ fontWeight: 700 }}>
+          <span
+            className="text-sm leading-tight truncate"
+            style={{ fontWeight: 700, color: 'var(--text-primary)' }}
+          >
             {branding?.shortName || 'Etüt Takip'}
           </span>
         )}
@@ -125,12 +135,16 @@ export default function Sidebar({
           return (
             <div key={group}>
               {group !== '__top__' && !collapsed && (
-                <p className="px-3 pt-3 pb-1 text-[10px] font-700 text-gray-400 uppercase tracking-widest"
-                   style={{ fontWeight: 700 }}>
+                <p
+                  className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest"
+                  style={{ fontWeight: 700, color: 'var(--text-muted)' }}
+                >
                   {group}
                 </p>
               )}
-              {group !== '__top__' && collapsed && <div className="my-2 border-t border-gray-100" />}
+              {group !== '__top__' && collapsed && (
+                <div className="my-2" style={{ borderTop: '1px solid var(--border-subtle)' }} />
+              )}
               {groupItems.map(item => (
                 <NavItem
                   key={item.key}
@@ -145,14 +159,18 @@ export default function Sidebar({
         })}
       </nav>
 
-      {/* Alt: Collapse toggle (yalnız masaüstü) */}
+      {/* Alt: Theme toggle + Collapse toggle (yalnız masaüstü) */}
       <div className="shrink-0 px-3 pb-4 hidden md:block">
-        <div className="border-t border-gray-100 pt-3">
+        <div className="pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+          <ThemeToggle collapsed={collapsed} />
           <button
             onClick={onCollapse}
             title={collapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-all"
-            style={{ justifyContent: collapsed ? 'center' : undefined }}
+            className="mt-1 w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all hover:bg-[var(--bg-muted)]"
+            style={{
+              color: 'var(--text-muted)',
+              justifyContent: collapsed ? 'center' : undefined,
+            }}
           >
             {collapsed
               ? <ChevronRight size={16} />
@@ -168,7 +186,8 @@ export default function Sidebar({
     <>
       {/* Masaüstü sidebar */}
       <aside
-        className={`sidebar hidden md:flex flex-col bg-white border-r border-gray-100 h-screen sticky top-0 shrink-0 ${collapsed ? 'w-16' : 'w-64'}`}
+        className={`sidebar hidden md:flex flex-col h-screen sticky top-0 shrink-0 ${collapsed ? 'w-16' : 'w-64'}`}
+        style={{ borderRight: '1px solid var(--border-subtle)' }}
       >
         {sidebarContent}
       </aside>
@@ -176,19 +195,17 @@ export default function Sidebar({
       {/* Mobil overlay drawer */}
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-40 flex">
-          {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={onMobileClose}
             aria-hidden="true"
           />
-          {/* Drawer */}
-          <aside className="relative z-10 w-72 max-w-[85vw] bg-white h-full flex flex-col shadow-2xl animate-slide-in-left">
-            {/* Kapat butonu */}
+          <aside className="relative z-10 w-72 max-w-[85vw] h-full flex flex-col shadow-2xl animate-slide-in-left">
             <button
               onClick={onMobileClose}
               aria-label="Menüyü kapat"
-              className="absolute top-3 right-3 p-2 rounded-lg hover:bg-gray-100 text-gray-500 z-10"
+              className="absolute top-3 right-3 p-2 rounded-lg z-10 hover:bg-[var(--bg-muted)]"
+              style={{ color: 'var(--text-secondary)' }}
             >
               <X size={18} />
             </button>
