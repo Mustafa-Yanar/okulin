@@ -25,16 +25,28 @@ import { AnnouncementSender } from './announcements/Announcements';
 export { DirectorSettingsModal } from './director/Settings';
 
 // ─── MAIN DIRECTOR PANEL ────────────────────────────────────────────────────────
-export default function DirectorPanel({ session, showToast }) {
+export default function DirectorPanel({ session, showToast, externalTab, onExternalTabChange }) {
   // Rehber (counselor) = müdür paneli EKSİ muhasebe. Sekme listesi role göre.
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
-    ? ['teachers', 'students', 'yoklama', 'kutuphane', 'duyurular']
-    : ['teachers', 'students', 'yoklama', 'muhasebe', 'kutuphane', 'duyurular'];
-  const [tab, setTab] = useUrlTab('teachers', validTabs);
+    ? ['overview', 'teachers', 'students', 'yoklama', 'kutuphane', 'duyurular']
+    : ['overview', 'teachers', 'students', 'yoklama', 'muhasebe', 'kutuphane', 'duyurular', 'denemeler'];
+  const [tab, setTabInternal] = useUrlTab('overview', validTabs);
+
+  // Sidebar'dan gelen externalTab değişince iç state'i güncelle
+  useEffect(() => {
+    if (externalTab && validTabs.includes(externalTab) && externalTab !== tab) {
+      setTabInternal(externalTab);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalTab]);
+
+  const setTab = useCallback((key) => {
+    setTabInternal(key);
+    onExternalTabChange?.(key);
+  }, [setTabInternal, onExternalTabChange]);
   const [showProgramOlusturucuModal, setShowProgramOlusturucuModal] = useState(false);
-  const [showDenemelerModal, setShowDenemelerModal] = useState(false);
-  const [denemeTab, setDenemeTab] = useState('denemeler'); // modal içi: 'denemeler' | 'optik'
+  const [denemeTab, setDenemeTab] = useState('denemeler');
   const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
   const [weekKey, setWeekKey] = useState(getWeekKey());
@@ -126,14 +138,6 @@ export default function DirectorPanel({ session, showToast }) {
 
   return (
     <div>
-      <div className="flex gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">
-        {[['teachers','Öğretmenler'],['students','Rehberlik'],['yoklama','Yoklama'],...(isCounselor ? [] : [['muhasebe','💰 Muhasebe']]),['kutuphane','Kütüphane'],['duyurular','📢 Duyurular']].map(([key,label]) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${tab===key?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
-            style={{ fontWeight:600 }}>{label}</button>
-        ))}
-      </div>
-
       {/* TEACHERS TAB */}
       {tab === 'teachers' && (
         <div>
@@ -308,6 +312,24 @@ export default function DirectorPanel({ session, showToast }) {
         <AnnouncementSender showToast={showToast} />
       )}
 
+      {tab === 'denemeler' && (
+        <div>
+          <div className="flex gap-1 mb-4 p-1 bg-gray-100 rounded-xl w-fit">
+            {[['denemeler','Denemeler'],['optik','Optik Form']].map(([k,l]) => (
+              <button key={k} onClick={() => setDenemeTab(k)}
+                className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${denemeTab===k?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
+                style={{ fontWeight: 600 }}>{l}</button>
+            ))}
+          </div>
+          {denemeTab === 'denemeler'
+            ? <DirectorDenemeYonetimi showToast={showToast} />
+            : <OptikFormTab showToast={showToast} />}
+        </div>
+      )}
+
+      {/* Genel Bakış sekmesi: KPICards page.js tarafından render edilir, DirectorPanel boş bırakır */}
+      {tab === 'overview' && null}
+
       {/* Modals */}
       {showTeacherForm && (
         <TeacherForm initial={editTeacher} onClose={() => { setShowTeacherForm(false); setEditTeacher(null); }}
@@ -341,20 +363,6 @@ export default function DirectorPanel({ session, showToast }) {
         <Modal title="Ders Programı Oluştur" onClose={() => setShowProgramOlusturucuModal(false)} xwide lockClose>
           <ProgramOlusturucu api={api} showToast={showToast}
             activeClasses={[...new Set(students.map(s => s.cls))]} />
-        </Modal>
-      )}
-      {showDenemelerModal && (
-        <Modal title="Denemeler" onClose={() => setShowDenemelerModal(false)} xwide lockClose>
-          <div className="flex gap-1 mb-4 p-1 bg-gray-100 rounded-xl w-fit">
-            {[['denemeler','📊 Denemeler'],['optik','🖊️ Optik Form']].map(([k,l]) => (
-              <button key={k} onClick={() => setDenemeTab(k)}
-                className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${denemeTab===k?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
-                style={{ fontWeight: 600 }}>{l}</button>
-            ))}
-          </div>
-          {denemeTab === 'denemeler'
-            ? <DirectorDenemeYonetimi showToast={showToast} />
-            : <OptikFormTab showToast={showToast} />}
         </Modal>
       )}
     </div>
