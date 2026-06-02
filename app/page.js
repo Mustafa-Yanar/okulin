@@ -13,9 +13,9 @@ import OrgAdminPanel from './_components/OrgAdminPanel';
 import DirectorPanel, { DirectorSettingsModal } from './_components/DirectorPanel';
 import ChangePasswordModal from './_components/ChangePasswordModal';
 import ForcedPasswordChange from './_components/ForcedPasswordChange';
-import NotificationButton from './_components/NotificationButton';
 import Sidebar from './_components/Sidebar';
 import KPICards from './_components/KPICards';
+import { isPushSupported, subscribeToPush } from '@/lib/push-client';
 import { SlotTimesProvider, useSlotTimes } from './_components/SlotTimesContext';
 import { ErrorBoundary, GlobalErrorListener } from './_components/ErrorBoundary';
 import { BRANDING_DEFAULTS, brandGradient } from '@/lib/branding';
@@ -267,6 +267,10 @@ function AppContent() {
             const times = await api('/api/slot-times');
             updateSlotTimes(times);
           } catch {}
+          // İlk girişte push izni iste — izin verilmişse sessiz, verilmemişse tarayıcı diyaloğu açılır
+          if (isPushSupported()) {
+            subscribeToPush().catch(() => {});
+          }
           if (SIDEBAR_ROLES.includes(status.session.role)) {
             setStatsLoading(true);
             try {
@@ -375,6 +379,7 @@ function AppContent() {
         onCollapse={handleCollapse}
         mobileOpen={mobileSidebarOpen}
         onMobileClose={() => setMobileSidebarOpen(false)}
+        showToast={showToast}
       />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -410,7 +415,6 @@ function AppContent() {
               <span className="text-sm hidden sm:inline" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{session.name}</span>
               <span className="text-xs" style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{roleLabel[session.role]}</span>
             </div>
-            <NotificationButton showToast={showToast} />
             {canChangePassword && (
               <button onClick={() => setShowChangePassword(true)} title="Şifremi Değiştir" className="btn-ghost !px-2.5 !py-2">
                 <Settings size={14} />

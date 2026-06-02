@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
 import ThemeToggle from './ThemeToggle';
+import NotificationButton from './NotificationButton';
 
 // ─── Sekme tanımları (rol bazlı) ────────────────────────────────────────────────
 
@@ -94,6 +95,7 @@ export default function Sidebar({
   onCollapse,
   mobileOpen,
   onMobileClose,
+  showToast,
 }) {
   const items = buildItems(session?.role);
 
@@ -118,16 +120,17 @@ export default function Sidebar({
 
   const sidebarContent = (
     <div className="flex flex-col h-full" style={{ background: 'var(--bg-surface)' }}>
-      {/* Logo / kurum adı */}
+      {/* Logo / kurum adı + zil */}
       <div
-        className={`flex items-center gap-2.5 px-4 h-14 shrink-0 ${collapsed ? 'justify-center' : ''}`}
+        className={`flex items-center h-14 shrink-0 px-3 ${collapsed ? 'justify-center' : 'gap-2'}`}
         style={{ borderBottom: '1px solid var(--border-subtle)' }}
       >
+        {/* Logo */}
         {branding?.logoUrl ? (
           <img
             src={branding.logoUrl}
             alt={branding.name}
-            className={`object-contain ${collapsed ? 'h-8 w-8' : 'h-9 w-auto max-w-[120px]'}`}
+            className={`object-contain shrink-0 ${collapsed ? 'h-8 w-8' : 'h-9 w-auto max-w-[100px]'}`}
             onError={e => { e.currentTarget.style.display = 'none'; }}
           />
         ) : (
@@ -138,10 +141,14 @@ export default function Sidebar({
             <BookMarked size={16} color="white" />
           </div>
         )}
+        {/* Kurum adı + zil (collapsed'da gizli) */}
         {!collapsed && (
-          <span className="text-sm leading-tight truncate" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-            {branding?.shortName || 'Etüt Takip'}
-          </span>
+          <>
+            <span className="text-sm leading-tight truncate flex-1 min-w-0" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+              {branding?.shortName || 'Etüt Takip'}
+            </span>
+            <NotificationButton showToast={showToast} />
+          </>
         )}
       </div>
 
