@@ -11,17 +11,17 @@ function KPICard({ icon: Icon, label, value, sub, color, loading }) {
   return (
     <div className="card p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-500">{label}</span>
+        <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{label}</span>
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${color.bg}`}>
           <Icon size={17} className={color.icon} />
         </div>
       </div>
       {loading ? (
-        <div className="h-8 w-24 bg-gray-100 rounded-lg animate-pulse" />
+        <div className="h-8 w-24 rounded-lg animate-pulse" style={{ background: 'var(--bg-muted)' }} />
       ) : (
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-800 text-gray-900" style={{ fontWeight: 800 }}>{value}</span>
-          {sub && <span className="text-xs text-gray-400">{sub}</span>}
+          <span className="text-2xl" style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{value}</span>
+          {sub && <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{sub}</span>}
         </div>
       )}
     </div>
@@ -29,10 +29,10 @@ function KPICard({ icon: Icon, label, value, sub, color, loading }) {
 }
 
 const COLORS = {
-  blue:   { bg: 'bg-blue-500/10',   icon: 'text-blue-600' },
-  purple: { bg: 'bg-purple-500/10', icon: 'text-purple-600' },
-  green:  { bg: 'bg-green-500/10',  icon: 'text-green-600' },
-  orange: { bg: 'bg-orange-500/10', icon: 'text-orange-600' },
+  blue:   { bg: 'bg-blue-500/10',   icon: 'text-blue-500' },
+  purple: { bg: 'bg-purple-500/10', icon: 'text-purple-500' },
+  green:  { bg: 'bg-green-500/10',  icon: 'text-green-500' },
+  orange: { bg: 'bg-orange-500/10', icon: 'text-orange-500' },
 };
 
 export default function KPICards({ stats, loading, showFinance = true }) {
