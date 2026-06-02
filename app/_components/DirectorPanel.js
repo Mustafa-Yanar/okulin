@@ -291,6 +291,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                       {/* Program sekmesi — inline */}
                       {expandedTeacherTab === 'program' && (
                         <ProgramEditor
+                          key={`prog-${t.id}`}
                           inline
                           teacher={t}
                           students={students}

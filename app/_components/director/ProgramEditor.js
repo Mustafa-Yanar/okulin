@@ -4,7 +4,7 @@
 // izin günü, hafta navigasyonu. Nested EtutPanel ile öğrenci ataması.
 import React, { useState, useEffect, useMemo } from 'react';
 import LoadingBox from '../Loading';
-import { ChevronLeft, ChevronRight, Save } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, X } from 'lucide-react';
 import {
   ALL_DAYS, WEEKDAY_SLOT_IDS, WEEKEND_SLOT_IDS, classLabel,
   makeSlots, slotsForDay, getWeekKey, weekRangeLabel,
@@ -392,6 +392,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
 
       {activeCell && (getEntry(activeCell.dayIndex, activeCell.slotId)?.type === 'available' || getEntry(activeCell.dayIndex, activeCell.slotId)?.type === 'etut') && (
         <EtutPanel
+          key={`${activeCell.dayIndex}:${activeCell.slotId}`}
           dayIndex={activeCell.dayIndex}
           slotId={activeCell.slotId}
           getEntry={getEntry}
