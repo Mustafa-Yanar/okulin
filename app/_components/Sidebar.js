@@ -34,7 +34,6 @@ const ITEMS_BY_ROLE = {
   accountant: [
     { group: 'Finans',   key: 'finance',     label: 'Öğrenci Ödemeleri', icon: CreditCard },
     { group: 'Finans',   key: 'expenses',    label: 'Giderler',          icon: TrendingDown },
-    { group: 'Yönetim',  key: 'accountants', label: 'Muhasebeciler',     icon: Users },
   ],
   teacher: [
     { group: null,       key: 'rezervasyon', label: 'Program',           icon: Calendar },
