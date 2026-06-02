@@ -118,10 +118,10 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
                     Muhasebeci
                   </span>
                   <div className="flex gap-1 shrink-0">
-                    <button onClick={() => openEdit(a)} className="p-2 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 transition-colors" title="Düzenle">
+                    <button onClick={() => openEdit(a)} className="btn-icon btn-icon-primary" title="Düzenle">
                       <Edit3 size={14} />
                     </button>
-                    <button onClick={() => handleDelete(a.id, a.name)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors" title="Sil">
+                    <button onClick={() => handleDelete(a.id, a.name)} className="btn-icon btn-icon-danger" title="Sil">
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -146,7 +146,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
                     <input
                       value={form.name}
                       onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
+                      className="input"
                       placeholder="Örn: Ayşe Yılmaz"
                       aria-label="Muhasebeci adı soyadı"
                       required autoFocus
@@ -161,20 +161,17 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
                       type="password"
                       value={form.password}
                       onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
+                      className="input"
                       placeholder={editAcc ? 'Yeni şifre (opsiyonel)' : 'Şifre girin'}
                       aria-label="Muhasebeci şifresi"
                       required={!editAcc}
                     />
                   </div>
                   <div className="flex gap-3 pt-1">
-                    <button type="submit" disabled={saving}
-                      className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-700 text-sm hover:from-cyan-600 hover:to-blue-700 transition-all disabled:opacity-50"
-                      style={{ fontWeight: 700 }}
-                    >{saving ? 'Kaydediliyor…' : editAcc ? 'Güncelle' : 'Ekle'}</button>
-                    <button type="button" onClick={() => setShowForm(false)}
-                      className="px-4 py-3 rounded-xl bg-gray-100 text-gray-600 font-600 text-sm hover:bg-gray-200 transition-colors"
-                      style={{ fontWeight: 600 }}>İptal</button>
+                    <button type="submit" disabled={saving} className="btn-primary flex-1">
+                      {saving ? 'Kaydediliyor…' : editAcc ? 'Güncelle' : 'Ekle'}
+                    </button>
+                    <button type="button" onClick={() => setShowForm(false)} className="btn-ghost">İptal</button>
                   </div>
                 </form>
               </div>

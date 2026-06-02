@@ -238,6 +238,18 @@ body {
 }
 .btn-ghost:hover { filter: brightness(0.95); color: var(--text-primary); }
 
+/* Küçük ikon buton — sadece ikon, padding küçük */
+.btn-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 8px;
+  border: none; background: transparent; cursor: pointer;
+  color: var(--text-muted);
+  transition: all var(--transition-fast);
+}
+.btn-icon:hover { background: var(--bg-muted); color: var(--text-secondary); }
+.btn-icon-danger:hover { background: var(--color-danger-bg); color: var(--color-danger); }
+.btn-icon-primary:hover { background: var(--color-info-bg); color: var(--color-info); }
+
 .input {
   width: 100%;
   background: var(--bg-surface-2);

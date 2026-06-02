@@ -245,8 +245,8 @@ function PersonnelList({ items, onEdit, onDelete }) {
               <div className="text-[10px] text-gray-400">{e.date}</div>
             </div>
             <div className="flex gap-1 shrink-0">
-              <button onClick={() => onEdit(e)} className="p-2 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600" title="Düzenle"><Edit3 size={14} /></button>
-              <button onClick={() => onDelete(e)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500" title="Sil"><Trash2 size={14} /></button>
+              <button onClick={() => onEdit(e)} className="btn-icon btn-icon-primary" title="Düzenle"><Edit3 size={14} /></button>
+              <button onClick={() => onDelete(e)} className="btn-icon btn-icon-danger" title="Sil"><Trash2 size={14} /></button>
             </div>
           </div>
         );
@@ -270,8 +270,8 @@ function GeneralList({ items, onEdit, onDelete }) {
           </div>
           <div className="font-800 shrink-0" style={{ fontWeight: 800, color: 'var(--text-primary)' }}>₺{fmt(e.amount)}</div>
           <div className="flex gap-1 shrink-0">
-            <button onClick={() => onEdit(e)} className="p-2 rounded-lg hover:bg-indigo-50 text-gray-400 hover:text-indigo-600" title="Düzenle"><Edit3 size={14} /></button>
-            <button onClick={() => onDelete(e)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500" title="Sil"><Trash2 size={14} /></button>
+            <button onClick={() => onEdit(e)} className="btn-icon btn-icon-primary" title="Düzenle"><Edit3 size={14} /></button>
+            <button onClick={() => onDelete(e)} className="btn-icon btn-icon-danger" title="Sil"><Trash2 size={14} /></button>
           </div>
         </div>
       ))}
@@ -365,7 +365,7 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
                 <label className={labelCls}>Personel</label>
                 <input value={personnelName} onChange={e => setPersonnelName(e.target.value)}
                   list="staff-suggestions" placeholder="İsim seç veya yaz"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
+                  className="input" />
                 <datalist id="staff-suggestions">
                   {staff.map(s => <option key={s.id} value={s.name} />)}
                 </datalist>
@@ -376,12 +376,12 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
                 <div>
                   <label className={labelCls}>Dönem (ay)</label>
                   <input type="month" value={period} onChange={e => setPeriod(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
+                    className="input" />
                 </div>
                 <div>
                   <label className={labelCls}>Maaş (₺)</label>
                   <input type="number" inputMode="decimal" value={salary} onChange={e => setSalary(e.target.value)} placeholder="0"
-                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
+                    className="input" />
                 </div>
               </div>
 
@@ -398,10 +398,10 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
                   {extras.map((x, i) => (
                     <div key={i} className="flex gap-2">
                       <input value={x.label} onChange={e => setExtra(i, 'label', e.target.value)} placeholder="Etiket (örn: Prim)"
-                        className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:border-indigo-400 focus:outline-none" />
+                        className="input flex-1" />
                       <input type="number" inputMode="decimal" value={x.amount} onChange={e => setExtra(i, 'amount', e.target.value)} placeholder="₺"
-                        className="w-24 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 text-sm focus:border-indigo-400 focus:outline-none" />
-                      <button type="button" onClick={() => removeExtra(i)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><X size={14} /></button>
+                        className="input w-24" />
+                      <button type="button" onClick={() => removeExtra(i)} className="btn-icon btn-icon-danger"><X size={14} /></button>
                     </div>
                   ))}
                 </div>
@@ -417,14 +417,14 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
               <div>
                 <label className={labelCls}>Kategori</label>
                 <select value={category} onChange={e => setCategory(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none">
+                  className="input">
                   {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
                 <label className={labelCls}>Tutar (₺)</label>
                 <input type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
+                  className="input" />
               </div>
             </>
           )}
@@ -433,20 +433,19 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
             <div>
               <label className={labelCls}>Tarih</label>
               <input type="date" value={date} onChange={e => setDate(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
+                className="input" />
             </div>
             <div>
               <label className={labelCls}>Açıklama</label>
               <input value={description} onChange={e => setDescription(e.target.value)} placeholder="Opsiyonel"
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
+                className="input" />
             </div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-100 sticky bottom-0 bg-white">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-100">İptal</button>
-          <button onClick={submit} disabled={busy}
-            className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+        <div className="flex justify-end gap-2 px-5 py-3 sticky bottom-0" style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
+          <button onClick={onClose} className="btn-ghost !px-4 !py-2 text-sm">İptal</button>
+          <button onClick={submit} disabled={busy} className="btn-primary !px-4 !py-2 text-sm">
             {busy ? 'Kaydediliyor…' : isEdit ? 'Güncelle' : 'Kaydet'}
           </button>
         </div>

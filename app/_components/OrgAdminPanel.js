@@ -111,8 +111,8 @@ function NewBranchModal({ onClose, onCreated, org, appDomain }) {
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <div className="flex gap-2 justify-end mt-2">
-            <button type="button" onClick={onClose} className="px-3 py-1.5 rounded text-sm text-slate-600 hover:bg-slate-100">İptal</button>
-            <button type="submit" disabled={loading} className="px-4 py-1.5 rounded text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
+            <button type="button" onClick={onClose} className="btn-ghost !px-3 !py-2 text-sm">İptal</button>
+            <button type="submit" disabled={loading} className="btn-primary !px-4 !py-2 text-sm">
               {loading ? 'Oluşturuluyor…' : 'Oluştur'}
             </button>
           </div>
@@ -158,7 +158,7 @@ function ResetPasswordModal({ branch, onClose, onDone }) {
           </Field>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2 justify-end mt-1">
-            <button type="button" onClick={onClose} className="px-3 py-1.5 rounded text-sm text-slate-600 hover:bg-slate-100">İptal</button>
+            <button type="button" onClick={onClose} className="btn-ghost !px-3 !py-2 text-sm">İptal</button>
             <button type="submit" disabled={loading} className="px-4 py-1.5 rounded text-sm bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50">
               {loading ? 'Sıfırlanıyor…' : 'Sıfırla'}
             </button>
@@ -204,8 +204,8 @@ function RenameModal({ branch, onClose, onDone }) {
           </Field>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2 justify-end mt-1">
-            <button type="button" onClick={onClose} className="px-3 py-1.5 rounded text-sm text-slate-600 hover:bg-slate-100">İptal</button>
-            <button type="submit" disabled={loading} className="px-4 py-1.5 rounded text-sm bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
+            <button type="button" onClick={onClose} className="btn-ghost !px-3 !py-2 text-sm">İptal</button>
+            <button type="submit" disabled={loading} className="btn-primary !px-4 !py-2 text-sm">
               {loading ? 'Kaydediliyor…' : 'Kaydet'}
             </button>
           </div>
@@ -306,7 +306,7 @@ export default function OrgAdminPanel({ session, onLogout }) {
             </button>
             <button
               onClick={() => setModal({ type: 'new' })}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700"
+              className="btn-primary !px-3 !py-2 flex items-center gap-1.5 text-sm"
             >
               <Plus size={15} /> Yeni Şube
             </button>

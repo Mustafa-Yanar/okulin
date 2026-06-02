@@ -210,11 +210,10 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
           </div>
 
           <div className="flex gap-3 pt-1">
-            <button type="submit" disabled={saving}
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 text-white font-700 text-sm hover:from-indigo-600 hover:to-indigo-700 transition-all disabled:opacity-50"
-              style={{ fontWeight: 700 }}
-            >{saving ? 'Kaydediliyor…' : 'Ödemeyi Kaydet & Makbuz Al'}</button>
-            <button type="button" onClick={onClose} className="px-4 py-3 rounded-xl bg-gray-100 text-gray-600 font-600 text-sm hover:bg-gray-200 transition-colors" style={{ fontWeight: 600 }}>İptal</button>
+            <button type="submit" disabled={saving} className="btn-primary flex-1">
+              {saving ? 'Kaydediliyor…' : 'Ödemeyi Kaydet & Makbuz Al'}
+            </button>
+            <button type="button" onClick={onClose} className="btn-ghost">İptal</button>
           </div>
         </form>
       </div>
@@ -361,11 +360,10 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
           )}
 
           <div className="flex gap-3 pt-1">
-            <button type="submit" disabled={saving}
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 text-white font-700 text-sm hover:from-indigo-600 hover:to-indigo-700 transition-all disabled:opacity-50"
-              style={{ fontWeight: 700 }}
-            >{saving ? 'Kaydediliyor…' : 'Kaydet'}</button>
-            <button type="button" onClick={onClose} className="px-4 py-3 rounded-xl bg-gray-100 text-gray-600 font-600 text-sm hover:bg-gray-200 transition-colors" style={{ fontWeight: 600 }}>İptal</button>
+            <button type="submit" disabled={saving} className="btn-primary flex-1">
+              {saving ? 'Kaydediliyor…' : 'Kaydet'}
+            </button>
+            <button type="button" onClick={onClose} className="btn-ghost">İptal</button>
           </div>
         </form>
       </div>

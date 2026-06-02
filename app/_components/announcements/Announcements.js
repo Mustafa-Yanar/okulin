@@ -179,7 +179,7 @@ function Composer({ showToast, onSent }) {
       )}
 
       <div className="flex justify-end">
-        <button onClick={send} disabled={busy} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+        <button onClick={send} disabled={busy} className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm">
           <Send size={14} /> {busy ? 'Gönderiliyor…' : 'Gönder'}
         </button>
       </div>
