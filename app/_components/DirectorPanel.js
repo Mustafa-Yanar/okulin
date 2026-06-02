@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, LayoutGrid, ClipboardList
+  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, LayoutGrid, ClipboardList, Compass
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
 import DirectorDenemeYonetimi from './rehberlik/DirectorDenemeYonetimi';
@@ -64,6 +64,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
   const [showTeacherForm, setShowTeacherForm] = useState(false);
   const [showStudentForm, setShowStudentForm] = useState(false);
+  const [showCounselorForm, setShowCounselorForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editTeacher, setEditTeacher] = useState(null);
   const [editStudent, setEditStudent] = useState(null);
@@ -319,6 +320,9 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
               <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditStudent(null); setShowStudentForm(true); }}>
                 <Plus size={14} /> Öğrenci Ekle
               </button>
+              <button className="btn-ghost !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => setShowCounselorForm(true)}>
+                <Compass size={14} /> Rehberlik Öğretmeni Ekle
+              </button>
             </div>
           </div>
           <StudentList students={students}
@@ -346,9 +350,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
             onHistory={s => setHistoryTarget({ type: 'student', id: s.id, name: s.name })}
             pendingGuidance={pendingGuidance}
             onGuidanceReviewed={loadPendingGuidance} />
-          <div className="mt-6 card p-5">
-            <CounselorSection showToast={showToast} />
-          </div>
         </div>
       )}
 
@@ -454,6 +455,11 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
               setShowTeacherForm(false); setEditTeacher(null); loadAll(weekKey);
             } catch(err){showToast(err.message,'error');}
           }} />
+      )}
+      {showCounselorForm && (
+        <Modal title="Rehberlik Öğretmeni Ekle" onClose={() => setShowCounselorForm(false)}>
+          <CounselorSection showToast={showToast} />
+        </Modal>
       )}
       {showStudentForm && (
         <StudentForm initial={editStudent} onClose={() => { setShowStudentForm(false); setEditStudent(null); }}
