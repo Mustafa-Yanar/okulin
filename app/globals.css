@@ -6,16 +6,55 @@
 
 /* ─── Tema değişkenleri ──────────────────────────────────────────────────────── */
 :root {
+  /* ── Yüzeyler ── */
   --bg-base:        #f0f2f7;
   --bg-surface:     #ffffff;
   --bg-surface-2:   #f8f9fc;
   --bg-muted:       #f3f4f6;
+
+  /* ── Kenarlıklar ── */
   --border-subtle:  rgba(0,0,0,0.07);
   --border-light:   rgba(0,0,0,0.1);
+
+  /* ── Metin ── */
   --text-primary:   #1a1d2e;
   --text-secondary: #6b7280;
   --text-muted:     #9ca3af;
+
+  /* ── Gölge ── */
   --shadow-inset:   rgba(255,255,255,0.9);
+  --shadow-sm:      0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:      0 2px 8px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-lg:      0 8px 24px rgba(0,0,0,0.1),  0 20px 40px rgba(0,0,0,0.08);
+
+  /* ── Semantik renkler ── */
+  --color-success:        #16a34a;
+  --color-success-bg:     #f0fdf4;
+  --color-success-border: rgba(22,163,74,0.2);
+
+  --color-warning:        #d97706;
+  --color-warning-bg:     #fffbeb;
+  --color-warning-border: rgba(217,119,6,0.2);
+
+  --color-danger:         #dc2626;
+  --color-danger-bg:      #fef2f2;
+  --color-danger-border:  rgba(220,38,38,0.2);
+
+  --color-info:           #2563eb;
+  --color-info-bg:        #eff6ff;
+  --color-info-border:    rgba(37,99,235,0.2);
+
+  /* ── Transition ── */
+  --transition-fast:   0.12s ease;
+  --transition-base:   0.18s ease;
+  --transition-slow:   0.28s ease;
+
+  /* ── Radius ── */
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --radius-xl:  20px;
+  --radius-2xl: 24px;
 }
 
 html.dark {
@@ -29,6 +68,25 @@ html.dark {
   --text-secondary: #9ca3af;
   --text-muted:     #6b7280;
   --shadow-inset:   rgba(255,255,255,0.04);
+  --shadow-sm:      0 1px 3px rgba(0,0,0,0.2),  0 1px 2px rgba(0,0,0,0.15);
+  --shadow-md:      0 2px 8px rgba(0,0,0,0.3),  0 4px 16px rgba(0,0,0,0.2);
+  --shadow-lg:      0 8px 24px rgba(0,0,0,0.4), 0 20px 40px rgba(0,0,0,0.3);
+
+  --color-success:        #4ade80;
+  --color-success-bg:     rgba(74,222,128,0.08);
+  --color-success-border: rgba(74,222,128,0.18);
+
+  --color-warning:        #fbbf24;
+  --color-warning-bg:     rgba(251,191,36,0.08);
+  --color-warning-border: rgba(251,191,36,0.18);
+
+  --color-danger:         #f87171;
+  --color-danger-bg:      rgba(248,113,113,0.08);
+  --color-danger-border:  rgba(248,113,113,0.18);
+
+  --color-info:           #60a5fa;
+  --color-info-bg:        rgba(96,165,250,0.08);
+  --color-info-border:    rgba(96,165,250,0.18);
 }
 
 * { box-sizing: border-box; }
@@ -38,6 +96,43 @@ body {
   background: var(--bg-base);
   color: var(--text-primary);
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Tipografi sistemi ──────────────────────────────────────────────────────── */
+.text-display {
+  font-size: 28px; font-weight: 800; line-height: 1.2;
+  letter-spacing: -0.03em; color: var(--text-primary);
+}
+.text-heading {
+  font-size: 20px; font-weight: 700; line-height: 1.3;
+  letter-spacing: -0.02em; color: var(--text-primary);
+}
+.text-subheading {
+  font-size: 16px; font-weight: 600; line-height: 1.4;
+  letter-spacing: -0.01em; color: var(--text-primary);
+}
+.text-body {
+  font-size: 14px; font-weight: 400; line-height: 1.6;
+  color: var(--text-primary);
+}
+.text-body-sm {
+  font-size: 13px; font-weight: 400; line-height: 1.5;
+  color: var(--text-secondary);
+}
+.text-label {
+  font-size: 11px; font-weight: 700; line-height: 1;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.text-caption {
+  font-size: 12px; font-weight: 400; line-height: 1.4;
+  color: var(--text-muted);
+}
+.text-mono {
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 13px;
 }
 
 .card {
@@ -149,6 +244,104 @@ body {
   font-weight: 600;
   letter-spacing: 0.03em;
 }
+.badge-success { background: var(--color-success-bg); color: var(--color-success); border: 1px solid var(--color-success-border); }
+.badge-warning { background: var(--color-warning-bg); color: var(--color-warning); border: 1px solid var(--color-warning-border); }
+.badge-danger  { background: var(--color-danger-bg);  color: var(--color-danger);  border: 1px solid var(--color-danger-border); }
+.badge-info    { background: var(--color-info-bg);    color: var(--color-info);    border: 1px solid var(--color-info-border); }
+
+/* ─── Kart varyantları ───────────────────────────────────────────────────────── */
+.card-hover {
+  cursor: pointer;
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 1px 0 var(--shadow-inset) inset,
+    0 4px 12px rgba(0,0,0,0.1),
+    0 16px 32px rgba(0,0,0,0.1);
+}
+.card-interactive {
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+.card-interactive:hover {
+  border-color: var(--border-light);
+  box-shadow: var(--shadow-md);
+}
+.card-interactive:active {
+  transform: scale(0.995);
+}
+
+/* ─── Durum satırları / status indicators ────────────────────────────────────── */
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+}
+.status-dot-success { background: var(--color-success); }
+.status-dot-warning { background: var(--color-warning); }
+.status-dot-danger  { background: var(--color-danger); }
+.status-dot-muted   { background: var(--text-muted); }
+
+/* ─── Bölüm başlığı ─────────────────────────────────────────────────────────── */
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.section-title {
+  font-size: 16px; font-weight: 700; letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+/* ─── Divider ────────────────────────────────────────────────────────────────── */
+.divider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 16px 0;
+}
+
+/* ─── Skeleton loading ───────────────────────────────────────────────────────── */
+@keyframes skeleton-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    90deg,
+    var(--bg-muted) 25%,
+    var(--bg-surface-2) 50%,
+    var(--bg-muted) 75%
+  );
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+/* ─── Micro-interactions ─────────────────────────────────────────────────────── */
+.press-effect {
+  transition: transform var(--transition-fast);
+}
+.press-effect:active { transform: scale(0.96); }
+
+@keyframes enter-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-enter-up { animation: enter-up 0.22s ease forwards; }
+
+@keyframes enter-scale {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.animate-enter-scale { animation: enter-scale 0.18s ease forwards; }
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.animate-shake { animation: shake 0.35s ease; }
 
 @keyframes fade-up {
   from { opacity: 0; transform: translate(-50%, 8px); }
