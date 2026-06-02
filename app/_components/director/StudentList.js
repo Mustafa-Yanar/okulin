@@ -95,7 +95,7 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
         </select>
       </div>
       <div className="grid gap-2">
-        {grouped.length === 0 && <div className="card p-8 text-center text-gray-400"><GraduationCap size={32} className="mx-auto mb-2 opacity-30" /><p>Öğrenci bulunamadı</p></div>}
+        {grouped.length === 0 && <div className="card p-8 text-center text-gray-400"><GraduationCap size={32} className="mx-auto mb-2 opacity-30" /><p className="text-caption">Arama kriterinizle eşleşen öğrenci yok</p></div>}
         {grouped.map(grp => {
           const isOpen = openCls === grp.cls;
           const dotColor = grp.group==='lise'

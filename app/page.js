@@ -35,9 +35,9 @@ async function api(path, opts = {}) {
 
 function Toast({ toast }) {
   if (!toast) return null;
-  const colors = { success: 'bg-green-500', error: 'bg-red-500', info: 'bg-indigo-500' };
+  const cls = { success: 'toast-success', error: 'toast-error', info: 'toast-info' };
   return (
-    <div className={`fixed bottom-6 left-1/2 z-50 animate-fade-up px-5 py-3 rounded-xl text-white text-sm font-medium shadow-xl -translate-x-1/2 ${colors[toast.type] || colors.success}`}>
+    <div className={`fixed bottom-6 left-1/2 z-50 animate-fade-up -translate-x-1/2 toast-base ${cls[toast.type] || 'toast-success'}`}>
       {toast.msg}
     </div>
   );
@@ -69,18 +69,21 @@ const LOGIN_ROLES = [
 
 function BrandHeader({ branding, subtitle }) {
   return (
-    <div className="text-center mb-7">
+    <div className="text-center mb-8">
       {branding?.logoUrl ? (
         <img src={branding.logoUrl} alt={branding.name}
-          className="h-16 w-auto object-contain mx-auto mb-4"
+          className="h-14 w-auto object-contain mx-auto mb-5"
           onError={(e) => { e.currentTarget.style.display = 'none'; }} />
       ) : (
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: brandGradient(branding?.themeColor) }}>
-          <BookOpen size={28} color="white" />
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-5"
+          style={{ background: brandGradient(branding?.themeColor), boxShadow: '0 8px 24px rgba(99,102,241,0.3)' }}>
+          <BookOpen size={26} color="white" />
         </div>
       )}
-      <h1 className="text-2xl font-800 text-gray-900" style={{ fontWeight: 800 }}>{branding?.shortName || 'Etüt Takip'}</h1>
-      <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+      <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.03em', color: 'var(--text-primary)' }}>
+        {branding?.shortName || 'Etüt Takip'}
+      </h1>
+      <p className="text-caption mt-1.5">{subtitle}</p>
     </div>
   );
 }
@@ -150,7 +153,7 @@ function LoginScreen({ onLogin, directorExists, showToast, branding }) {
               <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
             </FormField>
             <button className="btn-primary w-full mt-2" disabled={loading}>
-              {loading ? 'Lütfen bekleyin...' : 'Hesap Oluştur'}
+              {loading ? 'Giriş yapılıyor…' : 'Hesap Oluştur'}
             </button>
           </form>
         </div>
@@ -162,19 +165,19 @@ function LoginScreen({ onLogin, directorExists, showToast, branding }) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="card-elevated w-full max-w-md p-8">
-          <BrandHeader branding={branding} subtitle="Giriş için kim olduğunuzu seçin" />
+          <BrandHeader branding={branding} subtitle="Nasıl giriş yapacaksınız?" />
           <div className="grid grid-cols-2 gap-3">
             {LOGIN_ROLES.map(r => {
               const Icon = r.icon;
               return (
                 <button key={r.key} onClick={() => { setSelectedRole(r.key); setUsername(''); setPassword(''); }}
-                  className="group flex flex-col items-center gap-2 p-5 rounded-2xl border-2 border-gray-100 hover:border-indigo-400 hover:bg-indigo-50/40 transition-all">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white transition-transform group-hover:scale-105"
+                  className="role-card flex flex-col items-center gap-2.5 p-5 w-full">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white"
                     style={{ background: brandGradient(branding?.themeColor) }}>
                     <Icon size={22} />
                   </div>
-                  <span className="font-700 text-gray-800 text-sm" style={{ fontWeight: 700 }}>{r.label}</span>
-                  <span className="text-[11px] text-gray-400 -mt-1">{r.desc}</span>
+                  <span className="text-sm" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{r.label}</span>
+                  <span className="text-[11px]" style={{ color: 'var(--text-muted)', marginTop: -4 }}>{r.desc}</span>
                 </button>
               );
             })}
@@ -203,7 +206,7 @@ function LoginScreen({ onLogin, directorExists, showToast, branding }) {
             <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
           </FormField>
           <button className="btn-primary w-full mt-2" disabled={loading}>
-            {loading ? 'Lütfen bekleyin...' : 'Giriş Yap'}
+            {loading ? 'Giriş yapılıyor…' : 'Giriş Yap'}
           </button>
         </form>
         <button onClick={() => setSelectedRole(null)}

@@ -72,11 +72,11 @@ function NavItem({ item, active, collapsed, onClick }) {
       onClick={() => onClick(item.key)}
       aria-current={active ? 'page' : undefined}
       className={`
-        w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-500 transition-all
+        w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all
         ${active ? 'nav-item-active' : 'hover:bg-[var(--bg-muted)]'}
         ${collapsed ? 'justify-center' : ''}
       `}
-      style={{ fontWeight: 500, color: active ? undefined : 'var(--text-secondary)' }}
+      style={{ fontWeight: active ? 600 : 500, color: active ? undefined : 'var(--text-secondary)' }}
     >
       <Icon size={18} className="shrink-0" />
       {!collapsed && <span className="truncate">{item.label}</span>}
@@ -144,7 +144,7 @@ export default function Sidebar({
         {/* Kurum adı + zil + kapat (collapsed'da gizli) */}
         {!collapsed && (
           <>
-            <span className="text-sm leading-tight truncate flex-1 min-w-0" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+            <span className="text-sm leading-tight truncate flex-1 min-w-0" style={{ fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
               {branding?.shortName || 'Etüt Takip'}
             </span>
             <NotificationButton showToast={showToast} />

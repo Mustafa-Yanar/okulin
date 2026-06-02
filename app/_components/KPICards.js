@@ -9,21 +9,23 @@ function fmt(n) {
 
 function KPICard({ icon: Icon, label, value, sub, color, loading }) {
   return (
-    <div className="card card-hover p-5 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{label}</span>
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${color.bg}`}>
-          <Icon size={17} className={color.icon} />
+    <div className="card card-hover p-5 flex flex-col gap-4">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-label mb-0.5">{label}</p>
+          {loading ? (
+            <div className="h-7 w-20 skeleton mt-1" />
+          ) : (
+            <div className="flex items-baseline gap-1.5 mt-1">
+              <span style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, letterSpacing: '-0.03em', color: 'var(--text-primary)' }}>{value}</span>
+              {sub && <span className="text-caption">{sub}</span>}
+            </div>
+          )}
+        </div>
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${color.bg}`}>
+          <Icon size={18} className={color.icon} />
         </div>
       </div>
-      {loading ? (
-        <div className="h-8 w-24 rounded-lg animate-pulse" style={{ background: 'var(--bg-muted)' }} />
-      ) : (
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl" style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{value}</span>
-          {sub && <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{sub}</span>}
-        </div>
-      )}
     </div>
   );
 }

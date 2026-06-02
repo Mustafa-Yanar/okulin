@@ -102,7 +102,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
           ) : accountants.length === 0 ? (
             <div className="text-center py-12">
               <Wallet size={40} className="mx-auto mb-3 text-gray-300" />
-              <p className="text-gray-400 text-sm">Henüz muhasebeci eklenmemiş.</p>
+              <p className="text-caption">Henüz muhasebeci tanımlanmamış</p>
               <button className="mt-3 btn-primary !px-4 !py-2 text-sm" onClick={openNew}>
                 <Plus size={13} className="inline mr-1" /> İlk muhasebeciyi ekle
               </button>
