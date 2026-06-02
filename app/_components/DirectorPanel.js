@@ -18,6 +18,7 @@ import HistoryModal from './director/HistoryModal';
 import { StudentList } from './director/StudentList';
 import ProgramEditor from './director/ProgramEditor';
 import { useUrlTab } from './useUrlTab';
+import LoadingBox, { SkeletonList } from './Loading';
 import OptikFormTab from './director/OptikFormTab';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementSender } from './announcements/Announcements';
@@ -151,7 +152,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     } catch (err) { showToast(err.message, 'error'); }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-caption">Yükleniyor...</div>;
+  if (loading) return <LoadingBox height="h-64" />;
 
   return (
     <div>
@@ -245,7 +246,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                           canCancelAll
                         />
                       ) : (
-                        <div className="text-center py-6 text-caption">Yükleniyor...</div>
+                        <LoadingBox height="h-24" />
                       )}
                     </div>
                   )}
@@ -358,7 +359,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
             </div>
           </div>
           {slotTimesLoading ? (
-            <div className="text-center py-12 text-caption">Yükleniyor...</div>
+            <LoadingBox height="h-48" />
           ) : (
             <>
               <SlotTimeEditor

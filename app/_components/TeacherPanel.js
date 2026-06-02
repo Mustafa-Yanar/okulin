@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import LoadingBox from './Loading';
 import {
   Calendar, ClipboardList, User, ChevronRight, Users, LayoutGrid, List, GraduationCap, Clock, X, BookOpen, Megaphone
 } from 'lucide-react';
@@ -370,7 +371,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
     { value: 'yok', label: 'Yok', active: 'bg-red-500 text-white border-red-500' },
   ];
 
-  if (loading) return <div className="flex items-center justify-center h-40 text-gray-400">Yükleniyor...</div>;
+  if (loading) return <LoadingBox height="h-40" />;
 
   if (days.length === 0) {
     return (
@@ -724,7 +725,7 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
     return items;
   }, [slots, slotTimes]);
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Yükleniyor...</div>;
+  if (loading) return <LoadingBox height="h-64" />;
 
   return (
     <div>

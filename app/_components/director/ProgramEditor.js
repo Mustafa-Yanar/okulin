@@ -3,6 +3,7 @@
 // Öğretmen ders programı editörü: haftalık slot-grid, sabit/geçici ders & etüt,
 // izin günü, hafta navigasyonu. Nested EtutPanel ile öğrenci ataması.
 import React, { useState, useEffect, useMemo } from 'react';
+import LoadingBox from '../Loading';
 import { ChevronLeft, ChevronRight, Save } from 'lucide-react';
 import {
   ALL_DAYS, WEEKDAY_SLOT_IDS, WEEKEND_SLOT_IDS, classLabel,
@@ -263,7 +264,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students })
     <Modal title={`${teacher.name} – Program`} onClose={onClose} xwide>
       {weekNav}
       {offDayBar}
-      <div className="text-center py-8 text-gray-400">Yükleniyor...</div>
+      <LoadingBox height="h-32" />
     </Modal>
   );
 

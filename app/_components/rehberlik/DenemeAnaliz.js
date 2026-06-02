@@ -1,4 +1,5 @@
 'use client';
+import LoadingBox from '../Loading';
 
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
@@ -28,7 +29,7 @@ export default function DenemeAnaliz({ studentId }) {
     [points, examType]
   );
 
-  if (loading) return <div className="text-caption py-4">Yükleniyor...</div>;
+  if (loading) return <LoadingBox height="h-24" />;
 
   return (
     <div className="space-y-4">

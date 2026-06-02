@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import LoadingBox from './Loading';
 import {
   BookOpen, Calendar, Clock, Save, X, ClipboardList
 } from 'lucide-react';
@@ -396,7 +397,7 @@ function StudentGuidancePanel({ session, showToast }) {
     }
   }
 
-  if (loading) return <div className="text-center py-12 text-gray-400 text-sm">Yükleniyor...</div>;
+  if (loading) return <LoadingBox height="h-48" />;
 
   return (
     <div>
@@ -542,7 +543,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
     } catch (err) { showToast(err.message, 'error'); }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-gray-400">Yükleniyor...</div>;
+  if (loading) return <LoadingBox height="h-64" />;
 
   return (
     <div>

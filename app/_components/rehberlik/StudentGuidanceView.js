@@ -1,4 +1,5 @@
 'use client';
+import LoadingBox from '../Loading';
 
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Check } from 'lucide-react';
@@ -45,7 +46,7 @@ export default function StudentGuidanceView({ studentId, onReviewed, readOnly, b
     }
   }
 
-  if (loading) return <div className="py-8 text-center text-gray-400 text-sm">Yükleniyor...</div>;
+  if (loading) return <LoadingBox height="h-32" />;
   if (weeks.length === 0) return (
     <div className="py-8 text-center text-gray-400">
       <BookOpen size={28} className="mx-auto mb-2 opacity-30" />

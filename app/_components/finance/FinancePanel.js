@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import LoadingBox from '../Loading';
 import {
   TrendingUp, TrendingDown, DollarSign, Users, Plus, X, Check,
   ChevronDown, ChevronUp, Printer, Trash2, AlertCircle, Edit3,
@@ -714,7 +715,7 @@ export default function FinancePanel({ session, showToast }) {
     return true;
   });
 
-  if (loading) return <div className="flex items-center justify-center h-64 text-caption">Yükleniyor...</div>;
+  if (loading) return <LoadingBox height="h-64" />;
 
   return (
     <div>

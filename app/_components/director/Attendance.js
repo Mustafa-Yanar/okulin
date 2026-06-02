@@ -7,6 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Phone, ClipboardList, GraduationCap } from 'lucide-react';
 import { getWeekKey, ALL_DAYS } from '@/lib/constants';
 import { api, Modal } from './shared';
+import LoadingBox from '../Loading';
 
 function AttendanceStudentRow({ student, variant }) {
   const colors = variant === 'absent'
@@ -57,7 +58,7 @@ function AttendanceSummaryModal({ cls, date, onClose }) {
   return (
     <Modal title={`${cls.toUpperCase()} – ${dayName} Yoklama Özeti`} onClose={onClose}>
       {loading ? (
-        <div className="flex items-center justify-center h-32 text-gray-400">Yükleniyor...</div>
+        <LoadingBox height="h-32" />
       ) : !summary || summary.lessons.length === 0 ? (
         <div className="py-8 text-center text-gray-400">
           <ClipboardList size={28} className="mx-auto mb-2 opacity-30" />
@@ -165,7 +166,7 @@ export function DirectorAttendanceView({ showToast }) {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-40 text-caption">Yükleniyor...</div>
+        <LoadingBox height="h-40" />
       ) : clsList.length === 0 ? (
         <div className="card p-10 text-center text-gray-400">
           <ClipboardList size={32} className="mx-auto mb-2 opacity-30" />
@@ -228,7 +229,7 @@ export function StudentAttendanceView({ studentId }) {
     })();
   }, [studentId]);
 
-  if (loading) return <div className="py-8 text-center text-caption">Yükleniyor...</div>;
+  if (loading) return <LoadingBox height="h-32" />;
   if (!data || data.entries.length === 0) return (
     <div className="py-8 text-center text-gray-400">
       <ClipboardList size={28} className="mx-auto mb-2 opacity-30" />
