@@ -525,7 +525,9 @@ function AppContent() {
           <PullToRefreshIndicator pullDistance={pullDistance} refreshState={refreshState} />
           {isDirectorRole && (
             <>
-              <KPICards stats={stats} loading={statsLoading} showFinance={session.role === 'director'} />
+              {(!activeTab || activeTab === 'overview') && (
+                <KPICards stats={stats} loading={statsLoading} showFinance={session.role === 'director'} />
+              )}
               <DirectorPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />
             </>
           )}
