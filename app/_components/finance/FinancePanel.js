@@ -592,6 +592,83 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
   );
 }
 
+// ── Filtre dropdown ──────────────────────────────────────────────────────────
+const FILTER_OPTIONS = [
+  { value: 'all',          label: 'Tümü',           dot: null },
+  { value: 'unpaid',       label: 'Ödenmedi',        dot: '#ef4444' },
+  { value: 'partial',      label: 'Kısmen Ödendi',   dot: '#f59e0b' },
+  { value: 'paid',         label: 'Ödendi',          dot: '#22c55e' },
+  { value: 'overdue',      label: 'Vadesi Geçmiş',   dot: '#f97316' },
+  { value: 'unregistered', label: 'Kayıtsız',        dot: '#9ca3af' },
+];
+
+function FilterDropdown({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const current = FILTER_OPTIONS.find(o => o.value === value) || FILTER_OPTIONS[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm transition-all"
+        style={{
+          background: 'var(--bg-muted)',
+          border: '1px solid var(--border-subtle)',
+          color: 'var(--text-primary)',
+          fontWeight: 600,
+          minWidth: '148px',
+        }}
+      >
+        {current.dot && (
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: current.dot }} />
+        )}
+        <span className="flex-1 text-left">{current.label}</span>
+        <ChevronDown size={14} style={{ color: 'var(--text-muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+      </button>
+
+      {open && (
+        <div
+          className="absolute right-0 top-full mt-1.5 z-30 rounded-xl overflow-hidden animate-slide-in"
+          style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+            minWidth: '180px',
+          }}
+        >
+          {FILTER_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => { onChange(opt.value); setOpen(false); }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-all hover:bg-[var(--bg-muted)]"
+              style={{
+                color: value === opt.value ? 'var(--brand, #6366f1)' : 'var(--text-primary)',
+                fontWeight: value === opt.value ? 600 : 400,
+                background: value === opt.value ? 'color-mix(in srgb, var(--brand, #6366f1) 8%, transparent)' : undefined,
+              }}
+            >
+              {opt.dot
+                ? <span className="w-2 h-2 rounded-full shrink-0" style={{ background: opt.dot }} />
+                : <span className="w-2 h-2 shrink-0" />
+              }
+              {opt.label}
+              {value === opt.value && <Check size={13} className="ml-auto" style={{ color: 'var(--brand, #6366f1)' }} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Ana panel ────────────────────────────────────────────────────────────────
 export default function FinancePanel({ session, showToast }) {
   const [list, setList] = useState([]);
@@ -667,30 +744,7 @@ export default function FinancePanel({ session, showToast }) {
             placeholder="İsim veya sınıf ara..."
           />
         </div>
-        {/* Mobilde dropdown, masaüstünde buton grubu */}
-        <select
-          value={filterStatus}
-          onChange={e => setFilterStatus(e.target.value)}
-          className="sm:hidden input !py-2.5 !text-sm"
-        >
-          {[['all','Tümü'],['unpaid','🔴 Ödenmedi'],['partial','🟡 Kısmen Ödendi'],['paid','🟢 Ödendi'],['overdue','⚠ Vadesi Geçmiş'],['unregistered','Kayıtsız']].map(([v,l]) => (
-            <option key={v} value={v}>{l}</option>
-          ))}
-        </select>
-        <div className="hidden sm:flex gap-1 p-1 bg-gray-100 rounded-xl">
-          {[
-            ['all', 'Tümü'],
-            ['unpaid', '🔴 Ödenmedi'],
-            ['partial', '🟡 Kısmen'],
-            ['paid', '🟢 Ödendi'],
-            ['overdue', '⚠ Vadesi Geçmiş'],
-            ['unregistered', 'Kayıtsız'],
-          ].map(([v, l]) => (
-            <button key={v} onClick={() => setFilterStatus(v)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-600 whitespace-nowrap transition-all ${filterStatus === v ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-              style={{ fontWeight: 600 }}>{l}</button>
-          ))}
-        </div>
+        <FilterDropdown value={filterStatus} onChange={setFilterStatus} />
       </div>
 
       {/* Liste */}
