@@ -159,14 +159,14 @@ export default function Sidebar({
         })}
       </nav>
 
-      {/* Alt: Theme toggle + Collapse toggle (yalnız masaüstü) */}
-      <div className="shrink-0 px-3 pb-4 hidden md:block">
+      {/* Alt: Theme toggle + Collapse toggle */}
+      <div className="shrink-0 px-3 pb-4">
         <div className="pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
           <ThemeToggle collapsed={collapsed} />
           <button
             onClick={onCollapse}
             title={collapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'}
-            className="mt-1 w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all hover:bg-[var(--bg-muted)]"
+            className="mt-1 w-full hidden md:flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all hover:bg-[var(--bg-muted)]"
             style={{
               color: 'var(--text-muted)',
               justifyContent: collapsed ? 'center' : undefined,
