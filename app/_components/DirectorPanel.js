@@ -319,9 +319,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
               <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditStudent(null); setShowStudentForm(true); }}>
                 <Plus size={14} /> Öğrenci Ekle
               </button>
-              <button className="btn-ghost !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => setShowDenemelerModal(true)}>
-                <ClipboardList size={14} /> Denemeler
-              </button>
             </div>
           </div>
           <StudentList students={students}
