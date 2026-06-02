@@ -177,6 +177,40 @@ html.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
   padding-left: calc(0.75rem - 2px);
 }
 
+/* ─── Pull-to-refresh animasyonları ─────────────────────────────────────────── */
+@keyframes bubble-pop {
+  0%   { transform: scale(0.5); opacity: 0.8; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.animate-bubble-pop { animation: bubble-pop 0.5s ease-out forwards; }
+
+@keyframes bubble-pop-delayed {
+  0%   { transform: scale(0.5); opacity: 0.6; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+.animate-bubble-pop-delayed { animation: bubble-pop-delayed 0.55s 0.06s ease-out forwards; }
+
+@keyframes pop-dot-1 {
+  0%   { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { transform: translate(-14px,-14px) scale(0); opacity: 0; }
+}
+@keyframes pop-dot-2 {
+  0%   { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { transform: translate(14px,-14px) scale(0); opacity: 0; }
+}
+@keyframes pop-dot-3 {
+  0%   { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { transform: translate(-14px,14px) scale(0); opacity: 0; }
+}
+@keyframes pop-dot-4 {
+  0%   { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { transform: translate(14px,14px) scale(0); opacity: 0; }
+}
+.animate-pop-dot-1 { animation: pop-dot-1 0.45s ease-out forwards; }
+.animate-pop-dot-2 { animation: pop-dot-2 0.45s 0.04s ease-out forwards; }
+.animate-pop-dot-3 { animation: pop-dot-3 0.45s 0.08s ease-out forwards; }
+.animate-pop-dot-4 { animation: pop-dot-4 0.45s 0.02s ease-out forwards; }
+
 @keyframes slide-in-left {
   from { opacity: 0; transform: translateX(-100%); }
   to   { opacity: 1; transform: translateX(0); }

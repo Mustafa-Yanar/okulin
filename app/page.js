@@ -15,6 +15,8 @@ import ChangePasswordModal from './_components/ChangePasswordModal';
 import ForcedPasswordChange from './_components/ForcedPasswordChange';
 import Sidebar from './_components/Sidebar';
 import KPICards from './_components/KPICards';
+import PullToRefreshIndicator from './_components/PullToRefreshIndicator';
+import { usePullToRefresh } from './_components/usePullToRefresh';
 import { isPushSupported, subscribeToPush } from '@/lib/push-client';
 import { SlotTimesProvider, useSlotTimes } from './_components/SlotTimesContext';
 import { ErrorBoundary, GlobalErrorListener } from './_components/ErrorBoundary';
@@ -250,6 +252,11 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState(null);
   const { updateSlotTimes } = useSlotTimes();
 
+  const handleRefresh = useCallback(async () => {
+    window.location.reload();
+  }, []);
+  const { pullDistance, refreshState, setScrollContainerRef } = usePullToRefresh(handleRefresh);
+
   useEffect(() => {
     (async () => {
       try {
@@ -432,7 +439,8 @@ function AppContent() {
         </header>
 
         {/* İçerik */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <main ref={setScrollContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-6 relative">
+          <PullToRefreshIndicator pullDistance={pullDistance} refreshState={refreshState} />
           {isDirectorRole && (
             <>
               <KPICards stats={stats} loading={statsLoading} showFinance={session.role === 'director'} />
