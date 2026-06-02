@@ -728,11 +728,11 @@ export default function FinancePanel({ session, showToast }) {
           { label: 'Kalan Borç', value: fmt(stats.totalBalance), icon: TrendingDown, color: 'from-rose-500 to-red-600', suffix: '₺' },
         ].map(card => (
           <div key={card.label} className={`rounded-2xl bg-gradient-to-br ${card.color} p-4 text-white shadow-lg`}>
-            <div className="flex items-center justify-between mb-2">
-              <card.icon size={18} opacity={0.8} />
+            <div className="flex items-center gap-1.5 mb-2.5" style={{ opacity: 0.9 }}>
+              <card.icon size={15} />
+              <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.03em' }}>{card.label}</span>
             </div>
-            <div className="text-xl font-800" style={{ fontWeight: 800 }}>{card.suffix}{card.value}</div>
-            <div className="text-xs opacity-75 mt-0.5 font-500" style={{ fontWeight: 500 }}>{card.label}</div>
+            <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1 }}>{card.suffix}{card.value}</div>
           </div>
         ))}
       </div>
