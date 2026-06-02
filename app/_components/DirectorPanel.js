@@ -21,6 +21,8 @@ import { useUrlTab } from './useUrlTab';
 import OptikFormTab from './director/OptikFormTab';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementSender } from './announcements/Announcements';
+import SlotTimeEditor from './director/SlotTimeEditor';
+import { useSlotTimes as useSlotTimesCtx } from './SlotTimesContext';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
 export { DirectorSettingsModal } from './director/Settings';
 
@@ -30,7 +32,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
     ? ['overview', 'teachers', 'students', 'yoklama', 'kutuphane', 'duyurular']
-    : ['overview', 'teachers', 'students', 'yoklama', 'muhasebe', 'kutuphane', 'duyurular', 'denemeler'];
+    : ['overview', 'teachers', 'students', 'yoklama', 'muhasebe', 'kutuphane', 'duyurular', 'denemeler', 'ders-saatleri'];
   const [tab, setTabInternal] = useUrlTab('overview', validTabs);
 
   // Sidebar'dan gelen externalTab değişince iç state'i güncelle
@@ -47,6 +49,11 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   }, [setTabInternal, onExternalTabChange]);
   const [showProgramOlusturucuModal, setShowProgramOlusturucuModal] = useState(false);
   const [denemeTab, setDenemeTab] = useState('denemeler');
+  const [slotWeekday, setSlotWeekday] = useState([]);
+  const [slotWeekend, setSlotWeekend] = useState([]);
+  const [slotTimesLoading, setSlotTimesLoading] = useState(false);
+  const [savingSlotTimes, setSavingSlotTimes] = useState(false);
+  const { updateSlotTimes } = useSlotTimesCtx();
   const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
   const [weekKey, setWeekKey] = useState(getWeekKey());
@@ -75,6 +82,16 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   }, []);
 
   useEffect(() => { loadPendingGuidance(); }, [loadPendingGuidance]);
+
+  // Ders saatleri sekmesi açılınca yükle
+  useEffect(() => {
+    if (tab !== 'ders-saatleri' || slotWeekday.length > 0) return;
+    setSlotTimesLoading(true);
+    api('/api/slot-times').then(data => {
+      setSlotWeekday(data.weekday || []);
+      setSlotWeekend(data.weekend || []);
+    }).catch(() => {}).finally(() => setSlotTimesLoading(false));
+  }, [tab]);
 
   const loadAll = useCallback(async (wk) => {
     setLoading(true);
@@ -324,6 +341,50 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           {denemeTab === 'denemeler'
             ? <DirectorDenemeYonetimi showToast={showToast} />
             : <OptikFormTab showToast={showToast} />}
+        </div>
+      )}
+
+      {/* Ders Saatleri sekmesi */}
+      {tab === 'ders-saatleri' && (
+        <div className="max-w-lg">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 15%, transparent)' }}>
+              <Clock size={20} style={{ color: 'var(--brand,#6366f1)' }} />
+            </div>
+            <div>
+              <h2 className="text-lg" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Ders Saatleri</h2>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Haftalık ders slot başlangıç ve bitiş saatlerini ayarla</p>
+            </div>
+          </div>
+          {slotTimesLoading ? (
+            <div className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)' }}>Yükleniyor...</div>
+          ) : (
+            <>
+              <SlotTimeEditor
+                weekday={slotWeekday}
+                weekend={slotWeekend}
+                onChange={(type, slots) => type === 'weekday' ? setSlotWeekday(slots) : setSlotWeekend(slots)}
+              />
+              <div className="flex justify-end mt-4">
+                <button
+                  className="btn-primary !px-6 !py-2.5"
+                  disabled={savingSlotTimes || slotWeekday.length !== 12 || slotWeekend.length !== 12}
+                  onClick={async () => {
+                    setSavingSlotTimes(true);
+                    try {
+                      await api('/api/slot-times', { method: 'POST', body: JSON.stringify({ weekday: slotWeekday, weekend: slotWeekend }) });
+                      updateSlotTimes({ weekday: slotWeekday, weekend: slotWeekend });
+                      showToast('Saatler kaydedildi ve uygulandı');
+                    } catch (e) { showToast(e.message, 'error'); }
+                    finally { setSavingSlotTimes(false); }
+                  }}
+                >
+                  {savingSlotTimes ? 'Kaydediliyor…' : 'Saatleri Kaydet'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 

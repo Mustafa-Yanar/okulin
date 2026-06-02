@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import {
   Home, Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
   BarChart2, CreditCard, TrendingDown, ChevronLeft, ChevronRight,
-  BookMarked, Calendar, GraduationCap, Star,
+  BookMarked, Calendar, GraduationCap, Star, Clock,
 } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
 import ThemeToggle from './ThemeToggle';
@@ -22,6 +22,7 @@ const ITEMS_BY_ROLE = {
     { group: 'Finans',   key: 'muhasebe',    label: 'Muhasebe',          icon: Wallet },
     { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: 'Sistem',   key: 'duyurular',   label: 'Duyurular',         icon: Bell },
+    { group: 'Sistem',   key: 'ders-saatleri', label: 'Ders Saatleri',   icon: Clock },
   ],
   counselor: [
     { group: null,       key: 'overview',    label: 'Genel Bakış',       icon: Home },

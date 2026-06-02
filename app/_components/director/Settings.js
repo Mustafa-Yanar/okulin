@@ -3,9 +3,7 @@
 // Müdür ayarlar modalı (isim + ders saatleri) ve içindeki bölümler:
 // bildirim testi, denetim kayıtları (audit log), hata kayıtları (error log).
 import React, { useState, useEffect } from 'react';
-import { Clock, AlertTriangle, Palette, Users, Compass, Plus, Trash2, KeyRound, CreditCard } from 'lucide-react';
-import SlotTimeEditor from './SlotTimeEditor';
-import { useSlotTimes } from '../SlotTimesContext';
+import { AlertTriangle, Palette, Users, Compass, Plus, Trash2, KeyRound, CreditCard } from 'lucide-react';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
 import { formatTurkishMobile } from '@/lib/phone';
@@ -13,24 +11,6 @@ import { formatTurkishMobile } from '@/lib/phone';
 export function DirectorSettingsModal({ current, onClose, onSave, onBranding, showToast }) {
   const [name, setName] = useState(current || '');
   const [savingName, setSavingName] = useState(false);
-
-  const [weekday, setWeekday] = useState([]);
-  const [weekend, setWeekend] = useState([]);
-  const [timesLoading, setTimesLoading] = useState(true);
-  const [savingTimes, setSavingTimes] = useState(false);
-
-  const { updateSlotTimes } = useSlotTimes();
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await api('/api/slot-times');
-        setWeekday(data.weekday || []);
-        setWeekend(data.weekend || []);
-      } catch (e) { showToast(e.message, 'error'); }
-      setTimesLoading(false);
-    })();
-  }, []);
 
   const submitName = async e => {
     e.preventDefault();
@@ -44,26 +24,6 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
     finally { setSavingName(false); }
   };
 
-  async function saveTimes() {
-    for (const arr of [weekday, weekend]) {
-      for (const s of arr) {
-        if (!s.start || !s.end) {
-          showToast('Tüm saat alanlarını doldurun', 'error');
-          return;
-        }
-      }
-    }
-    setSavingTimes(true);
-    try {
-      await api('/api/slot-times', { method: 'POST', body: JSON.stringify({ weekday, weekend }) });
-      updateSlotTimes({ weekday, weekend });
-      showToast('Saatler kaydedildi ve uygulandı');
-    } catch (e) {
-      showToast(e.message, 'error');
-    } finally {
-      setSavingTimes(false);
-    }
-  }
 
   return (
     <Modal title="Ayarlar" onClose={onClose} wide>
@@ -94,30 +54,6 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
 
       <div className="mb-5 pb-5 border-b border-gray-100">
         <PaymentSection showToast={showToast} />
-      </div>
-
-      <div className="mb-5 pb-5 border-b border-gray-100">
-        <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-2" style={{ fontWeight: 700 }}>Ders Saatleri</h4>
-        {timesLoading ? (
-          <div className="text-center py-6 text-sm" style={{ color: 'var(--text-muted)' }}>Yükleniyor...</div>
-        ) : (
-          <>
-            <SlotTimeEditor
-              weekday={weekday}
-              weekend={weekend}
-              onChange={(type, slots) => type === 'weekday' ? setWeekday(slots) : setWeekend(slots)}
-            />
-            <div className="flex justify-end mt-4">
-              <button
-                className="btn-primary !px-4 !py-2 text-sm"
-                onClick={saveTimes}
-                disabled={savingTimes || weekday.length !== 12 || weekend.length !== 12}
-              >
-                {savingTimes ? 'Kaydediliyor…' : 'Saatleri Kaydet'}
-              </button>
-            </div>
-          </>
-        )}
       </div>
 
       <div className="mb-5 pb-5 border-b border-gray-100">
