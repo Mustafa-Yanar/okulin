@@ -3,7 +3,7 @@
 // Müdür ayarlar modalı (isim + ders saatleri) ve içindeki bölümler:
 // bildirim testi, denetim kayıtları (audit log), hata kayıtları (error log).
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Palette, Users, Compass, Plus, Trash2, KeyRound, CreditCard } from 'lucide-react';
+import { AlertTriangle, Palette, Users, Compass, Plus, Trash2, Trash, KeyRound, CreditCard, Clock } from 'lucide-react';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
 import { formatTurkishMobile } from '@/lib/phone';
