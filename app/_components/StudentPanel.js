@@ -458,14 +458,24 @@ export function StudentGuidancePanelWrapper({ session, showToast }) {
 }
 
 // ─── MAIN STUDENT PANEL ────────────────────────────────────────────────────────
-export default function StudentPanel({ session, showToast }) {
+export default function StudentPanel({ session, showToast, externalTab, onExternalTabChange }) {
   const [weekKey, setWeekKey] = useState(getWeekKey());
   const [allSlots, setAllSlots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterBranch, setFilterBranch] = useState('');
   const [filterTeacher, setFilterTeacher] = useState('');
   const [filterDay, setFilterDay] = useState('');
-  const [tab, setTab] = useUrlTab('available', ['available', 'myBookings', 'rehberlik', 'kutuphane', 'duyurular']);
+  const [tab, setTabInternal] = useUrlTab('available', ['available', 'myBookings', 'rehberlik', 'kutuphane', 'duyurular']);
+
+  useEffect(() => {
+    if (externalTab && externalTab !== tab) setTabInternal(externalTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalTab]);
+
+  const setTab = useCallback((key) => {
+    setTabInternal(key);
+    onExternalTabChange?.(key);
+  }, [setTabInternal, onExternalTabChange]);
 
   const loadData = useCallback(async (wk) => {
     setLoading(true);
@@ -539,17 +549,6 @@ export default function StudentPanel({ session, showToast }) {
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-gray-500">{classLabel(session.cls)} · {GROUPS[session.group]}</p>
         <WeekNav weekKey={weekKey} onPrev={() => { const w = getAdjacentWeek(weekKey,-1); setWeekKey(w); loadData(w); }} onNext={() => { const w = getAdjacentWeek(weekKey,1); setWeekKey(w); loadData(w); }} />
-      </div>
-
-      <div className="flex gap-1 mb-4 p-1 bg-gray-100 rounded-xl w-fit">
-        {[['available','Müsait Etütler'],['myBookings','Etütlerim'],['rehberlik','Rehberlik'],['kutuphane','Kütüphane'],['duyurular','Duyurular']].map(([key,label]) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${tab===key?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
-            style={{ fontWeight: 600 }}>
-            {label}
-            {key==='myBookings' && myBookings.length>0 && <span className="ml-1.5 badge" style={{ background:'#6366f1',color:'white' }}>{myBookings.length}</span>}
-          </button>
-        ))}
       </div>
 
       {tab === 'rehberlik' ? (

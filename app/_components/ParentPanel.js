@@ -235,10 +235,20 @@ function GuidanceView({ child }) {
 }
 
 // ─── KÖK ────────────────────────────────────────────────────────────────────────
-export default function ParentPanel({ session, showToast }) {
+export default function ParentPanel({ session, showToast, externalTab, onExternalTabChange }) {
   const children = useMemo(() => Array.isArray(session.children) ? session.children : [], [session.children]);
   const [childId, setChildId] = useState(children[0]?.id || null);
-  const [tab, setTab] = useUrlTab('program', ['program', 'odeme', 'rehberlik', 'duyurular']);
+  const [tab, setTabInternal] = useUrlTab('program', ['program', 'odeme', 'rehberlik', 'duyurular']);
+
+  useEffect(() => {
+    if (externalTab && externalTab !== tab) setTabInternal(externalTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalTab]);
+
+  const setTab = useCallback((key) => {
+    setTabInternal(key);
+    onExternalTabChange?.(key);
+  }, [setTabInternal, onExternalTabChange]);
 
   const child = useMemo(() => children.find(c => c.id === childId) || children[0], [children, childId]);
 
@@ -251,13 +261,6 @@ export default function ParentPanel({ session, showToast }) {
       </div>
     );
   }
-
-  const TABS = [
-    ['program', 'Program', Calendar],
-    ['odeme', 'Ödeme', Wallet],
-    ['rehberlik', 'Rehberlik', BarChart3],
-    ['duyurular', 'Duyurular', Megaphone],
-  ];
 
   return (
     <div>
@@ -278,16 +281,6 @@ export default function ParentPanel({ session, showToast }) {
       )}
 
       <p className="text-sm text-gray-500 mb-4">{child.name} · {classLabel(child.cls)}</p>
-
-      <div className="flex gap-1 mb-4 p-1 bg-gray-100 rounded-xl w-fit">
-        {TABS.map(([key, label, Icon]) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-600 transition-all ${tab === key ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-            style={{ fontWeight: 600 }}>
-            <Icon size={14} /> {label}
-          </button>
-        ))}
-      </div>
 
       {/* child.id değişince alt bileşenler remount olsun diye key */}
       {tab === 'program' && <ProgramView key={child.id} child={child} />}

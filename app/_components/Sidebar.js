@@ -4,33 +4,61 @@ import React, { useEffect } from 'react';
 import {
   Home, Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
   BarChart2, CreditCard, TrendingDown, ChevronLeft, ChevronRight,
-  X, BookMarked,
+  X, BookMarked, Calendar, GraduationCap, Star,
 } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
 import ThemeToggle from './ThemeToggle';
 
-// ─── Sekme tanımları ────────────────────────────────────────────────────────────
+// ─── Sekme tanımları (rol bazlı) ────────────────────────────────────────────────
 
-const DIRECTOR_ITEMS = [
-  { group: null,       key: 'overview',    label: 'Genel Bakış',    icon: Home },
-  { group: 'Akademik', key: 'teachers',    label: 'Öğretmenler',    icon: Users },
-  { group: 'Akademik', key: 'students',    label: 'Rehberlik',      icon: Compass },
-  { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',        icon: ClipboardList },
-  { group: 'Akademik', key: 'denemeler',   label: 'Denemeler',      icon: BarChart2,  directorOnly: true },
-  { group: 'Finans',   key: 'muhasebe',    label: 'Muhasebe',       icon: Wallet,     directorOnly: true },
-  { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',      icon: BookOpen },
-  { group: 'Sistem',   key: 'duyurular',   label: 'Duyurular',      icon: Bell },
-];
-
-const ACCOUNTANT_ITEMS = [
-  { group: 'Finans',   key: 'finance',     label: 'Öğrenci Ödemeleri', icon: CreditCard },
-  { group: 'Finans',   key: 'expenses',    label: 'Giderler',           icon: TrendingDown },
-  { group: 'Yönetim',  key: 'accountants', label: 'Muhasebeciler',      icon: Users },
-];
+const ITEMS_BY_ROLE = {
+  director: [
+    { group: null,       key: 'overview',    label: 'Genel Bakış',       icon: Home },
+    { group: 'Akademik', key: 'teachers',    label: 'Öğretmenler',       icon: Users },
+    { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
+    { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
+    { group: 'Akademik', key: 'denemeler',   label: 'Denemeler',         icon: BarChart2 },
+    { group: 'Finans',   key: 'muhasebe',    label: 'Muhasebe',          icon: Wallet },
+    { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
+    { group: 'Sistem',   key: 'duyurular',   label: 'Duyurular',         icon: Bell },
+  ],
+  counselor: [
+    { group: null,       key: 'overview',    label: 'Genel Bakış',       icon: Home },
+    { group: 'Akademik', key: 'teachers',    label: 'Öğretmenler',       icon: Users },
+    { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
+    { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
+    { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
+    { group: 'Sistem',   key: 'duyurular',   label: 'Duyurular',         icon: Bell },
+  ],
+  accountant: [
+    { group: 'Finans',   key: 'finance',     label: 'Öğrenci Ödemeleri', icon: CreditCard },
+    { group: 'Finans',   key: 'expenses',    label: 'Giderler',          icon: TrendingDown },
+    { group: 'Yönetim',  key: 'accountants', label: 'Muhasebeciler',     icon: Users },
+  ],
+  teacher: [
+    { group: null,       key: 'rezervasyon', label: 'Program',           icon: Calendar },
+    { group: null,       key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
+    { group: null,       key: 'ogrenciler',  label: 'Öğrenciler',        icon: Users },
+    { group: null,       key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
+    { group: null,       key: 'duyurular',   label: 'Duyurular',         icon: Bell },
+  ],
+  student: [
+    { group: null,       key: 'available',   label: 'Müsait Etütler',    icon: Calendar },
+    { group: null,       key: 'myBookings',  label: 'Etütlerim',         icon: BookMarked },
+    { group: null,       key: 'rehberlik',   label: 'Rehberlik',         icon: Compass },
+    { group: null,       key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
+    { group: null,       key: 'duyurular',   label: 'Duyurular',         icon: Bell },
+  ],
+  parent: [
+    { group: null,       key: 'program',     label: 'Program',           icon: Calendar },
+    { group: null,       key: 'odeme',       label: 'Ödeme',             icon: Wallet },
+    { group: null,       key: 'rehberlik',   label: 'Rehberlik',         icon: Star },
+    { group: null,       key: 'duyurular',   label: 'Duyurular',         icon: Bell },
+  ],
+};
 
 function buildItems(role) {
-  if (role === 'accountant') return ACCOUNTANT_ITEMS;
-  return DIRECTOR_ITEMS.filter(i => !i.directorOnly || role === 'director');
+  return ITEMS_BY_ROLE[role] || [];
 }
 
 // ─── Nav öğesi ─────────────────────────────────────────────────────────────────
@@ -44,16 +72,10 @@ function NavItem({ item, active, collapsed, onClick }) {
       aria-current={active ? 'page' : undefined}
       className={`
         w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-500 transition-all
-        ${active
-          ? 'nav-item-active'
-          : 'hover:bg-[var(--bg-muted)]'
-        }
+        ${active ? 'nav-item-active' : 'hover:bg-[var(--bg-muted)]'}
         ${collapsed ? 'justify-center' : ''}
       `}
-      style={{
-        fontWeight: 500,
-        color: active ? undefined : 'var(--text-secondary)',
-      }}
+      style={{ fontWeight: 500, color: active ? undefined : 'var(--text-secondary)' }}
     >
       <Icon size={18} className="shrink-0" />
       {!collapsed && <span className="truncate">{item.label}</span>}
@@ -75,7 +97,6 @@ export default function Sidebar({
 }) {
   const items = buildItems(session?.role);
 
-  // Mobil açıkken body scroll kilitleme
   useEffect(() => {
     if (mobileOpen) {
       document.body.style.overflow = 'hidden';
@@ -83,7 +104,6 @@ export default function Sidebar({
     }
   }, [mobileOpen]);
 
-  // Grupları çıkar (sıralamayı koruyarak)
   const groups = [];
   const seen = new Set();
   for (const item of items) {
@@ -119,10 +139,7 @@ export default function Sidebar({
           </div>
         )}
         {!collapsed && (
-          <span
-            className="text-sm leading-tight truncate"
-            style={{ fontWeight: 700, color: 'var(--text-primary)' }}
-          >
+          <span className="text-sm leading-tight truncate" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
             {branding?.shortName || 'Etüt Takip'}
           </span>
         )}
@@ -135,10 +152,8 @@ export default function Sidebar({
           return (
             <div key={group}>
               {group !== '__top__' && !collapsed && (
-                <p
-                  className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest"
-                  style={{ fontWeight: 700, color: 'var(--text-muted)' }}
-                >
+                <p className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest"
+                  style={{ fontWeight: 700, color: 'var(--text-muted)' }}>
                   {group}
                 </p>
               )}
@@ -167,10 +182,7 @@ export default function Sidebar({
             onClick={onCollapse}
             title={collapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'}
             className="mt-1 w-full hidden md:flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all hover:bg-[var(--bg-muted)]"
-            style={{
-              color: 'var(--text-muted)',
-              justifyContent: collapsed ? 'center' : undefined,
-            }}
+            style={{ color: 'var(--text-muted)', justifyContent: collapsed ? 'center' : undefined }}
           >
             {collapsed
               ? <ChevronRight size={16} />
@@ -195,11 +207,7 @@ export default function Sidebar({
       {/* Mobil overlay drawer */}
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-40 flex">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={onMobileClose}
-            aria-hidden="true"
-          />
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onMobileClose} aria-hidden="true" />
           <aside className="relative z-10 w-72 max-w-[85vw] h-full flex flex-col shadow-2xl animate-slide-in-left">
             <button
               onClick={onMobileClose}

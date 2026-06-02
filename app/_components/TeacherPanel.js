@@ -624,15 +624,25 @@ function TeacherStudentsView({ students, branches = [] }) {
   );
 }
 
-export default function TeacherPanel({ session, showToast }) {
+export default function TeacherPanel({ session, showToast, externalTab, onExternalTabChange }) {
   const [weekKey, setWeekKey] = useState(getWeekKey());
   const [slots, setSlots] = useState(null);
   const [program, setProgram] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama', 'ogrenciler', 'kutuphane', 'duyurular']);
+  const [activeTab, setActiveTabInternal] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama', 'ogrenciler', 'kutuphane', 'duyurular']);
   const [viewMode, setViewMode] = useState('table');
   const { slotTimes } = useSlotTimes();
+
+  useEffect(() => {
+    if (externalTab && externalTab !== activeTab) setActiveTabInternal(externalTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalTab]);
+
+  const setActiveTab = useCallback((key) => {
+    setActiveTabInternal(key);
+    onExternalTabChange?.(key);
+  }, [setActiveTabInternal, onExternalTabChange]);
 
   const loadData = useCallback(async (wk) => {
     setLoading(true);
@@ -718,39 +728,6 @@ export default function TeacherPanel({ session, showToast }) {
 
   return (
     <div>
-      <div className="flex rounded-xl border border-gray-200 overflow-hidden mb-4 w-fit">
-        <button
-          onClick={() => setActiveTab('rezervasyon')}
-          className={`px-4 py-2 text-xs flex items-center gap-1.5 transition-colors font-600 ${activeTab === 'rezervasyon' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-          style={{ fontWeight: 600 }}>
-          <Calendar size={13} /> Program
-        </button>
-        <button
-          onClick={() => setActiveTab('yoklama')}
-          className={`px-4 py-2 text-xs flex items-center gap-1.5 transition-colors font-600 ${activeTab === 'yoklama' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-          style={{ fontWeight: 600 }}>
-          <ClipboardList size={13} /> Yoklama
-        </button>
-        <button
-          onClick={() => setActiveTab('ogrenciler')}
-          className={`px-4 py-2 text-xs flex items-center gap-1.5 transition-colors font-600 ${activeTab === 'ogrenciler' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-          style={{ fontWeight: 600 }}>
-          <Users size={13} /> Öğrenciler
-        </button>
-        <button
-          onClick={() => setActiveTab('kutuphane')}
-          className={`px-4 py-2 text-xs flex items-center gap-1.5 transition-colors font-600 ${activeTab === 'kutuphane' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-          style={{ fontWeight: 600 }}>
-          <BookOpen size={13} /> Kütüphane
-        </button>
-        <button
-          onClick={() => setActiveTab('duyurular')}
-          className={`px-4 py-2 text-xs flex items-center gap-1.5 transition-colors font-600 ${activeTab === 'duyurular' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-          style={{ fontWeight: 600 }}>
-          <Megaphone size={13} /> Duyurular
-        </button>
-      </div>
-
       {activeTab === 'rezervasyon' && (
         <>
           <div className="flex items-center justify-between mb-4">

@@ -226,8 +226,8 @@ export default function App() {
   );
 }
 
-// Sidebar layout kullanan roller
-const SIDEBAR_ROLES = ['director', 'counselor', 'accountant'];
+// Tüm roller sidebar kullanır
+const SIDEBAR_ROLES = ['director', 'counselor', 'accountant', 'teacher', 'student', 'parent'];
 
 function AppContent() {
   const [loading, setLoading] = useState(true);
@@ -356,154 +356,109 @@ function AppContent() {
     </>
   );
 
-  const isSidebarRole = SIDEBAR_ROLES.includes(session.role);
+  // ── Tüm roller: Sidebar layout ──────────────────────────────────────────────
+  const roleLabel = { director: 'Müdür', counselor: 'Rehber', accountant: 'Muhasebeci', teacher: 'Öğretmen', student: 'Öğrenci', parent: 'Veli' };
+  const roleColor = { director: '#6366f1', counselor: '#8b5cf6', accountant: '#0891b2', teacher: '#22c55e', student: '#f59e0b', parent: '#db2777' };
+  const RoleIcon = { director: Shield, counselor: Compass, accountant: Wallet, teacher: BookMarked, student: GraduationCap, parent: Users };
+  const RIcon = RoleIcon[session.role] || User;
+  const isDirectorRole = session.role === 'director' || session.role === 'counselor';
+  const canChangePassword = ['teacher', 'student', 'parent', 'counselor', 'accountant'].includes(session.role);
 
-  // ── Sidebar layout (director / counselor / accountant) ──────────────────────
-  if (isSidebarRole) {
-    const roleLabel = { director: 'Müdür', accountant: 'Muhasebeci', counselor: 'Rehber' };
-    const roleColor = { director: '#6366f1', accountant: '#0891b2', counselor: '#8b5cf6' };
-    const RoleIcon = { director: Shield, accountant: Wallet, counselor: Compass };
-    const RIcon = RoleIcon[session.role] || User;
+  return (
+    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
+      <Sidebar
+        session={session}
+        branding={branding}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        collapsed={sidebarCollapsed}
+        onCollapse={handleCollapse}
+        mobileOpen={mobileSidebarOpen}
+        onMobileClose={() => setMobileSidebarOpen(false)}
+      />
 
-    return (
-      <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
-        <Sidebar
-          session={session}
-          branding={branding}
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          onLogout={logout}
-          onSettings={() => setShowDirectorName(true)}
-          collapsed={sidebarCollapsed}
-          onCollapse={handleCollapse}
-          mobileOpen={mobileSidebarOpen}
-          onMobileClose={() => setMobileSidebarOpen(false)}
-        />
-
-        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          {/* TopBar */}
-          <header className="h-14 flex items-center justify-between px-4 shrink-0 z-20"
-            style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' }}>
-            {/* Sol: hamburger (mobil) + kurum adı */}
-            <div className="flex items-center gap-3 min-w-0">
-              <button
-                className="md:hidden p-2 rounded-lg hover:bg-[var(--bg-muted)]"
-                style={{ color: 'var(--text-secondary)' }}
-                onClick={() => setMobileSidebarOpen(true)}
-                aria-label="Menüyü aç"
-              >
-                <Menu size={20} />
-              </button>
-              <span className="hidden md:block text-sm truncate" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                {branding.name}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        {/* TopBar */}
+        <header className="h-14 flex items-center justify-between px-4 shrink-0 z-20"
+          style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              className="md:hidden p-2 rounded-lg hover:bg-[var(--bg-muted)]"
+              style={{ color: 'var(--text-secondary)' }}
+              onClick={() => setMobileSidebarOpen(true)}
+              aria-label="Menüyü aç"
+            >
+              <Menu size={20} />
+            </button>
+            <span className="hidden md:block text-sm truncate" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+              {branding.name}
+            </span>
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt={branding.name}
+                className="md:hidden h-8 w-auto object-contain"
+                onError={e => { e.currentTarget.style.display = 'none'; }} />
+            ) : (
+              <span className="md:hidden text-sm truncate" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                {branding.shortName || 'Etüt Takip'}
               </span>
-              {branding.logoUrl ? (
-                <img src={branding.logoUrl} alt={branding.name}
-                  className="md:hidden h-8 w-auto object-contain"
-                  onError={e => { e.currentTarget.style.display = 'none'; }} />
-              ) : (
-                <span className="md:hidden text-sm truncate" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {branding.shortName || 'Etüt Takip'}
-                </span>
-              )}
-            </div>
+            )}
+          </div>
 
-            {/* Sağ: user chip + bildirim + ayarlar + çıkış */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
-                <RIcon size={13} style={{ color: roleColor[session.role] }} />
-                <span className="text-sm hidden sm:inline" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{session.name}</span>
-                <span className="text-xs" style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{roleLabel[session.role]}</span>
-              </div>
-              <NotificationButton showToast={showToast} />
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
+              <RIcon size={13} style={{ color: roleColor[session.role] }} />
+              <span className="text-sm hidden sm:inline" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{session.name}</span>
+              <span className="text-xs" style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{roleLabel[session.role]}</span>
+            </div>
+            <NotificationButton showToast={showToast} />
+            {canChangePassword && (
+              <button onClick={() => setShowChangePassword(true)} title="Şifremi Değiştir" className="btn-ghost !px-2.5 !py-2">
+                <Settings size={14} />
+              </button>
+            )}
+            {isDirectorRole && (
               <button onClick={() => setShowDirectorName(true)} title="Ayarlar" className="btn-ghost !px-2.5 !py-2">
                 <Settings size={14} />
               </button>
-              <button onClick={logout} aria-label="Çıkış yap" title="Çıkış yap" className="btn-ghost !px-2.5 !py-2">
-                <LogOut size={14} />
-              </button>
-            </div>
-          </header>
-
-          {/* İçerik */}
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6">
-            {(session.role === 'director' || session.role === 'counselor') && (
-              <>
-                <KPICards
-                  stats={stats}
-                  loading={statsLoading}
-                  showFinance={session.role === 'director'}
-                />
-                <DirectorPanel
-                  session={session}
-                  showToast={showToast}
-                  externalTab={activeTab}
-                  onExternalTabChange={handleTabChange}
-                />
-              </>
             )}
-            {session.role === 'accountant' && (
-              <AccountantPanel session={session} showToast={showToast} externalTab={activeTab} />
-            )}
-          </main>
-        </div>
-
-        {showDirectorName && (
-          <DirectorSettingsModal current={session.name} showToast={showToast}
-            onClose={() => setShowDirectorName(false)}
-            onSave={newName => setSession(s => ({ ...s, name: newName }))}
-            onBranding={(b) => {
-              setBranding(b);
-              if (b.themeColor) document.documentElement.style.setProperty('--brand', b.themeColor);
-            }} />
-        )}
-        <Toast toast={toast} />
-      </div>
-    );
-  }
-
-  // ── Klasik layout (teacher / student / parent) ───────────────────────────────
-  const roleLabel = { teacher: 'Öğretmen', student: 'Öğrenci', parent: 'Veli' };
-  const roleColor = { teacher: '#22c55e', student: '#f59e0b', parent: '#db2777' };
-  const RoleIcon2 = { teacher: BookMarked, student: GraduationCap, parent: Users };
-  const Icon2 = RoleIcon2[session.role] || User;
-
-  return (
-    <div className="min-h-screen">
-      <header className="sticky top-0 z-30 shadow-sm"
-        style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' }}>
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            {branding.logoUrl ? (
-              <img src={branding.logoUrl} alt={branding.name}
-                className="h-[52px] w-auto object-contain shrink-0"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-            ) : (
-              <div className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: brandGradient(branding.themeColor) }}>
-                <BookOpen size={18} color="white" />
-              </div>
-            )}
-            <span className="text-sm sm:text-base leading-tight truncate" style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{branding.name}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
-              <Icon2 size={14} style={{ color: roleColor[session.role] }} />
-              <span className="text-sm" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{session.name}</span>
-              <span className="text-sm" style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{roleLabel[session.role]}</span>
-            </div>
-            <NotificationButton showToast={showToast} />
-            <button onClick={() => setShowChangePassword(true)} title="Şifremi Değiştir" className="btn-ghost !px-3 !py-2">
-              <Settings size={14} />
+            <button onClick={logout} aria-label="Çıkış yap" title="Çıkış yap" className="btn-ghost !px-2.5 !py-2">
+              <LogOut size={14} />
             </button>
-            <button onClick={logout} aria-label="Çıkış yap" title="Çıkış yap" className="btn-ghost !px-3 !py-2"><LogOut size={14} /></button>
           </div>
-        </div>
-      </header>
-      <main className="max-w-5xl mx-auto px-4 py-6">
-        {session.role === 'teacher' && <TeacherPanel session={session} showToast={showToast} />}
-        {session.role === 'student' && <StudentPanel session={session} showToast={showToast} />}
-        {session.role === 'parent' && <ParentPanel session={session} showToast={showToast} />}
-      </main>
+        </header>
+
+        {/* İçerik */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+          {isDirectorRole && (
+            <>
+              <KPICards stats={stats} loading={statsLoading} showFinance={session.role === 'director'} />
+              <DirectorPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />
+            </>
+          )}
+          {session.role === 'accountant' && (
+            <AccountantPanel session={session} showToast={showToast} externalTab={activeTab} />
+          )}
+          {session.role === 'teacher' && (
+            <TeacherPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />
+          )}
+          {session.role === 'student' && (
+            <StudentPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />
+          )}
+          {session.role === 'parent' && (
+            <ParentPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />
+          )}
+        </main>
+      </div>
+
+      {showDirectorName && (
+        <DirectorSettingsModal current={session.name} showToast={showToast}
+          onClose={() => setShowDirectorName(false)}
+          onSave={newName => setSession(s => ({ ...s, name: newName }))}
+          onBranding={(b) => {
+            setBranding(b);
+            if (b.themeColor) document.documentElement.style.setProperty('--brand', b.themeColor);
+          }} />
+      )}
       {showChangePassword && (
         <ChangePasswordModal showToast={showToast} onClose={() => setShowChangePassword(false)} />
       )}
