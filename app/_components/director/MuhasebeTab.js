@@ -11,7 +11,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
   const [accountants, setAccountants] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editAcc, setEditAcc] = useState(null);
-  const [form, setForm] = useState({ name: '', password: '' });
+  const [form, setForm] = useState({ name: '', password: '', phone: '' });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -27,8 +27,8 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
 
   useEffect(() => { if (subTab === 'accountants') loadAccountants(); }, [subTab]);
 
-  function openNew() { setEditAcc(null); setForm({ name: '', password: '' }); setShowForm(true); }
-  function openEdit(a) { setEditAcc(a); setForm({ name: a.name, password: '' }); setShowForm(true); }
+  function openNew() { setEditAcc(null); setForm({ name: '', password: '', phone: '' }); setShowForm(true); }
+  function openEdit(a) { setEditAcc(a); setForm({ name: a.name, password: '', phone: a.phone || '' }); setShowForm(true); }
 
   async function handleSave(e) {
     e.preventDefault();
@@ -37,8 +37,8 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
     setSaving(true);
     try {
       const body = editAcc
-        ? { id: editAcc.id, name: form.name, password: form.password || undefined }
-        : { name: form.name, password: form.password };
+        ? { id: editAcc.id, name: form.name, password: form.password || undefined, phone: form.phone || undefined }
+        : { name: form.name, password: form.password, phone: form.phone || undefined };
       const res = await fetch('/api/accountants', {
         method: editAcc ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -169,6 +169,18 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
                       placeholder={editAcc ? 'Yeni şifre (opsiyonel)' : 'Şifre girin'}
                       aria-label="Muhasebeci şifresi"
                       required={!editAcc}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-label block mb-1.5">Telefon</label>
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      value={form.phone}
+                      onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                      className="input"
+                      placeholder="05XX XXX XX XX"
+                      aria-label="Muhasebeci telefonu"
                     />
                   </div>
                   <div className="flex gap-3 pt-1">

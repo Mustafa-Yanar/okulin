@@ -13,14 +13,15 @@ function makeId() {
 }
 
 const zPhone = z.string().max(40).optional();
+const zBirthDate = z.string().max(20).optional(); // YYYY-MM-DD
 const StudentCreateSchema = z.object({
   name: zName, password: zPassword, cls: z.string().min(1).max(40),
-  phone: zPhone, parentPhone: zPhone,
+  phone: zPhone, parentPhone: zPhone, birthDate: zBirthDate,
 });
 const StudentUpdateSchema = z.object({
   id: zId, name: zName, cls: z.string().min(1).max(40),
   password: z.string().max(200).optional(),
-  phone: zPhone, parentPhone: zPhone,
+  phone: zPhone, parentPhone: zPhone, birthDate: zBirthDate,
 });
 // Tekil { id } veya toplu { ids:[...] } silme.
 const StudentDeleteSchema = z.object({
@@ -40,7 +41,7 @@ export async function GET() {
   const results = await pipeline.exec();
   const students = results.filter(Boolean).map(s => ({
     id: s.id, name: s.name, username: s.username, cls: s.cls, group: s.group,
-    phone: s.phone || '', parentPhone: s.parentPhone || '',
+    phone: s.phone || '', parentPhone: s.parentPhone || '', birthDate: s.birthDate || '',
   }));
   return NextResponse.json(students);
 }
@@ -53,7 +54,7 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, StudentCreateSchema);
   if (!parsed.ok) return parsed.response;
-  const { name, password, cls, phone, parentPhone } = parsed.data;
+  const { name, password, cls, phone, parentPhone, birthDate } = parsed.data;
 
   // İsim soyisim kullanıcı adı olarak kullanılır
   const username = name;
@@ -90,6 +91,7 @@ export async function POST(req) {
   const student = {
     id, name, username, passwordHash: hash, cls, group,
     phone: normPhone, parentPhone: normParentPhone,
+    birthDate: birthDate || '',
     mustChangePassword: true,  // ilk girişte öğrenci kendi şifresini belirleyecek
   };
   await redis.set(`student:${id}`, student);
@@ -107,12 +109,14 @@ export async function PUT(req) {
 
   const parsed = await parseBody(req, StudentUpdateSchema);
   if (!parsed.ok) return parsed.response;
-  const { id, name, password, cls, phone, parentPhone } = parsed.data;
+  const { id, name, password, cls, phone, parentPhone, birthDate } = parsed.data;
   const student = await redis.get(`student:${id}`);
   if (!student) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
 
   const group = classToGroup(cls) || student.group;
-  const updated = { ...student, name, username: name, cls, group };
+  const updated = { ...student, name, username: name, cls, group,
+    birthDate: birthDate !== undefined ? birthDate : (student.birthDate || ''),
+  };
   if (phone !== undefined) {
     if (phone) {
       const n = normalizeTurkishMobile(phone);

@@ -74,7 +74,7 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
 export function CounselorSection({ showToast }) {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ name: '', password: '' });
+  const [form, setForm] = useState({ name: '', password: '', phone: '' });
   const [saving, setSaving] = useState(false);
 
   async function load() {
@@ -89,8 +89,8 @@ export function CounselorSection({ showToast }) {
     if (!form.name.trim() || !form.password) { showToast('İsim ve şifre gerekli', 'error'); return; }
     setSaving(true);
     try {
-      await api('/api/counselors', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), password: form.password }) });
-      showToast('Rehber eklendi'); setForm({ name: '', password: '' }); load();
+      await api('/api/counselors', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), password: form.password, phone: form.phone }) });
+      showToast('Rehber eklendi'); setForm({ name: '', password: '', phone: '' }); load();
     } catch (e) { showToast(e.message, 'error'); } finally { setSaving(false); }
   }
   async function remove(c) {
@@ -122,6 +122,10 @@ export function CounselorSection({ showToast }) {
         <div className="flex-1 min-w-[120px]">
           <label className="text-label block mb-1">Şifre</label>
           <input className="input" type="text" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Şifre" autoComplete="new-password" />
+        </div>
+        <div className="flex-1 min-w-[120px]">
+          <label className="text-label block mb-1">Telefon</label>
+          <input className="input" type="tel" inputMode="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="05XX XXX XX XX" />
         </div>
         <button type="submit" className="btn-primary !px-4 !py-2 text-sm flex items-center gap-1.5" disabled={saving}>
           <Plus size={13} /> {saving ? 'Ekleniyor…' : 'Ekle'}

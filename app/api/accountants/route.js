@@ -10,8 +10,9 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-const AccountantCreateSchema = z.object({ name: zName, password: zPassword });
-const AccountantUpdateSchema = z.object({ id: zId, name: zName, password: z.string().max(200).optional() });
+const zPhone = z.string().max(40).optional();
+const AccountantCreateSchema = z.object({ name: zName, password: zPassword, phone: zPhone });
+const AccountantUpdateSchema = z.object({ id: zId, name: zName, password: z.string().max(200).optional(), phone: zPhone });
 const AccountantDeleteSchema = z.object({ id: zId });
 
 export async function GET() {
@@ -27,7 +28,7 @@ export async function GET() {
   ids.forEach(id => pipeline.get(`accountant:${id}`));
   const results = await pipeline.exec();
   const accountants = results.filter(Boolean).map(a => ({
-    id: a.id, name: a.name, username: a.username,
+    id: a.id, name: a.name, username: a.username, phone: a.phone || '',
   }));
   return NextResponse.json(accountants);
 }
@@ -40,7 +41,7 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, AccountantCreateSchema);
   if (!parsed.ok) return parsed.response;
-  const { name, password } = parsed.data;
+  const { name, password, phone } = parsed.data;
 
   const username = name;
 
@@ -60,6 +61,7 @@ export async function POST(req) {
   const hash = await bcrypt.hash(password, 10);
   const accountant = {
     id, name, username, passwordHash: hash,
+    phone: phone || '',
     mustChangePassword: true,  // ilk girişte muhasebeci kendi şifresini belirleyecek
   };
   await redis.set(`accountant:${id}`, accountant);
@@ -77,11 +79,13 @@ export async function PUT(req) {
 
   const parsed = await parseBody(req, AccountantUpdateSchema);
   if (!parsed.ok) return parsed.response;
-  const { id, name, password } = parsed.data;
+  const { id, name, password, phone } = parsed.data;
   const accountant = await redis.get(`accountant:${id}`);
   if (!accountant) return NextResponse.json({ error: 'Muhasebeci bulunamadı' }, { status: 404 });
 
-  const updated = { ...accountant, name, username: name };
+  const updated = { ...accountant, name, username: name,
+    phone: phone !== undefined ? phone : (accountant.phone || ''),
+  };
   if (password) {
     updated.passwordHash = await bcrypt.hash(password, 10);
   }

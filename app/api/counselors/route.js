@@ -14,8 +14,9 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-const CreateSchema = z.object({ name: zName, password: zPassword });
-const UpdateSchema = z.object({ id: zId, name: zName, password: z.string().max(200).optional() });
+const zPhone = z.string().max(40).optional();
+const CreateSchema = z.object({ name: zName, password: zPassword, phone: zPhone });
+const UpdateSchema = z.object({ id: zId, name: zName, password: z.string().max(200).optional(), phone: zPhone });
 const DeleteSchema = z.object({ id: zId });
 
 export async function GET() {
@@ -31,7 +32,7 @@ export async function GET() {
   ids.forEach(id => pipeline.get(`counselor:${id}`));
   const results = await pipeline.exec();
   const counselors = results.filter(Boolean).map(c => ({
-    id: c.id, name: c.name, username: c.username,
+    id: c.id, name: c.name, username: c.username, phone: c.phone || '',
   }));
   return NextResponse.json(counselors);
 }
@@ -44,7 +45,7 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, CreateSchema);
   if (!parsed.ok) return parsed.response;
-  const { name, password } = parsed.data;
+  const { name, password, phone } = parsed.data;
   const username = name;
 
   // Aynı isimde rehber var mı kontrol et
@@ -62,6 +63,7 @@ export async function POST(req) {
   const hash = await bcrypt.hash(password, 10);
   const counselor = {
     id, name, username, passwordHash: hash,
+    phone: phone || '',
     mustChangePassword: true, // ilk girişte rehber kendi şifresini belirler
   };
   await redis.set(`counselor:${id}`, counselor);
@@ -79,11 +81,13 @@ export async function PUT(req) {
 
   const parsed = await parseBody(req, UpdateSchema);
   if (!parsed.ok) return parsed.response;
-  const { id, name, password } = parsed.data;
+  const { id, name, password, phone } = parsed.data;
   const counselor = await redis.get(`counselor:${id}`);
   if (!counselor) return NextResponse.json({ error: 'Rehber bulunamadı' }, { status: 404 });
 
-  const updated = { ...counselor, name, username: name };
+  const updated = { ...counselor, name, username: name,
+    phone: phone !== undefined ? phone : (counselor.phone || ''),
+  };
   if (password) updated.passwordHash = await bcrypt.hash(password, 10);
   await redis.set(`counselor:${id}`, updated);
   await updateIndexUsername(counselor.username, name, 'counselor', id);

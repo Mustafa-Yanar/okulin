@@ -13,8 +13,11 @@ export function TeacherForm({ initial, onClose, onSave }) {
   const [branches, setBranches] = useState(initial?.branches||[]);
   const [allowedGroups, setAllowedGroups] = useState(initial?.allowedGroups||[]);
   const [photoUrl, setPhotoUrl] = useState(initial?.photoUrl||'');
+  const [phone, setPhone] = useState(initial?.phone ? formatTurkishMobile(initial.phone) : '');
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const phoneInvalid = phone.trim() !== '' && !isValidTurkishMobile(phone);
 
   const toggleGroup = g => setAllowedGroups(prev => {
     const next = prev.includes(g) ? prev.filter(x=>x!==g) : [...prev, g];
@@ -44,8 +47,9 @@ export function TeacherForm({ initial, onClose, onSave }) {
   const submit = async e => {
     e.preventDefault();
     if (branches.length === 0) { alert('En az bir branş seçin'); return; }
+    if (phoneInvalid) return;
     setLoading(true);
-    await onSave({name, username: name, password, branches, allowedGroups, photoUrl});
+    await onSave({name, username: name, password, branches, allowedGroups, photoUrl, phone});
     setLoading(false);
   };
   return (
@@ -67,6 +71,11 @@ export function TeacherForm({ initial, onClose, onSave }) {
         <FormField label={initial?'Şifre (boş bırakırsan değişmez)':'Şifre'}>
           <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} required={!initial} />
         </FormField>
+        <div>
+          <Label>Telefon <span className="text-gray-400 font-400" style={{fontWeight:400}}>(opsiyonel)</span></Label>
+          <input className={`input ${phoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={phone} onChange={e=>setPhone(e.target.value)} />
+          {phoneInvalid && <p className="text-xs text-red-500 mt-1">Geçersiz numara. Örnek: 0532 123 45 67</p>}
+        </div>
         <div>
           <Label>Hangi gruplara ders girebilir?</Label>
           <p className="text-caption mb-2">Hiç seçilmezse tüm gruplara açık. Branş listesi buna göre belirlenir.</p>
@@ -95,7 +104,7 @@ export function TeacherForm({ initial, onClose, onSave }) {
           {branches.length === 0 && <p className="text-xs mt-2" style={{ color: 'var(--color-warning)' }}>En az bir branş seçin.</p>}
         </div>
         <div className="flex gap-3 pt-2">
-          <button className="btn-primary flex-1" disabled={loading}>{loading?'Kaydediliyor...':'Kaydet'}</button>
+          <button className="btn-primary flex-1" disabled={loading || phoneInvalid}>{loading?'Kaydediliyor...':'Kaydet'}</button>
           <button type="button" className="btn-ghost" onClick={onClose}>İptal</button>
         </div>
       </form>
@@ -110,6 +119,7 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
   const [cls, setCls] = useState(initial?.cls||STUDENT_GROUPS.ortaokul.classes[0]);
   const [phone, setPhone] = useState(initial?.phone ? formatTurkishMobile(initial.phone) : '');
   const [parentPhone, setParentPhone] = useState(initial?.parentPhone ? formatTurkishMobile(initial.parentPhone) : '');
+  const [birthDate, setBirthDate] = useState(initial?.birthDate || '');
   const [loading, setLoading] = useState(false);
   useEffect(() => { if (!initial) setCls(STUDENT_GROUPS[selectedGroup].classes[0]); }, [selectedGroup]);
 
@@ -120,7 +130,7 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
     e.preventDefault();
     if (phoneInvalid || parentPhoneInvalid) return; // geçersiz telefonla gönderme
     setLoading(true);
-    await onSave({ name, username: name, password, cls, phone, parentPhone });
+    await onSave({ name, username: name, password, cls, phone, parentPhone, birthDate });
     setLoading(false);
   };
   return (
@@ -156,6 +166,10 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
         <FormField label="Veli Telefonu">
           <input className={`input ${parentPhoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={parentPhone} onChange={e=>setParentPhone(e.target.value)} />
           {parentPhoneInvalid && <p className="text-xs text-red-500 mt-1">Geçersiz numara. Örnek: 0532 123 45 67</p>}
+        </FormField>
+        <FormField label="Doğum Tarihi">
+          <input className="input" type="date" value={birthDate} onChange={e=>setBirthDate(e.target.value)}
+            max={new Date().toISOString().split('T')[0]} />
         </FormField>
         <div className="flex gap-3 pt-2">
           <button className="btn-primary flex-1" disabled={loading || phoneInvalid || parentPhoneInvalid}>{loading?'Kaydediliyor...':'Kaydet'}</button>

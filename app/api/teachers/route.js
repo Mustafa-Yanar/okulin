@@ -14,10 +14,11 @@ function makeId() {
 }
 
 const zPhotoUrl = z.string().max(1_000_000).optional(); // base64 data URL (~400KB)
+const zPhone = z.string().max(40).optional();
 const TeacherCreateSchema = z.object({
   name: zName, password: zPassword,
   branches: zStringArray.refine(a => a.length > 0, { message: 'En az bir branş gerekli' }),
-  allowedGroups: zStringArray.optional(), photoUrl: zPhotoUrl,
+  allowedGroups: zStringArray.optional(), photoUrl: zPhotoUrl, phone: zPhone,
 });
 // PUT: ya toggle_off_day özel aksiyonu ya normal güncelleme.
 const TeacherUpdateSchema = z.union([
@@ -25,7 +26,7 @@ const TeacherUpdateSchema = z.union([
   z.object({
     action: z.undefined().optional(), id: zId, name: zName,
     password: z.string().max(200).optional(), branches: zStringArray.optional(),
-    allowedGroups: zStringArray.optional(), photoUrl: zPhotoUrl,
+    allowedGroups: zStringArray.optional(), photoUrl: zPhotoUrl, phone: zPhone,
   }),
 ]);
 const TeacherDeleteSchema = z.object({ id: zId });
@@ -43,7 +44,7 @@ export async function GET() {
   const teachers = results.filter(Boolean).map(normalizeTeacher).map(t => ({
     id: t.id, name: t.name, username: t.username, branches: t.branches || [],
     allowedGroups: t.allowedGroups || [], photoUrl: t.photoUrl || '',
-    offDays: t.offDays || [],
+    offDays: t.offDays || [], phone: t.phone || '',
   }));
   return NextResponse.json(teachers);
 }
@@ -56,7 +57,7 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, TeacherCreateSchema);
   if (!parsed.ok) return parsed.response;
-  const { name, password, branches, allowedGroups, photoUrl } = parsed.data;
+  const { name, password, branches, allowedGroups, photoUrl, phone } = parsed.data;
 
   // İsim soyisim kullanıcı adı olarak kullanılır
   const username = name;
@@ -78,6 +79,7 @@ export async function POST(req) {
   const teacher = {
     id, name, username, passwordHash: hash, branches,
     allowedGroups: allowedGroups || [], photoUrl: photoUrl || '',
+    phone: phone || '',
     mustChangePassword: true,  // ilk girişte öğretmen kendi şifresini belirleyecek
   };
   await redis.set(`teacher:${id}`, teacher);
@@ -130,7 +132,7 @@ export async function PUT(req) {
     return NextResponse.json({ ok: true, offDays: updated.offDays });
   }
 
-  const { id, name, password, branches, allowedGroups, photoUrl } = body;
+  const { id, name, password, branches, allowedGroups, photoUrl, phone } = body;
   const teacher = await redis.get(`teacher:${id}`);
   if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
 
@@ -139,6 +141,7 @@ export async function PUT(req) {
     branches: branches !== undefined ? branches : (teacher.branches || []),
     allowedGroups: allowedGroups || teacher.allowedGroups,
     photoUrl: photoUrl !== undefined ? photoUrl : teacher.photoUrl,
+    phone: phone !== undefined ? phone : (teacher.phone || ''),
   };
   delete updated.branch;        // eski şema alanlarını temizle
   delete updated.extraBranches;
