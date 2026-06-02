@@ -2,8 +2,9 @@
 
 // Müdür ayarlar modalı (isim + ders saatleri) ve içindeki bölümler:
 // bildirim testi, denetim kayıtları (audit log), hata kayıtları (error log).
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Clock, AlertTriangle, Palette, Users, Compass, Plus, Trash2, KeyRound, CreditCard } from 'lucide-react';
+import SlotTimeEditor from './SlotTimeEditor';
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
@@ -42,60 +43,6 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
     } catch (err) { showToast(err.message, 'error'); }
     finally { setSavingName(false); }
   };
-
-  const TIME_OPTIONS = useMemo(() => {
-    const out = [];
-    for (let h = 9; h <= 19; h++) {
-      for (let m = 0; m < 60; m += 5) {
-        if (h === 19 && m > 20) break;
-        out.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
-      }
-    }
-    return out;
-  }, []);
-
-  function toMin(t) {
-    const [h, m] = t.split(':').map(n => parseInt(n));
-    return h * 60 + m;
-  }
-
-  function updateSlot(arr, setArr, i, field, value) {
-    const next = arr.map((s, idx) => idx === i ? { ...s, [field]: value } : s);
-    for (let j = i + 1; j < next.length; j++) {
-      if (toMin(next[j].start || '00:00') < toMin(next[j - 1].end || '00:00')) {
-        next[j] = { start: '', end: '' };
-      }
-    }
-    setArr(next);
-  }
-
-  function renderRow(arr, setArr, i) {
-    const s = arr[i];
-    const prevEnd = i > 0 ? arr[i - 1].end : null;
-    const startOptions = TIME_OPTIONS.filter(t => !prevEnd || toMin(t) >= toMin(prevEnd));
-    const endOptions = s.start ? TIME_OPTIONS.filter(t => toMin(t) > toMin(s.start)) : [];
-    return (
-      <tr key={i} className="border-t border-gray-50">
-        <td className="py-1 px-2 text-xs text-gray-400 w-10">{i + 1}.</td>
-        <td className="py-1 px-1">
-          <select value={s.start || ''} onChange={e => updateSlot(arr, setArr, i, 'start', e.target.value)}
-            className="w-full text-xs border border-gray-200 rounded px-2 py-1 bg-white">
-            <option value="">—</option>
-            {startOptions.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </td>
-        <td className="py-1 px-1 text-xs text-gray-400 text-center">–</td>
-        <td className="py-1 px-1">
-          <select value={s.end || ''} onChange={e => updateSlot(arr, setArr, i, 'end', e.target.value)}
-            disabled={!s.start}
-            className="w-full text-xs border border-gray-200 rounded px-2 py-1 bg-white disabled:bg-gray-50 disabled:text-gray-300">
-            <option value="">—</option>
-            {endOptions.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </td>
-      </tr>
-    );
-  }
 
   async function saveTimes() {
     for (const arr of [weekday, weekend]) {
@@ -152,25 +99,20 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
       <div className="mb-5 pb-5 border-b border-gray-100">
         <h4 className="text-xs font-700 text-gray-700 uppercase tracking-wide mb-2" style={{ fontWeight: 700 }}>Ders Saatleri</h4>
         {timesLoading ? (
-          <div className="text-center py-6 text-gray-400 text-sm">Yükleniyor...</div>
+          <div className="text-center py-6 text-sm" style={{ color: 'var(--text-muted)' }}>Yükleniyor...</div>
         ) : (
           <>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <div className="text-[11px] font-600 text-gray-500 uppercase mb-1.5" style={{ fontWeight: 600 }}>Hafta İçi</div>
-                <table className="w-full text-sm">
-                  <tbody>{weekday.map((_, i) => renderRow(weekday, setWeekday, i))}</tbody>
-                </table>
-              </div>
-              <div>
-                <div className="text-[11px] font-600 text-gray-500 uppercase mb-1.5" style={{ fontWeight: 600 }}>Hafta Sonu</div>
-                <table className="w-full text-sm">
-                  <tbody>{weekend.map((_, i) => renderRow(weekend, setWeekend, i))}</tbody>
-                </table>
-              </div>
-            </div>
+            <SlotTimeEditor
+              weekday={weekday}
+              weekend={weekend}
+              onChange={(type, slots) => type === 'weekday' ? setWeekday(slots) : setWeekend(slots)}
+            />
             <div className="flex justify-end mt-4">
-              <button className="btn-primary !px-4 !py-2 text-sm" onClick={saveTimes} disabled={savingTimes}>
+              <button
+                className="btn-primary !px-4 !py-2 text-sm"
+                onClick={saveTimes}
+                disabled={savingTimes || weekday.length !== 12 || weekend.length !== 12}
+              >
                 {savingTimes ? 'Kaydediliyor…' : 'Saatleri Kaydet'}
               </button>
             </div>
