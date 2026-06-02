@@ -38,7 +38,7 @@ function ReceiptPrintArea({ data, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 print:bg-transparent print:static print:p-0">
-      <div role="dialog" aria-modal="true" aria-label="Makbuz önizlemesi" className="bg-white rounded-2xl shadow-2xl w-full max-w-md print:shadow-none print:max-w-none print:w-full print:border-none">
+      <div role="dialog" aria-modal="true" aria-label="Makbuz önizlemesi" className="modal w-full max-w-md print:shadow-none print:max-w-none print:w-full print:border-none">
         <div className="flex items-center justify-between p-4 border-b border-gray-100 no-print">
           <span className="font-700 text-gray-800" style={{ fontWeight: 700 }}>Makbuz Önizlemesi</span>
           <div className="flex gap-2">
@@ -128,7 +128,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="Ödeme ekle" className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-slide-in">
+      <div role="dialog" aria-modal="true" aria-label="Ödeme ekle" className="modal w-full max-w-md animate-slide-in">
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>Ödeme Ekle — {studentName}</h3>
           <button onClick={onClose} aria-label="Kapat" className="p-2 rounded-lg hover:bg-gray-100"><X size={16} /></button>
@@ -289,7 +289,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="Finansal kayıt" className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-slide-in max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" aria-label="Finansal kayıt" className="modal w-full max-w-lg animate-slide-in max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>
             {existing ? 'Kaydı Güncelle' : 'Finansal Kayıt Oluştur'} — {student.name || student.studentName}
@@ -477,7 +477,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
                 { label: 'Net Ücret', value: `₺${fmt(finance.netFee)}`, color: 'text-indigo-700' },
                 { label: 'Kalan Borç', value: `₺${fmt(finance.balance)}`, color: finance.balance > 0 ? 'text-red-600' : 'text-green-600' },
               ].map(item => (
-                <div key={item.label} className="bg-white rounded-xl p-3 text-center shadow-sm">
+                <div key={item.label} className="card p-3 text-center">
                   <div className="text-label mb-1">{item.label}</div>
                   <div className={`text-base font-800 ${item.color}`} style={{ fontWeight: 800 }}>{item.value}</div>
                 </div>

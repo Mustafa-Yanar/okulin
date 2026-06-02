@@ -118,7 +118,7 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
             const meta = TYPE_META[r.type] || TYPE_META.link;
             const Icon = meta.icon;
             return (
-              <div key={r.id} className="border border-slate-200 rounded-xl p-3.5 flex flex-col gap-2 hover:shadow-sm transition">
+              <div key={r.id} className="card p-3.5 flex flex-col gap-2">
                 <div className="flex items-start gap-2.5">
                   <div className={`${meta.bg} ${meta.color} rounded-lg p-2 shrink-0`}>
                     <Icon size={18} />
@@ -181,7 +181,7 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
 function VideoModal({ url, title, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl overflow-hidden w-full max-w-3xl" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" className="modal overflow-hidden w-full max-w-3xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
           <p className="text-sm font-600 truncate" style={{ fontWeight: 600 }}>{title}</p>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X size={18} /></button>
@@ -268,7 +268,7 @@ function ResourceForm({ branches, onClose, onSaved, showToast }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" className="modal w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 sticky top-0 bg-white">
           <h4 className="font-700" style={{ fontWeight: 700 }}>Kaynak Ekle</h4>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X size={18} /></button>

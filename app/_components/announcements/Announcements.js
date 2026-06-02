@@ -195,7 +195,7 @@ function ReadDetailModal({ ann, onClose }) {
   const readCount = data?.recipients?.filter(r => r.read).length || 0;
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl w-full max-w-sm max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" className="modal w-full max-w-sm max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <div className="min-w-0">
             <p className="font-700 truncate" style={{ fontWeight: 700 }}>{ann.title}</p>

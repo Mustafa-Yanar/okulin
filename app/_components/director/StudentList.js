@@ -3,7 +3,7 @@
 // Öğrenci listesi (gruplu) + öğrenci detay görünümü (StudentExpandedView) +
 // sınıf ders programı modalı (ClassScheduleModal).
 import React, { useState, useEffect, useMemo } from 'react';
-import { BookOpen, ClipboardList, Clock, Calendar, ChevronRight, Edit3, GraduationCap, Trash2 } from 'lucide-react';
+import { BookOpen, ClipboardList, Clock, Calendar, ChevronRight, Edit3, GraduationCap, Trash2, X } from 'lucide-react';
 import { classLabel, ALL_DAYS } from '@/lib/constants';
 import { GROUPS, api, Modal, guidanceSubjectsFor } from './shared';
 import { StudentAttendanceView } from './Attendance';
@@ -168,7 +168,7 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
         if (!st) return null;
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div role="dialog" aria-modal="true" aria-label="Öğrenci detayı" className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in">
+            <div role="dialog" aria-modal="true" aria-label="Öğrenci detayı" className="modal w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in">
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 shrink-0">
                 <h3 className="font-700 text-base truncate" style={{ fontWeight: 700 }}>
                   {st.name} <span className="font-500 text-sm" style={{ fontWeight: 500, color: 'var(--text-muted)' }}>· {classLabel(st.cls)}</span>

@@ -70,7 +70,7 @@ function NewOrgModal({ onClose, onCreated }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 my-4" role="dialog" aria-modal="true" aria-labelledby="new-org-title">
+      <div className="modal w-full max-w-md p-6 my-4" role="dialog" aria-modal="true" aria-labelledby="new-org-title">
         <h2 id="new-org-title" className="text-lg font-semibold mb-4">Yeni Kurum Ekle</h2>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <Field label="Kurum Adı *" id="org-name">
@@ -162,7 +162,7 @@ function ResetPasswordModal({ org, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="reset-pw-title">
+      <div className="modal w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="reset-pw-title">
         <h2 id="reset-pw-title" className="text-base font-semibold mb-1">Müdür Şifresi Sıfırla</h2>
         <p className="text-sm text-slate-500 mb-4">{org.name}</p>
         <form onSubmit={submit} className="flex flex-col gap-3">
@@ -210,7 +210,7 @@ function RenameModal({ org, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="rename-title">
+      <div className="modal w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="rename-title">
         <h2 id="rename-title" className="text-base font-semibold mb-4">Kurum Adını Düzenle</h2>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <Field label="Kurum Adı *" id="r-name">
@@ -262,7 +262,7 @@ function ChangeOwnPasswordModal({ onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="chpw-title">
+      <div className="modal w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="chpw-title">
         <h2 id="chpw-title" className="text-base font-semibold mb-4">Şifremi Değiştir</h2>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <Field label="Mevcut Şifre *" id="cp-current">
@@ -315,7 +315,7 @@ function DeleteConfirmModal({ org, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+      <div className="modal w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="delete-title">
         <h2 id="delete-title" className="text-base font-semibold text-red-600 mb-1">Kurumu Sil</h2>
         <p className="text-sm text-slate-600 mb-1"><strong>{org.name}</strong> kurumu ve tüm verisi kalıcı olarak silinecek.</p>
         <p className="text-sm text-slate-500 mb-4">Bu işlem <strong>geri alınamaz</strong>. Onaylamak için slug'ı yazın:</p>
@@ -429,7 +429,7 @@ export default function SuperAdminPanel({ session, onLogout }) {
             {orgs.map(org => (
               <div
                 key={org.slug}
-                className={`bg-white rounded-lg border px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 ${org.active ? 'border-slate-200' : 'border-slate-200 opacity-60'}`}
+                className={`card px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 ${!org.active ? 'opacity-60' : ''}`}
               >
                 {/* Bilgi */}
                 <div className="flex-1 min-w-0">

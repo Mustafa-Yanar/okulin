@@ -79,7 +79,7 @@ function NewBranchModal({ onClose, onCreated, org, appDomain }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" role="dialog" aria-modal="true" aria-labelledby="new-branch-title">
+      <div className="modal w-full max-w-md p-6" role="dialog" aria-modal="true" aria-labelledby="new-branch-title">
         <h2 id="new-branch-title" className="text-lg font-semibold mb-4">Yeni Şube Ekle</h2>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <Field label="Şube Slug (URL kimliği) *" id="b-slug">
@@ -149,7 +149,7 @@ function ResetPasswordModal({ branch, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="reset-b-pw-title">
+      <div className="modal w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="reset-b-pw-title">
         <h2 id="reset-b-pw-title" className="text-base font-semibold mb-1">Müdür Şifresi Sıfırla</h2>
         <p className="text-sm text-slate-500 mb-4">{branch.name}</p>
         <form onSubmit={submit} className="flex flex-col gap-3">
@@ -196,7 +196,7 @@ function RenameModal({ branch, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="rename-b-title">
+      <div className="modal w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="rename-b-title">
         <h2 id="rename-b-title" className="text-base font-semibold mb-4">Şube Adını Düzenle</h2>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <Field label="Şube Adı *" id="rb-name">
@@ -276,15 +276,15 @@ export default function OrgAdminPanel({ session, onLogout }) {
         {/* Özet istatistik */}
         {!loading && data && (
           <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="bg-white rounded-lg border border-slate-200 p-3 text-center">
+            <div className="card p-3 text-center">
               <div className="text-2xl font-bold text-indigo-600">{branches.length}</div>
               <div className="text-xs text-slate-500 mt-0.5">Şube</div>
             </div>
-            <div className="bg-white rounded-lg border border-slate-200 p-3 text-center">
+            <div className="card p-3 text-center">
               <div className="text-2xl font-bold text-amber-600">{totalStudents}</div>
               <div className="text-xs text-slate-500 mt-0.5">Öğrenci</div>
             </div>
-            <div className="bg-white rounded-lg border border-slate-200 p-3 text-center">
+            <div className="card p-3 text-center">
               <div className="text-2xl font-bold text-green-600">{totalTeachers}</div>
               <div className="text-xs text-slate-500 mt-0.5">Öğretmen</div>
             </div>
@@ -323,7 +323,7 @@ export default function OrgAdminPanel({ session, onLogout }) {
             {branches.map(branch => (
               <div
                 key={branch.slug}
-                className={`bg-white rounded-lg border px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 ${branch.active ? 'border-slate-200' : 'border-slate-200 opacity-60'}`}
+                className={`card px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 ${!branch.active ? 'opacity-60' : ''}`}
               >
                 {/* Bilgi */}
                 <div className="flex-1 min-w-0">
