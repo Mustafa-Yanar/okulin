@@ -141,13 +141,24 @@ export default function Sidebar({
             <BookMarked size={16} color="white" />
           </div>
         )}
-        {/* Kurum adı + zil (collapsed'da gizli) */}
+        {/* Kurum adı + zil + kapat (collapsed'da gizli) */}
         {!collapsed && (
           <>
             <span className="text-sm leading-tight truncate flex-1 min-w-0" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
               {branding?.shortName || 'Etüt Takip'}
             </span>
             <NotificationButton showToast={showToast} />
+            {/* X butonu yalnız mobil drawer'da görünür */}
+            {onMobileClose && (
+              <button
+                onClick={onMobileClose}
+                aria-label="Menüyü kapat"
+                className="md:hidden p-1.5 rounded-lg hover:bg-[var(--bg-muted)] shrink-0"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                <X size={16} />
+              </button>
+            )}
           </>
         )}
       </div>
@@ -216,14 +227,6 @@ export default function Sidebar({
         <div className="md:hidden fixed inset-0 z-40 flex">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onMobileClose} aria-hidden="true" />
           <aside className="relative z-10 w-72 max-w-[85vw] h-full flex flex-col shadow-2xl animate-slide-in-left">
-            <button
-              onClick={onMobileClose}
-              aria-label="Menüyü kapat"
-              className="absolute top-3 right-3 p-2 rounded-lg z-10 hover:bg-[var(--bg-muted)]"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              <X size={18} />
-            </button>
             {sidebarContent}
           </aside>
         </div>
