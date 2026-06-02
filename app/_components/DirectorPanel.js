@@ -68,7 +68,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [editStudent, setEditStudent] = useState(null);
   const [selectedTeacherForSlots, setSelectedTeacherForSlots] = useState(null);
   const [teacherSlots, setTeacherSlots] = useState(null);
-  const [programTeacher, setProgramTeacher] = useState(null);
   const [expandedTeacherId, setExpandedTeacherId] = useState(null);
   const [expandedTeacherTab, setExpandedTeacherTab] = useState('etutler');
   const [historyTarget, setHistoryTarget] = useState(null);
@@ -208,7 +207,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                   </div>
                   {isOpen && (
                     <div className="border-t px-4 py-3" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-surface-2)' }}>
-                      {/* Sekme başlığı + tarih nav */}
+                      {/* Sekme başlığı + tarih nav (sadece Etütler sekmesinde) */}
                       <div className="flex items-center justify-between gap-2 mb-3">
                         <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)' }}>
                           {[['etutler','Etütler'],['gecmis','Etüt Geçmişi'],['program','Program']].map(([k,l]) => (
@@ -223,7 +222,9 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                               }}>{l}</button>
                           ))}
                         </div>
-                        <WeekNav weekKey={weekKey} onPrev={() => handleWeekChange(getAdjacentWeek(weekKey,-1))} onNext={() => handleWeekChange(getAdjacentWeek(weekKey,1))} />
+                        {expandedTeacherTab === 'etutler' && (
+                          <WeekNav weekKey={weekKey} onPrev={() => handleWeekChange(getAdjacentWeek(weekKey,-1))} onNext={() => handleWeekChange(getAdjacentWeek(weekKey,1))} />
+                        )}
                       </div>
 
                       {/* Etütler sekmesi */}
@@ -261,22 +262,41 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                         )
                       )}
 
-                      {/* Etüt Geçmişi sekmesi */}
+                      {/* Etüt Geçmişi sekmesi — inline */}
                       {expandedTeacherTab === 'gecmis' && (
-                        <div className="py-2">
-                          <button className="btn-ghost !px-3 !py-2 flex items-center gap-2 text-sm" onClick={() => setHistoryTarget({ type: 'teacher', id: t.id, name: t.name })}>
-                            <Clock size={14} /> {t.name} — Geçmiş Etütleri Göster
-                          </button>
-                        </div>
+                        <HistoryModal
+                          inline
+                          target={{ type: 'teacher', id: t.id, name: t.name }}
+                          onClose={() => setExpandedTeacherTab('etutler')}
+                          currentWeekKey={weekKey}
+                          currentEntries={(() => {
+                            if (selectedTeacherForSlots?.id !== t.id || !teacherSlots) return [];
+                            const items = [];
+                            ALL_DAYS.forEach(day => {
+                              slotsForDay(day.index, slotTimes).forEach((slot, slotIdx) => {
+                                const sd = teacherSlots[day.index]?.[slotIdx];
+                                if (sd?.booked) items.push({
+                                  day: day.index, dayLabel: day.label,
+                                  slotId: slot.id, slotLabel: slot.label,
+                                  studentName: sd.studentName,
+                                  studentCls: (sd.studentCls||'').toUpperCase(),
+                                });
+                              });
+                            });
+                            return items;
+                          })()}
+                        />
                       )}
 
-                      {/* Program sekmesi */}
+                      {/* Program sekmesi — inline */}
                       {expandedTeacherTab === 'program' && (
-                        <div className="py-2">
-                          <button className="btn-primary !px-3 !py-2 flex items-center gap-2 text-sm" onClick={() => setProgramTeacher(t)}>
-                            <LayoutGrid size={13} /> {t.name} — Ders Programını Düzenle
-                          </button>
-                        </div>
+                        <ProgramEditor
+                          inline
+                          teacher={t}
+                          students={students}
+                          showToast={showToast}
+                          onClose={() => setExpandedTeacherTab('etutler')}
+                        />
                       )}
                     </div>
                   )}
@@ -443,10 +463,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
               setShowStudentForm(false); setEditStudent(null); loadAll(weekKey);
             } catch(err){showToast(err.message,'error');}
           }} />
-      )}
-      {programTeacher && (
-        <ProgramEditor teacher={programTeacher} students={students} showToast={showToast}
-          onClose={() => { setProgramTeacher(null); loadAll(weekKey); }} />
       )}
       {showImport && (
         <ImportModal onClose={() => setShowImport(false)} showToast={showToast} onDone={() => { setShowImport(false); loadAll(weekKey); }} />

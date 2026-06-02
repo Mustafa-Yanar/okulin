@@ -12,7 +12,7 @@ import {
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal, getAdjacentWeek, isSlotPast } from './shared';
 
-export default function ProgramEditor({ teacher, onClose, showToast, students }) {
+export default function ProgramEditor({ teacher, onClose, showToast, students, inline = false }) {
   const currentWeek = getWeekKey();
   const maxWeek = getAdjacentWeek(getAdjacentWeek(currentWeek, 1), 1);
   const [weekKey, setWeekKey] = useState(currentWeek);
@@ -260,21 +260,19 @@ export default function ProgramEditor({ teacher, onClose, showToast, students })
     </div>
   );
 
-  if (loading) return (
-    <Modal title={`${teacher.name} – Program`} onClose={onClose} xwide>
-      {weekNav}
-      {offDayBar}
-      <LoadingBox height="h-32" />
-    </Modal>
-  );
+  if (loading) {
+    const inner = <>{weekNav}{offDayBar}<LoadingBox height="h-32" /></>;
+    if (inline) return <div className="py-2">{inner}</div>;
+    return <Modal title={`${teacher.name} – Program`} onClose={onClose} xwide>{inner}</Modal>;
+  }
 
   const weekdayDays = visibleDays.filter(d => !d.weekend);
   const weekendDays = visibleDays.filter(d => d.weekend);
   const hasWeekday = weekdayDays.length > 0;
   const hasWeekend = weekendDays.length > 0;
 
-  return (
-    <Modal title={`${teacher.name} – Program`} onClose={onClose} xwide>
+  const content = (
+    <>
       {weekNav}
       {offDayBar}
       <div className="overflow-x-auto">
@@ -400,8 +398,11 @@ export default function ProgramEditor({ teacher, onClose, showToast, students })
         <button className="btn-primary flex-1 flex items-center justify-center gap-1.5" onClick={handleSave} disabled={saving}>
           <Save size={14} /> {saving ? 'Kaydediliyor...' : 'Kaydet ve Uygula'}
         </button>
-        <button className="btn-ghost" onClick={onClose}>İptal</button>
+        {!inline && <button className="btn-ghost" onClick={onClose}>İptal</button>}
       </div>
-    </Modal>
+    </>
   );
+
+  if (inline) return <div className="py-2">{content}</div>;
+  return <Modal title={`${teacher.name} – Program`} onClose={onClose} xwide>{content}</Modal>;
 }

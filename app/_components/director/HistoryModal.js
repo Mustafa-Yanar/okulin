@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BookOpen, ClipboardList, Clock } from 'lucide-react';
 import { api, Modal } from './shared';
 
-export default function HistoryModal({ target, onClose, currentWeekKey, currentEntries }) {
+export default function HistoryModal({ target, onClose, currentWeekKey, currentEntries, inline = false }) {
   const isStudent = target.type === 'student';
   const [activeTab, setActiveTab] = useState('etut');
   const [weeks, setWeeks] = useState([]);
@@ -239,8 +239,8 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
     )
   );
 
-  return (
-    <Modal title={modalTitle} onClose={onClose} wide>
+  const inner = (
+    <>
       {isStudent && (
         <div className="flex rounded-xl border border-gray-200 overflow-hidden mb-4 w-fit">
           <button
@@ -259,6 +259,9 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
       )}
       {(!isStudent || activeTab === 'etut') && etutContent}
       {isStudent && activeTab === 'devamsizlik' && devamsizlikContent}
-    </Modal>
+    </>
   );
+
+  if (inline) return <div className="py-2">{inner}</div>;
+  return <Modal title={modalTitle} onClose={onClose} wide>{inner}</Modal>;
 }
