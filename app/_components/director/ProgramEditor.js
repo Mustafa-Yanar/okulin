@@ -207,19 +207,19 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   }
 
   const weekNav = (
-    <div className="flex items-center justify-between mb-3 px-1">
+    <div className="flex items-center gap-2 mb-3 px-1 w-fit">
       <button
         onClick={() => canPrev && setWeekKey(getAdjacentWeek(weekKey, -1))}
         disabled={!canPrev}
         className={`btn-ghost !p-2 ${!canPrev ? 'opacity-30 cursor-not-allowed' : ''}`}>
         <ChevronLeft size={16} />
       </button>
-      <div className="text-xs text-gray-700 text-center">
+      <div className="text-xs text-center min-w-[140px]" style={{ color: 'var(--text-secondary)' }}>
         <div className="font-600" style={{ fontWeight: 600 }}>
           {(() => { const r = weekRangeLabel(weekKey); return `${r.startStr} – ${r.endStr} ${r.yearStr}`; })()}
         </div>
         {weekKey === currentWeek && <div className="text-[10px] text-indigo-500 mt-0.5">Bu hafta</div>}
-        {weekKey !== currentWeek && <div className="text-[10px] text-amber-600 mt-0.5">İleri hafta — geçici değişiklikler bu haftaya uygulanır</div>}
+        {weekKey !== currentWeek && <div className="text-[10px] text-amber-600 mt-0.5">İleri hafta — bu haftaya uygulanır</div>}
       </div>
       <button
         onClick={() => canNext && setWeekKey(getAdjacentWeek(weekKey, 1))}
@@ -233,13 +233,10 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   const offSet = new Set(offDays);
   const visibleDays = ALL_DAYS.filter(d => !offSet.has(d.index));
 
-  const dayHasContent = {};
-  for (const day of visibleDays) {
-    const dayProg = program?.[String(day.index)] || {};
-    dayHasContent[day.index] = Object.values(dayProg).some(e => e && e.type);
-  }
-  const totalUnits = visibleDays.reduce((sum, d) => sum + (dayHasContent[d.index] ? 3 : 1), 0) || 1;
-  const dayWidth = (dayIdx) => `${((dayHasContent[dayIdx] ? 3 : 1) / totalUnits) * 100}%`;
+  // Tüm günler eşit genişlik — dolu günün otomatik genişlemesi kaldırıldı
+  // (mobilde hoştu ama masaüstünde gereksiz zıplama yapıyordu).
+  const dayCount = visibleDays.length || 1;
+  const dayWidth = () => `${100 / dayCount}%`;
 
   const offDayBar = (
     <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
