@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import {
   Home, Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
   BarChart2, CreditCard, TrendingDown, ChevronLeft, ChevronRight,
-  BookMarked, Calendar, GraduationCap, Star, Clock,
+  BookMarked, Calendar, GraduationCap, Star, Clock, Settings,
 } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
 import ThemeToggle from './ThemeToggle';
@@ -96,6 +96,7 @@ export default function Sidebar({
   mobileOpen,
   onMobileClose,
   showToast,
+  onSettings,
 }) {
   const items = buildItems(session?.role);
 
@@ -181,21 +182,21 @@ export default function Sidebar({
         })}
       </nav>
 
-      {/* Alt: Theme toggle + Collapse toggle */}
+      {/* Alt: Ayarlar + Theme toggle */}
       <div className="shrink-0 px-3 pb-4">
-        <div className="pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+        <div className="pt-3 space-y-1" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+          {onSettings && (
+            <button
+              onClick={() => { onSettings(); onMobileClose?.(); }}
+              title={collapsed ? 'Ayarlar' : undefined}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all hover:bg-[var(--bg-muted)] ${collapsed ? 'justify-center' : ''}`}
+              style={{ fontWeight: 500, color: 'var(--text-secondary)' }}
+            >
+              <Settings size={18} className="shrink-0" />
+              {!collapsed && <span className="truncate">Ayarlar</span>}
+            </button>
+          )}
           <ThemeToggle collapsed={collapsed} />
-          <button
-            onClick={onCollapse}
-            title={collapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'}
-            className="mt-1 w-full hidden md:flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all hover:bg-[var(--bg-muted)]"
-            style={{ color: 'var(--text-muted)', justifyContent: collapsed ? 'center' : undefined }}
-          >
-            {collapsed
-              ? <ChevronRight size={16} />
-              : <><ChevronLeft size={16} /><span className="text-xs">Daralt</span></>
-            }
-          </button>
         </div>
       </div>
     </div>
@@ -205,10 +206,24 @@ export default function Sidebar({
     <>
       {/* Masaüstü sidebar */}
       <aside
-        className={`sidebar hidden md:flex flex-col h-screen sticky top-0 shrink-0 ${collapsed ? 'w-16' : 'w-64'}`}
+        className={`sidebar relative hidden md:flex flex-col h-screen sticky top-0 shrink-0 ${collapsed ? 'w-16' : 'w-64'}`}
         style={{ borderRight: '1px solid var(--border-subtle)' }}
       >
         {sidebarContent}
+        {/* Sağ kenarda daralt/genişlet tutamağı */}
+        <button
+          onClick={onCollapse}
+          title={collapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'}
+          aria-label={collapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'}
+          className="absolute top-1/2 -right-3 -translate-y-1/2 z-30 w-6 h-6 rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110"
+          style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
       </aside>
 
       {/* Mobil overlay drawer */}

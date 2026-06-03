@@ -469,6 +469,7 @@ function AppContent() {
         mobileOpen={mobileSidebarOpen}
         onMobileClose={() => setMobileSidebarOpen(false)}
         showToast={showToast}
+        onSettings={isDirectorRole ? () => setShowDirectorName(true) : undefined}
       />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -506,11 +507,6 @@ function AppContent() {
             </div>
             {canChangePassword && (
               <button onClick={() => setShowChangePassword(true)} title="Şifremi Değiştir" className="btn-ghost !px-2.5 !py-2">
-                <Settings size={14} />
-              </button>
-            )}
-            {isDirectorRole && (
-              <button onClick={() => setShowDirectorName(true)} title="Ayarlar" className="btn-ghost !px-2.5 !py-2">
                 <Settings size={14} />
               </button>
             )}
