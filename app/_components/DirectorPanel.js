@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, LayoutGrid, ClipboardList, Compass
+  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, LayoutGrid, ClipboardList, Compass
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
 import DirectorDenemeYonetimi from './rehberlik/DirectorDenemeYonetimi';
@@ -163,21 +163,31 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
   return (
     <div>
-      {/* TEACHERS TAB — Ders Programı açıkken inline gösterilir */}
-      {tab === 'teachers' && showProgramOlusturucuModal && (
-        <div>
-          <div className="flex items-center gap-3 mb-4">
-            <button
-              onClick={() => setShowProgramOlusturucuModal(false)}
-              className="btn-ghost !px-3 !py-2 flex items-center gap-1.5 text-sm"
-            >
-              <ChevronLeft size={16} /> Öğretmenlere Dön
-            </button>
-            <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>Ders Programı Oluştur</h3>
-          </div>
-          <ProgramOlusturucu api={api} showToast={showToast}
-            activeClasses={[...new Set(students.map(s => s.cls))]} />
+      {/* TEACHERS TAB — üstte Öğretmenler / Ders Programı geçişi */}
+      {tab === 'teachers' && (
+        <div className="flex gap-1 mb-4 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)' }}>
+          {[['liste', 'Öğretmenler'], ['program', 'Ders Programı']].map(([k, l]) => {
+            const isActive = (k === 'program') === showProgramOlusturucuModal;
+            return (
+              <button key={k} onClick={() => setShowProgramOlusturucuModal(k === 'program')}
+                className="px-4 py-2 rounded-lg text-sm transition-all flex items-center gap-1.5"
+                style={{
+                  fontWeight: isActive ? 600 : 400,
+                  background: isActive ? 'var(--bg-surface)' : 'transparent',
+                  color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                }}>
+                {k === 'program' ? <LayoutGrid size={14} /> : <Users size={14} />} {l}
+              </button>
+            );
+          })}
         </div>
+      )}
+
+      {/* Ders Programı oluşturucu (inline) */}
+      {tab === 'teachers' && showProgramOlusturucuModal && (
+        <ProgramOlusturucu api={api} showToast={showToast}
+          activeClasses={[...new Set(students.map(s => s.cls))]} />
       )}
 
       {tab === 'teachers' && !showProgramOlusturucuModal && (
@@ -187,9 +197,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
             <div className="flex gap-2 flex-wrap">
               <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
                 <Plus size={14} /> Öğretmen Ekle
-              </button>
-              <button className="btn-ghost !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => setShowProgramOlusturucuModal(true)}>
-                <LayoutGrid size={14} /> Ders Programı
               </button>
             </div>
           </div>

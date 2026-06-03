@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutGrid, Sparkles, AlertTriangle, Check, Download, Eye } from 'lucide-react';
+import { Sparkles, AlertTriangle, Check, Download, Eye } from 'lucide-react';
 import {
   STUDENT_GROUPS, classToGroup, WEEKDAY_SLOT_IDS, WEEKEND_SLOT_IDS,
   DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES,
@@ -482,11 +482,8 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
 
   return (
     <div className="space-y-5">
-      {/* Başlık + aksiyonlar */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h3 className="font-700 text-lg flex items-center gap-2" style={{fontWeight:700}}>
-          <LayoutGrid size={18} className="text-indigo-500" /> Otomatik Ders Programı
-        </h3>
+      {/* Aksiyonlar (başlık kaldırıldı) */}
+      <div className="flex items-center justify-end flex-wrap gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           <label className="text-xs text-gray-500 flex items-center gap-1">Haftalık maks
             <input type="number" value={maxWeekly} onChange={e=>setMaxWeekly(parseInt(e.target.value)||40)}
