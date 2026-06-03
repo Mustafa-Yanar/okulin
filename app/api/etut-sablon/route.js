@@ -117,8 +117,10 @@ export async function PUT(req) {
 
   const sb = { ...list[idx] };
   if (scope === 'all') {
-    // Kalıcı: aktif alanını set et
+    // Kalıcı: aktif alanını set et. Aktif yapılıyorsa bu-hafta pasif kayıtlarını da temizle
+    // (aksi halde aktif:true ama pasifHaftalar bu haftayı içerirse etüt görünmez kalır).
     sb.aktif = aktif;
+    if (aktif) sb.pasifHaftalar = [];
   } else {
     // O haftaya özel: pasifHaftalar listesini güncelle
     const set = new Set(Array.isArray(sb.pasifHaftalar) ? sb.pasifHaftalar : []);

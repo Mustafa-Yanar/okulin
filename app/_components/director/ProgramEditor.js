@@ -710,7 +710,11 @@ function EtutEylemModal({ sablon, aktif, onClose, onToggle, onDelete }) {
             {aktif ? (
               <button className="btn-ghost w-full justify-center" onClick={() => setPasifMode(true)}>Pasif Yap</button>
             ) : (
-              <button className="btn-ghost w-full justify-center" onClick={() => onToggle(sablon.id, 'all', true)}>Aktif Yap</button>
+              // Kalıcı pasifse (aktif:false) tümünü aç; sadece bu hafta pasifse o haftayı aç
+              <button className="btn-ghost w-full justify-center"
+                onClick={() => onToggle(sablon.id, sablon.aktif === false ? 'all' : 'week', true)}>
+                Aktif Yap
+              </button>
             )}
             <button className="btn-ghost w-full justify-center text-red-500 hover:bg-red-50"
               onClick={() => { if (confirm('Bu etüt kalıcı olarak silinsin mi?')) onDelete(sablon.id); }}>
