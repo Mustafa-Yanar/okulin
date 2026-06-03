@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import {
-  Home, Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
+  Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
   BarChart2, CreditCard, TrendingDown, ChevronLeft, ChevronRight,
   BookMarked, Calendar, GraduationCap, Star, Clock, Settings,
 } from 'lucide-react';
@@ -14,7 +14,6 @@ import NotificationButton from './NotificationButton';
 
 const ITEMS_BY_ROLE = {
   director: [
-    { group: null,       key: 'overview',    label: 'Genel Bakış',       icon: Home },
     { group: 'Akademik', key: 'teachers',    label: 'Öğretmenler',       icon: Users },
     { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
     { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
@@ -25,7 +24,6 @@ const ITEMS_BY_ROLE = {
     { group: 'Sistem',   key: 'ders-saatleri', label: 'Ders Saatleri',   icon: Clock },
   ],
   counselor: [
-    { group: null,       key: 'overview',    label: 'Genel Bakış',       icon: Home },
     { group: 'Akademik', key: 'teachers',    label: 'Öğretmenler',       icon: Users },
     { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
     { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },

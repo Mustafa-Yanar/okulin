@@ -33,9 +33,9 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   // Rehber (counselor) = müdür paneli EKSİ muhasebe. Sekme listesi role göre.
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
-    ? ['overview', 'teachers', 'students', 'yoklama', 'kutuphane', 'duyurular']
-    : ['overview', 'teachers', 'students', 'yoklama', 'muhasebe', 'kutuphane', 'duyurular', 'denemeler', 'ders-saatleri'];
-  const [tab, setTabInternal] = useUrlTab('overview', validTabs);
+    ? ['teachers', 'students', 'yoklama', 'kutuphane', 'duyurular']
+    : ['teachers', 'students', 'yoklama', 'muhasebe', 'kutuphane', 'duyurular', 'denemeler', 'ders-saatleri'];
+  const [tab, setTabInternal] = useUrlTab('teachers', validTabs);
 
   // Sidebar'dan gelen externalTab değişince iç state'i güncelle
   useEffect(() => {
@@ -441,9 +441,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           )}
         </div>
       )}
-
-      {/* Genel Bakış sekmesi: KPICards page.js tarafından render edilir, DirectorPanel boş bırakır */}
-      {tab === 'overview' && null}
 
       {/* Modals */}
       {showTeacherForm && (

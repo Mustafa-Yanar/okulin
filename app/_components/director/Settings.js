@@ -52,15 +52,7 @@ function SettingsBody({ current, onSave, onBranding, showToast }) {
         <PaymentSection showToast={showToast} />
       </div>
 
-      <div className="mb-5 pb-5 border-b border-gray-100">
-        <AuditLogSection showToast={showToast} />
-      </div>
-
-      <div className="mb-5 pb-5 border-b border-gray-100">
-        <ErrorLogSection showToast={showToast} />
-      </div>
-
-      <PushTestSection showToast={showToast} />
+      <AuditLogSection showToast={showToast} />
     </>
   );
 }

@@ -14,7 +14,6 @@ import DirectorPanel, { DirectorSettingsInline } from './_components/DirectorPan
 import ChangePasswordModal from './_components/ChangePasswordModal';
 import ForcedPasswordChange from './_components/ForcedPasswordChange';
 import Sidebar from './_components/Sidebar';
-import KPICards from './_components/KPICards';
 import PullToRefreshIndicator from './_components/PullToRefreshIndicator';
 import { usePullToRefresh } from './_components/usePullToRefresh';
 import { isPushSupported, subscribeToPush } from '@/lib/push-client';
@@ -320,9 +319,6 @@ function AppContent() {
   const [branding, setBranding] = useState(BRANDING_DEFAULTS);
   const [toast, setToast] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  // KPI stats
-  const [stats, setStats] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(false);
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -358,15 +354,6 @@ function AppContent() {
           // İlk girişte push izni iste — izin verilmişse sessiz, verilmemişse tarayıcı diyaloğu açılır
           if (isPushSupported()) {
             subscribeToPush().catch(() => {});
-          }
-          if (SIDEBAR_ROLES.includes(status.session.role)) {
-            setStatsLoading(true);
-            try {
-              const s = await api('/api/stats');
-              setStats(s);
-            } catch {} finally {
-              setStatsLoading(false);
-            }
           }
         }
       } catch {}
@@ -468,7 +455,7 @@ function AppContent() {
         mobileOpen={mobileSidebarOpen}
         onMobileClose={() => setMobileSidebarOpen(false)}
         showToast={showToast}
-        onSettings={isDirectorRole ? () => handleTabChange('ayarlar') : undefined}
+        onSettings={session.role === 'director' ? () => handleTabChange('ayarlar') : undefined}
       />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -520,10 +507,7 @@ function AppContent() {
           <PullToRefreshIndicator pullDistance={pullDistance} refreshState={refreshState} />
           {isDirectorRole && (
             <>
-              {(!activeTab || activeTab === 'overview') && (
-                <KPICards stats={stats} loading={statsLoading} showFinance={session.role === 'director'} />
-              )}
-              {activeTab === 'ayarlar' ? (
+              {activeTab === 'ayarlar' && session.role === 'director' ? (
                 <DirectorSettingsInline
                   current={session.name}
                   showToast={showToast}
