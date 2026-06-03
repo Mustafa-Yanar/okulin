@@ -515,7 +515,21 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
       {showEtutForm && (
         <EtutEkleForm
           defaultSure={slotTimes.etutSuresi || 60}
+          molaSure={slotTimes.molaSuresi ?? 10}
           saving={savingEtut}
+          busyRangesForDay={(dayIndex) => {
+            // O günün meşgul aralıkları: ders/etüt slotları + etüt şablonları
+            const ranges = [];
+            const slots = slotsForDay(dayIndex, slotTimes);
+            for (const slot of slots) {
+              const entry = getEntry(dayIndex, slot.id);
+              if (entry && entry.type) ranges.push({ start: slot.start, end: slot.end, label: entry.type === 'available' ? 'ders' : 'etüt' });
+            }
+            for (const sb of etutSablonlar) {
+              if (sb.dayIndex === dayIndex) ranges.push({ start: sb.start, end: sb.end, label: 'etüt' });
+            }
+            return ranges;
+          }}
           onClose={() => setShowEtutForm(false)}
           onSave={saveEtutSablon}
         />
@@ -547,10 +561,11 @@ function addMinutesToTime(t, addMin) {
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }
 
-function EtutEkleForm({ defaultSure, saving, onClose, onSave }) {
+function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, saving, onClose, onSave }) {
   const [dayIndex, setDayIndex] = useState(0);
   const [start, setStart] = useState('15:00');
   const [end, setEnd] = useState(addMinutesToTime('15:00', defaultSure));
+  const [ignoreMola, setIgnoreMola] = useState(false);
 
   const handleStartChange = (v) => {
     setStart(v);
@@ -560,33 +575,74 @@ function EtutEkleForm({ defaultSure, saving, onClose, onSave }) {
   const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
   const invalid = toMin(end) <= toMin(start);
 
+  // Çakışma + mola kontrolü
+  const { overlap, molaWarnings } = useMemo(() => {
+    const sMin = toMin(start), eMin = toMin(end);
+    const ranges = busyRangesForDay ? busyRangesForDay(dayIndex) : [];
+    let overlap = false;
+    const molaWarnings = [];
+    for (const r of ranges) {
+      const rs = toMin(r.start), re = toMin(r.end);
+      // Üst üste binme (çakışma)
+      if (sMin < re && rs < eMin) { overlap = true; continue; }
+      // Mola: bu blok bizim önümüzde bitiyorsa, aradaki boşluk molaSure'den az mı?
+      if (re <= sMin && sMin - re < molaSure) {
+        molaWarnings.push(`${r.start}–${r.end} ${r.label} bitiminden sonra ${sMin - re} dk var (en az ${molaSure} dk olmalı).`);
+      }
+      // Mola: bu blok bizden sonra başlıyorsa, aradaki boşluk molaSure'den az mı?
+      if (eMin <= rs && rs - eMin < molaSure) {
+        molaWarnings.push(`${r.start}–${r.end} ${r.label} başlangıcından önce ${rs - eMin} dk var (en az ${molaSure} dk olmalı).`);
+      }
+    }
+    return { overlap, molaWarnings };
+  }, [dayIndex, start, end, molaSure, busyRangesForDay]);
+
+  const hasMola = molaWarnings.length > 0;
+  // Çakışma asla geçilemez; mola uyarısı "yoksay" ile geçilebilir.
+  const blocked = invalid || overlap || (hasMola && !ignoreMola);
+
   return (
     <Modal title="Yeni Etüt" onClose={onClose}>
       <div className="space-y-3">
         <div>
           <label className="text-label block mb-1">Gün</label>
-          <select value={dayIndex} onChange={e => setDayIndex(parseInt(e.target.value))} className="input">
+          <select value={dayIndex} onChange={e => { setDayIndex(parseInt(e.target.value)); setIgnoreMola(false); }} className="input">
             {ALL_DAYS.map(d => <option key={d.index} value={d.index}>{d.label}</option>)}
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-label block mb-1">Başlangıç</label>
-            <select value={start} onChange={e => handleStartChange(e.target.value)} className="input">
+            <select value={start} onChange={e => { handleStartChange(e.target.value); setIgnoreMola(false); }} className="input">
               {ETUT_TIME_OPTS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           <div>
             <label className="text-label block mb-1">Bitiş</label>
-            <select value={end} onChange={e => setEnd(e.target.value)} className="input">
+            <select value={end} onChange={e => { setEnd(e.target.value); setIgnoreMola(false); }} className="input">
               {ETUT_TIME_OPTS.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
         </div>
+
         {invalid && <p className="text-xs" style={{ color: '#ef4444' }}>Bitiş saati başlangıçtan sonra olmalı.</p>}
+        {!invalid && overlap && (
+          <p className="text-xs" style={{ color: '#ef4444' }}>⛔ Bu saat aralığı mevcut bir ders/etütle çakışıyor — değiştirin.</p>
+        )}
+        {!invalid && !overlap && hasMola && (
+          <div className="rounded-lg p-2.5" style={{ background: 'color-mix(in srgb, #f59e0b 12%, transparent)', border: '1px solid color-mix(in srgb, #f59e0b 35%, transparent)' }}>
+            <p className="text-xs mb-1" style={{ color: '#b45309', fontWeight: 600 }}>⚠ Yeterli mola yok:</p>
+            {molaWarnings.map((w, i) => <p key={i} className="text-[11px]" style={{ color: '#b45309' }}>• {w}</p>)}
+            <label className="flex items-center gap-1.5 text-xs mt-2 cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+              <input type="checkbox" checked={ignoreMola} onChange={e => setIgnoreMola(e.target.checked)} />
+              Uyarıyı yoksay
+            </label>
+          </div>
+        )}
+
         <div className="flex justify-end gap-2 pt-1">
           <button className="btn-ghost" onClick={onClose}>İptal</button>
-          <button className="btn-primary !px-5" disabled={saving || invalid}
+          <button className="btn-primary !px-5" disabled={saving || blocked}
             onClick={() => onSave({ dayIndex, start, end, aktif: true })}>
             {saving ? 'Kaydediliyor…' : 'Kaydet'}
           </button>
