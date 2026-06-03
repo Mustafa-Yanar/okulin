@@ -11,6 +11,7 @@ import {
 } from '@/lib/constants';
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal, getAdjacentWeek, isSlotPast } from './shared';
+import EtutCalendar from './EtutCalendar';
 
 function EtutPanel({ dayIndex, slotId, getEntry, setEntry, clearEntry, setActiveCell, allowedStudents, slotTimes }) {
   const existing = getEntry(dayIndex, slotId);
@@ -406,6 +407,21 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
           <Save size={14} /> {saving ? 'Kaydediliyor...' : 'Kaydet ve Uygula'}
         </button>
         {!inline && <button className="btn-ghost" onClick={onClose}>İptal</button>}
+      </div>
+
+      {/* GEÇİCİ ÖNİZLEME — yeni etüt takvimi (fazlı geliştirme, Faz 7'de eski grid'in yerini alacak) */}
+      <div className="mt-8 pt-6" style={{ borderTop: '2px dashed var(--border-subtle)' }}>
+        <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+          ⚙️ Yeni Etüt Takvimi (geliştirme önizlemesi)
+        </p>
+        <EtutCalendar
+          weekKey={weekKey}
+          currentWeek={currentWeek}
+          canPrev={canPrev}
+          canNext={canNext}
+          onPrev={() => canPrev && setWeekKey(getAdjacentWeek(weekKey, -1))}
+          onNext={() => canNext && setWeekKey(getAdjacentWeek(weekKey, 1))}
+        />
       </div>
     </>
   );
