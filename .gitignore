@@ -25,3 +25,6 @@ competitor_analysis_report.md
 # Şifre sıfırlama çıktıları (düz metin şifreler — ASLA git'e girmemeli)
 sifreler-*.csv
 scripts/*.csv
+
+# Yerel çalışma/araştırma dosyaları (rakip analizleri, geçici notlar)
+scratch/
