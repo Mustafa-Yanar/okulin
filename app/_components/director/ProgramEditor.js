@@ -4,7 +4,7 @@
 // izin günü, hafta navigasyonu. Nested EtutPanel ile öğrenci ataması.
 import React, { useState, useEffect, useMemo } from 'react';
 import LoadingBox from '../Loading';
-import { ChevronLeft, ChevronRight, Save, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, X, Plus } from 'lucide-react';
 import {
   ALL_DAYS, WEEKDAY_SLOT_IDS, WEEKEND_SLOT_IDS, classLabel,
   makeSlots, slotsForDay, getWeekKey, weekRangeLabel,
@@ -88,6 +88,11 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   const [togglingDay, setTogglingDay] = useState(null);
   const [dirty, setDirty] = useState({});
 
+  // Etüt şablonları (calendar — serbest saatli, haftadan bağımsız)
+  const [etutSablonlar, setEtutSablonlar] = useState([]);
+  const [showEtutForm, setShowEtutForm] = useState(false);
+  const [savingEtut, setSavingEtut] = useState(false);
+
   const { slotTimes } = useSlotTimes();
   const weekdaySlots = useMemo(() => makeSlots(WEEKDAY_SLOT_IDS, slotTimes.weekday), [slotTimes.weekday]);
   const weekendSlots = useMemo(() => makeSlots(WEEKEND_SLOT_IDS, slotTimes.weekend), [slotTimes.weekend]);
@@ -107,6 +112,35 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
       }
     })();
   }, [teacher.id, weekKey]);
+
+  // Etüt şablonlarını yükle (haftadan bağımsız — sadece öğretmen değişince)
+  useEffect(() => {
+    (async () => {
+      try {
+        const d = await api(`/api/etut-sablon?teacherId=${teacher.id}`);
+        setEtutSablonlar(d.sablonlar || []);
+      } catch { setEtutSablonlar([]); }
+    })();
+  }, [teacher.id]);
+
+  async function saveEtutSablon(sablon) {
+    setSavingEtut(true);
+    try {
+      const r = await api('/api/etut-sablon', { method: 'POST', body: JSON.stringify({ teacherId: teacher.id, sablon }) });
+      setEtutSablonlar(r.sablonlar || []);
+      setShowEtutForm(false);
+      showToast('Etüt eklendi');
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { setSavingEtut(false); }
+  }
+
+  async function deleteEtutSablon(id) {
+    try {
+      const r = await api('/api/etut-sablon', { method: 'DELETE', body: JSON.stringify({ teacherId: teacher.id, id }) });
+      setEtutSablonlar(r.sablonlar || []);
+      showToast('Etüt silindi');
+    } catch (e) { showToast(e.message, 'error'); }
+  }
 
   const canPrev = weekKey !== currentWeek;
   const canNext = weekKey !== maxWeek;
@@ -421,25 +455,29 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
           canNext={canNext}
           onPrev={() => canPrev && setWeekKey(getAdjacentWeek(weekKey, -1))}
           onNext={() => canNext && setWeekKey(getAdjacentWeek(weekKey, 1))}
+          headerRight={
+            <button className="btn-primary !px-3 !py-1.5 text-sm flex items-center gap-1.5" onClick={() => setShowEtutForm(true)}>
+              <Plus size={14} /> Etüt Ekle
+            </button>
+          }
           renderDayContent={(day) => {
+            const blocks = [];
+            // 1) Ders + mevcut slot-etüt blokları (mavi/mor/yeşil)
             const slots = slotsForDay(day.index, slotTimes);
-            return slots.map(slot => {
+            for (const slot of slots) {
               const entry = getEntry(day.index, slot.id);
-              if (!entry || !entry.type) return null;
+              if (!entry || !entry.type) continue;
               const top = minToTop(timeToMin(slot.start));
               const height = Math.max(durationToHeight(timeToMin(slot.end) - timeToMin(slot.start)), 16);
               const isDers = entry.type === 'available';
               const isEtutSabit = entry.type === 'etut' && entry.studentId;
-              // Renkler: ders = mavi, etüt(sabit) = mor, etüt(açık) = yeşil
-              const bg = isDers
-                ? 'color-mix(in srgb, #3b82f6 18%, transparent)'
-                : isEtutSabit
-                  ? 'color-mix(in srgb, #8b5cf6 18%, transparent)'
-                  : 'color-mix(in srgb, #10b981 18%, transparent)';
+              const bg = isDers ? 'color-mix(in srgb, #3b82f6 18%, transparent)'
+                : isEtutSabit ? 'color-mix(in srgb, #8b5cf6 18%, transparent)'
+                : 'color-mix(in srgb, #10b981 18%, transparent)';
               const border = isDers ? '#3b82f6' : isEtutSabit ? '#8b5cf6' : '#10b981';
               const label = isDers ? 'Ders' : isEtutSabit ? entry.studentName : 'Etüt';
-              return (
-                <div key={slot.id}
+              blocks.push(
+                <div key={`slot-${slot.id}`}
                   className="absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden"
                   style={{ top, height, background: bg, borderLeft: `3px solid ${border}` }}
                   title={`${slot.start}–${slot.end} · ${label}`}>
@@ -447,13 +485,113 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                   {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{slot.start}</div>}
                 </div>
               );
-            });
+            }
+            // 2) Etüt şablonları (serbest saatli, turkuaz, tıkla→sil)
+            for (const sb of etutSablonlar) {
+              if (sb.dayIndex !== day.index) continue;
+              const top = minToTop(timeToMin(sb.start));
+              const height = Math.max(durationToHeight(timeToMin(sb.end) - timeToMin(sb.start)), 18);
+              const aktif = sb.aktif !== false;
+              blocks.push(
+                <button key={`etut-${sb.id}`}
+                  onClick={() => { if (confirm(`${sb.start}–${sb.end} etüdü silinsin mi?`)) deleteEtutSablon(sb.id); }}
+                  className="absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left group"
+                  style={{
+                    top, height,
+                    background: aktif ? 'color-mix(in srgb, #14b8a6 22%, transparent)' : 'color-mix(in srgb, #94a3b8 18%, transparent)',
+                    borderLeft: `3px solid ${aktif ? '#14b8a6' : '#94a3b8'}`,
+                  }}
+                  title={`Etüt ${sb.start}–${sb.end}${aktif ? '' : ' (pasif)'} · tıkla: sil`}>
+                  <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Etüt</div>
+                  {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{sb.start}–{sb.end}</div>}
+                </button>
+              );
+            }
+            return blocks;
           }}
         />
       </div>
+
+      {showEtutForm && (
+        <EtutEkleForm
+          defaultSure={slotTimes.etutSuresi || 60}
+          saving={savingEtut}
+          onClose={() => setShowEtutForm(false)}
+          onSave={saveEtutSablon}
+        />
+      )}
     </>
   );
 
   if (inline) return <div className="py-2">{content}</div>;
   return <Modal title={`${teacher.name} – Program`} onClose={onClose} xwide>{content}</Modal>;
+}
+
+// ─── Etüt Ekle formu ─────────────────────────────────────────────────────────
+// Gün + başlangıç + bitiş (serbest süre). Başlangıç seçilince bitiş, kurum
+// varsayılan etüt süresiyle ön-doldurulur (kullanıcı değiştirebilir).
+const ETUT_TIME_OPTS = (() => {
+  const opts = [];
+  for (let min = 7 * 60; min <= 23 * 60; min += 5) {
+    const h = Math.floor(min / 60), m = min % 60;
+    opts.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+  }
+  return opts;
+})();
+
+function addMinutesToTime(t, addMin) {
+  const [h, m] = t.split(':').map(Number);
+  let total = h * 60 + m + addMin;
+  total = Math.min(total, 23 * 60); // calendar sınırı
+  const hh = Math.floor(total / 60), mm = total % 60;
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
+function EtutEkleForm({ defaultSure, saving, onClose, onSave }) {
+  const [dayIndex, setDayIndex] = useState(0);
+  const [start, setStart] = useState('15:00');
+  const [end, setEnd] = useState(addMinutesToTime('15:00', defaultSure));
+
+  const handleStartChange = (v) => {
+    setStart(v);
+    setEnd(addMinutesToTime(v, defaultSure)); // bitişi otomatik öner
+  };
+
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const invalid = toMin(end) <= toMin(start);
+
+  return (
+    <Modal title="Yeni Etüt" onClose={onClose}>
+      <div className="space-y-3">
+        <div>
+          <label className="text-label block mb-1">Gün</label>
+          <select value={dayIndex} onChange={e => setDayIndex(parseInt(e.target.value))} className="input">
+            {ALL_DAYS.map(d => <option key={d.index} value={d.index}>{d.label}</option>)}
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-label block mb-1">Başlangıç</label>
+            <select value={start} onChange={e => handleStartChange(e.target.value)} className="input">
+              {ETUT_TIME_OPTS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-label block mb-1">Bitiş</label>
+            <select value={end} onChange={e => setEnd(e.target.value)} className="input">
+              {ETUT_TIME_OPTS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+        {invalid && <p className="text-xs" style={{ color: '#ef4444' }}>Bitiş saati başlangıçtan sonra olmalı.</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button className="btn-ghost" onClick={onClose}>İptal</button>
+          <button className="btn-primary !px-5" disabled={saving || invalid}
+            onClick={() => onSave({ dayIndex, start, end, aktif: true })}>
+            {saving ? 'Kaydediliyor…' : 'Kaydet'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
 }
