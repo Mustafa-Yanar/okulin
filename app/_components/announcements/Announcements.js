@@ -53,13 +53,13 @@ export function AnnouncementSender({ showToast }) {
       ) : (
         <div className="flex flex-col gap-2">
           {list.map(a => (
-            <div key={a.id} className="border border-gray-200 rounded-xl p-3.5">
+            <div key={a.id} className="rounded-xl p-3.5" style={{ border: '1px solid var(--border-subtle)' }}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{a.title}</p>
                   <p className="text-body-sm mt-0.5 line-clamp-2">{a.body}</p>
                 </div>
-                <button onClick={() => remove(a)} className="text-gray-300 hover:text-rose-500 shrink-0"><Trash2 size={15} /></button>
+                <button onClick={() => remove(a)} className="shrink-0 hover:text-rose-500" style={{ color: 'var(--text-muted)' }}><Trash2 size={15} /></button>
               </div>
               <div className="flex items-center gap-3 mt-2 text-caption flex-wrap">
                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded">{a.audienceLabel}</span>
@@ -128,35 +128,35 @@ function Composer({ showToast, onSent }) {
     : [['all', 'Tümü'], ['group', 'Grup'], ['class', 'Sınıf']];
 
   return (
-    <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
+    <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface-2)', border: '1px solid var(--border-subtle)' }}>
       <div className="flex items-center gap-2 mb-3">
         <Megaphone size={18} className="text-indigo-600" />
-        <h3 className="font-700" style={{ fontWeight: 700 }}>Yeni Duyuru</h3>
+        <h3 className="font-700" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Yeni Duyuru</h3>
       </div>
 
       <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Başlık"
-        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 mb-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+        className="input !text-sm mb-2" />
       <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Duyuru metni…" rows={3}
-        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 mb-3 focus:outline-none focus:ring-1 focus:ring-indigo-400 resize-y" />
+        className="input !text-sm mb-3 resize-y" />
 
       {/* Hedef seçici */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        <span className="text-xs text-gray-500">Kime:</span>
-        <select value={role} onChange={e => setRole(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Kime:</span>
+        <select value={role} onChange={e => setRole(e.target.value)} className="input !w-auto !text-xs !py-1.5 !px-2">
           <option value="parent">Veliler</option>
           <option value="student">Öğrenciler</option>
           <option value="teacher">Öğretmenler</option>
         </select>
-        <select value={scope} onChange={e => setScope(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+        <select value={scope} onChange={e => setScope(e.target.value)} className="input !w-auto !text-xs !py-1.5 !px-2">
           {scopeOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
         {scope === 'group' && (
-          <select value={group} onChange={e => setGroup(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+          <select value={group} onChange={e => setGroup(e.target.value)} className="input !w-auto !text-xs !py-1.5 !px-2">
             {Object.entries(STUDENT_GROUPS).map(([k, g]) => <option key={k} value={k}>{g.label}</option>)}
           </select>
         )}
         {scope === 'class' && (
-          <select value={cls} onChange={e => setCls(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+          <select value={cls} onChange={e => setCls(e.target.value)} className="input !w-auto !text-xs !py-1.5 !px-2">
             <option value="">Sınıf seç…</option>
             {allClasses.map(c => <option key={c} value={c}>{classLabel(c)}</option>)}
           </select>
@@ -165,11 +165,13 @@ function Composer({ showToast, onSent }) {
 
       {/* Öğretmen seçili → çoklu seçim */}
       {role === 'teacher' && scope === 'selected' && (
-        <div className="border border-gray-200 rounded-lg p-2 mb-3 max-h-40 overflow-y-auto grid grid-cols-2 gap-1 bg-white">
-          {teachers.length === 0 ? <span className="text-xs text-gray-400 col-span-2">Öğretmen yok</span> : teachers.map(t => {
+        <div className="rounded-lg p-2 mb-3 max-h-40 overflow-y-auto grid grid-cols-2 gap-1"
+          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+          {teachers.length === 0 ? <span className="text-xs col-span-2" style={{ color: 'var(--text-muted)' }}>Öğretmen yok</span> : teachers.map(t => {
             const on = teacherIds.includes(t.id);
             return (
-              <label key={t.id} className={`text-xs flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer ${on ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50 text-gray-600'}`}>
+              <label key={t.id} className={`text-xs flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer ${on ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-[var(--bg-muted)]'}`}
+                style={on ? undefined : { color: 'var(--text-secondary)' }}>
                 <input type="checkbox" checked={on} onChange={() => setTeacherIds(p => on ? p.filter(x => x !== t.id) : [...p, t.id])} className="hidden" />
                 {on ? <Check size={12} /> : <span className="w-3" />} {t.name}
               </label>
@@ -196,19 +198,19 @@ function ReadDetailModal({ ann, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
       <div role="dialog" aria-modal="true" className="modal w-full max-w-sm max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
           <div className="min-w-0">
-            <p className="font-700 truncate" style={{ fontWeight: 700 }}>{ann.title}</p>
+            <p className="font-700 truncate" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{ann.title}</p>
             {data && <p className="text-caption">{readCount}/{data.recipients.length} okudu</p>}
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+          <button onClick={onClose} className="hover:opacity-70" style={{ color: 'var(--text-muted)' }}><X size={18} /></button>
         </div>
         <div className="overflow-y-auto p-2">
           {!data ? <p className="text-caption p-3">Yükleniyor…</p> :
             data.recipients.map(r => (
               <div key={r.id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
-                {r.read ? <MailOpen size={14} className="text-green-600 shrink-0" /> : <Mail size={14} className="text-gray-300 shrink-0" />}
-                <span className={`truncate ${r.read ? 'text-gray-700' : 'text-gray-400'}`}>{r.name}</span>
+                {r.read ? <MailOpen size={14} className="text-green-600 shrink-0" /> : <Mail size={14} className="shrink-0" style={{ color: 'var(--text-muted)' }} />}
+                <span className="truncate" style={{ color: r.read ? 'var(--text-primary)' : 'var(--text-muted)' }}>{r.name}</span>
               </div>
             ))}
         </div>
@@ -253,18 +255,22 @@ export function AnnouncementInbox({ showToast }) {
       {list.map(a => {
         const open = openId === a.id;
         return (
-          <div key={a.id} className={`border rounded-xl overflow-hidden ${a.read ? 'border-gray-200' : 'border-indigo-300 bg-indigo-50/30'}`}>
+          <div key={a.id} className="rounded-xl overflow-hidden"
+            style={{
+              border: a.read ? '1px solid var(--border-subtle)' : '1px solid color-mix(in srgb, #6366f1 50%, transparent)',
+              background: a.read ? 'transparent' : 'color-mix(in srgb, #6366f1 8%, transparent)',
+            }}>
             <button onClick={() => toggle(a)} className="w-full flex items-center gap-2.5 px-4 py-3 text-left">
               {!a.read && <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />}
               <div className="min-w-0 flex-1">
                 <p className={`text-sm truncate ${a.read ? 'font-500' : 'font-700'}`} style={{ fontWeight: a.read ? 500 : 700, color: 'var(--text-primary)' }}>{a.title}</p>
                 <p className="text-caption">{a.senderName} · {fmtDate(a.createdAt)}</p>
               </div>
-              {open ? <ChevronUp size={16} className="text-gray-400 shrink-0" /> : <ChevronDown size={16} className="text-gray-400 shrink-0" />}
+              {open ? <ChevronUp size={16} className="shrink-0" style={{ color: 'var(--text-muted)' }} /> : <ChevronDown size={16} className="shrink-0" style={{ color: 'var(--text-muted)' }} />}
             </button>
             {open && (
               <div className="px-4 pb-3.5 -mt-1">
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{a.body}</p>
+                <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-secondary)' }}>{a.body}</p>
               </div>
             )}
           </div>
