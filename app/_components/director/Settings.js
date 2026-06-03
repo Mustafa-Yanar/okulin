@@ -49,10 +49,6 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
       </div>
 
       <div className="mb-5 pb-5 border-b border-gray-100">
-        <CounselorSection showToast={showToast} />
-      </div>
-
-      <div className="mb-5 pb-5 border-b border-gray-100">
         <PaymentSection showToast={showToast} />
       </div>
 
