@@ -22,16 +22,23 @@ const DEFAULT_WEEKEND_TIMES = [
 
 const SlotTimesContext = createContext(null);
 
+const DEFAULT_ETUT_SURESI = 60;
+const DEFAULT_MOLA_SURESI = 10;
+
 export function SlotTimesProvider({ children }) {
   const [slotTimes, setSlotTimesState] = useState({
     weekday: DEFAULT_WEEKDAY_TIMES,
     weekend: DEFAULT_WEEKEND_TIMES,
+    etutSuresi: DEFAULT_ETUT_SURESI,
+    molaSuresi: DEFAULT_MOLA_SURESI,
   });
 
   const updateSlotTimes = (times) => {
     setSlotTimesState({
       weekday: times.weekday || DEFAULT_WEEKDAY_TIMES,
       weekend: times.weekend || DEFAULT_WEEKEND_TIMES,
+      etutSuresi: times.etutSuresi ?? DEFAULT_ETUT_SURESI,
+      molaSuresi: times.molaSuresi ?? DEFAULT_MOLA_SURESI,
     });
   };
 

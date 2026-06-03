@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES } from '@/lib/constants';
+import { DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES, DEFAULT_ETUT_SURESI, DEFAULT_MOLA_SURESI } from '@/lib/constants';
 import { parseBody, z } from '@/lib/validate';
 
 // Şekil doğrulaması — saat/sıra mantığı aşağıda ayrıca kontrol edilir.
 const zSlotArr = z.array(z.object({ start: z.string().max(10), end: z.string().max(10) }).passthrough());
-const SlotTimesSchema = z.object({ weekday: zSlotArr, weekend: zSlotArr });
+const SlotTimesSchema = z.object({
+  weekday: zSlotArr,
+  weekend: zSlotArr,
+  // Etüt takvimi ayarları (opsiyonel — eski client'lar göndermeyebilir)
+  etutSuresi: z.number().int().min(5).max(300).optional(),
+  molaSuresi: z.number().int().min(0).max(120).optional(),
+});
 
 // slot_times → { weekday: [{start, end}, ...], weekend: [{start, end}, ...] }
 
@@ -31,6 +37,8 @@ export async function GET() {
   return NextResponse.json({
     weekday: stored?.weekday || DEFAULT_WEEKDAY_TIMES,
     weekend: stored?.weekend || DEFAULT_WEEKEND_TIMES,
+    etutSuresi: stored?.etutSuresi ?? DEFAULT_ETUT_SURESI,
+    molaSuresi: stored?.molaSuresi ?? DEFAULT_MOLA_SURESI,
   });
 }
 
@@ -42,7 +50,7 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, SlotTimesSchema);
   if (!parsed.ok) return parsed.response;
-  const { weekday, weekend } = parsed.data;
+  const { weekday, weekend, etutSuresi, molaSuresi } = parsed.data;
   if (weekday.length !== 12 || weekend.length !== 12) {
     return NextResponse.json({ error: 'Her gün tipi için 12 slot olmalı' }, { status: 400 });
   }
@@ -63,6 +71,13 @@ export async function POST(req) {
     }
   }
 
-  await redis.set('slot_times', { weekday, weekend });
+  // Mevcut etüt/mola ayarlarını koru (gönderilmezse), gönderilmişse güncelle
+  const prev = await redis.get('slot_times');
+  await redis.set('slot_times', {
+    weekday,
+    weekend,
+    etutSuresi: etutSuresi ?? prev?.etutSuresi ?? DEFAULT_ETUT_SURESI,
+    molaSuresi: molaSuresi ?? prev?.molaSuresi ?? DEFAULT_MOLA_SURESI,
+  });
   return NextResponse.json({ ok: true });
 }

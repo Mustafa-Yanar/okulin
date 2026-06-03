@@ -58,6 +58,8 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [denemeTab, setDenemeTab] = useState('denemeler');
   const [slotWeekday, setSlotWeekday] = useState([]);
   const [slotWeekend, setSlotWeekend] = useState([]);
+  const [slotEtutSuresi, setSlotEtutSuresi] = useState(60);
+  const [slotMolaSuresi, setSlotMolaSuresi] = useState(10);
   const [slotTimesLoading, setSlotTimesLoading] = useState(false);
   const [savingSlotTimes, setSavingSlotTimes] = useState(false);
   const { updateSlotTimes } = useSlotTimesCtx();
@@ -98,6 +100,8 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     api('/api/slot-times').then(data => {
       setSlotWeekday(data.weekday || []);
       setSlotWeekend(data.weekend || []);
+      if (data.etutSuresi != null) setSlotEtutSuresi(data.etutSuresi);
+      if (data.molaSuresi != null) setSlotMolaSuresi(data.molaSuresi);
     }).catch(() => {}).finally(() => setSlotTimesLoading(false));
   }, [tab]);
 
@@ -448,7 +452,10 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
               <SlotTimeEditor
                 weekday={slotWeekday}
                 weekend={slotWeekend}
+                etutSuresi={slotEtutSuresi}
+                molaSuresi={slotMolaSuresi}
                 onChange={(type, slots) => type === 'weekday' ? setSlotWeekday(slots) : setSlotWeekend(slots)}
+                onMetaChange={(key, val) => key === 'etutSuresi' ? setSlotEtutSuresi(val) : setSlotMolaSuresi(val)}
               />
               <div className="flex justify-end mt-4">
                 <button
@@ -457,8 +464,9 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                   onClick={async () => {
                     setSavingSlotTimes(true);
                     try {
-                      await api('/api/slot-times', { method: 'POST', body: JSON.stringify({ weekday: slotWeekday, weekend: slotWeekend }) });
-                      updateSlotTimes({ weekday: slotWeekday, weekend: slotWeekend });
+                      const payload = { weekday: slotWeekday, weekend: slotWeekend, etutSuresi: slotEtutSuresi, molaSuresi: slotMolaSuresi };
+                      await api('/api/slot-times', { method: 'POST', body: JSON.stringify(payload) });
+                      updateSlotTimes(payload);
                       showToast('Saatler kaydedildi ve uygulandı');
                     } catch (e) { showToast(e.message, 'error'); }
                     finally { setSavingSlotTimes(false); }

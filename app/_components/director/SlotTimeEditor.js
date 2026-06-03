@@ -117,8 +117,14 @@ function DayColumn({ title, slots, onSlotsChange }) {
   );
 }
 
+// Süre dropdown seçenekleri (dk)
+const ETUT_SURE_OPTS = [];
+for (let m = 20; m <= 180; m += 5) ETUT_SURE_OPTS.push(m);
+const MOLA_SURE_OPTS = [];
+for (let m = 0; m <= 60; m += 5) MOLA_SURE_OPTS.push(m);
+
 // ─── Ana bileşen ─────────────────────────────────────────────────────────────
-export default function SlotTimeEditor({ weekday, weekend, onChange }) {
+export default function SlotTimeEditor({ weekday, weekend, etutSuresi = 60, molaSuresi = 10, onChange, onMetaChange }) {
   return (
     <div>
       <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
@@ -136,6 +142,30 @@ export default function SlotTimeEditor({ weekday, weekend, onChange }) {
           slots={weekend}
           onSlotsChange={slots => onChange('weekend', slots)}
         />
+      </div>
+
+      {/* Etüt takvimi ayarları */}
+      <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+        <h3 className="text-sm mb-1" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Etüt Takvimi Ayarları</h3>
+        <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
+          Etüt süresi formda bitişi ön-doldurur. Mola süresi, ders/etüt arası bırakılması gereken en az boşluktur (uyarı için).
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+            Etüt süresi
+            <select value={etutSuresi} onChange={e => onMetaChange?.('etutSuresi', parseInt(e.target.value))}
+              className="input !w-auto !text-sm !py-1.5 !px-2">
+              {ETUT_SURE_OPTS.map(m => <option key={m} value={m}>{m} dk</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+            Mola süresi
+            <select value={molaSuresi} onChange={e => onMetaChange?.('molaSuresi', parseInt(e.target.value))}
+              className="input !w-auto !text-sm !py-1.5 !px-2">
+              {MOLA_SURE_OPTS.map(m => <option key={m} value={m}>{m} dk</option>)}
+            </select>
+          </label>
+        </div>
       </div>
     </div>
   );
