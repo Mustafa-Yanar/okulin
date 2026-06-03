@@ -11,7 +11,7 @@ import {
 } from '@/lib/constants';
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal, getAdjacentWeek, isSlotPast } from './shared';
-import EtutCalendar from './EtutCalendar';
+import EtutCalendar, { timeToMin, minToTop, durationToHeight } from './EtutCalendar';
 
 function EtutPanel({ dayIndex, slotId, getEntry, setEntry, clearEntry, setActiveCell, allowedStudents, slotTimes }) {
   const existing = getEntry(dayIndex, slotId);
@@ -421,6 +421,34 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
           canNext={canNext}
           onPrev={() => canPrev && setWeekKey(getAdjacentWeek(weekKey, -1))}
           onNext={() => canNext && setWeekKey(getAdjacentWeek(weekKey, 1))}
+          renderDayContent={(day) => {
+            const slots = slotsForDay(day.index, slotTimes);
+            return slots.map(slot => {
+              const entry = getEntry(day.index, slot.id);
+              if (!entry || !entry.type) return null;
+              const top = minToTop(timeToMin(slot.start));
+              const height = Math.max(durationToHeight(timeToMin(slot.end) - timeToMin(slot.start)), 16);
+              const isDers = entry.type === 'available';
+              const isEtutSabit = entry.type === 'etut' && entry.studentId;
+              // Renkler: ders = mavi, etüt(sabit) = mor, etüt(açık) = yeşil
+              const bg = isDers
+                ? 'color-mix(in srgb, #3b82f6 18%, transparent)'
+                : isEtutSabit
+                  ? 'color-mix(in srgb, #8b5cf6 18%, transparent)'
+                  : 'color-mix(in srgb, #10b981 18%, transparent)';
+              const border = isDers ? '#3b82f6' : isEtutSabit ? '#8b5cf6' : '#10b981';
+              const label = isDers ? 'Ders' : isEtutSabit ? entry.studentName : 'Etüt';
+              return (
+                <div key={slot.id}
+                  className="absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden"
+                  style={{ top, height, background: bg, borderLeft: `3px solid ${border}` }}
+                  title={`${slot.start}–${slot.end} · ${label}`}>
+                  <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>
+                  {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{slot.start}</div>}
+                </div>
+              );
+            });
+          }}
         />
       </div>
     </>
