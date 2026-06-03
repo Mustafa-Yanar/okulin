@@ -400,7 +400,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
       {/* Ders Saatleri sekmesi */}
       {tab === 'ders-saatleri' && (
-        <div className="max-w-lg">
+        <div className="max-w-2xl">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
               style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 15%, transparent)' }}>
