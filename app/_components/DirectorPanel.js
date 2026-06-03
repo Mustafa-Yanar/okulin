@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, LayoutGrid, ClipboardList, Compass
+  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, LayoutGrid, ClipboardList, Compass
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
 import DirectorDenemeYonetimi from './rehberlik/DirectorDenemeYonetimi';
@@ -44,6 +44,11 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalTab]);
+
+  // Sekme değişince inline Ders Programı görünümünü kapat
+  useEffect(() => {
+    setShowProgramOlusturucuModal(false);
+  }, [tab]);
 
   const setTab = useCallback((key) => {
     setTabInternal(key);
@@ -158,8 +163,24 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
   return (
     <div>
-      {/* TEACHERS TAB */}
-      {tab === 'teachers' && (
+      {/* TEACHERS TAB — Ders Programı açıkken inline gösterilir */}
+      {tab === 'teachers' && showProgramOlusturucuModal && (
+        <div>
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={() => setShowProgramOlusturucuModal(false)}
+              className="btn-ghost !px-3 !py-2 flex items-center gap-1.5 text-sm"
+            >
+              <ChevronLeft size={16} /> Öğretmenlere Dön
+            </button>
+            <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>Ders Programı Oluştur</h3>
+          </div>
+          <ProgramOlusturucu api={api} showToast={showToast}
+            activeClasses={[...new Set(students.map(s => s.cls))]} />
+        </div>
+      )}
+
+      {tab === 'teachers' && !showProgramOlusturucuModal && (
         <div>
           <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğretmenler ({teachers.length})</h3>
@@ -473,12 +494,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       )}
       {showImport && (
         <ImportModal onClose={() => setShowImport(false)} showToast={showToast} onDone={() => { setShowImport(false); loadAll(weekKey); }} />
-      )}
-      {showProgramOlusturucuModal && (
-        <Modal title="Ders Programı Oluştur" onClose={() => setShowProgramOlusturucuModal(false)} xwide lockClose>
-          <ProgramOlusturucu api={api} showToast={showToast}
-            activeClasses={[...new Set(students.map(s => s.cls))]} />
-        </Modal>
       )}
     </div>
   );
