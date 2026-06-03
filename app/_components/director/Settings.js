@@ -3,12 +3,13 @@
 // Müdür ayarlar modalı (isim + ders saatleri) ve içindeki bölümler:
 // bildirim testi, denetim kayıtları (audit log), hata kayıtları (error log).
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Palette, Users, Compass, Plus, Trash2, Trash, KeyRound, CreditCard, Clock } from 'lucide-react';
+import { AlertTriangle, Palette, Users, Compass, Plus, Trash2, Trash, KeyRound, CreditCard, Clock, Settings as SettingsIcon } from 'lucide-react';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
 import { formatTurkishMobile } from '@/lib/phone';
 
-export function DirectorSettingsModal({ current, onClose, onSave, onBranding, showToast }) {
+// Ayarlar bölümlerinin ortak gövdesi — hem modal hem inline kullanır.
+function SettingsBody({ current, onSave, onBranding, showToast }) {
   const [name, setName] = useState(current || '');
   const [savingName, setSavingName] = useState(false);
 
@@ -24,9 +25,8 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
     finally { setSavingName(false); }
   };
 
-
   return (
-    <Modal title="Ayarlar" onClose={onClose} wide>
+    <>
       <div className="mb-5 pb-5 border-b border-gray-100">
         <h4 className="text-label mb-2">Müdür Bilgisi</h4>
         <form onSubmit={submitName} className="flex gap-2 items-end">
@@ -61,7 +61,35 @@ export function DirectorSettingsModal({ current, onClose, onSave, onBranding, sh
       </div>
 
       <PushTestSection showToast={showToast} />
+    </>
+  );
+}
+
+// Modal sürümü (artık kullanılmıyor ama API uyumu için duruyor).
+export function DirectorSettingsModal({ current, onClose, onSave, onBranding, showToast }) {
+  return (
+    <Modal title="Ayarlar" onClose={onClose} wide>
+      <SettingsBody current={current} onSave={onSave} onBranding={onBranding} showToast={showToast} />
     </Modal>
+  );
+}
+
+// Inline sürümü — içerik alanında sekme olarak render edilir.
+export function DirectorSettingsInline({ current, onSave, onBranding, showToast }) {
+  return (
+    <div className="max-w-2xl">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 15%, transparent)' }}>
+          <SettingsIcon size={20} style={{ color: 'var(--brand,#6366f1)' }} />
+        </div>
+        <div>
+          <h2 className="text-lg" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Ayarlar</h2>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Kurum, veli erişimi, ödeme ve sistem kayıtları</p>
+        </div>
+      </div>
+      <SettingsBody current={current} onSave={onSave} onBranding={onBranding} showToast={showToast} />
+    </div>
   );
 }
 

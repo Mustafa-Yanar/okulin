@@ -10,7 +10,7 @@ import AccountantPanel from './_components/AccountantPanel';
 import ParentPanel from './_components/ParentPanel';
 import SuperAdminPanel from './_components/SuperAdminPanel';
 import OrgAdminPanel from './_components/OrgAdminPanel';
-import DirectorPanel, { DirectorSettingsModal } from './_components/DirectorPanel';
+import DirectorPanel, { DirectorSettingsInline } from './_components/DirectorPanel';
 import ChangePasswordModal from './_components/ChangePasswordModal';
 import ForcedPasswordChange from './_components/ForcedPasswordChange';
 import Sidebar from './_components/Sidebar';
@@ -320,7 +320,6 @@ function AppContent() {
   const [branding, setBranding] = useState(BRANDING_DEFAULTS);
   const [toast, setToast] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [showDirectorName, setShowDirectorName] = useState(false);
   // KPI stats
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -469,7 +468,7 @@ function AppContent() {
         mobileOpen={mobileSidebarOpen}
         onMobileClose={() => setMobileSidebarOpen(false)}
         showToast={showToast}
-        onSettings={isDirectorRole ? () => setShowDirectorName(true) : undefined}
+        onSettings={isDirectorRole ? () => handleTabChange('ayarlar') : undefined}
       />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -524,7 +523,19 @@ function AppContent() {
               {(!activeTab || activeTab === 'overview') && (
                 <KPICards stats={stats} loading={statsLoading} showFinance={session.role === 'director'} />
               )}
-              <DirectorPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />
+              {activeTab === 'ayarlar' ? (
+                <DirectorSettingsInline
+                  current={session.name}
+                  showToast={showToast}
+                  onSave={newName => setSession(s => ({ ...s, name: newName }))}
+                  onBranding={(b) => {
+                    setBranding(b);
+                    if (b.themeColor) document.documentElement.style.setProperty('--brand', b.themeColor);
+                  }}
+                />
+              ) : (
+                <DirectorPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />
+              )}
             </>
           )}
           {session.role === 'accountant' && (
@@ -542,15 +553,6 @@ function AppContent() {
         </main>
       </div>
 
-      {showDirectorName && (
-        <DirectorSettingsModal current={session.name} showToast={showToast}
-          onClose={() => setShowDirectorName(false)}
-          onSave={newName => setSession(s => ({ ...s, name: newName }))}
-          onBranding={(b) => {
-            setBranding(b);
-            if (b.themeColor) document.documentElement.style.setProperty('--brand', b.themeColor);
-          }} />
-      )}
       {showChangePassword && (
         <ChangePasswordModal showToast={showToast} onClose={() => setShowChangePassword(false)} />
       )}

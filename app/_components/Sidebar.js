@@ -189,8 +189,13 @@ export default function Sidebar({
             <button
               onClick={() => { onSettings(); onMobileClose?.(); }}
               title={collapsed ? 'Ayarlar' : undefined}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all hover:bg-[var(--bg-muted)] ${collapsed ? 'justify-center' : ''}`}
-              style={{ fontWeight: 500, color: 'var(--text-secondary)' }}
+              aria-current={activeTab === 'ayarlar' ? 'page' : undefined}
+              className={`
+                w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all
+                ${activeTab === 'ayarlar' ? 'nav-item-active' : 'hover:bg-[var(--bg-muted)]'}
+                ${collapsed ? 'justify-center' : ''}
+              `}
+              style={{ fontWeight: activeTab === 'ayarlar' ? 600 : 500, color: activeTab === 'ayarlar' ? undefined : 'var(--text-secondary)' }}
             >
               <Settings size={18} className="shrink-0" />
               {!collapsed && <span className="truncate">Ayarlar</span>}

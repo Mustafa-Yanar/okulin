@@ -25,7 +25,7 @@ import { AnnouncementSender } from './announcements/Announcements';
 import SlotTimeEditor from './director/SlotTimeEditor';
 import { useSlotTimes as useSlotTimesCtx } from './SlotTimesContext';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
-export { DirectorSettingsModal } from './director/Settings';
+export { DirectorSettingsModal, DirectorSettingsInline } from './director/Settings';
 import { CounselorSection } from './director/Settings';
 
 // ─── MAIN DIRECTOR PANEL ────────────────────────────────────────────────────────
