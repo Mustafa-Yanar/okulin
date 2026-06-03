@@ -92,6 +92,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   const [etutSablonlar, setEtutSablonlar] = useState([]);
   const [showEtutForm, setShowEtutForm] = useState(false);
   const [savingEtut, setSavingEtut] = useState(false);
+  const [selectedEtut, setSelectedEtut] = useState(null); // tıklanan etüt (eylem menüsü)
 
   const { slotTimes } = useSlotTimes();
   const weekdaySlots = useMemo(() => makeSlots(WEEKDAY_SLOT_IDS, slotTimes.weekday), [slotTimes.weekday]);
@@ -138,8 +139,28 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     try {
       const r = await api('/api/etut-sablon', { method: 'DELETE', body: JSON.stringify({ teacherId: teacher.id, id }) });
       setEtutSablonlar(r.sablonlar || []);
+      setSelectedEtut(null);
       showToast('Etüt silindi');
     } catch (e) { showToast(e.message, 'error'); }
+  }
+
+  async function toggleEtutSablon(id, scope, aktif) {
+    try {
+      const r = await api('/api/etut-sablon', {
+        method: 'PUT',
+        body: JSON.stringify({ teacherId: teacher.id, id, scope, weekKey, aktif }),
+      });
+      setEtutSablonlar(r.sablonlar || []);
+      setSelectedEtut(null);
+      showToast(aktif ? 'Etüt aktifleştirildi' : (scope === 'week' ? 'Etüt bu hafta pasifleştirildi' : 'Etüt pasifleştirildi'));
+    } catch (e) { showToast(e.message, 'error'); }
+  }
+
+  // Bir etüt şablonu bu hafta efektif aktif mi? (kalıcı aktif + bu hafta pasif listesinde değil)
+  function etutAktifThisWeek(sb) {
+    if (sb.aktif === false) return false;
+    if (Array.isArray(sb.pasifHaftalar) && sb.pasifHaftalar.includes(weekKey)) return false;
+    return true;
   }
 
   const canPrev = weekKey !== currentWeek;
@@ -486,23 +507,26 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                 </div>
               );
             }
-            // 2) Etüt şablonları (serbest saatli, turkuaz, tıkla→sil)
+            // 2) Etüt şablonları (serbest saatli, turkuaz aktif / gri pasif, tıkla→menü)
             for (const sb of etutSablonlar) {
               if (sb.dayIndex !== day.index) continue;
               const top = minToTop(timeToMin(sb.start));
               const height = Math.max(durationToHeight(timeToMin(sb.end) - timeToMin(sb.start)), 18);
-              const aktif = sb.aktif !== false;
+              const aktif = etutAktifThisWeek(sb);
               blocks.push(
                 <button key={`etut-${sb.id}`}
-                  onClick={() => { if (confirm(`${sb.start}–${sb.end} etüdü silinsin mi?`)) deleteEtutSablon(sb.id); }}
-                  className="absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left group"
+                  onClick={() => setSelectedEtut(sb)}
+                  className="absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left"
                   style={{
                     top, height,
-                    background: aktif ? 'color-mix(in srgb, #14b8a6 22%, transparent)' : 'color-mix(in srgb, #94a3b8 18%, transparent)',
+                    background: aktif ? 'color-mix(in srgb, #14b8a6 22%, transparent)' : 'color-mix(in srgb, #94a3b8 16%, transparent)',
                     borderLeft: `3px solid ${aktif ? '#14b8a6' : '#94a3b8'}`,
+                    opacity: aktif ? 1 : 0.7,
                   }}
-                  title={`Etüt ${sb.start}–${sb.end}${aktif ? '' : ' (pasif)'} · tıkla: sil`}>
-                  <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Etüt</div>
+                  title={`Etüt ${sb.start}–${sb.end}${aktif ? '' : ' (pasif)'} · tıkla: seçenekler`}>
+                  <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Etüt{aktif ? '' : ' (pasif)'}
+                  </div>
                   {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{sb.start}–{sb.end}</div>}
                 </button>
               );
@@ -511,6 +535,16 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
           }}
         />
       </div>
+
+      {selectedEtut && (
+        <EtutEylemModal
+          sablon={selectedEtut}
+          aktif={etutAktifThisWeek(selectedEtut)}
+          onClose={() => setSelectedEtut(null)}
+          onToggle={toggleEtutSablon}
+          onDelete={deleteEtutSablon}
+        />
+      )}
 
       {showEtutForm && (
         <EtutEkleForm
@@ -647,6 +681,62 @@ function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, saving, on
             {saving ? 'Kaydediliyor…' : 'Kaydet'}
           </button>
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Etüt eylem modalı (tıklanan etüt: aktif/pasif/sil) ──────────────────────
+function EtutEylemModal({ sablon, aktif, onClose, onToggle, onDelete }) {
+  const gun = ALL_DAYS.find(d => d.index === sablon.dayIndex)?.label || '';
+  // Pasifleştirme onayı: "sadece bu hafta" varsayılan İŞARETLİ
+  const [pasifMode, setPasifMode] = useState(false); // pasifleştirme onayı gösteriliyor mu
+  const [sadeceBuHafta, setSadeceBuHafta] = useState(true);
+
+  return (
+    <Modal title={`${gun} ${sablon.start}–${sablon.end} Etüt`} onClose={onClose}>
+      <div className="space-y-3">
+        <div className="text-sm flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+          Durum:
+          <span className="px-2 py-0.5 rounded-full text-xs" style={{ fontWeight: 600,
+            background: aktif ? 'color-mix(in srgb,#14b8a6 18%,transparent)' : 'color-mix(in srgb,#94a3b8 18%,transparent)',
+            color: aktif ? '#0f766e' : '#475569' }}>
+            {aktif ? '● Aktif' : '○ Pasif'}
+          </span>
+        </div>
+
+        {!pasifMode ? (
+          <div className="flex flex-col gap-2">
+            {aktif ? (
+              <button className="btn-ghost w-full justify-center" onClick={() => setPasifMode(true)}>Pasif Yap</button>
+            ) : (
+              <button className="btn-ghost w-full justify-center" onClick={() => onToggle(sablon.id, 'all', true)}>Aktif Yap</button>
+            )}
+            <button className="btn-ghost w-full justify-center text-red-500 hover:bg-red-50"
+              onClick={() => { if (confirm('Bu etüt kalıcı olarak silinsin mi?')) onDelete(sablon.id); }}>
+              Sil
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-lg p-3" style={{ background: 'var(--bg-muted)' }}>
+            <label className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary)' }}>
+              <input type="checkbox" checked={sadeceBuHafta} onChange={e => setSadeceBuHafta(e.target.checked)} />
+              Sadece bu hafta
+            </label>
+            <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>
+              {sadeceBuHafta
+                ? 'Etüt yalnızca bu hafta pasifleşir, sonraki haftalarda tekrar açık olur.'
+                : 'İşaret kaldırıldı — etüt bu hafta ve sonraki tüm haftalarda pasif olur.'}
+            </p>
+            <div className="flex justify-end gap-2 mt-3">
+              <button className="btn-ghost" onClick={() => setPasifMode(false)}>Vazgeç</button>
+              <button className="btn-primary !px-5"
+                onClick={() => onToggle(sablon.id, sadeceBuHafta ? 'week' : 'all', false)}>
+                Onayla
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </Modal>
   );

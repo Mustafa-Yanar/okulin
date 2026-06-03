@@ -32,6 +32,15 @@ const SaveSchema = z.object({
 });
 const DeleteSchema = z.object({ teacherId: zId, id: z.string().max(20) });
 
+// Aktif/pasif değiştir. scope:'all' → kalıcı (aktif alanı); scope:'week' → o haftaya özel (pasifHaftalar listesi)
+const ToggleSchema = z.object({
+  teacherId: zId,
+  id: z.string().max(20),
+  scope: z.enum(['all', 'week']),
+  weekKey: z.string().max(40).optional(),
+  aktif: z.boolean(), // hedef durum (true=aktif yap, false=pasif yap)
+});
+
 function toMin(t) {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
@@ -82,6 +91,41 @@ export async function POST(req) {
     });
   }
 
+  template.etutSablonlari = list;
+  await redis.set(programKey(teacherId), template);
+  return NextResponse.json({ ok: true, sablonlar: list });
+}
+
+// PUT /api/etut-sablon  → aktif/pasif değiştir (kalıcı veya o haftaya özel)
+export async function PUT(req) {
+  const session = await getSession();
+  if (!session || !isManager(session)) {
+    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  }
+
+  const parsed = await parseBody(req, ToggleSchema);
+  if (!parsed.ok) return parsed.response;
+  const { teacherId, id, scope, weekKey, aktif } = parsed.data;
+  if (scope === 'week' && !weekKey) {
+    return NextResponse.json({ error: 'weekKey gerekli' }, { status: 400 });
+  }
+
+  const template = (await redis.get(programKey(teacherId))) || {};
+  const list = Array.isArray(template.etutSablonlari) ? template.etutSablonlari : [];
+  const idx = list.findIndex(s => s.id === id);
+  if (idx === -1) return NextResponse.json({ error: 'Şablon bulunamadı' }, { status: 404 });
+
+  const sb = { ...list[idx] };
+  if (scope === 'all') {
+    // Kalıcı: aktif alanını set et
+    sb.aktif = aktif;
+  } else {
+    // O haftaya özel: pasifHaftalar listesini güncelle
+    const set = new Set(Array.isArray(sb.pasifHaftalar) ? sb.pasifHaftalar : []);
+    if (aktif) set.delete(weekKey); else set.add(weekKey);
+    sb.pasifHaftalar = Array.from(set);
+  }
+  list[idx] = sb;
   template.etutSablonlari = list;
   await redis.set(programKey(teacherId), template);
   return NextResponse.json({ ok: true, sablonlar: list });
