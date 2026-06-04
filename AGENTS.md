@@ -75,6 +75,6 @@ Aşağıdaki özellikler projeye eklendi — detay hafıza dosyalarında (`~/.cl
 - **`lib/finance.js`:** applyInstallmentPayment — manuel ödeme + online callback ortak helper (çift kredilendirme yok).
 
 ## Mevcut açık işler (Mustafa elle yapacak)
-- Migration sonrası bazı öğretmenlerde fazla branş kaldı (örn matematik öğretmenlerine 4 mat branşı birden; Feyznur Pekin'de eski Sosyal Bilgiler). TeacherForm'dan temizlenmeli.
+- ~~Migration sonrası fazla branş temizliği~~ — ARTIK GEÇERSİZ (2026-06-04): gerçek öğretmen kayıtları silindi, canlıda yalnız test kaydı var. Yeni öğretmenler TeacherForm'dan doğru branşla girilince sorun oluşmaz.
 - Gerçek PayTR mağaza hesabı aç → Settings'e gir → test_mode'da dene → active aç.
 - Mali müşavire danış: GVK 20/B istisna mı, şahıs şirketi mi (lisans geliri modeli).
