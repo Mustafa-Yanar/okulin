@@ -1,35 +1,17 @@
 'use client';
 
-// Öğretmen ders programı editörü: haftalık slot-grid, sabit/geçici ders & etüt,
-// izin günü, hafta navigasyonu. Nested EtutPanel ile öğrenci ataması.
+// Öğretmen ders programı editörü: Google Calendar tarzı tek takvim görünümü.
+// Ders slotları (sabit ID, saatleri sidebar'dan) tek-tık aktif/pasif yapılır;
+// etütler serbest saatli "+ Etüt Ekle" ile eklenir (etutSablonlari).
 import React, { useState, useEffect, useMemo } from 'react';
 import LoadingBox from '../Loading';
-import { ChevronLeft, ChevronRight, Save, X, Plus } from 'lucide-react';
+import { Save, Plus } from 'lucide-react';
 import {
-  ALL_DAYS, WEEKDAY_SLOT_IDS, WEEKEND_SLOT_IDS,
-  makeSlots, slotsForDay, getWeekKey, weekRangeLabel,
+  ALL_DAYS, slotsForDay, getWeekKey,
 } from '@/lib/constants';
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal, getAdjacentWeek, isSlotPast } from './shared';
 import EtutCalendar, { timeToMin, minToTop, durationToHeight } from './EtutCalendar';
-
-// Ders slotu eylem paneli: "Ders" işaretli bir slota tıklayınca açılır.
-// Etüt artık ayrı takvim sisteminde (etutSablonlari) — bu panelde sadece slotu kapatma var.
-function DersPanel({ dayIndex, slotId, clearEntry, setActiveCell, slotTimes }) {
-  return (
-    <div className="p-4 border-t border-gray-100 bg-gray-50">
-      <div className="text-xs font-600 text-gray-500 mb-2" style={{ fontWeight: 600 }}>
-        {ALL_DAYS.find(d => d.index === dayIndex)?.label} – {slotsForDay(dayIndex, slotTimes).find(s => s.id === slotId)?.label}
-      </div>
-      <p className="text-[11px] text-gray-400 mb-3">
-        Bu slot ders programına açık. Otomatik program oluşturucu buraya ders yerleştirebilir.
-      </p>
-      <button onClick={() => { clearEntry(dayIndex, slotId); setActiveCell(null); }}
-        className="px-3 py-1.5 rounded-lg text-xs font-600 border bg-white border-gray-200 text-gray-500 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all"
-        style={{ fontWeight: 600 }}>Slotu Kapat</button>
-    </div>
-  );
-}
 
 export default function ProgramEditor({ teacher, onClose, showToast, students, inline = false }) {
   const currentWeek = getWeekKey();
@@ -38,7 +20,6 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   const [program, setProgram] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeCell, setActiveCell] = useState(null);
   const [offDays, setOffDays] = useState(teacher.offDays || []);
   const [togglingDay, setTogglingDay] = useState(null);
   const [dirty, setDirty] = useState({});
@@ -50,12 +31,9 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   const [selectedEtut, setSelectedEtut] = useState(null); // tıklanan etüt (eylem menüsü)
 
   const { slotTimes } = useSlotTimes();
-  const weekdaySlots = useMemo(() => makeSlots(WEEKDAY_SLOT_IDS, slotTimes.weekday), [slotTimes.weekday]);
-  const weekendSlots = useMemo(() => makeSlots(WEEKEND_SLOT_IDS, slotTimes.weekend), [slotTimes.weekend]);
 
   useEffect(() => {
     setLoading(true);
-    setActiveCell(null);
     setDirty({});
     (async () => {
       try {
@@ -219,46 +197,17 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     ? students.filter(s => !teacher.allowedGroups?.length || teacher.allowedGroups.includes(s.group))
     : [];
 
-  function handleSlotClick(dayIndex, slotId) {
+  // Ders slotu tek-tık toggle: pasif (boş) → aktif (available); aktif → pasif.
+  // Geçmiş slot düzenlenemez. Kayıt "Kaydet ve Uygula" ile toplu (dirty/diff).
+  function handleSlotClick(dayIndex, slotId, slotLabel) {
+    if (isSlotPast(weekKey, dayIndex, slotLabel)) return;
     const entry = getEntry(dayIndex, slotId);
-    if (!entry || !entry.type) {
-      setEntry(dayIndex, slotId, { type: 'available', fixed: true });
-    } else if (entry.type === 'available') {
-      setActiveCell(prev => prev?.slotId === slotId && prev?.dayIndex === dayIndex ? null : { dayIndex, slotId });
-    }
+    if (entry?.type === 'available') clearEntry(dayIndex, slotId);
+    else setEntry(dayIndex, slotId, { type: 'available', fixed: true });
   }
 
-  const weekNav = (
-    <div className="flex items-center gap-2 mb-3 px-1 w-fit">
-      <button
-        onClick={() => canPrev && setWeekKey(getAdjacentWeek(weekKey, -1))}
-        disabled={!canPrev}
-        className={`btn-ghost !p-2 ${!canPrev ? 'opacity-30 cursor-not-allowed' : ''}`}>
-        <ChevronLeft size={16} />
-      </button>
-      <div className="text-xs text-center min-w-[140px]" style={{ color: 'var(--text-secondary)' }}>
-        <div className="font-600" style={{ fontWeight: 600 }}>
-          {(() => { const r = weekRangeLabel(weekKey); return `${r.startStr} – ${r.endStr} ${r.yearStr}`; })()}
-        </div>
-        {weekKey === currentWeek && <div className="text-[10px] text-indigo-500 mt-0.5">Bu hafta</div>}
-        {weekKey !== currentWeek && <div className="text-[10px] text-amber-600 mt-0.5">İleri hafta — bu haftaya uygulanır</div>}
-      </div>
-      <button
-        onClick={() => canNext && setWeekKey(getAdjacentWeek(weekKey, 1))}
-        disabled={!canNext}
-        className={`btn-ghost !p-2 ${!canNext ? 'opacity-30 cursor-not-allowed' : ''}`}>
-        <ChevronRight size={16} />
-      </button>
-    </div>
-  );
-
   const offSet = new Set(offDays);
-  const visibleDays = ALL_DAYS.filter(d => !offSet.has(d.index));
-
-  // Tüm günler eşit genişlik — dolu günün otomatik genişlemesi kaldırıldı
-  // (mobilde hoştu ama masaüstünde gereksiz zıplama yapıyordu).
-  const dayCount = visibleDays.length || 1;
-  const dayWidth = () => `${100 / dayCount}%`;
+  const hiddenDayIndexes = offDays;
 
   const offDayBar = (
     <div className="flex flex-wrap items-center gap-1 mb-3 px-1">
@@ -280,203 +229,104 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   );
 
   if (loading) {
-    const inner = <>{weekNav}{offDayBar}<LoadingBox height="h-32" /></>;
+    const inner = <>{offDayBar}<LoadingBox height="h-32" /></>;
     if (inline) return <div className="py-2">{inner}</div>;
     return <Modal title={`${teacher.name} – Program`} onClose={onClose} xwide>{inner}</Modal>;
   }
 
-  const weekdayDays = visibleDays.filter(d => !d.weekend);
-  const weekendDays = visibleDays.filter(d => d.weekend);
-  const hasWeekday = weekdayDays.length > 0;
-  const hasWeekend = weekendDays.length > 0;
-
   const content = (
     <>
-      {weekNav}
       {offDayBar}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm border-collapse table-fixed">
-          <thead>
-            <tr>
-              {hasWeekday && (
-                <th className="hiddentext-left py-2 px-2 text-xs text-gray-400 font-600" style={{ fontWeight: 600, width: '72px' }}>Saat</th>
-              )}
-              {weekdayDays.map(day => (
-                <th key={day.index}
-                  className="text-center py-2 px-1 text-xs font-600 text-gray-500"
-                  style={{ fontWeight: 600, width: dayWidth(day.index) }}>
-                  {day.short}
-                </th>
-              ))}
-              {hasWeekday && hasWeekend && (
-                <th className="hiddenpx-0" style={{ width: '12px' }}><div className="w-px h-6 bg-gray-200 mx-auto" /></th>
-              )}
-              {weekendDays.map(day => (
-                <th key={day.index}
-                  className="text-center py-2 px-1 text-xs font-600 text-indigo-500"
-                  style={{ fontWeight: 600, width: dayWidth(day.index) }}>
-                  {day.short}
-                  <span className="block text-[9px] text-indigo-300">H.sonu</span>
-                </th>
-              ))}
-              {hasWeekend && (
-                <th className="hiddentext-right py-2 px-2 text-xs text-indigo-400 font-600" style={{ fontWeight: 600, width: '72px' }}>Saat</th>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {(() => {
-              const maxRows = Math.max(hasWeekday ? weekdaySlots.length : 0, hasWeekend ? weekendSlots.length : 0);
-              const renderDayCell = (day, rowIdx) => {
-                const slots = slotsForDay(day.index, slotTimes);
-                const slot = slots[rowIdx];
-                if (!slot) return <td key={day.index} className="py-1 px-1"><div className="h-9 rounded bg-gray-50 border border-gray-100 text-center text-gray-200 text-xs flex items-center justify-center">—</div></td>;
-                const entry = getEntry(day.index, slot.id);
-                const isActive = activeCell?.dayIndex === day.index && activeCell?.slotId === slot.id;
-                const type = entry?.type;
-                let cellClass = 'h-9 rounded-lg border text-xs font-500 transition-all cursor-pointer flex items-center justify-center px-1 w-full ';
-                let cellContent = <span className="text-gray-300 text-[10px]">kapalı</span>;
-                if (type === 'available') {
-                  cellClass += 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100';
-                  cellContent = <span className="text-[10px] font-600" style={{ fontWeight: 600 }}>Ders</span>;
-                } else {
-                  cellClass += 'bg-white border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50/40';
-                }
-                const slotIsPast = isSlotPast(weekKey, day.index, slot.label);
-                const blockPast = false; // ders slotları geçmişte de düzenlenebilir (kapatma)
-                if (isActive) cellClass += ' ring-2 ring-indigo-400';
-                if (blockPast) cellClass += ' opacity-70 !cursor-not-allowed';
-                return (
-                  <td key={day.index} className="py-0.5 px-0.5">
-                    <div className="relative">
-                      <button className={cellClass}
-                        disabled={blockPast}
-                        title={blockPast ? 'Bu saat dilimi geçmiş — düzenlenemez' : (type ? 'Tıkla: seçenekler' : 'Tıkla: ders saati aç')}
-                        onClick={() => !blockPast && handleSlotClick(day.index, slot.id)}>
-                        {cellContent}
-                      </button>
-                      {type && !slotIsPast && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            clearEntry(day.index, slot.id);
-                            if (isActive) setActiveCell(null);
-                          }}
-                          className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-sm transition-colors z-10"
-                          title="Slotu kapat"
-                        >
-                          <X size={9} strokeWidth={3} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                );
-              };
-              return Array.from({ length: maxRows }, (_, rowIdx) => (
-                <tr key={rowIdx} className="border-t border-gray-50">
-                  {hasWeekday && (
-                    <td className="hiddenpy-1 px-2 text-[10px] text-gray-400 whitespace-nowrap text-left">
-                      {weekdaySlots[rowIdx]?.label || ''}
-                    </td>
-                  )}
-                  {weekdayDays.map(day => renderDayCell(day, rowIdx))}
-                  {hasWeekday && hasWeekend && (
-                    <td className="hiddenpx-0"><div className="w-px h-9 bg-gray-200 mx-auto" /></td>
-                  )}
-                  {weekendDays.map(day => renderDayCell(day, rowIdx))}
-                  {hasWeekend && (
-                    <td className="hiddenpy-1 px-2 text-[10px] text-indigo-400 whitespace-nowrap text-right">
-                      {weekendSlots[rowIdx]?.label || ''}
-                    </td>
-                  )}
-                </tr>
-              ));
-            })()}
-          </tbody>
-        </table>
-      </div>
 
-      {activeCell && getEntry(activeCell.dayIndex, activeCell.slotId)?.type === 'available' && (
-        <DersPanel
-          key={`${activeCell.dayIndex}:${activeCell.slotId}`}
-          dayIndex={activeCell.dayIndex}
-          slotId={activeCell.slotId}
-          clearEntry={clearEntry}
-          setActiveCell={setActiveCell}
-          slotTimes={slotTimes}
-        />
-      )}
+      <p className="text-[11px] mb-3 px-1" style={{ color: 'var(--text-muted)' }}>
+        Ders saatlerine tıkla → aç/kapat (mavi = ders). Boş saatlere "Etüt Ekle" ile serbest etüt koy.
+      </p>
+
+      <EtutCalendar
+        weekKey={weekKey}
+        currentWeek={currentWeek}
+        canPrev={canPrev}
+        canNext={canNext}
+        onPrev={() => canPrev && setWeekKey(getAdjacentWeek(weekKey, -1))}
+        onNext={() => canNext && setWeekKey(getAdjacentWeek(weekKey, 1))}
+        hiddenDayIndexes={hiddenDayIndexes}
+        headerRight={
+          <button className="btn-primary !px-3 !py-1.5 text-sm flex items-center gap-1.5" onClick={() => setShowEtutForm(true)}>
+            <Plus size={14} /> Etüt Ekle
+          </button>
+        }
+        renderDayContent={(day) => {
+          const blocks = [];
+          // 1) Ders slotları — 12'sinin hepsi çizilir. Aktif (available) mavi dolu,
+          //    pasif soluk/boş. Tıkla → aç/kapat toggle. Geçmiş slot düzenlenemez.
+          const slots = slotsForDay(day.index, slotTimes);
+          for (const slot of slots) {
+            const entry = getEntry(day.index, slot.id);
+            const aktif = entry?.type === 'available';
+            const past = isSlotPast(weekKey, day.index, slot.label);
+            const top = minToTop(timeToMin(slot.start));
+            const height = Math.max(durationToHeight(timeToMin(slot.end) - timeToMin(slot.start)), 16);
+            blocks.push(
+              <button key={`slot-${slot.id}`}
+                onClick={() => handleSlotClick(day.index, slot.id, slot.label)}
+                disabled={past}
+                className="absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left transition-colors"
+                style={{
+                  top, height, zIndex: 1,
+                  background: aktif ? 'color-mix(in srgb, #3b82f6 18%, transparent)' : 'transparent',
+                  border: aktif ? 'none' : '1px dashed var(--border-subtle)',
+                  borderLeft: aktif ? '3px solid #3b82f6' : '1px dashed var(--border-subtle)',
+                  opacity: past ? 0.4 : 1,
+                  cursor: past ? 'not-allowed' : 'pointer',
+                }}
+                title={past ? 'Geçmiş saat — düzenlenemez'
+                  : aktif ? `${slot.start}–${slot.end} · Ders — tıkla: kapat`
+                  : `${slot.start}–${slot.end} — tıkla: ders saati aç`}>
+                {aktif ? (
+                  <>
+                    <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Ders</div>
+                    {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{slot.start}</div>}
+                  </>
+                ) : (
+                  height >= 24 && <div className="text-[8px] leading-tight truncate" style={{ color: 'var(--text-muted)', opacity: 0.6 }}>{slot.start}</div>
+                )}
+              </button>
+            );
+          }
+          // 2) Etüt şablonları (serbest saatli, turkuaz aktif / gri pasif, tıkla→menü)
+          //    zIndex ders bloklarının üstünde — pasif slotla çakışsa da tıklanabilir.
+          for (const sb of etutSablonlar) {
+            if (sb.dayIndex !== day.index) continue;
+            const top = minToTop(timeToMin(sb.start));
+            const height = Math.max(durationToHeight(timeToMin(sb.end) - timeToMin(sb.start)), 18);
+            const aktif = etutAktifThisWeek(sb);
+            blocks.push(
+              <button key={`etut-${sb.id}`}
+                onClick={() => setSelectedEtut(sb)}
+                className="absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left"
+                style={{
+                  top, height, zIndex: 5,
+                  background: aktif ? 'color-mix(in srgb, #14b8a6 22%, transparent)' : 'color-mix(in srgb, #94a3b8 16%, transparent)',
+                  borderLeft: `3px solid ${aktif ? '#14b8a6' : '#94a3b8'}`,
+                  opacity: aktif ? 1 : 0.7,
+                }}
+                title={`Etüt ${sb.start}–${sb.end}${aktif ? '' : ' (pasif)'} · tıkla: seçenekler`}>
+                <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {sb.studentName || 'Etüt'}{aktif ? '' : ' (pasif)'}
+                </div>
+                {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{sb.start}–{sb.end}</div>}
+              </button>
+            );
+          }
+          return blocks;
+        }}
+      />
 
       <div className="flex gap-3 mt-4">
         <button className="btn-primary flex-1 flex items-center justify-center gap-1.5" onClick={handleSave} disabled={saving}>
           <Save size={14} /> {saving ? 'Kaydediliyor...' : 'Kaydet ve Uygula'}
         </button>
         {!inline && <button className="btn-ghost" onClick={onClose}>İptal</button>}
-      </div>
-
-      {/* GEÇİCİ ÖNİZLEME — yeni etüt takvimi (fazlı geliştirme, Faz 7'de eski grid'in yerini alacak) */}
-      <div className="mt-8 pt-6" style={{ borderTop: '2px dashed var(--border-subtle)' }}>
-        <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
-          ⚙️ Yeni Etüt Takvimi (geliştirme önizlemesi)
-        </p>
-        <EtutCalendar
-          weekKey={weekKey}
-          currentWeek={currentWeek}
-          canPrev={canPrev}
-          canNext={canNext}
-          onPrev={() => canPrev && setWeekKey(getAdjacentWeek(weekKey, -1))}
-          onNext={() => canNext && setWeekKey(getAdjacentWeek(weekKey, 1))}
-          headerRight={
-            <button className="btn-primary !px-3 !py-1.5 text-sm flex items-center gap-1.5" onClick={() => setShowEtutForm(true)}>
-              <Plus size={14} /> Etüt Ekle
-            </button>
-          }
-          renderDayContent={(day) => {
-            const blocks = [];
-            // 1) Ders blokları (mavi) — grid'deki "available" slotlar
-            const slots = slotsForDay(day.index, slotTimes);
-            for (const slot of slots) {
-              const entry = getEntry(day.index, slot.id);
-              if (entry?.type !== 'available') continue;
-              const top = minToTop(timeToMin(slot.start));
-              const height = Math.max(durationToHeight(timeToMin(slot.end) - timeToMin(slot.start)), 16);
-              blocks.push(
-                <div key={`slot-${slot.id}`}
-                  className="absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden"
-                  style={{ top, height, background: 'color-mix(in srgb, #3b82f6 18%, transparent)', borderLeft: '3px solid #3b82f6' }}
-                  title={`${slot.start}–${slot.end} · Ders`}>
-                  <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Ders</div>
-                  {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{slot.start}</div>}
-                </div>
-              );
-            }
-            // 2) Etüt şablonları (serbest saatli, turkuaz aktif / gri pasif, tıkla→menü)
-            for (const sb of etutSablonlar) {
-              if (sb.dayIndex !== day.index) continue;
-              const top = minToTop(timeToMin(sb.start));
-              const height = Math.max(durationToHeight(timeToMin(sb.end) - timeToMin(sb.start)), 18);
-              const aktif = etutAktifThisWeek(sb);
-              blocks.push(
-                <button key={`etut-${sb.id}`}
-                  onClick={() => setSelectedEtut(sb)}
-                  className="absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left"
-                  style={{
-                    top, height,
-                    background: aktif ? 'color-mix(in srgb, #14b8a6 22%, transparent)' : 'color-mix(in srgb, #94a3b8 16%, transparent)',
-                    borderLeft: `3px solid ${aktif ? '#14b8a6' : '#94a3b8'}`,
-                    opacity: aktif ? 1 : 0.7,
-                  }}
-                  title={`Etüt ${sb.start}–${sb.end}${aktif ? '' : ' (pasif)'} · tıkla: seçenekler`}>
-                  <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                    {sb.studentName || 'Etüt'}{aktif ? '' : ' (pasif)'}
-                  </div>
-                  {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{sb.start}–{sb.end}</div>}
-                </button>
-              );
-            }
-            return blocks;
-          }}
-        />
       </div>
 
       {selectedEtut && (
@@ -497,7 +347,8 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
           molaSure={slotTimes.molaSuresi ?? 10}
           saving={savingEtut}
           busyRangesForDay={(dayIndex) => {
-            // O günün meşgul aralıkları: ders/etüt slotları + etüt şablonları
+            // O günün meşgul aralıkları: SADECE aktif (available) ders slotları + etüt şablonları.
+            // Pasif/boş ders slotları meşgul değil → o saatlere etüt eklenebilir.
             const ranges = [];
             const slots = slotsForDay(dayIndex, slotTimes);
             for (const slot of slots) {

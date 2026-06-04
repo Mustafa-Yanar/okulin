@@ -88,8 +88,12 @@ export default function EtutCalendar({
   onNext,
   headerRight = null,
   renderDayContent,
+  hiddenDayIndexes = [],
 }) {
-  const days = useMemo(() => daysWithDates(weekKey), [weekKey]);
+  const days = useMemo(() => {
+    const hidden = new Set(hiddenDayIndexes);
+    return daysWithDates(weekKey).filter(d => !hidden.has(d.index));
+  }, [weekKey, hiddenDayIndexes]);
 
   // Saat etiketleri (07:00 … 23:00)
   const hourLabels = [];
