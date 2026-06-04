@@ -228,14 +228,14 @@ function AvailableTree({ available, onBook, selectableBranchesFor }) {
                                   <span className="text-xs font-600 text-gray-700" style={{ fontWeight: 600 }}>{s.slotLabel}</span>
                                 </div>
                                 {sel.length === 1 ? (
-                                  <button onClick={() => onBook({ teacherId: s.teacherId, day: s.day, slotId: s.slotId, branch: sel[0] })}
+                                  <button onClick={() => onBook({ teacherId: s.teacherId, day: s.day, slotId: s.slotId, branch: sel[0], kind: s.kind, etutId: s.etutId })}
                                     className="btn-primary !px-3 !py-1 text-xs">
                                     {sel[0]} · Al
                                   </button>
                                 ) : (
                                   <div className="flex gap-1 flex-wrap justify-end">
                                     {sel.map(b => (
-                                      <button key={b} onClick={() => onBook({ teacherId: s.teacherId, day: s.day, slotId: s.slotId, branch: b })}
+                                      <button key={b} onClick={() => onBook({ teacherId: s.teacherId, day: s.day, slotId: s.slotId, branch: b, kind: s.kind, etutId: s.etutId })}
                                         className="btn-primary !px-2.5 !py-1 text-[11px]">
                                         {b}
                                       </button>
@@ -328,7 +328,7 @@ export function StudentBookingsView({ student, allSlots, onCancel }) {
                         {bookedByLabel[s.bookedBy] || 'Öğrenci'}
                       </span>
                       {onCancel && (
-                        <button onClick={() => onCancel({ teacherId: s.teacherId, day: s.day, slotId: s.slotId })}
+                        <button onClick={() => onCancel({ teacherId: s.teacherId, day: s.day, slotId: s.slotId, kind: s.kind, etutId: s.etutId })}
                           className="p-1 rounded hover:bg-red-100 transition-colors" title="İptal et">
                           <X size={13} className="text-red-400" />
                         </button>
@@ -483,8 +483,34 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
     try {
       const resolvedWeek = wk || getWeekKey();
       if (!wk) setWeekKey(resolvedWeek);
-      const slotsData = await api(`/api/slots?week=${resolvedWeek}`);
-      setAllSlots(slotsData.slots || []);
+      // Eski slot-etüt + yeni serbest etüt şablonlarını birlikte çek, tek listede birleştir.
+      const [slotsData, etutData] = await Promise.all([
+        api(`/api/slots?week=${resolvedWeek}`),
+        api(`/api/etut-sablon/all?week=${resolvedWeek}`),
+      ]);
+      const slotList = slotsData.slots || [];
+      // Yeni etütleri slot-benzeri şekle çevir (AvailableTree/BookingsView aynı bileşeni kullanır).
+      const etutList = (etutData.etutler || []).map(e => ({
+        kind: 'etut',
+        etutId: e.id,
+        teacherId: e.teacherId,
+        teacherName: e.teacherName,
+        branches: e.branches || [],
+        allowedGroups: e.allowedGroups || [],
+        day: e.dayIndex,
+        dayLabel: e.dayLabel,
+        start: e.start,
+        end: e.end,
+        slotId: `etut:${e.id}`,
+        slotLabel: `${e.start}–${e.end}`,
+        booked: e.booked,
+        disabled: false,
+        studentId: e.studentId,
+        studentName: e.studentName,
+        branch: e.branch,
+        bookedBy: e.studentId ? 'student' : undefined,
+      }));
+      setAllSlots([...slotList, ...etutList]);
     } catch (err) { showToast(err.message, 'error'); }
     finally { setLoading(false); }
   }, [showToast]);
@@ -527,17 +553,25 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
     });
   }, [allSlots, myBookings, session, selectableBranchesFor, filterBranch, filterTeacher, filterDay, weekKey]);
 
-  const handleBook = async ({ teacherId, day, slotId, branch }) => {
+  const handleBook = async ({ teacherId, day, slotId, branch, kind, etutId }) => {
     try {
-      await api('/api/slots', { method: 'POST', body: JSON.stringify({ teacherId, day, slotId, weekKey, branch }) });
+      if (kind === 'etut') {
+        await api('/api/etut-sablon/rezervasyon', { method: 'POST', body: JSON.stringify({ teacherId, etutId, branch, weekKey }) });
+      } else {
+        await api('/api/slots', { method: 'POST', body: JSON.stringify({ teacherId, day, slotId, weekKey, branch }) });
+      }
       showToast('Etüde kaydoldunuz!');
       loadData(weekKey);
     } catch (err) { showToast(err.message, 'error'); }
   };
 
-  const handleCancel = async ({ teacherId, day, slotId }) => {
+  const handleCancel = async ({ teacherId, day, slotId, kind, etutId }) => {
     try {
-      await api('/api/slots', { method: 'DELETE', body: JSON.stringify({ teacherId, day, slotId, weekKey }) });
+      if (kind === 'etut') {
+        await api('/api/etut-sablon/rezervasyon', { method: 'DELETE', body: JSON.stringify({ teacherId, etutId }) });
+      } else {
+        await api('/api/slots', { method: 'DELETE', body: JSON.stringify({ teacherId, day, slotId, weekKey }) });
+      }
       showToast('Rezervasyon iptal edildi');
       loadData(weekKey);
     } catch (err) { showToast(err.message, 'error'); }
