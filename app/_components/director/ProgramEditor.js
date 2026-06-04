@@ -156,6 +156,19 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     } catch (e) { showToast(e.message, 'error'); }
   }
 
+  async function assignEtutSablon(id, student) {
+    try {
+      const r = await api('/api/etut-sablon', {
+        method: 'PATCH',
+        body: JSON.stringify({ teacherId: teacher.id, id, student }),
+      });
+      const list = r.sablonlar || [];
+      setEtutSablonlar(list);
+      setSelectedEtut(list.find(s => s.id === id) || null);
+      showToast(student ? 'Öğrenci atandı' : 'Atama kaldırıldı');
+    } catch (e) { showToast(e.message, 'error'); }
+  }
+
   // Bir etüt şablonu bu hafta efektif aktif mi? (kalıcı aktif + bu hafta pasif listesinde değil)
   function etutAktifThisWeek(sb) {
     if (sb.aktif === false) return false;
@@ -525,7 +538,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                   }}
                   title={`Etüt ${sb.start}–${sb.end}${aktif ? '' : ' (pasif)'} · tıkla: seçenekler`}>
                   <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Etüt{aktif ? '' : ' (pasif)'}
+                    {sb.studentName || 'Etüt'}{aktif ? '' : ' (pasif)'}
                   </div>
                   {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{sb.start}–{sb.end}</div>}
                 </button>
@@ -540,8 +553,10 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
         <EtutEylemModal
           sablon={selectedEtut}
           aktif={etutAktifThisWeek(selectedEtut)}
+          allowedStudents={allowedStudents}
           onClose={() => setSelectedEtut(null)}
           onToggle={toggleEtutSablon}
+          onAssign={assignEtutSablon}
           onDelete={deleteEtutSablon}
         />
       )}
@@ -687,11 +702,18 @@ function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, saving, on
 }
 
 // ─── Etüt eylem modalı (tıklanan etüt: aktif/pasif/sil) ──────────────────────
-function EtutEylemModal({ sablon, aktif, onClose, onToggle, onDelete }) {
+function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle, onAssign, onDelete }) {
   const gun = ALL_DAYS.find(d => d.index === sablon.dayIndex)?.label || '';
   // Pasifleştirme onayı: "sadece bu hafta" varsayılan İŞARETLİ
   const [pasifMode, setPasifMode] = useState(false); // pasifleştirme onayı gösteriliyor mu
   const [sadeceBuHafta, setSadeceBuHafta] = useState(true);
+
+  function handleStudentSelect(e) {
+    const sid = e.target.value;
+    if (!sid) { onAssign(sablon.id, null); return; }
+    const s = allowedStudents.find(x => x.id === sid);
+    if (s) onAssign(sablon.id, { id: s.id, name: s.name, cls: s.cls || '' });
+  }
 
   return (
     <Modal title={`${gun} ${sablon.start}–${sablon.end} Etüt`} onClose={onClose}>
@@ -703,6 +725,21 @@ function EtutEylemModal({ sablon, aktif, onClose, onToggle, onDelete }) {
             color: aktif ? '#0f766e' : '#475569' }}>
             {aktif ? '● Aktif' : '○ Pasif'}
           </span>
+        </div>
+
+        {/* Öğrenci ataması (birebir) */}
+        <div>
+          <label className="text-xs block mb-1" style={{ color: 'var(--text-muted)' }}>Öğrenci (birebir)</label>
+          <select value={sablon.studentId || ''} onChange={handleStudentSelect}
+            className="input !text-sm !py-1.5 w-full">
+            <option value="">— Boş (atama yok) —</option>
+            {allowedStudents.map(s => (
+              <option key={s.id} value={s.id}>{s.name}{s.cls ? ` · ${s.cls}` : ''}</option>
+            ))}
+          </select>
+          {sablon.studentName && (
+            <p className="text-xs mt-1" style={{ color: '#0f766e' }}>Atandı: {sablon.studentName}</p>
+          )}
         </div>
 
         {!pasifMode ? (

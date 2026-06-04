@@ -41,6 +41,17 @@ const ToggleSchema = z.object({
   aktif: z.boolean(), // hedef durum (true=aktif yap, false=pasif yap)
 });
 
+// Öğrenci ata/kaldır (birebir). student null → atamayı kaldır.
+const AssignSchema = z.object({
+  teacherId: zId,
+  id: z.string().max(20),
+  student: z.object({
+    id: zId,
+    name: z.string().max(120),
+    cls: z.string().max(20).optional(),
+  }).nullable(),
+});
+
 function toMin(t) {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
@@ -126,6 +137,38 @@ export async function PUT(req) {
     const set = new Set(Array.isArray(sb.pasifHaftalar) ? sb.pasifHaftalar : []);
     if (aktif) set.delete(weekKey); else set.add(weekKey);
     sb.pasifHaftalar = Array.from(set);
+  }
+  list[idx] = sb;
+  template.etutSablonlari = list;
+  await redis.set(programKey(teacherId), template);
+  return NextResponse.json({ ok: true, sablonlar: list });
+}
+
+// PATCH /api/etut-sablon  → şablona öğrenci ata / kaldır (birebir)
+export async function PATCH(req) {
+  const session = await getSession();
+  if (!session || !isManager(session)) {
+    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  }
+
+  const parsed = await parseBody(req, AssignSchema);
+  if (!parsed.ok) return parsed.response;
+  const { teacherId, id, student } = parsed.data;
+
+  const template = (await redis.get(programKey(teacherId))) || {};
+  const list = Array.isArray(template.etutSablonlari) ? template.etutSablonlari : [];
+  const idx = list.findIndex(s => s.id === id);
+  if (idx === -1) return NextResponse.json({ error: 'Şablon bulunamadı' }, { status: 404 });
+
+  const sb = { ...list[idx] };
+  if (student) {
+    sb.studentId = student.id;
+    sb.studentName = student.name;
+    sb.studentCls = student.cls || '';
+  } else {
+    delete sb.studentId;
+    delete sb.studentName;
+    delete sb.studentCls;
   }
   list[idx] = sb;
   template.etutSablonlari = list;
