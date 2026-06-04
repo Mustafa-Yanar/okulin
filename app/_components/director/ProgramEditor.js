@@ -197,13 +197,34 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     ? students.filter(s => !teacher.allowedGroups?.length || teacher.allowedGroups.includes(s.group))
     : [];
 
+  // O günün, [start,end) aralığıyla çakışan efektif AKTİF etüt şablonu var mı?
+  // (mola payı hariç — ders slotuyla birebir saat çakışmasını engelliyoruz.)
+  function cakisanAktifEtut(dayIndex, slotStart, slotEnd) {
+    const s = timeToMin(slotStart), e = timeToMin(slotEnd);
+    return etutSablonlar.find(sb =>
+      sb.dayIndex === dayIndex &&
+      etutAktifThisWeek(sb) &&
+      timeToMin(sb.start) < e && timeToMin(sb.end) > s
+    );
+  }
+
   // Ders slotu tek-tık toggle: pasif (boş) → aktif (available); aktif → pasif.
   // Geçmiş slot düzenlenemez. Kayıt "Kaydet ve Uygula" ile toplu (dirty/diff).
+  // Çift yönlü çakışma: o saate aktif etüt varsa ders aktif EDİLEMEZ (kapatma serbest).
   function handleSlotClick(dayIndex, slotId, slotLabel) {
     if (isSlotPast(weekKey, dayIndex, slotLabel)) return;
     const entry = getEntry(dayIndex, slotId);
-    if (entry?.type === 'available') clearEntry(dayIndex, slotId);
-    else setEntry(dayIndex, slotId, { type: 'available', fixed: true });
+    if (entry?.type === 'available') { clearEntry(dayIndex, slotId); return; }
+    const slots = slotsForDay(dayIndex, dayIndex >= 5 ? slotTimes.weekend : slotTimes.weekday);
+    const slot = slots.find(x => x.id === slotId);
+    if (slot) {
+      const c = cakisanAktifEtut(dayIndex, slot.start, slot.end);
+      if (c) {
+        showToast(`Bu saatte aktif etüt var (${c.start}–${c.end}). Önce etüdü iptal/pasif yapın.`, 'error');
+        return;
+      }
+    }
+    setEntry(dayIndex, slotId, { type: 'available', fixed: true });
   }
 
   const offSet = new Set(offDays);
@@ -265,23 +286,26 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
             const entry = getEntry(day.index, slot.id);
             const aktif = entry?.type === 'available';
             const past = isSlotPast(weekKey, day.index, slot.label);
+            // Pasif slot + o saatte aktif etüt → ders eklenemez (bloklu). Aktif slot zaten etüdü engelliyor.
+            const etutEngel = !aktif && cakisanAktifEtut(day.index, slot.start, slot.end);
             const top = minToTop(timeToMin(slot.start));
             const height = Math.max(durationToHeight(timeToMin(slot.end) - timeToMin(slot.start)), 16);
             blocks.push(
               <button key={`slot-${slot.id}`}
                 onClick={() => handleSlotClick(day.index, slot.id, slot.label)}
-                disabled={past}
-                className={`absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left transition-colors ${aktif ? '' : 'ders-slot-bos'}`}
+                disabled={past || !!etutEngel}
+                className={`absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left transition-colors ${aktif || etutEngel ? '' : 'ders-slot-bos'}`}
                 style={{
                   top, height, zIndex: 1,
                   background: aktif ? 'color-mix(in srgb, #3b82f6 22%, transparent)' : 'var(--bg-muted, #f1f5f9)',
                   border: aktif ? '1px solid #3b82f6' : '1px dashed var(--border-subtle)',
                   borderLeft: aktif ? '3px solid #3b82f6' : '1px dashed var(--border-subtle)',
-                  opacity: past ? 0.4 : 1,
-                  cursor: past ? 'not-allowed' : 'pointer',
+                  opacity: past ? 0.4 : etutEngel ? 0.5 : 1,
+                  cursor: past || etutEngel ? 'not-allowed' : 'pointer',
                 }}
                 title={past ? 'Geçmiş saat — düzenlenemez'
                   : aktif ? `${slot.start}–${slot.end} · Ders — tıkla: kapat`
+                  : etutEngel ? `${slot.start}–${slot.end} — bu saatte aktif etüt var, ders eklenemez`
                   : `${slot.start}–${slot.end} — tıkla: ders saati aç`}>
                 {aktif ? (
                   <>
@@ -290,7 +314,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                   </>
                 ) : (
                   <div className="text-[8px] leading-tight truncate" style={{ color: 'var(--text-muted)' }}>
-                    {height >= 28 ? `${slot.start} +` : '+'}
+                    {etutEngel ? '' : height >= 28 ? `${slot.start} +` : '+'}
                   </div>
                 )}
               </button>
