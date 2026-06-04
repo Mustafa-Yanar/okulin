@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, LayoutGrid, ClipboardList, Compass
+  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ClipboardList, Compass
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
 import DirectorDenemeYonetimi from './rehberlik/DirectorDenemeYonetimi';
@@ -33,8 +33,8 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   // Rehber (counselor) = müdür paneli EKSİ muhasebe. Sekme listesi role göre.
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
-    ? ['teachers', 'students', 'yoklama', 'kutuphane', 'duyurular']
-    : ['teachers', 'students', 'yoklama', 'muhasebe', 'kutuphane', 'duyurular', 'denemeler', 'ders-saatleri'];
+    ? ['teachers', 'students', 'yoklama', 'kutuphane', 'duyurular', 'ders-programi']
+    : ['teachers', 'students', 'yoklama', 'muhasebe', 'kutuphane', 'duyurular', 'denemeler', 'ders-saatleri', 'ders-programi'];
   const [tab, setTabInternal] = useUrlTab('teachers', validTabs);
 
   // Sidebar'dan gelen externalTab değişince iç state'i güncelle
@@ -45,16 +45,10 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalTab]);
 
-  // Sekme değişince inline Ders Programı görünümünü kapat
-  useEffect(() => {
-    setShowProgramOlusturucuModal(false);
-  }, [tab]);
-
   const setTab = useCallback((key) => {
     setTabInternal(key);
     onExternalTabChange?.(key);
   }, [setTabInternal, onExternalTabChange]);
-  const [showProgramOlusturucuModal, setShowProgramOlusturucuModal] = useState(false);
   const [denemeTab, setDenemeTab] = useState('denemeler');
   const [slotWeekday, setSlotWeekday] = useState([]);
   const [slotWeekend, setSlotWeekend] = useState([]);
@@ -167,34 +161,14 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
   return (
     <div>
-      {/* TEACHERS TAB — üstte Öğretmenler / Ders Programı geçişi */}
-      {tab === 'teachers' && (
-        <div className="flex gap-1 mb-4 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)' }}>
-          {[['liste', 'Öğretmenler'], ['program', 'Ders Programı']].map(([k, l]) => {
-            const isActive = (k === 'program') === showProgramOlusturucuModal;
-            return (
-              <button key={k} onClick={() => setShowProgramOlusturucuModal(k === 'program')}
-                className="px-4 py-2 rounded-lg text-sm transition-all flex items-center gap-1.5"
-                style={{
-                  fontWeight: isActive ? 600 : 400,
-                  background: isActive ? 'var(--bg-surface)' : 'transparent',
-                  color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                }}>
-                {k === 'program' ? <LayoutGrid size={14} /> : <Users size={14} />} {l}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Ders Programı oluşturucu (inline) */}
-      {tab === 'teachers' && showProgramOlusturucuModal && (
+      {/* DERS PROGRAMI TAB — otomatik program oluşturucu (sidebar > Sistem) */}
+      {tab === 'ders-programi' && (
         <ProgramOlusturucu api={api} showToast={showToast}
           activeClasses={[...new Set(students.map(s => s.cls))]} />
       )}
 
-      {tab === 'teachers' && !showProgramOlusturucuModal && (
+      {/* TEACHERS TAB — öğretmen listesi */}
+      {tab === 'teachers' && (
         <div>
           <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğretmenler ({teachers.length})</h3>

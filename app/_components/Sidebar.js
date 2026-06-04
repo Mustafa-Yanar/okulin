@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import {
   Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
   BarChart2, CreditCard, TrendingDown, ChevronLeft, ChevronRight,
-  BookMarked, Calendar, GraduationCap, Star, Clock, Settings,
+  BookMarked, Calendar, GraduationCap, Star, Clock, Settings, LayoutGrid,
 } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
 import ThemeToggle from './ThemeToggle';
@@ -22,6 +22,7 @@ const ITEMS_BY_ROLE = {
     { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: 'Sistem',   key: 'duyurular',   label: 'Duyurular',         icon: Bell },
     { group: 'Sistem',   key: 'ders-saatleri', label: 'Ders Saatleri',   icon: Clock },
+    { group: 'Sistem',   key: 'ders-programi', label: 'Ders Programı',   icon: LayoutGrid },
   ],
   counselor: [
     { group: 'Akademik', key: 'teachers',    label: 'Öğretmenler',       icon: Users },
@@ -29,6 +30,7 @@ const ITEMS_BY_ROLE = {
     { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
     { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: 'Sistem',   key: 'duyurular',   label: 'Duyurular',         icon: Bell },
+    { group: 'Sistem',   key: 'ders-programi', label: 'Ders Programı',   icon: LayoutGrid },
   ],
   accountant: [
     { group: 'Finans',   key: 'finance',     label: 'Öğrenci Ödemeleri', icon: CreditCard },
