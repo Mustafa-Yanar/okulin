@@ -62,7 +62,7 @@ export function AnnouncementSender({ showToast }) {
                 <button onClick={() => remove(a)} className="shrink-0 hover:text-rose-500" style={{ color: 'var(--text-muted)' }}><Trash2 size={15} /></button>
               </div>
               <div className="flex items-center gap-3 mt-2 text-caption flex-wrap">
-                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded">{a.audienceLabel}</span>
+                <span className="badge badge-info">{a.audienceLabel}</span>
                 <span className="flex items-center gap-1"><Users size={11} /> {a.recipientCount}</span>
                 <button onClick={() => setDetail(a)} className="flex items-center gap-1 text-indigo-600 hover:underline">
                   <Eye size={11} /> {a.readCount}/{a.recipientCount} okudu

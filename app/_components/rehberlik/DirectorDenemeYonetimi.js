@@ -82,7 +82,8 @@ function UploadView({ showToast }) {
               type="file"
               accept=".xlsx,.xls"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+              className="w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[var(--bg-muted)] file:text-[var(--text-secondary)] file:cursor-pointer hover:file:brightness-95"
+              style={{ color: 'var(--text-secondary)' }}
             />
           </div>
           <button

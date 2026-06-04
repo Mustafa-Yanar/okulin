@@ -199,8 +199,8 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                         <div className="font-600" style={{ fontWeight:600 }}>{t.name}</div>
                         <div className="text-caption">{(t.branches||[]).join(', ')}</div>
                         <div className="flex gap-1 mt-1 flex-wrap">
-                          {(t.allowedGroups||[]).map(g => <span key={g} className="badge" style={{ background:'#e0e7ff',color:'#4338ca' }}>{GROUPS[g]}</span>)}
-                          {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'#f3f4f6',color:'#9ca3af' }}>Tüm gruplar</span>}
+                          {(t.allowedGroups||[]).map(g => <span key={g} className="badge badge-info">{GROUPS[g]}</span>)}
+                          {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'var(--bg-muted)',color:'var(--text-muted)' }}>Tüm gruplar</span>}
                         </div>
                       </div>
                       <ChevronRight size={16} className="text-gray-400 shrink-0 transition-transform mx-2" style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
