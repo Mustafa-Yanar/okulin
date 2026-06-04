@@ -14,14 +14,15 @@ function makeId() {
 
 const zPhone = z.string().max(40).optional();
 const zBirthDate = z.string().max(20).optional(); // YYYY-MM-DD
+const zParentName = z.string().max(120).optional(); // veli adı soyadı (opsiyonel)
 const StudentCreateSchema = z.object({
   name: zName, password: zPassword, cls: z.string().min(1).max(40),
-  phone: zPhone, parentPhone: zPhone, birthDate: zBirthDate,
+  phone: zPhone, parentPhone: zPhone, parentName: zParentName, birthDate: zBirthDate,
 });
 const StudentUpdateSchema = z.object({
   id: zId, name: zName, cls: z.string().min(1).max(40),
   password: z.string().max(200).optional(),
-  phone: zPhone, parentPhone: zPhone, birthDate: zBirthDate,
+  phone: zPhone, parentPhone: zPhone, parentName: zParentName, birthDate: zBirthDate,
 });
 // Tekil { id } veya toplu { ids:[...] } silme.
 const StudentDeleteSchema = z.object({
@@ -41,7 +42,7 @@ export async function GET() {
   const results = await pipeline.exec();
   const students = results.filter(Boolean).map(s => ({
     id: s.id, name: s.name, username: s.username, cls: s.cls, group: s.group,
-    phone: s.phone || '', parentPhone: s.parentPhone || '', birthDate: s.birthDate || '',
+    phone: s.phone || '', parentPhone: s.parentPhone || '', parentName: s.parentName || '', birthDate: s.birthDate || '',
   }));
   return NextResponse.json(students);
 }
@@ -54,7 +55,7 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, StudentCreateSchema);
   if (!parsed.ok) return parsed.response;
-  const { name, password, cls, phone, parentPhone, birthDate } = parsed.data;
+  const { name, password, cls, phone, parentPhone, parentName, birthDate } = parsed.data;
 
   // İsim soyisim kullanıcı adı olarak kullanılır
   const username = name;
@@ -91,6 +92,7 @@ export async function POST(req) {
   const student = {
     id, name, username, passwordHash: hash, cls, group,
     phone: normPhone, parentPhone: normParentPhone,
+    parentName: (parentName || '').trim(),
     birthDate: birthDate || '',
     mustChangePassword: true,  // ilk girişte öğrenci kendi şifresini belirleyecek
   };
@@ -109,13 +111,14 @@ export async function PUT(req) {
 
   const parsed = await parseBody(req, StudentUpdateSchema);
   if (!parsed.ok) return parsed.response;
-  const { id, name, password, cls, phone, parentPhone, birthDate } = parsed.data;
+  const { id, name, password, cls, phone, parentPhone, parentName, birthDate } = parsed.data;
   const student = await redis.get(`student:${id}`);
   if (!student) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
 
   const group = classToGroup(cls) || student.group;
   const updated = { ...student, name, username: name, cls, group,
     birthDate: birthDate !== undefined ? birthDate : (student.birthDate || ''),
+    parentName: parentName !== undefined ? (parentName || '').trim() : (student.parentName || ''),
   };
   if (phone !== undefined) {
     if (phone) {

@@ -285,6 +285,14 @@ export default function ParentPanel({ session, showToast, externalTab, onExterna
 
   return (
     <div>
+      {/* Veli karşılama — kendi adını görür (öğrenci formundaki Veli Adı'ndan gelir).
+          parentName yalnız gerçek ad girilmişse dolu; boşsa karşılama gösterilmez. */}
+      {session.parentName && (
+        <p className="text-lg mb-3" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+          Hoş geldiniz, {session.parentName}
+        </p>
+      )}
+
       {/* Çocuk seçici (birden çok çocuk varsa) */}
       {children.length > 1 && (
         <div className="flex gap-2 mb-4 flex-wrap">

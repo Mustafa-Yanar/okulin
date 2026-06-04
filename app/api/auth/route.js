@@ -112,8 +112,12 @@ export async function POST(req) {
         payload = { role: 'student', id: rec.id, name: rec.name, cls: rec.cls, group: rec.group, mustChangePassword: !!rec.mustChangePassword };
       } else if (role === 'parent') {
         const children = Array.isArray(rec.children) ? rec.children : [];
-        const pName = children.length === 1 ? `${children[0].name} (Veli)` : 'Veli';
-        payload = { role: 'parent', id: rec.id, name: pName, children, mustChangePassword: !!rec.mustChangePassword };
+        // Veli adı: kayıttaki gerçek ad (öğrenci formundan girilir). Header her zaman dolu
+        // olmalı → ad yoksa eski türetmeye düş. parentName ise SADECE gerçek ad (panel
+        // karşılaması için; boşsa karşılama gösterilmez).
+        const realName = rec.name || '';
+        const headerName = realName || (children.length === 1 ? `${children[0].name} (Veli)` : 'Veli');
+        payload = { role: 'parent', id: rec.id, name: headerName, parentName: realName, children, mustChangePassword: !!rec.mustChangePassword };
       } else { // accountant veya counselor (rehber) — aynı şekil
         payload = { role, id: rec.id, name: rec.name, mustChangePassword: !!rec.mustChangePassword };
       }

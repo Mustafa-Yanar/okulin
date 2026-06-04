@@ -119,6 +119,7 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
   const [cls, setCls] = useState(initial?.cls||STUDENT_GROUPS.ortaokul.classes[0]);
   const [phone, setPhone] = useState(initial?.phone ? formatTurkishMobile(initial.phone) : '');
   const [parentPhone, setParentPhone] = useState(initial?.parentPhone ? formatTurkishMobile(initial.parentPhone) : '');
+  const [parentName, setParentName] = useState(initial?.parentName || '');
   const [birthDate, setBirthDate] = useState(initial?.birthDate || '');
   const [loading, setLoading] = useState(false);
   useEffect(() => { if (!initial) setCls(STUDENT_GROUPS[selectedGroup].classes[0]); }, [selectedGroup]);
@@ -130,7 +131,7 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
     e.preventDefault();
     if (phoneInvalid || parentPhoneInvalid) return; // geçersiz telefonla gönderme
     setLoading(true);
-    await onSave({ name, username: name, password, cls, phone, parentPhone, birthDate });
+    await onSave({ name, username: name, password, cls, phone, parentPhone, parentName, birthDate });
     setLoading(false);
   };
   return (
@@ -162,6 +163,9 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
         <FormField label="Öğrenci Telefonu">
           <input className={`input ${phoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={phone} onChange={e=>setPhone(e.target.value)} />
           {phoneInvalid && <p className="text-xs text-red-500 mt-1">Geçersiz numara. Örnek: 0532 123 45 67</p>}
+        </FormField>
+        <FormField label="Veli Adı Soyadı">
+          <input className="input" type="text" placeholder="Örn. Ayşe Yılmaz" value={parentName} onChange={e=>setParentName(e.target.value)} />
         </FormField>
         <FormField label="Veli Telefonu">
           <input className={`input ${parentPhoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={parentPhone} onChange={e=>setParentPhone(e.target.value)} />
