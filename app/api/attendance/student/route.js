@@ -45,20 +45,32 @@ export async function GET(req) {
     if (status !== 'yok' && status !== 'gec') return;
     const parts = keys[i].split(':');
     if (parts.length !== 5) return;
-    const [, date, teacherId, cls, lessonNo] = parts;
+    const [, date, teacherId, cls, lessonNoRaw] = parts;
     teacherIds.add(teacherId);
-    matched.push({ date, teacherId, cls, lessonNo: parseInt(lessonNo), status });
+    // Etüt yoklaması: lessonNo "e<etutId>" formatında (birebir serbest etüt). Ders: sayı.
+    if (lessonNoRaw.startsWith('e') && lessonNoRaw.length > 1) {
+      matched.push({ date, teacherId, cls, etutId: lessonNoRaw.slice(1), isEtut: true, status });
+    } else {
+      matched.push({ date, teacherId, cls, lessonNo: parseInt(lessonNoRaw), status });
+    }
   });
 
-  // Teacher lookup
+  // Teacher lookup (+ etüt şablonları, etüt yoklamalarını zenginleştirmek için)
   const teacherMap = {};
+  const etutMap = {}; // `${teacherId}|${etutId}` → { branch, start, end, dayIndex }
   if (teacherIds.size > 0) {
-    const tPipeline = redis.pipeline();
     const ids = Array.from(teacherIds);
+    const tPipeline = redis.pipeline();
     ids.forEach(id => tPipeline.get(`teacher:${id}`));
+    ids.forEach(id => tPipeline.get(`program:${id}`));
     const tResults = await tPipeline.exec();
     ids.forEach((id, i) => {
       if (tResults[i]) teacherMap[id] = tResults[i];
+      const prog = tResults[ids.length + i];
+      const list = Array.isArray(prog?.etutSablonlari) ? prog.etutSablonlari : [];
+      for (const sb of list) {
+        etutMap[`${id}|${sb.id}`] = { branch: sb.branch || '', start: sb.start, end: sb.end, dayIndex: sb.dayIndex };
+      }
     });
   }
 
@@ -68,6 +80,7 @@ export async function GET(req) {
   const uniqueDateTeachers = [];
   const seen = new Set();
   for (const m of matched) {
+    if (m.isEtut) continue; // etüt branch/saat etutMap'ten gelir, grid taraması gerekmez
     const key = `${m.date}|${m.teacherId}`;
     if (!seen.has(key)) {
       seen.add(key);
@@ -112,6 +125,22 @@ export async function GET(req) {
   const entries = matched.map(m => {
     const d = new Date(m.date);
     const teacher = teacherMap[m.teacherId];
+    if (m.isEtut) {
+      const et = etutMap[`${m.teacherId}|${m.etutId}`] || {};
+      return {
+        date: m.date,
+        dayLabel: DAY_NAMES_TR[d.getDay()],
+        teacherId: m.teacherId,
+        teacherName: teacher?.name || m.teacherId,
+        branch: et.branch || '',
+        cls: m.cls,
+        lessonNo: null,
+        slotLabel: et.start && et.end ? `${et.start}–${et.end}` : '',
+        subBranch: '',
+        isEtut: true,
+        status: m.status,
+      };
+    }
     const info = lessonInfoMap[`${m.date}|${m.teacherId}|${m.lessonNo}`] || {};
     return {
       date: m.date,
@@ -123,9 +152,10 @@ export async function GET(req) {
       lessonNo: m.lessonNo,
       slotLabel: info.slotLabel || '',
       subBranch: info.subBranch || '',
+      isEtut: false,
       status: m.status,
     };
-  }).sort((a, b) => b.date.localeCompare(a.date) || a.lessonNo - b.lessonNo);
+  }).sort((a, b) => b.date.localeCompare(a.date) || (a.lessonNo || 0) - (b.lessonNo || 0));
 
   const summary = {
     yok: entries.filter(e => e.status === 'yok').length,

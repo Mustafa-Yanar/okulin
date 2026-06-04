@@ -251,6 +251,7 @@ export function TeacherBookingsList({ bookedList, listColorMap, onCancel, canCan
 
 function TeacherAttendancePanel({ session, weekKey, showToast }) {
   const [program, setProgram] = useState(null);
+  const [etutler, setEtutler] = useState([]); // bu öğretmenin bu hafta efektif aktif + öğrenci atanmış etütleri
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openDays, setOpenDays] = useState({});
@@ -279,12 +280,15 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
     (async () => {
       setLoading(true);
       try {
-        const [progData, stuData] = await Promise.all([
+        const [progData, stuData, etutData] = await Promise.all([
           api(`/api/program?teacherId=${session.id}&week=${weekKey}`),
           api('/api/students'),
+          api(`/api/etut-sablon/all?week=${weekKey}`).catch(() => ({ etutler: [] })),
         ]);
         setProgram(progData?.program || {});
         setStudents(stuData);
+        // Sadece bu öğretmenin, öğrenci atanmış (booked) etütleri yoklamaya girer.
+        setEtutler((etutData.etutler || []).filter(e => e.teacherId === session.id && e.studentId));
       } catch (err) {
         showToast(err.message, 'error');
       } finally {
@@ -307,10 +311,14 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
           lessons.push({ lessonNo, cls: entry.cls });
         }
       }
-      if (lessons.length === 0) return null;
-      return { dayIndex: day.index, dayLabel: day.label, lessons };
+      // O günün serbest etütleri (birebir) — saat sırasına göre
+      const dayEtuts = etutler
+        .filter(e => e.dayIndex === day.index)
+        .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+      if (lessons.length === 0 && dayEtuts.length === 0) return null;
+      return { dayIndex: day.index, dayLabel: day.label, lessons, etuts: dayEtuts };
     }).filter(Boolean);
-  }, [program, slotTimes]);
+  }, [program, slotTimes, etutler]);
 
   const studentsForCls = useCallback((cls) => {
     return students.filter(s => s.cls === cls);
@@ -400,7 +408,9 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
                 </div>
                 <div className="text-left">
                   <div className="font-700 text-gray-900 text-sm" style={{ fontWeight: 700 }}>{day.dayLabel}</div>
-                  <div className="text-xs text-gray-500">{lessons.length} ders</div>
+                  <div className="text-xs text-gray-500">
+                    {lessons.length} ders{day.etuts?.length ? ` · ${day.etuts.length} etüt` : ''}
+                  </div>
                 </div>
               </div>
               <ChevronRight size={16} className="text-gray-400 shrink-0 transition-transform" style={{ transform: dOpen ? 'rotate(90deg)' : 'rotate(0)' }} />
@@ -465,6 +475,59 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
                               </button>
                             </>
                           )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {day.etuts?.map((e) => {
+                  const lessonNo = `e${e.id}`;
+                  const cls = e.studentCls || (students.find(s => s.id === e.studentId)?.cls) || '';
+                  const lk = `${day.dayIndex}_${lessonNo}`;
+                  const lOpen = !!openLessons[lk];
+                  const attKey = `${date}_${cls}_${lessonNo}`;
+                  const att = attendance[attKey] || {};
+                  const current = att[e.studentId];
+                  return (
+                    <div key={lessonNo} className="rounded-xl overflow-hidden border border-violet-100">
+                      <button onClick={() => toggleLesson(day.dayIndex, lessonNo, cls)}
+                        className="w-full flex items-center justify-between px-3 py-2.5 bg-violet-50 hover:bg-violet-100 transition-colors">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-200 text-violet-700 font-600 shrink-0" style={{ fontWeight: 600 }}>ETÜT</span>
+                          <span className="text-xs text-gray-500 shrink-0">{e.start}–{e.end}</span>
+                          {e.branch && <span className="text-xs text-violet-600 font-600 shrink-0" style={{ fontWeight: 600 }}>{e.branch}</span>}
+                          <span className="text-sm text-gray-800 truncate">{e.studentName}</span>
+                        </div>
+                        <ChevronRight size={14} className="text-gray-400 shrink-0 transition-transform" style={{ transform: lOpen ? 'rotate(90deg)' : 'rotate(0)' }} />
+                      </button>
+
+                      {lOpen && (
+                        <div className="bg-white px-3 py-2">
+                          <div className="flex items-center justify-between py-1 mb-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <User size={12} className="text-gray-400 shrink-0" />
+                              <span className="text-sm text-gray-800 truncate">{e.studentName}</span>
+                              {cls && <span className="text-xs text-gray-400">({cls.toUpperCase()})</span>}
+                            </div>
+                            <div className="flex gap-1 shrink-0 ml-2">
+                              {STATUS_OPTS.map(opt => (
+                                <button key={opt.value}
+                                  onClick={() => setStatus(date, cls, lessonNo, e.studentId, opt.value)}
+                                  className={`text-[11px] px-2.5 py-1 rounded-lg border font-600 transition-all ${current === opt.value ? opt.active : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                                  style={{ fontWeight: 600 }}>
+                                  {opt.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => saveAttendance(day.dayIndex, cls, lessonNo)}
+                            disabled={saving[attKey]}
+                            className="w-full py-1.5 rounded-lg bg-violet-600 text-white text-xs font-600 hover:bg-violet-700 transition-colors disabled:opacity-60"
+                            style={{ fontWeight: 600 }}>
+                            {saving[attKey] ? 'Kaydediliyor...' : 'Etüt Yoklamasını Kaydet'}
+                          </button>
                         </div>
                       )}
                     </div>
