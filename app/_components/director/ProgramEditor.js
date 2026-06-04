@@ -259,7 +259,8 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
           const blocks = [];
           // 1) Ders slotları — 12'sinin hepsi çizilir. Aktif (available) mavi dolu,
           //    pasif soluk/boş. Tıkla → aç/kapat toggle. Geçmiş slot düzenlenemez.
-          const slots = slotsForDay(day.index, slotTimes);
+          // slotsForDay 2. arg DİZİ bekler (slotTimes objesi değil) → gün tipine göre seç.
+          const slots = slotsForDay(day.index, day.index >= 5 ? slotTimes.weekend : slotTimes.weekday);
           for (const slot of slots) {
             const entry = getEntry(day.index, slot.id);
             const aktif = entry?.type === 'available';
@@ -352,7 +353,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
             // O günün meşgul aralıkları: SADECE aktif (available) ders slotları + etüt şablonları.
             // Pasif/boş ders slotları meşgul değil → o saatlere etüt eklenebilir.
             const ranges = [];
-            const slots = slotsForDay(dayIndex, slotTimes);
+            const slots = slotsForDay(dayIndex, dayIndex >= 5 ? slotTimes.weekend : slotTimes.weekday);
             for (const slot of slots) {
               const entry = getEntry(dayIndex, slot.id);
               if (entry?.type === 'available') ranges.push({ start: slot.start, end: slot.end, label: 'ders' });
