@@ -263,11 +263,12 @@ function AvailableTree({ available, onBook, selectableBranchesFor }) {
 export function StudentBookingsView({ student, allSlots, onCancel }) {
   const [openDays, setOpenDays] = useState({});
 
-  const bookedByLabel = { student: 'Öğrenci', teacher: 'Öğretmen', director: 'Müdür' };
+  const bookedByLabel = { student: 'Öğrenci', teacher: 'Öğretmen', director: 'Müdür', counselor: 'Rehber' };
   const bookedByColor = {
     student: 'bg-indigo-100 text-indigo-600',
     teacher: 'bg-emerald-100 text-emerald-600',
     director: 'bg-amber-100 text-amber-600',
+    counselor: 'bg-amber-100 text-amber-600',
   };
 
   const days = useMemo(() => {
@@ -508,7 +509,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
         studentId: e.studentId,
         studentName: e.studentName,
         branch: e.branch,
-        bookedBy: e.studentId ? 'student' : undefined,
+        bookedBy: e.bookedBy || (e.studentId ? 'student' : undefined),
       }));
       setAllSlots([...slotList, ...etutList]);
     } catch (err) { showToast(err.message, 'error'); }

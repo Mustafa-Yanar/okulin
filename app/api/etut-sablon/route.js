@@ -165,10 +165,12 @@ export async function PATCH(req) {
     sb.studentId = student.id;
     sb.studentName = student.name;
     sb.studentCls = student.cls || '';
+    sb.bookedBy = session.role; // atayan: director / counselor / teacher
   } else {
     delete sb.studentId;
     delete sb.studentName;
     delete sb.studentCls;
+    delete sb.bookedBy;
   }
   list[idx] = sb;
   template.etutSablonlari = list;

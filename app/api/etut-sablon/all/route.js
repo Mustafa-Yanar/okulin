@@ -50,6 +50,7 @@ export async function GET(req) {
         studentName: sb.studentName || null,
         studentCls: sb.studentCls || null,
         branch: sb.branch || null,
+        bookedBy: sb.bookedBy || null,
         booked: !!sb.studentId,
       });
     }

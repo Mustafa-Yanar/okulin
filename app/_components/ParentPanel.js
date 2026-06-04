@@ -67,7 +67,7 @@ function ProgramView({ child }) {
         studentId: e.studentId,
         studentName: e.studentName,
         branch: e.branch,
-        bookedBy: 'student',
+        bookedBy: e.bookedBy || 'student',
       }));
       setAllSlots([...slotList, ...etutList]);
     } catch { setAllSlots([]); }
