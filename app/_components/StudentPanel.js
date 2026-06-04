@@ -484,12 +484,8 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
     try {
       const resolvedWeek = wk || getWeekKey();
       if (!wk) setWeekKey(resolvedWeek);
-      // Eski slot-etüt + yeni serbest etüt şablonlarını birlikte çek, tek listede birleştir.
-      const [slotsData, etutData] = await Promise.all([
-        api(`/api/slots?week=${resolvedWeek}`),
-        api(`/api/etut-sablon/all?week=${resolvedWeek}`),
-      ]);
-      const slotList = slotsData.slots || [];
+      // Sadece yeni serbest etüt şablonları (eski slot-etüt /api/slots emekli edildi — Faz 7c-3).
+      const etutData = await api(`/api/etut-sablon/all?week=${resolvedWeek}`);
       // Yeni etütleri slot-benzeri şekle çevir (AvailableTree/BookingsView aynı bileşeni kullanır).
       const etutList = (etutData.etutler || []).map(e => ({
         kind: 'etut',
@@ -511,7 +507,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
         branch: e.branch,
         bookedBy: e.bookedBy || (e.studentId ? 'student' : undefined),
       }));
-      setAllSlots([...slotList, ...etutList]);
+      setAllSlots(etutList);
     } catch (err) { showToast(err.message, 'error'); }
     finally { setLoading(false); }
   }, [showToast]);
@@ -554,25 +550,17 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
     });
   }, [allSlots, myBookings, session, selectableBranchesFor, filterBranch, filterTeacher, filterDay, weekKey]);
 
-  const handleBook = async ({ teacherId, day, slotId, branch, kind, etutId }) => {
+  const handleBook = async ({ teacherId, branch, etutId }) => {
     try {
-      if (kind === 'etut') {
-        await api('/api/etut-sablon/rezervasyon', { method: 'POST', body: JSON.stringify({ teacherId, etutId, branch, weekKey }) });
-      } else {
-        await api('/api/slots', { method: 'POST', body: JSON.stringify({ teacherId, day, slotId, weekKey, branch }) });
-      }
+      await api('/api/etut-sablon/rezervasyon', { method: 'POST', body: JSON.stringify({ teacherId, etutId, branch, weekKey }) });
       showToast('Etüde kaydoldunuz!');
       loadData(weekKey);
     } catch (err) { showToast(err.message, 'error'); }
   };
 
-  const handleCancel = async ({ teacherId, day, slotId, kind, etutId }) => {
+  const handleCancel = async ({ teacherId, etutId }) => {
     try {
-      if (kind === 'etut') {
-        await api('/api/etut-sablon/rezervasyon', { method: 'DELETE', body: JSON.stringify({ teacherId, etutId }) });
-      } else {
-        await api('/api/slots', { method: 'DELETE', body: JSON.stringify({ teacherId, day, slotId, weekKey }) });
-      }
+      await api('/api/etut-sablon/rezervasyon', { method: 'DELETE', body: JSON.stringify({ teacherId, etutId }) });
       showToast('Rezervasyon iptal edildi');
       loadData(weekKey);
     } catch (err) { showToast(err.message, 'error'); }
