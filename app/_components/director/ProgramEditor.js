@@ -58,9 +58,14 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   }, [teacher.id]);
 
   async function saveEtutSablon(sablon) {
+    // Geçmiş gün/saate etüt eklenemez (server de reddeder; burada erken uyarı).
+    if (isSlotPast(weekKey, sablon.dayIndex, sablon.start)) {
+      showToast('Geçmiş bir gün/saate etüt eklenemez', 'error');
+      return;
+    }
     setSavingEtut(true);
     try {
-      const r = await api('/api/etut-sablon', { method: 'POST', body: JSON.stringify({ teacherId: teacher.id, sablon }) });
+      const r = await api('/api/etut-sablon', { method: 'POST', body: JSON.stringify({ teacherId: teacher.id, weekKey, sablon }) });
       setEtutSablonlar(r.sablonlar || []);
       setShowEtutForm(false);
       showToast('Etüt eklendi');
@@ -370,6 +375,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
 
       {showEtutForm && (
         <EtutEkleForm
+          weekKey={weekKey}
           defaultSure={slotTimes.etutSuresi || 60}
           molaSure={slotTimes.molaSuresi ?? 10}
           saving={savingEtut}
@@ -418,11 +424,21 @@ function addMinutesToTime(t, addMin) {
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }
 
-function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, saving, onClose, onSave }) {
-  const [dayIndex, setDayIndex] = useState(0);
+function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, weekKey, saving, onClose, onSave }) {
+  // Geçmiş günleri engelle: gösterilen hafta içinde günü/saati geçmiş slotlara etüt eklenemez.
+  // İlk seçilebilir gün = bugün veya sonrası (gösterilen hafta currentWeek ise hafta içi geçmiş günler kapanır).
+  const firstValidDay = useMemo(() => {
+    const d = ALL_DAYS.find(d => !isSlotPast(weekKey, d.index, '23:59'));
+    return d ? d.index : ALL_DAYS[0].index;
+  }, [weekKey]);
+
+  const [dayIndex, setDayIndex] = useState(firstValidDay);
   const [start, setStart] = useState('15:00');
   const [end, setEnd] = useState(addMinutesToTime('15:00', defaultSure));
   const [ignoreMola, setIgnoreMola] = useState(false);
+
+  // Seçili gün+saat geçmişte mi?
+  const isPast = isSlotPast(weekKey, dayIndex, start);
 
   const handleStartChange = (v) => {
     setStart(v);
@@ -455,8 +471,8 @@ function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, saving, on
   }, [dayIndex, start, end, molaSure, busyRangesForDay]);
 
   const hasMola = molaWarnings.length > 0;
-  // Çakışma asla geçilemez; mola uyarısı "yoksay" ile geçilebilir.
-  const blocked = invalid || overlap || (hasMola && !ignoreMola);
+  // Çakışma ve geçmiş gün/saat asla geçilemez; mola uyarısı "yoksay" ile geçilebilir.
+  const blocked = invalid || overlap || isPast || (hasMola && !ignoreMola);
 
   return (
     <Modal title="Yeni Etüt" onClose={onClose}>
@@ -464,7 +480,10 @@ function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, saving, on
         <div>
           <label className="text-label block mb-1">Gün</label>
           <select value={dayIndex} onChange={e => { setDayIndex(parseInt(e.target.value)); setIgnoreMola(false); }} className="input">
-            {ALL_DAYS.map(d => <option key={d.index} value={d.index}>{d.label}</option>)}
+            {ALL_DAYS.map(d => {
+              const dayPast = isSlotPast(weekKey, d.index, '23:59'); // o günün tamamı geçti mi
+              return <option key={d.index} value={d.index} disabled={dayPast}>{d.label}{dayPast ? ' (geçmiş)' : ''}</option>;
+            })}
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -483,10 +502,13 @@ function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, saving, on
         </div>
 
         {invalid && <p className="text-xs" style={{ color: '#ef4444' }}>Bitiş saati başlangıçtan sonra olmalı.</p>}
-        {!invalid && overlap && (
+        {!invalid && isPast && (
+          <p className="text-xs" style={{ color: '#ef4444' }}>⛔ Geçmiş bir gün/saate etüt eklenemez — ileri bir zaman seçin.</p>
+        )}
+        {!invalid && !isPast && overlap && (
           <p className="text-xs" style={{ color: '#ef4444' }}>⛔ Bu saat aralığı mevcut bir ders/etütle çakışıyor — değiştirin.</p>
         )}
-        {!invalid && !overlap && hasMola && (
+        {!invalid && !isPast && !overlap && hasMola && (
           <div className="rounded-lg p-2.5" style={{ background: 'color-mix(in srgb, #f59e0b 12%, transparent)', border: '1px solid color-mix(in srgb, #f59e0b 35%, transparent)' }}>
             <p className="text-xs mb-1" style={{ color: '#b45309', fontWeight: 600 }}>⚠ Yeterli mola yok:</p>
             {molaWarnings.map((w, i) => <p key={i} className="text-[11px]" style={{ color: '#b45309' }}>• {w}</p>)}

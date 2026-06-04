@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { getSession, isManager } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
+import { slotStartTime } from '@/lib/slots';
+import { getWeekKey } from '@/lib/constants';
 
 // Etüt şablonları — öğretmenin haftadan bağımsız, serbest saatli etüt blokları.
 // program:<teacherId>.etutSablonlari = [ { id, dayIndex, start, end, aktif } ]
@@ -22,6 +24,7 @@ const zDay = z.number().int().min(0).max(6);
 // Tek şablon ekle/güncelle
 const SaveSchema = z.object({
   teacherId: zId,
+  weekKey: z.string().max(40).optional(),
   sablon: z.object({
     id: z.string().max(20).optional(),
     dayIndex: zDay,
@@ -77,10 +80,19 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, SaveSchema);
   if (!parsed.ok) return parsed.response;
-  const { teacherId, sablon } = parsed.data;
+  const { teacherId, sablon, weekKey: wk } = parsed.data;
+  const weekKey = wk || getWeekKey();
 
   if (toMin(sablon.end) <= toMin(sablon.start)) {
     return NextResponse.json({ error: 'Bitiş saati başlangıçtan sonra olmalı' }, { status: 400 });
+  }
+
+  // Geçmişe etüt eklenemez/düzenlenemez — gösterilen haftanın o gün/saati geçmişse reddet.
+  // Geçmiş hafta zaten currentWeek'ten öncesine gidilemediği için kapalı; bu bu-haftadaki
+  // geçmiş gün/saati de kapatır (müdür dahil).
+  const startAt = slotStartTime(weekKey, sablon.dayIndex, sablon.start);
+  if (startAt.getTime() <= Date.now()) {
+    return NextResponse.json({ error: 'Geçmiş bir gün/saate etüt eklenemez' }, { status: 400 });
   }
 
   const template = (await redis.get(programKey(teacherId))) || {};
