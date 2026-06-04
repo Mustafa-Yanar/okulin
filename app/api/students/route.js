@@ -16,7 +16,8 @@ const zPhone = z.string().max(40).optional();
 const zBirthDate = z.string().max(20).optional(); // YYYY-MM-DD
 const zParentName = z.string().max(120).optional(); // veli adı soyadı (opsiyonel)
 const StudentCreateSchema = z.object({
-  name: zName, password: zPassword, cls: z.string().min(1).max(40),
+  // Şifre opsiyonel: boş bırakılırsa öğrenci telefonu ilk şifre olur (aşağıda kontrol).
+  name: zName, password: z.string().max(200).optional(), cls: z.string().min(1).max(40),
   phone: zPhone, parentPhone: zPhone, parentName: zParentName, birthDate: zBirthDate,
 });
 const StudentUpdateSchema = z.object({
@@ -69,10 +70,25 @@ export async function POST(req) {
     normPhone = normalizeTurkishMobile(phone);
     if (!normPhone) return NextResponse.json({ error: 'Öğrenci telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
   }
-  let normParentPhone = '';
-  if (parentPhone) {
-    normParentPhone = normalizeTurkishMobile(parentPhone);
-    if (!normParentPhone) return NextResponse.json({ error: 'Veli telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
+
+  // Veli bilgileri ZORUNLU (öğrenci-veli bağı + veli paneli için)
+  if (!(parentName || '').trim()) {
+    return NextResponse.json({ error: 'Veli adı soyadı zorunludur' }, { status: 400 });
+  }
+  if (!parentPhone) {
+    return NextResponse.json({ error: 'Veli telefonu zorunludur' }, { status: 400 });
+  }
+  const normParentPhone = normalizeTurkishMobile(parentPhone);
+  if (!normParentPhone) return NextResponse.json({ error: 'Veli telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
+
+  // Şifre kuralı: girilmişse o; boşsa öğrenci telefonu ilk şifre olur.
+  // Telefon da yoksa şifre zorunlu (ya telefon ya şifre).
+  let initialPassword = (password || '').trim();
+  if (!initialPassword) {
+    if (!normPhone) {
+      return NextResponse.json({ error: 'Şifre boş bırakıldı — öğrenci telefonu yoksa şifre zorunludur' }, { status: 400 });
+    }
+    initialPassword = normPhone; // ilk şifre = telefon
   }
 
   // Aynı isimde öğrenci var mı kontrol et
@@ -88,7 +104,7 @@ export async function POST(req) {
   }
 
   const id = makeId();
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(initialPassword, 10);
   const student = {
     id, name, username, passwordHash: hash, cls, group,
     phone: normPhone, parentPhone: normParentPhone,

@@ -126,10 +126,14 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
 
   const phoneInvalid = phone.trim() !== '' && !isValidTurkishMobile(phone);
   const parentPhoneInvalid = parentPhone.trim() !== '' && !isValidTurkishMobile(parentPhone);
+  // Veli zorunlu; şifre boşsa öğrenci telefonu ilk şifre olur — telefon da yoksa şifre zorunlu.
+  const parentMissing = !initial && (parentName.trim() === '' || parentPhone.trim() === '');
+  const passwordRequired = !initial && password.trim() === '' && phone.trim() === '';
 
   const submit = async e => {
     e.preventDefault();
     if (phoneInvalid || parentPhoneInvalid) return; // geçersiz telefonla gönderme
+    if (parentMissing || passwordRequired) return;
     setLoading(true);
     await onSave({ name, username: name, password, cls, phone, parentPhone, parentName, birthDate });
     setLoading(false);
@@ -147,8 +151,9 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
       )}
       <form onSubmit={submit} className="space-y-4">
         <FormField label="Ad Soyad"><input className="input" value={name} onChange={e=>setName(e.target.value)} required /></FormField>
-        <FormField label={initial?'Şifre (boş bırakırsan değişmez)':'Şifre'}>
-          <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} required={!initial} />
+        <FormField label={initial?'Şifre (boş bırakırsan değişmez)':'Şifre (boş bırakırsan telefonu ilk şifre olur)'}>
+          <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={initial?'':'Boş = öğrenci telefonu'} />
+          {passwordRequired && <p className="text-xs text-red-500 mt-1">Telefon girilmediği için şifre zorunlu.</p>}
         </FormField>
         <FormField label="Grup">
           <select className="input" value={selectedGroup} onChange={e=>setSelectedGroup(e.target.value)} disabled={!!initial}>
@@ -164,19 +169,22 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
           <input className={`input ${phoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={phone} onChange={e=>setPhone(e.target.value)} />
           {phoneInvalid && <p className="text-xs text-red-500 mt-1">Geçersiz numara. Örnek: 0532 123 45 67</p>}
         </FormField>
-        <FormField label="Veli Adı Soyadı">
-          <input className="input" type="text" placeholder="Örn. Ayşe Yılmaz" value={parentName} onChange={e=>setParentName(e.target.value)} />
+        <FormField label="Veli Adı Soyadı *">
+          <input className="input" type="text" placeholder="Örn. Ayşe Yılmaz" value={parentName} onChange={e=>setParentName(e.target.value)} required={!initial} />
+          {!initial && parentName.trim()==='' && <p className="text-xs text-gray-400 mt-1">Veli adı zorunlu.</p>}
         </FormField>
-        <FormField label="Veli Telefonu">
-          <input className={`input ${parentPhoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={parentPhone} onChange={e=>setParentPhone(e.target.value)} />
-          {parentPhoneInvalid && <p className="text-xs text-red-500 mt-1">Geçersiz numara. Örnek: 0532 123 45 67</p>}
+        <FormField label="Veli Telefonu *">
+          <input className={`input ${parentPhoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={parentPhone} onChange={e=>setParentPhone(e.target.value)} required={!initial} />
+          {parentPhoneInvalid
+            ? <p className="text-xs text-red-500 mt-1">Geçersiz numara. Örnek: 0532 123 45 67</p>
+            : (!initial && parentPhone.trim()==='' && <p className="text-xs text-gray-400 mt-1">Veli telefonu zorunlu (veli paneli girişi bu numarayla).</p>)}
         </FormField>
         <FormField label="Doğum Tarihi">
           <input className="input" type="date" value={birthDate} onChange={e=>setBirthDate(e.target.value)}
             max={new Date().toISOString().split('T')[0]} />
         </FormField>
         <div className="flex gap-3 pt-2">
-          <button className="btn-primary flex-1" disabled={loading || phoneInvalid || parentPhoneInvalid}>{loading?'Kaydediliyor...':'Kaydet'}</button>
+          <button className="btn-primary flex-1" disabled={loading || phoneInvalid || parentPhoneInvalid || parentMissing || passwordRequired}>{loading?'Kaydediliyor...':'Kaydet'}</button>
           <button type="button" className="btn-ghost" onClick={onClose}>İptal</button>
         </div>
       </form>
