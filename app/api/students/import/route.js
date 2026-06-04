@@ -52,6 +52,7 @@ export async function POST(req) {
     const rawCls = String(row[1] || '').trim();
     const phone = String(row[2] || '').trim();
     const parentPhone = String(row[3] || '').trim();
+    const parentName = String(row[4] || '').trim(); // 5. sütun — opsiyonel, sona eklendi (eski dosyalar bozulmaz)
 
     if (!rawName || !rawCls) continue;
 
@@ -87,6 +88,7 @@ export async function POST(req) {
     const student = {
       id, name, username: name, passwordHash: hash, cls, group,
       phone: normPhone, parentPhone: normParentPhone,
+      parentName,
       mustChangePassword: true,  // ilk girişte öğrenci kendi şifresini belirleyecek
     };
     await redis.set(`student:${id}`, student);

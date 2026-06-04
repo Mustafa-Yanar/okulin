@@ -211,7 +211,9 @@ export function ImportModal({ onClose, showToast, onDone }) {
   return (
     <Modal title="Excel'den Öğrenci Yükle" onClose={onClose}>
       <p className="text-sm text-gray-500 mb-4">
-        Excel dosyası: <strong>A sütunu</strong> isim soyisim, <strong>B sütunu</strong> sınıf kodu (701, 802, 101 vb.)
+        Excel sütunları sırayla: <strong>A</strong> isim soyisim, <strong>B</strong> sınıf kodu (701, 802, 101 vb.),
+        <strong> C</strong> öğrenci telefonu, <strong>D</strong> veli telefonu, <strong>E</strong> veli adı soyadı.
+        <br /><span className="text-gray-400">A ve B zorunlu; C–E opsiyonel (boş bırakılabilir).</span>
       </p>
       {!result ? (
         <label className={`btn-primary flex items-center justify-center gap-2 cursor-pointer ${loading ? 'opacity-60 pointer-events-none' : ''}`}>
