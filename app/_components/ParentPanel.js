@@ -47,8 +47,29 @@ function ProgramView({ child }) {
   const load = useCallback(async (wk) => {
     setLoading(true);
     try {
-      const data = await api(`/api/slots?week=${wk}&studentId=${encodeURIComponent(child.id)}`);
-      setAllSlots(data.slots || []);
+      const sid = encodeURIComponent(child.id);
+      // Eski slot-etüt + yeni serbest etüt şablonları (yalnız kendi çocuğu)
+      const [data, etutData] = await Promise.all([
+        api(`/api/slots?week=${wk}&studentId=${sid}`),
+        api(`/api/etut-sablon/all?week=${wk}&studentId=${sid}`).catch(() => ({ etutler: [] })),
+      ]);
+      const slotList = data.slots || [];
+      const etutList = (etutData.etutler || []).map(e => ({
+        kind: 'etut',
+        etutId: e.id,
+        teacherId: e.teacherId,
+        teacherName: e.teacherName,
+        day: e.dayIndex,
+        dayLabel: e.dayLabel,
+        slotId: `etut:${e.id}`,
+        slotLabel: `${e.start}–${e.end}`,
+        booked: e.booked,
+        studentId: e.studentId,
+        studentName: e.studentName,
+        branch: e.branch,
+        bookedBy: 'student',
+      }));
+      setAllSlots([...slotList, ...etutList]);
     } catch { setAllSlots([]); }
     finally { setLoading(false); }
   }, [child.id]);
