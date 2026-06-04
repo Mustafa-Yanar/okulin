@@ -4,30 +4,11 @@ import { useEffect, useState } from 'react';
 import { Upload, Trash2, ChevronDown } from 'lucide-react';
 
 // Müdür: Excel yükle + isim eşleştir + deneme listesi/sil.
-export default function DirectorDenemeYonetimi({ showToast }) {
-  const [view, setView] = useState('upload'); // 'upload' | 'list'
-  return (
-    <div className="space-y-4">
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
-        {[
-          ['upload', 'Deneme Yükle'],
-          ['list', 'Yüklenen Denemeler'],
-        ].map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setView(k)}
-            className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${
-              view === k ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'
-            }`}
-            style={{ fontWeight: 600 }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {view === 'upload' ? <UploadView showToast={showToast} /> : <ListView showToast={showToast} />}
-    </div>
-  );
+// Sekme çubuğu üst katmanda (DirectorPanel); hangi görünümün gösterileceği `view` prop'uyla gelir.
+export default function DirectorDenemeYonetimi({ showToast, view = 'upload' }) {
+  return view === 'list'
+    ? <ListView showToast={showToast} />
+    : <UploadView showToast={showToast} />;
 }
 
 function UploadView({ showToast }) {
@@ -78,7 +59,7 @@ function UploadView({ showToast }) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="APOTEMİ TG 3 TYT"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none"
+                className="input"
               />
             </div>
             <div>
@@ -89,7 +70,7 @@ function UploadView({ showToast }) {
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none bg-white"
+                className="input"
               />
             </div>
           </div>

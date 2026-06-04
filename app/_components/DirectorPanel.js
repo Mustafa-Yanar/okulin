@@ -49,7 +49,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     setTabInternal(key);
     onExternalTabChange?.(key);
   }, [setTabInternal, onExternalTabChange]);
-  const [denemeTab, setDenemeTab] = useState('denemeler');
+  const [denemeTab, setDenemeTab] = useState('upload');
   const [slotWeekday, setSlotWeekday] = useState([]);
   const [slotWeekend, setSlotWeekend] = useState([]);
   const [slotEtutSuresi, setSlotEtutSuresi] = useState(60);
@@ -394,15 +394,15 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       {tab === 'denemeler' && (
         <div>
           <div className="flex gap-1 mb-4 p-1 bg-gray-100 rounded-xl w-fit">
-            {[['denemeler','Denemeler'],['optik','Optik Form']].map(([k,l]) => (
+            {[['upload','Deneme Yükle'],['list','Yüklenen Denemeler'],['optik','Optik Form']].map(([k,l]) => (
               <button key={k} onClick={() => setDenemeTab(k)}
                 className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${denemeTab===k?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
                 style={{ fontWeight: 600 }}>{l}</button>
             ))}
           </div>
-          {denemeTab === 'denemeler'
-            ? <DirectorDenemeYonetimi showToast={showToast} />
-            : <OptikFormTab showToast={showToast} />}
+          {denemeTab === 'optik'
+            ? <OptikFormTab showToast={showToast} />
+            : <DirectorDenemeYonetimi showToast={showToast} view={denemeTab} />}
         </div>
       )}
 
