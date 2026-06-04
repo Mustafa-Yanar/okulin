@@ -468,7 +468,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
 
         {/* Açılır detay paneli */}
         {open && finance && (
-          <div className="border-t border-gray-100 bg-gray-50/50">
+          <div className="border-t" style={{ borderColor:'var(--border-light)', background:'var(--bg-surface-2)' }}>
             <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3 border-b border-gray-100">
               {[
                 { label: 'Kayıt Ücreti', value: `₺${fmt(finance.totalFee)}`, color: 'text-gray-700' },
@@ -491,17 +491,22 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
                   {finance.installments.map((inst, i) => {
                     const overdue = !inst.paid && isOverdue(inst.dueDate);
                     return (
-                      <div key={i} className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${inst.paid ? 'bg-green-50 border border-green-200' : overdue ? 'bg-red-50 border border-red-200' : 'bg-white border border-gray-200'}`}>
+                      <div key={i} className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm border"
+                        style={inst.paid
+                          ? { background:'var(--color-success-bg)', borderColor:'var(--color-success-border)' }
+                          : overdue
+                          ? { background:'var(--color-danger-bg)', borderColor:'var(--color-danger-border)' }
+                          : { background:'var(--bg-surface)', borderColor:'var(--border-light)' }}>
                         <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${inst.paid ? 'bg-green-500' : overdue ? 'bg-red-400' : 'bg-gray-200'}`}>
                           {inst.paid ? <Check size={10} color="white" /> : overdue ? <AlertCircle size={10} color="white" /> : <span className="text-[9px] text-gray-500 font-700">{i + 1}</span>}
                         </div>
-                        <span className={`flex-1 text-xs ${overdue ? 'text-red-600 font-600' : inst.paid ? 'text-green-700' : 'text-gray-600'}`} style={{ fontWeight: inst.paid || overdue ? 600 : 400 }}>
+                        <span className="flex-1 text-xs" style={{ fontWeight: inst.paid || overdue ? 600 : 400, color: overdue ? 'var(--color-danger)' : inst.paid ? 'var(--color-success)' : 'var(--text-secondary)' }}>
                           {inst.dueDate}
                           {overdue && ' — Vadesi Geçti!'}
                           {inst.paid && ` — Ödendi (${inst.paidDate})`}
                         </span>
-                        <span className="font-700 text-xs" style={{ fontWeight: 700 }}>₺{fmt(inst.amount)}</span>
-                        {inst.receiptNo && <span className="text-[10px] text-gray-400">{inst.receiptNo}</span>}
+                        <span className="font-700 text-xs" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>₺{fmt(inst.amount)}</span>
+                        {inst.receiptNo && <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{inst.receiptNo}</span>}
                       </div>
                     );
                   })}

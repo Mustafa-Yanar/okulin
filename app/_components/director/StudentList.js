@@ -103,10 +103,10 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
             : grp.group==='ortaokul'
             ? 'linear-gradient(135deg,#22c55e,#16a34a)'
             : 'linear-gradient(135deg,#f59e0b,#d97706)';
-          const colors = { header:'bg-slate-200 text-slate-700 hover:bg-slate-300', dot: dotColor };
+          const colors = { dot: dotColor };
           return (
             <div key={grp.cls}>
-              <div className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-700 transition-colors ${colors.header}`} style={{ fontWeight:700 }}>
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-700 transition-colors hover:brightness-95" style={{ fontWeight:700, background:'var(--bg-muted)', color:'var(--text-secondary)' }}>
                 <button onClick={() => toggle(grp.cls)} className="flex items-center gap-2 flex-1 text-left">
                   <span>{grp.label} <span className="font-500 opacity-60" style={{ fontWeight:500 }}>({grp.students.length} öğrenci)</span></span>
                   <ChevronRight size={14} className="transition-transform" style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />

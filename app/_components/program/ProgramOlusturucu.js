@@ -710,12 +710,12 @@ function LoadTable({ load, setLoad, cols }) {
               )}
             </tr>
           ))}
-          <tr style={{background:'#f5f6fb'}} className="border-t-2 border-gray-200">
-            <td className="p-2 text-gray-500 sticky left-0 font-700" style={{background:'#f5f6fb',fontWeight:700}}>Σ saat</td>
+          <tr style={{background:'var(--bg-muted)'}} className="border-t-2 border-gray-200">
+            <td className="p-2 sticky left-0 font-700" style={{background:'var(--bg-muted)',color:'var(--text-secondary)',fontWeight:700}}>Σ saat</td>
             {cols.map(c => {
               const s=sumFor(c.key);
               const cap = c.key.startsWith('Mezun') ? 24 : 200;
-              return <td key={c.key} className="text-center p-2" style={{fontWeight:700,color:s>cap?'#dc2626':'#4b5563'}}>{s}</td>;
+              return <td key={c.key} className="text-center p-2" style={{fontWeight:700,color:s>cap?'#dc2626':'var(--text-secondary)'}}>{s}</td>;
             })}
           </tr>
         </tbody>
