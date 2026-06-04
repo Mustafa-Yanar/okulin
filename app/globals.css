@@ -466,6 +466,35 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
 /* ─── Sidebar ────────────────────────────────────────────────────────────────── */
 .sidebar { transition: width 0.2s ease; }
 
+/* Daralt/genişlet tutamağı — Canva tarzı dikey pill, kenara yapışık.
+   Tüm yüzey tek tıklama alanı (eski yarım-taşma + ikon-merkezli hit-area sorunu giderildi). */
+.sidebar-toggle {
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  transform: translateY(-50%);
+  z-index: 40;
+  width: 28px;
+  height: 52px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  padding: 0;
+}
+.sidebar-toggle:hover {
+  background: var(--bg-muted) !important;
+  color: var(--text-primary) !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+  transform: translateY(-50%) scale(1.06);
+}
+.sidebar-toggle:active {
+  transform: translateY(-50%) scale(0.96);
+}
+
 .nav-item-active {
   background: color-mix(in srgb, var(--brand, #6366f1) 12%, transparent);
   color: var(--brand, #6366f1);

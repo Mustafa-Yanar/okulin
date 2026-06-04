@@ -211,23 +211,23 @@ export default function Sidebar({
     <>
       {/* Masaüstü sidebar */}
       <aside
-        className={`sidebar relative hidden md:flex flex-col h-screen sticky top-0 shrink-0 ${collapsed ? 'w-16' : 'w-64'}`}
+        className={`sidebar relative hidden md:flex flex-col h-screen sticky top-0 shrink-0 z-30 ${collapsed ? 'w-16' : 'w-64'}`}
         style={{ borderRight: '1px solid var(--border-subtle)' }}
       >
         {sidebarContent}
-        {/* Sağ kenarda daralt/genişlet tutamağı */}
+        {/* Sağ kenarda daralt/genişlet tutamağı (Canva tarzı dikey pill) */}
         <button
           onClick={onCollapse}
           title={collapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'}
           aria-label={collapsed ? 'Menüyü Genişlet' : 'Menüyü Daralt'}
-          className="absolute top-1/2 -right-3 -translate-y-1/2 z-30 w-6 h-6 rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110"
+          className="sidebar-toggle"
           style={{
             background: 'var(--bg-surface)',
             border: '1px solid var(--border-subtle)',
             color: 'var(--text-muted)',
           }}
         >
-          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+          {collapsed ? <ChevronRight size={16} strokeWidth={2.5} /> : <ChevronLeft size={16} strokeWidth={2.5} />}
         </button>
       </aside>
 
