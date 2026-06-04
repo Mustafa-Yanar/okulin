@@ -675,12 +675,12 @@ function LoadTable({ load, setLoad, cols }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="text-xs w-full" style={{borderCollapse:'collapse'}}>
+      <table className="text-xs w-full" style={{borderCollapse:'collapse', tableLayout:'fixed'}}>
         <thead>
           <tr>
-            <th className="text-left p-2 text-gray-400 sticky left-0 bg-white min-w-[110px]" style={{fontWeight:600}}>Ders</th>
+            <th className="text-left px-2 py-1 text-gray-400 sticky left-0 bg-white" style={{fontWeight:600, width:120}}>Ders</th>
             {cols.map(c => (
-              <th key={c.key} className="p-2 text-gray-600 text-center min-w-[64px]" style={{fontWeight:700}}>
+              <th key={c.key} className="px-1 py-1 text-gray-600 text-center" style={{fontWeight:700, width:64}}>
                 {/* Dikey yazı */}
                 <div style={{writingMode:'vertical-rl', transform:'rotate(180deg)', whiteSpace:'nowrap', height:90, display:'flex', alignItems:'center', justifyContent:'center', fontSize:11}}>
                   {c.label}
@@ -692,7 +692,7 @@ function LoadTable({ load, setLoad, cols }) {
         <tbody>
           {allCourses.map(d => (
             <tr key={d} className="border-t border-gray-50">
-              <td className="p-1.5 sticky left-0 bg-white" style={{fontWeight:600}}>
+              <td className="px-2 py-1.5 sticky left-0 bg-white" style={{fontWeight:600}}>
                 <span className="inline-flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full shrink-0" style={{background:COURSE_COLOR[d]}} />
                   {d}
@@ -700,22 +700,22 @@ function LoadTable({ load, setLoad, cols }) {
               </td>
               {cols.map(c => COL_COURSES[c.key]?.includes(d)
                 ? (
-                  <td key={c.key} className="text-center p-1">
+                  <td key={c.key} className="text-center px-1 py-1">
                     <input type="number" min="0" value={(load[c.key]?.[d])||0}
                       onChange={e=>set(c.key,d,e.target.value)}
-                      className="input !w-16 !py-1.5 text-center text-sm" />
+                      className="input !w-full !py-1.5 text-center text-sm" />
                   </td>
                 )
-                : <td key={c.key} className="text-center text-gray-100 p-1">–</td>
+                : <td key={c.key} className="text-center text-gray-100 px-1 py-1">–</td>
               )}
             </tr>
           ))}
           <tr style={{background:'var(--bg-muted)'}} className="border-t-2 border-gray-200">
-            <td className="p-2 sticky left-0 font-700" style={{background:'var(--bg-muted)',color:'var(--text-secondary)',fontWeight:700}}>Σ saat</td>
+            <td className="px-2 py-2 sticky left-0 font-700" style={{background:'var(--bg-muted)',color:'var(--text-secondary)',fontWeight:700}}>Σ saat</td>
             {cols.map(c => {
               const s=sumFor(c.key);
               const cap = c.key.startsWith('Mezun') ? 24 : 200;
-              return <td key={c.key} className="text-center p-2" style={{fontWeight:700,color:s>cap?'#dc2626':'var(--text-secondary)'}}>{s}</td>;
+              return <td key={c.key} className="text-center px-1 py-2" style={{fontWeight:700,color:s>cap?'#dc2626':'var(--text-secondary)'}}>{s}</td>;
             })}
           </tr>
         </tbody>

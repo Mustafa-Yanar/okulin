@@ -14,7 +14,7 @@ import NotificationButton from './NotificationButton';
 
 const ITEMS_BY_ROLE = {
   director: [
-    { group: 'Akademik', key: 'teachers',    label: 'Öğretmenler',       icon: Users },
+    { group: 'Akademik', key: 'teachers',    label: 'Öğretmen',          icon: Users },
     { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
     { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
     { group: 'Akademik', key: 'denemeler',   label: 'Denemeler',         icon: BarChart2 },
@@ -25,7 +25,7 @@ const ITEMS_BY_ROLE = {
     { group: 'Sistem',   key: 'ders-programi', label: 'Ders Programı',   icon: LayoutGrid },
   ],
   counselor: [
-    { group: 'Akademik', key: 'teachers',    label: 'Öğretmenler',       icon: Users },
+    { group: 'Akademik', key: 'teachers',    label: 'Öğretmen',          icon: Users },
     { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
     { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
     { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },

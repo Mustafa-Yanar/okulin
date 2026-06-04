@@ -171,7 +171,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       {tab === 'teachers' && (
         <div>
           <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-            <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğretmenler ({teachers.length})</h3>
+            <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğretmen ({teachers.length})</h3>
             <div className="flex gap-2 flex-wrap">
               <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
                 <Plus size={14} /> Öğretmen Ekle

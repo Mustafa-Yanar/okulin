@@ -152,7 +152,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
                     if (inst) setAmount(String(inst.amount));
                   }
                 }}
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
+                className="input"
               >
                 <option value="">— Genel ödeme —</option>
                 {unpaidInstallments.map(inst => (

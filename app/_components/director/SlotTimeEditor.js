@@ -3,8 +3,8 @@
 import React, { useMemo, useCallback } from 'react';
 
 // ─── Sabitler ────────────────────────────────────────────────────────────────
-const START_MIN = 9 * 60;        // 09:00
-const END_MIN   = 19 * 60 + 20;  // 19:20
+const START_MIN = 7 * 60;        // 07:00
+const END_MIN   = 23 * 60;       // 23:00
 const STEP      = 5;             // 5 dakika adım
 const SLOT_COUNT = 12;
 
@@ -19,7 +19,7 @@ function toTime(min) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-// 09:00 → 19:20 arası 5dk adımlı saat seçenekleri
+// 07:00 → 23:00 arası 5dk adımlı saat seçenekleri
 const TIME_OPTIONS = (() => {
   const opts = [];
   for (let min = START_MIN; min <= END_MIN; min += STEP) opts.push(toTime(min));
