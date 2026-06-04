@@ -497,8 +497,9 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
                           : overdue
                           ? { background:'var(--color-danger-bg)', borderColor:'var(--color-danger-border)' }
                           : { background:'var(--bg-surface)', borderColor:'var(--border-light)' }}>
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${inst.paid ? 'bg-green-500' : overdue ? 'bg-red-400' : 'bg-gray-200'}`}>
-                          {inst.paid ? <Check size={10} color="white" /> : overdue ? <AlertCircle size={10} color="white" /> : <span className="text-[9px] text-gray-500 font-700">{i + 1}</span>}
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${inst.paid ? 'bg-green-500' : overdue ? 'bg-red-400' : ''}`}
+                          style={inst.paid || overdue ? undefined : { background: 'var(--bg-muted)' }}>
+                          {inst.paid ? <Check size={10} color="white" /> : overdue ? <AlertCircle size={10} color="white" /> : <span className="text-[9px] font-700" style={{ color: 'var(--text-muted)' }}>{i + 1}</span>}
                         </div>
                         <span className="flex-1 text-xs" style={{ fontWeight: inst.paid || overdue ? 600 : 400, color: overdue ? 'var(--color-danger)' : inst.paid ? 'var(--color-success)' : 'var(--text-secondary)' }}>
                           {inst.dueDate}
