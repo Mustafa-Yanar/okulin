@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import {
   Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
   BarChart2, CreditCard, TrendingDown, ChevronLeft, ChevronRight,
-  BookMarked, Calendar, GraduationCap, Star, Clock, Settings, LayoutGrid,
+  BookMarked, Calendar, GraduationCap, Star, Clock, Settings, LayoutGrid, Contact,
 } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
 import ThemeToggle from './ThemeToggle';
@@ -16,6 +16,7 @@ const ITEMS_BY_ROLE = {
   director: [
     { group: 'Akademik', key: 'teachers',    label: 'Öğretmen',          icon: Users },
     { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
+    { group: 'Akademik', key: 'veliler',     label: 'Veli',              icon: Contact },
     { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
     { group: 'Akademik', key: 'denemeler',   label: 'Denemeler',         icon: BarChart2 },
     { group: 'Finans',   key: 'muhasebe',    label: 'Muhasebe',          icon: Wallet },
@@ -27,6 +28,7 @@ const ITEMS_BY_ROLE = {
   counselor: [
     { group: 'Akademik', key: 'teachers',    label: 'Öğretmen',          icon: Users },
     { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
+    { group: 'Akademik', key: 'veliler',     label: 'Veli',              icon: Contact },
     { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
     { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: 'Sistem',   key: 'duyurular',   label: 'Duyurular',         icon: Bell },

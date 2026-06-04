@@ -16,6 +16,7 @@ import { DirectorAttendanceView } from './director/Attendance';
 import DirectorMuhasebeTab from './director/MuhasebeTab';
 import HistoryModal from './director/HistoryModal';
 import { StudentList } from './director/StudentList';
+import VeliPanel from './director/VeliPanel';
 import ProgramEditor from './director/ProgramEditor';
 import { useUrlTab } from './useUrlTab';
 import LoadingBox, { SkeletonList } from './Loading';
@@ -33,8 +34,8 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   // Rehber (counselor) = müdür paneli EKSİ muhasebe. Sekme listesi role göre.
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
-    ? ['teachers', 'students', 'yoklama', 'kutuphane', 'duyurular', 'ders-programi']
-    : ['teachers', 'students', 'yoklama', 'muhasebe', 'kutuphane', 'duyurular', 'denemeler', 'ders-saatleri', 'ders-programi'];
+    ? ['teachers', 'students', 'veliler', 'yoklama', 'kutuphane', 'duyurular', 'ders-programi']
+    : ['teachers', 'students', 'veliler', 'yoklama', 'muhasebe', 'kutuphane', 'duyurular', 'denemeler', 'ders-saatleri', 'ders-programi'];
   const [tab, setTabInternal] = useUrlTab('teachers', validTabs);
 
   // Sidebar'dan gelen externalTab değişince iç state'i güncelle
@@ -358,6 +359,15 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
             onHistory={s => setHistoryTarget({ type: 'student', id: s.id, name: s.name })}
             pendingGuidance={pendingGuidance}
             onGuidanceReviewed={loadPendingGuidance} />
+        </div>
+      )}
+
+      {tab === 'veliler' && (
+        <div>
+          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+            <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Veli ({students.length})</h3>
+          </div>
+          <VeliPanel students={students} showToast={showToast} onChanged={() => loadAll(weekKey)} />
         </div>
       )}
 

@@ -15,15 +15,24 @@ function makeId() {
 const zPhone = z.string().max(40).optional();
 const zBirthDate = z.string().max(20).optional(); // YYYY-MM-DD
 const zParentName = z.string().max(120).optional(); // veli adı soyadı (opsiyonel)
+const zRelation = z.string().max(40).optional();    // yakınlık derecesi (Anne, Baba...)
+const zNote = z.string().max(2000).optional();      // veliye özel not (yönetim görür)
+// Veli ek alanları: yakınlık, not, 2. iletişim (ad/telefon/yakınlık)
+const parentExtraFields = {
+  parentRelation: zRelation, parentNote: zNote,
+  parent2Name: zParentName, parent2Phone: zPhone, parent2Relation: zRelation,
+};
 const StudentCreateSchema = z.object({
   // Şifre opsiyonel: boş bırakılırsa öğrenci telefonu ilk şifre olur (aşağıda kontrol).
   name: zName, password: z.string().max(200).optional(), cls: z.string().min(1).max(40),
   phone: zPhone, parentPhone: zPhone, parentName: zParentName, birthDate: zBirthDate,
+  ...parentExtraFields,
 });
 const StudentUpdateSchema = z.object({
   id: zId, name: zName, cls: z.string().min(1).max(40),
   password: z.string().max(200).optional(),
   phone: zPhone, parentPhone: zPhone, parentName: zParentName, birthDate: zBirthDate,
+  ...parentExtraFields,
 });
 // Tekil { id } veya toplu { ids:[...] } silme.
 const StudentDeleteSchema = z.object({
@@ -44,6 +53,8 @@ export async function GET() {
   const students = results.filter(Boolean).map(s => ({
     id: s.id, name: s.name, username: s.username, cls: s.cls, group: s.group,
     phone: s.phone || '', parentPhone: s.parentPhone || '', parentName: s.parentName || '', birthDate: s.birthDate || '',
+    parentRelation: s.parentRelation || '', parentNote: s.parentNote || '',
+    parent2Name: s.parent2Name || '', parent2Phone: s.parent2Phone || '', parent2Relation: s.parent2Relation || '',
   }));
   return NextResponse.json(students);
 }
@@ -56,7 +67,8 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, StudentCreateSchema);
   if (!parsed.ok) return parsed.response;
-  const { name, password, cls, phone, parentPhone, parentName, birthDate } = parsed.data;
+  const { name, password, cls, phone, parentPhone, parentName, birthDate,
+          parentRelation, parentNote, parent2Name, parent2Phone, parent2Relation } = parsed.data;
 
   // İsim soyisim kullanıcı adı olarak kullanılır
   const username = name;
@@ -80,6 +92,13 @@ export async function POST(req) {
   }
   const normParentPhone = normalizeTurkishMobile(parentPhone);
   if (!normParentPhone) return NextResponse.json({ error: 'Veli telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
+
+  // 2. iletişim telefonu (opsiyonel ama verilmişse geçerli olmalı)
+  let normParent2Phone = '';
+  if (parent2Phone) {
+    normParent2Phone = normalizeTurkishMobile(parent2Phone);
+    if (!normParent2Phone) return NextResponse.json({ error: '2. iletişim telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
+  }
 
   // Şifre kuralı: girilmişse o; boşsa öğrenci telefonu ilk şifre olur.
   // Telefon da yoksa şifre zorunlu (ya telefon ya şifre).
@@ -109,6 +128,11 @@ export async function POST(req) {
     id, name, username, passwordHash: hash, cls, group,
     phone: normPhone, parentPhone: normParentPhone,
     parentName: (parentName || '').trim(),
+    parentRelation: (parentRelation || '').trim(),
+    parentNote: (parentNote || '').trim(),
+    parent2Name: (parent2Name || '').trim(),
+    parent2Phone: normParent2Phone,
+    parent2Relation: (parent2Relation || '').trim(),
     birthDate: birthDate || '',
     mustChangePassword: true,  // ilk girişte öğrenci kendi şifresini belirleyecek
   };
@@ -127,7 +151,8 @@ export async function PUT(req) {
 
   const parsed = await parseBody(req, StudentUpdateSchema);
   if (!parsed.ok) return parsed.response;
-  const { id, name, password, cls, phone, parentPhone, parentName, birthDate } = parsed.data;
+  const { id, name, password, cls, phone, parentPhone, parentName, birthDate,
+          parentRelation, parentNote, parent2Name, parent2Phone, parent2Relation } = parsed.data;
   const student = await redis.get(`student:${id}`);
   if (!student) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
 
@@ -135,6 +160,10 @@ export async function PUT(req) {
   const updated = { ...student, name, username: name, cls, group,
     birthDate: birthDate !== undefined ? birthDate : (student.birthDate || ''),
     parentName: parentName !== undefined ? (parentName || '').trim() : (student.parentName || ''),
+    parentRelation: parentRelation !== undefined ? (parentRelation || '').trim() : (student.parentRelation || ''),
+    parentNote: parentNote !== undefined ? (parentNote || '').trim() : (student.parentNote || ''),
+    parent2Name: parent2Name !== undefined ? (parent2Name || '').trim() : (student.parent2Name || ''),
+    parent2Relation: parent2Relation !== undefined ? (parent2Relation || '').trim() : (student.parent2Relation || ''),
   };
   if (phone !== undefined) {
     if (phone) {
@@ -152,6 +181,15 @@ export async function PUT(req) {
       updated.parentPhone = n;
     } else {
       updated.parentPhone = '';
+    }
+  }
+  if (parent2Phone !== undefined) {
+    if (parent2Phone) {
+      const n = normalizeTurkishMobile(parent2Phone);
+      if (!n) return NextResponse.json({ error: '2. iletişim telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
+      updated.parent2Phone = n;
+    } else {
+      updated.parent2Phone = '';
     }
   }
   if (password) {
