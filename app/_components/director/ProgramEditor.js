@@ -6,72 +6,27 @@ import React, { useState, useEffect, useMemo } from 'react';
 import LoadingBox from '../Loading';
 import { ChevronLeft, ChevronRight, Save, X, Plus } from 'lucide-react';
 import {
-  ALL_DAYS, WEEKDAY_SLOT_IDS, WEEKEND_SLOT_IDS, classLabel,
+  ALL_DAYS, WEEKDAY_SLOT_IDS, WEEKEND_SLOT_IDS,
   makeSlots, slotsForDay, getWeekKey, weekRangeLabel,
 } from '@/lib/constants';
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal, getAdjacentWeek, isSlotPast } from './shared';
 import EtutCalendar, { timeToMin, minToTop, durationToHeight } from './EtutCalendar';
 
-function EtutPanel({ dayIndex, slotId, getEntry, setEntry, clearEntry, setActiveCell, allowedStudents, slotTimes }) {
-  const existing = getEntry(dayIndex, slotId);
-  const [studentId, setStudentId] = useState(existing?.studentId || '');
-  const [studentName, setStudentName] = useState(existing?.studentName || '');
-  const [studentCls, setStudentCls] = useState(existing?.studentCls || '');
-  const [fixed, setFixed] = useState(existing?.fixed !== false);
-  const [studentSearch, setStudentSearch] = useState('');
-
-  function saveEtut() {
-    setEntry(dayIndex, slotId, { type: 'etut', studentId, studentName, studentCls, fixed });
-    setActiveCell(null);
-  }
-
+// Ders slotu eylem paneli: "Ders" işaretli bir slota tıklayınca açılır.
+// Etüt artık ayrı takvim sisteminde (etutSablonlari) — bu panelde sadece slotu kapatma var.
+function DersPanel({ dayIndex, slotId, clearEntry, setActiveCell, slotTimes }) {
   return (
     <div className="p-4 border-t border-gray-100 bg-gray-50">
       <div className="text-xs font-600 text-gray-500 mb-2" style={{ fontWeight: 600 }}>
         {ALL_DAYS.find(d => d.index === dayIndex)?.label} – {slotsForDay(dayIndex, slotTimes).find(s => s.id === slotId)?.label}
       </div>
-      <div className="flex gap-2 mb-3">
-        <button onClick={() => { clearEntry(dayIndex, slotId); setActiveCell(null); }}
-          className="px-3 py-1.5 rounded-lg text-xs font-600 border bg-white border-gray-200 text-gray-500 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all"
-          style={{ fontWeight: 600 }}>Slotu Kapat</button>
-        <button onClick={() => { setEntry(dayIndex, slotId, { type: 'etut', studentId: '', studentName: '', studentCls: '', fixed: true }); setActiveCell(null); }}
-          className="px-3 py-1.5 rounded-lg text-xs font-600 border bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition-all"
-          style={{ fontWeight: 600 }}>Açık Etüt</button>
-      </div>
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Sabit öğrenci rezervasyonu (opsiyonel)</label>
-        <input className="input text-xs mb-1" placeholder="İsim veya sınıf ara..." value={studentSearch}
-          onChange={e => setStudentSearch(e.target.value)} />
-        <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-lg bg-white">
-          <button onClick={() => { setStudentId(''); setStudentName(''); setStudentCls(''); setStudentSearch(''); }}
-            className={`w-full text-left px-3 py-2 text-xs transition-colors ${!studentId ? 'bg-emerald-50 text-emerald-700 font-600' : 'text-gray-400 hover:bg-gray-50'}`}
-            style={{ fontWeight: !studentId ? 600 : 400 }}>— Açık slot —</button>
-          {allowedStudents.filter(s => {
-            const q = studentSearch.toLowerCase();
-            return !q || s.name.toLowerCase().includes(q) || s.cls.toLowerCase().includes(q);
-          }).slice(0, 20).map(s => (
-            <button key={s.id} onClick={() => { setStudentId(s.id); setStudentName(s.name); setStudentCls(s.cls); setStudentSearch(''); }}
-              className={`w-full text-left px-3 py-2 text-xs transition-colors ${studentId === s.id ? 'bg-emerald-50 text-emerald-700 font-600' : 'hover:bg-gray-50 text-gray-700'}`}
-              style={{ fontWeight: studentId === s.id ? 600 : 400 }}>
-              <span className="font-600" style={{ fontWeight: 600 }}>{s.name}</span>
-              <span className="text-gray-400 ml-1.5">{classLabel(s.cls)}</span>
-            </button>
-          ))}
-        </div>
-        {studentId && (
-          <label className="flex items-center gap-2 cursor-pointer select-none mt-2">
-            <input type="checkbox" checked={fixed} onChange={e => setFixed(e.target.checked)}
-              className="w-4 h-4 rounded accent-indigo-600" />
-            <span className="text-xs text-gray-700">Sabit rezervasyon (her hafta tekrar)</span>
-          </label>
-        )}
-        {studentId && (
-          <button onClick={saveEtut}
-            className="mt-2 px-4 py-1.5 rounded-lg text-xs font-600 bg-indigo-600 text-white hover:bg-indigo-700 transition-all"
-            style={{ fontWeight: 600 }}>Kaydet</button>
-        )}
-      </div>
+      <p className="text-[11px] text-gray-400 mb-3">
+        Bu slot ders programına açık. Otomatik program oluşturucu buraya ders yerleştirebilir.
+      </p>
+      <button onClick={() => { clearEntry(dayIndex, slotId); setActiveCell(null); }}
+        className="px-3 py-1.5 rounded-lg text-xs font-600 border bg-white border-gray-200 text-gray-500 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all"
+        style={{ fontWeight: 600 }}>Slotu Kapat</button>
     </div>
   );
 }
@@ -270,8 +225,6 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
       setEntry(dayIndex, slotId, { type: 'available', fixed: true });
     } else if (entry.type === 'available') {
       setActiveCell(prev => prev?.slotId === slotId && prev?.dayIndex === dayIndex ? null : { dayIndex, slotId });
-    } else if (entry.type === 'etut') {
-      setActiveCell(prev => prev?.slotId === slotId && prev?.dayIndex === dayIndex ? null : { dayIndex, slotId });
     }
   }
 
@@ -386,24 +339,11 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                 if (type === 'available') {
                   cellClass += 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100';
                   cellContent = <span className="text-[10px] font-600" style={{ fontWeight: 600 }}>Ders</span>;
-                } else if (type === 'etut') {
-                  if (entry.studentId) {
-                    cellClass += 'bg-emerald-50 border-emerald-200 text-emerald-700';
-                    cellContent = (
-                      <div className="text-center leading-tight">
-                        <div className="text-[9px] truncate font-600" style={{ fontWeight: 600 }}>{entry.studentName}</div>
-                        <div className="text-[8px] text-violet-500">Sabit</div>
-                      </div>
-                    );
-                  } else {
-                    cellClass += 'bg-emerald-50 border-dashed border-emerald-300 text-emerald-500';
-                    cellContent = <span className="text-[10px]">Etüt</span>;
-                  }
                 } else {
                   cellClass += 'bg-white border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50/40';
                 }
                 const slotIsPast = isSlotPast(weekKey, day.index, slot.label);
-                const blockPast = slotIsPast && type === 'etut';
+                const blockPast = false; // ders slotları geçmişte de düzenlenebilir (kapatma)
                 if (isActive) cellClass += ' ring-2 ring-indigo-400';
                 if (blockPast) cellClass += ' opacity-70 !cursor-not-allowed';
                 return (
@@ -456,16 +396,13 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
         </table>
       </div>
 
-      {activeCell && (getEntry(activeCell.dayIndex, activeCell.slotId)?.type === 'available' || getEntry(activeCell.dayIndex, activeCell.slotId)?.type === 'etut') && (
-        <EtutPanel
+      {activeCell && getEntry(activeCell.dayIndex, activeCell.slotId)?.type === 'available' && (
+        <DersPanel
           key={`${activeCell.dayIndex}:${activeCell.slotId}`}
           dayIndex={activeCell.dayIndex}
           slotId={activeCell.slotId}
-          getEntry={getEntry}
-          setEntry={setEntry}
           clearEntry={clearEntry}
           setActiveCell={setActiveCell}
-          allowedStudents={allowedStudents}
           slotTimes={slotTimes}
         />
       )}
@@ -496,26 +433,19 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
           }
           renderDayContent={(day) => {
             const blocks = [];
-            // 1) Ders + mevcut slot-etüt blokları (mavi/mor/yeşil)
+            // 1) Ders blokları (mavi) — grid'deki "available" slotlar
             const slots = slotsForDay(day.index, slotTimes);
             for (const slot of slots) {
               const entry = getEntry(day.index, slot.id);
-              if (!entry || !entry.type) continue;
+              if (entry?.type !== 'available') continue;
               const top = minToTop(timeToMin(slot.start));
               const height = Math.max(durationToHeight(timeToMin(slot.end) - timeToMin(slot.start)), 16);
-              const isDers = entry.type === 'available';
-              const isEtutSabit = entry.type === 'etut' && entry.studentId;
-              const bg = isDers ? 'color-mix(in srgb, #3b82f6 18%, transparent)'
-                : isEtutSabit ? 'color-mix(in srgb, #8b5cf6 18%, transparent)'
-                : 'color-mix(in srgb, #10b981 18%, transparent)';
-              const border = isDers ? '#3b82f6' : isEtutSabit ? '#8b5cf6' : '#10b981';
-              const label = isDers ? 'Ders' : isEtutSabit ? entry.studentName : 'Etüt';
               blocks.push(
                 <div key={`slot-${slot.id}`}
                   className="absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden"
-                  style={{ top, height, background: bg, borderLeft: `3px solid ${border}` }}
-                  title={`${slot.start}–${slot.end} · ${label}`}>
-                  <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>
+                  style={{ top, height, background: 'color-mix(in srgb, #3b82f6 18%, transparent)', borderLeft: '3px solid #3b82f6' }}
+                  title={`${slot.start}–${slot.end} · Ders`}>
+                  <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Ders</div>
                   {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{slot.start}</div>}
                 </div>
               );
@@ -572,7 +502,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
             const slots = slotsForDay(dayIndex, slotTimes);
             for (const slot of slots) {
               const entry = getEntry(dayIndex, slot.id);
-              if (entry && entry.type) ranges.push({ start: slot.start, end: slot.end, label: entry.type === 'available' ? 'ders' : 'etüt' });
+              if (entry?.type === 'available') ranges.push({ start: slot.start, end: slot.end, label: 'ders' });
             }
             for (const sb of etutSablonlar) {
               if (sb.dayIndex === dayIndex) ranges.push({ start: sb.start, end: sb.end, label: 'etüt' });
