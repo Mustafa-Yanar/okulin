@@ -225,6 +225,12 @@ body {
 .btn-danger:active { transform: translateY(0); }
 .btn-danger:disabled { opacity: 0.5; transform: none; cursor: not-allowed; }
 
+/* Etüt takvimi — boş (pasif) ders slotu: hover'da mavi vurgu (tıklanabilir ipucu) */
+.ders-slot-bos:not(:disabled):hover {
+  background: color-mix(in srgb, #3b82f6 14%, transparent) !important;
+  border-color: #3b82f6 !important;
+}
+
 .btn-ghost {
   background: var(--bg-muted);
   color: var(--text-secondary);

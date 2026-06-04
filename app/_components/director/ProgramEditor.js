@@ -270,11 +270,11 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
               <button key={`slot-${slot.id}`}
                 onClick={() => handleSlotClick(day.index, slot.id, slot.label)}
                 disabled={past}
-                className="absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left transition-colors"
+                className={`absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left transition-colors ${aktif ? '' : 'ders-slot-bos'}`}
                 style={{
                   top, height, zIndex: 1,
-                  background: aktif ? 'color-mix(in srgb, #3b82f6 18%, transparent)' : 'transparent',
-                  border: aktif ? 'none' : '1px dashed var(--border-subtle)',
+                  background: aktif ? 'color-mix(in srgb, #3b82f6 22%, transparent)' : 'var(--bg-muted, #f1f5f9)',
+                  border: aktif ? '1px solid #3b82f6' : '1px dashed var(--border-subtle)',
                   borderLeft: aktif ? '3px solid #3b82f6' : '1px dashed var(--border-subtle)',
                   opacity: past ? 0.4 : 1,
                   cursor: past ? 'not-allowed' : 'pointer',
@@ -288,7 +288,9 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                     {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{slot.start}</div>}
                   </>
                 ) : (
-                  height >= 24 && <div className="text-[8px] leading-tight truncate" style={{ color: 'var(--text-muted)', opacity: 0.6 }}>{slot.start}</div>
+                  <div className="text-[8px] leading-tight truncate" style={{ color: 'var(--text-muted)' }}>
+                    {height >= 28 ? `${slot.start} +` : '+'}
+                  </div>
                 )}
               </button>
             );
