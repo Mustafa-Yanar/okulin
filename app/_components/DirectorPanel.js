@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ClipboardList, Compass
+  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, ClipboardList, Compass
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
 import DirectorDenemeYonetimi from './rehberlik/DirectorDenemeYonetimi';
@@ -19,6 +19,7 @@ import { StudentList } from './director/StudentList';
 import VeliPanel from './director/VeliPanel';
 import ProgramEditor from './director/ProgramEditor';
 import { useUrlTab } from './useUrlTab';
+import { useUrlParam } from './useUrlParam';
 import LoadingBox, { SkeletonList } from './Loading';
 import OptikFormTab from './director/OptikFormTab';
 import ResourceLibrary from './library/ResourceLibrary';
@@ -72,7 +73,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [editStudent, setEditStudent] = useState(null);
   const [selectedTeacherForSlots, setSelectedTeacherForSlots] = useState(null);
   const [teacherSlots, setTeacherSlots] = useState(null);
-  const [expandedTeacherId, setExpandedTeacherId] = useState(null);
+  const [expandedTeacherId, setExpandedTeacherId] = useUrlParam('ogretmen'); // inline detay → URL'de görünür
   const [expandedTeacherTab, setExpandedTeacherTab] = useState('etutler');
   const [historyTarget, setHistoryTarget] = useState(null);
   const [pendingGuidance, setPendingGuidance] = useState({});
@@ -125,6 +126,15 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     setSelectedTeacherForSlots(teacher);
   };
 
+  // URL'den (yenileme / geri-ileri) gelen öğretmen detayı için slotları yükle.
+  useEffect(() => {
+    if (!expandedTeacherId || !teachers.length) return;
+    if (selectedTeacherForSlots?.id === expandedTeacherId && teacherSlots) return;
+    const t = teachers.find(x => x.id === expandedTeacherId);
+    if (t) loadTeacherSlots(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedTeacherId, teachers]);
+
   const handleWeekChange = async (newWeek) => {
     setWeekKey(newWeek);
     const slotsData = await api(`/api/slots?week=${newWeek}`);
@@ -168,155 +178,187 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           activeClasses={[...new Set(students.map(s => s.cls))]} />
       )}
 
-      {/* TEACHERS TAB — öğretmen listesi */}
-      {tab === 'teachers' && (
-        <div>
-          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-            <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğretmen ({teachers.length})</h3>
-            <div className="flex gap-2 flex-wrap">
-              <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
-                <Plus size={14} /> Öğretmen Ekle
-              </button>
-            </div>
-          </div>
-          <div className="grid gap-2">
-            {teachers.map(t => {
-              const isOpen = expandedTeacherId === t.id;
-              return (
-                <div key={t.id} className={`card overflow-hidden ${isOpen ? '' : 'card-interactive'}`}>
-                  <div className="flex items-center justify-between px-4 py-3.5">
-                    <button className="flex items-center gap-3 text-left flex-1 min-w-0" onClick={async () => {
-                      if (isOpen) { setExpandedTeacherId(null); return; }
-                      setExpandedTeacherId(t.id);
-                      setExpandedTeacherTab('etutler');
-                      await loadTeacherSlots(t);
-                    }}>
-                      <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
-                        {t.photoUrl
-                          ? <img src={t.photoUrl} alt={t.name} className="w-full h-full object-cover" />
-                          : <User size={22} className="text-gray-400" />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-600" style={{ fontWeight:600 }}>{t.name}</div>
-                        <div className="text-caption">{(t.branches||[]).join(', ')}</div>
-                        <div className="flex gap-1 mt-1 flex-wrap">
-                          {(t.allowedGroups||[]).map(g => <span key={g} className="badge badge-info">{GROUPS[g]}</span>)}
-                          {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'var(--bg-muted)',color:'var(--text-muted)' }}>Tüm gruplar</span>}
-                        </div>
-                      </div>
-                      <ChevronRight size={16} className="text-gray-400 shrink-0 transition-transform mx-2" style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
-                    </button>
-                    <div className="flex gap-2 shrink-0">
-                      <button className="btn-ghost !px-3 !py-2" onClick={() => { setEditTeacher(t); setShowTeacherForm(true); }}><Edit3 size={14} /></button>
-                      <button className="btn-ghost !px-3 !py-2 text-red-400 hover:bg-red-50" onClick={async () => {
-                        if (!confirm(`${t.name} silinsin mi?`)) return;
-                        try { await api('/api/teachers',{method:'DELETE',body:JSON.stringify({id:t.id})}); showToast('Öğretmen silindi'); loadAll(weekKey); } catch(err){showToast(err.message,'error');}
-                      }}><Trash2 size={14} /></button>
+      {/* TEACHERS TAB — öğretmen listesi + inline detay sayfası (?ogretmen=ID) */}
+      {tab === 'teachers' && (() => {
+        const selT = expandedTeacherId ? teachers.find(x => x.id === expandedTeacherId) : null;
+
+        // İnline detay sayfası — bir öğretmen seçiliyse liste yerine bunu göster.
+        if (expandedTeacherId && selT) {
+          const t = selT;
+          const slotsReady = selectedTeacherForSlots?.id === t.id && teacherSlots;
+          return (
+            <div>
+              <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+                <button onClick={() => setExpandedTeacherId(null)}
+                  className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5">
+                  <ChevronLeft size={16} /> Geri
+                </button>
+                <div className="flex gap-2 shrink-0">
+                  <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5" onClick={() => { setEditTeacher(t); setShowTeacherForm(true); }}>
+                    <Edit3 size={14} /> Düzenle
+                  </button>
+                  <button className="btn-ghost !px-3 !py-2 text-sm text-red-500 hover:bg-red-50 flex items-center gap-1.5" onClick={async () => {
+                    if (!confirm(`${t.name} silinsin mi?`)) return;
+                    try { await api('/api/teachers',{method:'DELETE',body:JSON.stringify({id:t.id})}); showToast('Öğretmen silindi'); setExpandedTeacherId(null); loadAll(weekKey); } catch(err){showToast(err.message,'error');}
+                  }}>
+                    <Trash2 size={14} /> Sil
+                  </button>
+                </div>
+              </div>
+              <div className="card overflow-hidden">
+                {/* Başlık kartı */}
+                <div className="flex items-center gap-3 px-5 py-4 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+                  <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
+                    {t.photoUrl
+                      ? <img src={t.photoUrl} alt={t.name} className="w-full h-full object-cover" />
+                      : <User size={24} className="text-gray-400" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-700 text-base" style={{ fontWeight:700 }}>{t.name}</h3>
+                    <div className="text-caption">{(t.branches||[]).join(', ')}</div>
+                    <div className="flex gap-1 mt-1 flex-wrap">
+                      {(t.allowedGroups||[]).map(g => <span key={g} className="badge badge-info">{GROUPS[g]}</span>)}
+                      {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'var(--bg-muted)',color:'var(--text-muted)' }}>Tüm gruplar</span>}
                     </div>
                   </div>
-                  {isOpen && (
-                    <div className="border-t px-4 py-3" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-surface-2)' }}>
-                      {/* Sekme başlığı + tarih nav (sadece Etütler sekmesinde) */}
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)' }}>
-                          {[['etutler','Etütler'],['gecmis','Etüt Geçmişi'],['program','Program']].map(([k,l]) => (
-                            <button key={k} onClick={() => setExpandedTeacherTab(k)} className="press-effect"
-                              style={{
-                                padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                                transition: 'all var(--transition-base)',
-                                background: expandedTeacherTab === k ? 'var(--bg-surface)' : 'transparent',
-                                color: expandedTeacherTab === k ? 'var(--text-primary)' : 'var(--text-secondary)',
-                                boxShadow: expandedTeacherTab === k ? 'var(--shadow-sm)' : 'none',
-                                whiteSpace: 'nowrap',
-                              }}>{l}</button>
-                          ))}
-                        </div>
-                        {expandedTeacherTab === 'etutler' && (
-                          <WeekNav weekKey={weekKey} onPrev={() => handleWeekChange(getAdjacentWeek(weekKey,-1))} onNext={() => handleWeekChange(getAdjacentWeek(weekKey,1))} />
-                        )}
-                      </div>
+                </div>
 
-                      {/* Etütler sekmesi */}
-                      {expandedTeacherTab === 'etutler' && (
-                        selectedTeacherForSlots?.id === t.id && teacherSlots ? (
-                          <TeacherBookingsList
-                            bookedList={(() => {
-                              const items = [];
-                              ALL_DAYS.forEach(day => {
-                                slotsForDay(day.index, slotTimes).forEach((slot, slotIdx) => {
-                                  const sd = teacherSlots[day.index]?.[slotIdx];
-                                  if (sd?.booked) items.push({
-                                    dayIndex: day.index, dayLabel: day.label,
-                                    slotId: slot.id, slotLabel: slot.label, slotIdx,
-                                    studentName: sd.studentName,
-                                    studentCls: (sd.studentCls||'').toUpperCase(),
-                                    studentId: sd.studentId,
-                                    bookedBy: sd.bookedBy || 'student',
-                                    fixed: !!sd.fixed,
-                                  });
-                                });
-                              });
-                              return items;
-                            })()}
-                            listColorMap={{
-                              student: { bg:'bg-indigo-50', border:'border-indigo-100', day:'text-indigo-700', time:'text-indigo-400', div:'bg-indigo-200', badge:'bg-indigo-100 text-indigo-500', label:'Öğrenci' },
-                              teacher: { bg:'bg-emerald-50', border:'border-emerald-100', day:'text-emerald-700', time:'text-emerald-400', div:'bg-emerald-200', badge:'bg-emerald-100 text-emerald-600', label:'Öğretmen' },
-                              director: { bg:'bg-amber-50', border:'border-amber-100', day:'text-amber-700', time:'text-amber-400', div:'bg-amber-200', badge:'bg-amber-100 text-amber-600', label:'Müdür' },
-                            }}
-                            onCancel={item => handleCancel({ teacherId: t.id, day: item.dayIndex, slotId: item.slotId })}
-                            canCancelAll
-                          />
-                        ) : (
-                          <LoadingBox height="h-24" />
-                        )
-                      )}
+                <div className="px-4 py-3" style={{ background: 'var(--bg-surface-2)' }}>
+                  {/* Sekme başlığı + tarih nav (sadece Etütler sekmesinde) */}
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)' }}>
+                      {[['etutler','Etütler'],['gecmis','Etüt Geçmişi'],['program','Program']].map(([k,l]) => (
+                        <button key={k} onClick={() => setExpandedTeacherTab(k)} className="press-effect"
+                          style={{
+                            padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                            transition: 'all var(--transition-base)',
+                            background: expandedTeacherTab === k ? 'var(--bg-surface)' : 'transparent',
+                            color: expandedTeacherTab === k ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            boxShadow: expandedTeacherTab === k ? 'var(--shadow-sm)' : 'none',
+                            whiteSpace: 'nowrap',
+                          }}>{l}</button>
+                      ))}
+                    </div>
+                    {expandedTeacherTab === 'etutler' && (
+                      <WeekNav weekKey={weekKey} onPrev={() => handleWeekChange(getAdjacentWeek(weekKey,-1))} onNext={() => handleWeekChange(getAdjacentWeek(weekKey,1))} />
+                    )}
+                  </div>
 
-                      {/* Etüt Geçmişi sekmesi — inline */}
-                      {expandedTeacherTab === 'gecmis' && (
-                        <HistoryModal
-                          inline
-                          target={{ type: 'teacher', id: t.id, name: t.name }}
-                          onClose={() => setExpandedTeacherTab('etutler')}
-                          currentWeekKey={weekKey}
-                          currentEntries={(() => {
-                            if (selectedTeacherForSlots?.id !== t.id || !teacherSlots) return [];
-                            const items = [];
-                            ALL_DAYS.forEach(day => {
-                              slotsForDay(day.index, slotTimes).forEach((slot, slotIdx) => {
-                                const sd = teacherSlots[day.index]?.[slotIdx];
-                                if (sd?.booked) items.push({
-                                  day: day.index, dayLabel: day.label,
-                                  slotId: slot.id, slotLabel: slot.label,
-                                  studentName: sd.studentName,
-                                  studentCls: (sd.studentCls||'').toUpperCase(),
-                                });
+                  {/* Etütler sekmesi */}
+                  {expandedTeacherTab === 'etutler' && (
+                    slotsReady ? (
+                      <TeacherBookingsList
+                        bookedList={(() => {
+                          const items = [];
+                          ALL_DAYS.forEach(day => {
+                            slotsForDay(day.index, slotTimes).forEach((slot, slotIdx) => {
+                              const sd = teacherSlots[day.index]?.[slotIdx];
+                              if (sd?.booked) items.push({
+                                dayIndex: day.index, dayLabel: day.label,
+                                slotId: slot.id, slotLabel: slot.label, slotIdx,
+                                studentName: sd.studentName,
+                                studentCls: (sd.studentCls||'').toUpperCase(),
+                                studentId: sd.studentId,
+                                bookedBy: sd.bookedBy || 'student',
+                                fixed: !!sd.fixed,
                               });
                             });
-                            return items;
-                          })()}
-                        />
-                      )}
+                          });
+                          return items;
+                        })()}
+                        listColorMap={{
+                          student: { bg:'bg-indigo-50', border:'border-indigo-100', day:'text-indigo-700', time:'text-indigo-400', div:'bg-indigo-200', badge:'bg-indigo-100 text-indigo-500', label:'Öğrenci' },
+                          teacher: { bg:'bg-emerald-50', border:'border-emerald-100', day:'text-emerald-700', time:'text-emerald-400', div:'bg-emerald-200', badge:'bg-emerald-100 text-emerald-600', label:'Öğretmen' },
+                          director: { bg:'bg-amber-50', border:'border-amber-100', day:'text-amber-700', time:'text-amber-400', div:'bg-amber-200', badge:'bg-amber-100 text-amber-600', label:'Müdür' },
+                        }}
+                        onCancel={item => handleCancel({ teacherId: t.id, day: item.dayIndex, slotId: item.slotId })}
+                        canCancelAll
+                      />
+                    ) : (
+                      <LoadingBox height="h-24" />
+                    )
+                  )}
 
-                      {/* Program sekmesi — inline */}
-                      {expandedTeacherTab === 'program' && (
-                        <ProgramEditor
-                          key={`prog-${t.id}`}
-                          inline
-                          teacher={t}
-                          students={students}
-                          showToast={showToast}
-                          onClose={() => setExpandedTeacherTab('etutler')}
-                        />
-                      )}
-                    </div>
+                  {/* Etüt Geçmişi sekmesi — inline */}
+                  {expandedTeacherTab === 'gecmis' && (
+                    <HistoryModal
+                      inline
+                      target={{ type: 'teacher', id: t.id, name: t.name }}
+                      onClose={() => setExpandedTeacherTab('etutler')}
+                      currentWeekKey={weekKey}
+                      currentEntries={(() => {
+                        if (selectedTeacherForSlots?.id !== t.id || !teacherSlots) return [];
+                        const items = [];
+                        ALL_DAYS.forEach(day => {
+                          slotsForDay(day.index, slotTimes).forEach((slot, slotIdx) => {
+                            const sd = teacherSlots[day.index]?.[slotIdx];
+                            if (sd?.booked) items.push({
+                              day: day.index, dayLabel: day.label,
+                              slotId: slot.id, slotLabel: slot.label,
+                              studentName: sd.studentName,
+                              studentCls: (sd.studentCls||'').toUpperCase(),
+                            });
+                          });
+                        });
+                        return items;
+                      })()}
+                    />
+                  )}
+
+                  {/* Program sekmesi — inline */}
+                  {expandedTeacherTab === 'program' && (
+                    <ProgramEditor
+                      key={`prog-${t.id}`}
+                      inline
+                      teacher={t}
+                      students={students}
+                      showToast={showToast}
+                      onClose={() => setExpandedTeacherTab('etutler')}
+                    />
                   )}
                 </div>
-              );
-            })}
-            {teachers.length===0 && <div className="card p-8 text-center text-gray-400"><Users size={32} className="mx-auto mb-2 opacity-30" /><p>Henüz öğretmen eklenmemiş</p></div>}
+              </div>
+            </div>
+          );
+        }
+
+        // Liste görünümü
+        return (
+          <div>
+            <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+              <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğretmen ({teachers.length})</h3>
+              <div className="flex gap-2 flex-wrap">
+                <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
+                  <Plus size={14} /> Öğretmen Ekle
+                </button>
+              </div>
+            </div>
+            <div className="grid gap-2">
+              {teachers.map(t => (
+                <div key={t.id} className="card card-interactive overflow-hidden">
+                  <button className="w-full flex items-center gap-3 px-4 py-3.5 text-left" onClick={() => { setExpandedTeacherTab('etutler'); setExpandedTeacherId(t.id); }}>
+                    <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
+                      {t.photoUrl
+                        ? <img src={t.photoUrl} alt={t.name} className="w-full h-full object-cover" />
+                        : <User size={22} className="text-gray-400" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-600" style={{ fontWeight:600 }}>{t.name}</div>
+                      <div className="text-caption">{(t.branches||[]).join(', ')}</div>
+                      <div className="flex gap-1 mt-1 flex-wrap">
+                        {(t.allowedGroups||[]).map(g => <span key={g} className="badge badge-info">{GROUPS[g]}</span>)}
+                        {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'var(--bg-muted)',color:'var(--text-muted)' }}>Tüm gruplar</span>}
+                      </div>
+                    </div>
+                    <ChevronRight size={16} className="text-gray-400 shrink-0 ml-2" />
+                  </button>
+                </div>
+              ))}
+              {teachers.length===0 && <div className="card p-8 text-center text-gray-400"><Users size={32} className="mx-auto mb-2 opacity-30" /><p>Henüz öğretmen eklenmemiş</p></div>}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* STUDENTS TAB */}
       {tab === 'students' && (

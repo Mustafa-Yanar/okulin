@@ -3,13 +3,14 @@
 // Öğrenci listesi (gruplu) + öğrenci detay görünümü (StudentExpandedView) +
 // sınıf ders programı modalı (ClassScheduleModal).
 import React, { useState, useEffect, useMemo } from 'react';
-import { BookOpen, ClipboardList, Clock, Calendar, ChevronRight, Edit3, GraduationCap, Trash2, X } from 'lucide-react';
+import { BookOpen, ClipboardList, Clock, Calendar, ChevronRight, ChevronLeft, Edit3, GraduationCap, Trash2 } from 'lucide-react';
 import { classLabel, ALL_DAYS } from '@/lib/constants';
 import { GROUPS, api, Modal, guidanceSubjectsFor } from './shared';
 import { StudentAttendanceView } from './Attendance';
 import { StudentBookingsView } from '../StudentPanel';
 import RehberlikAccordion from '../rehberlik/RehberlikAccordion';
 import StudentGuidanceView from '../rehberlik/StudentGuidanceView';
+import { useUrlParam } from '../useUrlParam';
 
 function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceReviewed }) {
   const [tab, setTab] = useState('rehberlik');
@@ -56,7 +57,7 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
   const [searchQ, setSearchQ] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
   const [openCls, setOpenCls] = useState(null);
-  const [expandedId, setExpandedId] = useState(null);
+  const [expandedId, setExpandedId] = useUrlParam('ogrenci'); // inline detay → URL'de görünür
   const [scheduleCls, setScheduleCls] = useState(null);
 
   const grouped = useMemo(() => {
@@ -84,6 +85,43 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
   }, [students, searchQ, filterGroup]);
 
   const toggle = cls => setOpenCls(prev => prev === cls ? null : cls);
+
+  // İnline detay sayfası — bir öğrenci seçiliyse liste yerine bunu göster (URL'de ?ogrenci=ID).
+  const selected = expandedId ? students.find(x => x.id === expandedId) : null;
+  if (expandedId && selected) {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+          <button onClick={() => setExpandedId(null)}
+            className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5">
+            <ChevronLeft size={16} /> Geri
+          </button>
+          <div className="flex gap-2 shrink-0">
+            <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5" onClick={() => onEdit(selected)}>
+              <Edit3 size={14} /> Düzenle
+            </button>
+            <button className="btn-ghost !px-3 !py-2 text-sm text-red-500 hover:bg-red-50 flex items-center gap-1.5"
+              onClick={() => { onDelete(selected); setExpandedId(null); }}>
+              <Trash2 size={14} /> Sil
+            </button>
+          </div>
+        </div>
+        <div className="card overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-700"
+              style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', fontWeight: 700 }}>
+              {selected.name.slice(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <h3 className="font-700 text-base" style={{ fontWeight: 700 }}>{selected.name}</h3>
+              <p className="text-caption">{classLabel(selected.cls)}</p>
+            </div>
+          </div>
+          <StudentExpandedView student={selected} allSlots={allSlots} onCancelBooking={onCancelBooking} onGuidanceReviewed={onGuidanceReviewed} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -129,29 +167,22 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
               {isOpen && (
                 <div className="grid gap-1.5 mt-1.5 ml-2">
                   {grp.students.map(s => (
-                    <div key={s.id} className={`card overflow-hidden text-sm ${expandedId === s.id ? '' : 'card-interactive'}`}>
-                      <div className="flex items-center justify-between px-3 py-3">
-                        <button className="flex items-center gap-3 flex-1 min-w-0 text-left" onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}>
-                          <div className="relative shrink-0">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-700"
-                              style={{ background: colors.dot, fontWeight:700 }}>
-                              {s.name.slice(0,2).toUpperCase()}
-                            </div>
-                            {pendingGuidance?.[s.id] > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-700 flex items-center justify-center" style={{ fontWeight: 700 }}>
-                                {pendingGuidance[s.id]}
-                              </span>
-                            )}
+                    <div key={s.id} className="card card-interactive overflow-hidden text-sm">
+                      <button className="w-full flex items-center gap-3 px-3 py-3 text-left" onClick={() => setExpandedId(s.id)}>
+                        <div className="relative shrink-0">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-700"
+                            style={{ background: colors.dot, fontWeight:700 }}>
+                            {s.name.slice(0,2).toUpperCase()}
                           </div>
-                          <span className="font-600 truncate" style={{ fontWeight:600 }}>{s.name}</span>
-                          <ChevronRight size={14} className="text-gray-400 shrink-0 transition-transform ml-auto"
-                            style={{ transform: expandedId === s.id ? 'rotate(90deg)' : 'rotate(0deg)' }} />
-                        </button>
-                        <div className="flex gap-2 shrink-0 ml-2">
-                          <button className="btn-ghost !px-2 !py-1.5" onClick={() => onEdit(s)}><Edit3 size={12} /></button>
-                          <button className="btn-ghost !px-2 !py-1.5 text-red-400 hover:bg-red-50" onClick={() => onDelete(s)}><Trash2 size={12} /></button>
+                          {pendingGuidance?.[s.id] > 0 && (
+                            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-700 flex items-center justify-center" style={{ fontWeight: 700 }}>
+                              {pendingGuidance[s.id]}
+                            </span>
+                          )}
                         </div>
-                      </div>
+                        <span className="font-600 truncate" style={{ fontWeight:600 }}>{s.name}</span>
+                        <ChevronRight size={14} className="text-gray-400 shrink-0 ml-auto" />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -163,25 +194,6 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
       {scheduleCls && (
         <ClassScheduleModal cls={scheduleCls} onClose={() => setScheduleCls(null)} />
       )}
-      {expandedId && (() => {
-        const st = students.find(x => x.id === expandedId);
-        if (!st) return null;
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div role="dialog" aria-modal="true" aria-label="Öğrenci detayı" className="modal w-full max-w-2xl max-h-[90vh] flex flex-col animate-modal-in">
-              <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 shrink-0">
-                <h3 className="font-700 text-base truncate" style={{ fontWeight: 700 }}>
-                  {st.name} <span className="font-500 text-sm" style={{ fontWeight: 500, color: 'var(--text-muted)' }}>· {classLabel(st.cls)}</span>
-                </h3>
-                <button onClick={() => setExpandedId(null)} className="p-2 rounded-lg hover:bg-gray-100 shrink-0" title="Kapat"><X size={18} /></button>
-              </div>
-              <div className="overflow-y-auto">
-                <StudentExpandedView student={st} allSlots={allSlots} onCancelBooking={onCancelBooking} onGuidanceReviewed={onGuidanceReviewed} />
-              </div>
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 }
