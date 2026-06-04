@@ -112,18 +112,26 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Geçmiş hafta düzenlenemez. Sadece mevcut hafta ve sonraki 2 hafta düzenlenebilir.' }, { status: 400 });
   }
 
+  // Şablonu erken oku — geçmiş-silme istisnası için (available slot kaldırma).
+  const templateForGuard = (await redis.get(programKey(teacherId))) || {};
+
   // Geçmiş slotları diff'ten sessizce kaldır — frontend yanlışlıkla gönderirse
   // mevcut etüt/ders kayıtlarına dokunulmaz.
   // İSTİSNA: type:'available' haftadan bağımsız şablon ayarı (öğretmenin genel
   // müsaitliği); geçmiş-silme kuralından muaf, aksi halde bu haftanın geçmiş
-  // günleri işaretlenemez.
+  // günleri işaretlenemez. Aynı şekilde, şablonda 'available' olan bir slotu
+  // KALDIRMA (null) da geçmiş-silmeden muaf — yoksa geçmiş güne düşen 'Ders'
+  // işaretli slot "Slotu Kapat" ile kapatılamaz (kullanıcı bug raporu).
   const postSlotTimes = await getSlotTimes();
   for (const dayIdx of Object.keys(program)) {
     const di = parseInt(dayIdx);
     const slots = slotsForDay(di, di >= 5 ? postSlotTimes.weekend : postSlotTimes.weekday);
     for (const slotId of Object.keys(program[dayIdx] || {})) {
       const entry = program[dayIdx][slotId];
-      if (entry?.type === 'available') continue; // şablon müsaitliği — koru
+      if (entry?.type === 'available') continue; // şablon müsaitliği ekleme — koru
+      // available slot kaldırma (null) — şablonda available varsa koru
+      const tmpl = templateForGuard?.[dayIdx]?.[slotId];
+      if ((entry === null || entry === undefined) && tmpl?.type === 'available') continue;
       const slotDef = slots.find(s => s.id === slotId);
       if (!slotDef) continue;
       const slotStart = slotStartTime(weekKey, parseInt(dayIdx), slotDef.label);
