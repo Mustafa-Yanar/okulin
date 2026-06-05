@@ -447,10 +447,21 @@ body {
 html.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
 
 /* Light + dark ORTAK: en soluk gri metinler (gray-400/300) okunmuyordu (beyaz zeminde
-   kontrast 2.5, AA<4.5). --text-muted'a bağlanır → light #6b7280 (4.83 ✅), dark #9ca3af
+   kontrast 2.5, AA<4.5). --text-muted'a bağlanır → light #646a76 (5.43 ✅), dark #9ca3af
    (6.57 ✅). İkonlarda da koyulaşır ama dekoratif/opacity'li, kabul edilebilir. */
 .text-gray-400 { color: var(--text-muted); }
 .text-gray-300 { color: var(--text-muted); }
+
+/* slate-300/400 (OptikForm vb.) Tailwind ham değerleri beyazda 1.5-2.6 → AA<4.5.
+   --text-muted'a bağlanır (her iki temada AA). İkon/dekoratif yerlerde de kabul edilebilir. */
+.text-slate-400 { color: var(--text-muted); }
+.text-slate-300 { color: var(--text-muted); }
+
+/* amber-500/600 (uyarı metinleri: yoklama alınmadı, branş yok vb.) AÇIK temada okunmuyordu
+   (amber-500 2.15 / amber-600 3.19, AA<4.5) → amber-700'e (#b45309, beyazda 5.02 ✅).
+   DARK'a dokunma: koyu zeminde parlak amber zaten yüksek kontrast + semantik vurgu. */
+html:not(.dark) .text-amber-500,
+html:not(.dark) .text-amber-600 { color: #b45309; }
 
 /* ─── Dark mode genel overrides — Tailwind hardcoded class'larını ezer ──────── */
 html.dark .text-gray-900 { color: var(--text-primary) !important; }
