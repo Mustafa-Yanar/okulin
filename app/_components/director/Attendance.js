@@ -182,7 +182,7 @@ export function DirectorAttendanceView({ showToast }) {
                 boxShadow: active ? '0 2px 8px color-mix(in srgb, var(--brand,#6366f1) 30%, transparent)' : 'none',
               }}>
               <span className="text-[10px] font-600 uppercase tracking-wide opacity-80" style={{ fontWeight: 600 }}>
-                {day.label.slice(0, 3)}
+                {day.short}
               </span>
               <span className="text-base font-700 leading-none" style={{ fontWeight: 700 }}>
                 {dayDate(day.index).getUTCDate()}
