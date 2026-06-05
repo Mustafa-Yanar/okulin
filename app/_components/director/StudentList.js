@@ -151,9 +151,10 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
                 </button>
                 <div className="flex items-center gap-1 ml-2">
                   <button onClick={() => setScheduleCls(grp.cls)}
-                    className="p-1 rounded hover:bg-indigo-100 text-slate-600 hover:text-indigo-600 transition-colors"
+                    className="flex items-center gap-1 px-2 py-1 rounded hover:bg-indigo-100 text-slate-600 hover:text-indigo-600 transition-colors text-[11px] font-600"
+                    style={{ fontWeight:600 }}
                     title="Sınıfın ders programı">
-                    <Calendar size={12} />
+                    <Calendar size={12} /> Ders Programı
                   </button>
                   {onDeleteClass && (
                     <button onClick={() => onDeleteClass(grp.cls, grp.students)}
