@@ -123,7 +123,8 @@ export function DirectorAttendanceView({ showToast }) {
   const [loading, setLoading] = useState(false);
   const [selectedCls, setSelectedCls] = useState(null);
 
-  const dateForSelectedDay = useMemo(() => {
+  // Bu haftanın pazartesisi (gün kutucuklarının tarih sayısı buradan türer).
+  const weekMonday = useMemo(() => {
     const wk = getWeekKey();
     const [year, wStr] = wk.split('-W');
     const week = parseInt(wStr);
@@ -131,9 +132,19 @@ export function DirectorAttendanceView({ showToast }) {
     const dow = jan4.getUTCDay() || 7;
     const mon = new Date(jan4);
     mon.setUTCDate(jan4.getUTCDate() - dow + 1 + (week - 1) * 7);
-    mon.setUTCDate(mon.getUTCDate() + selectedDay);
-    return mon.toISOString().slice(0, 10);
-  }, [selectedDay]);
+    return mon;
+  }, []);
+
+  const dayDate = (idx) => {
+    const d = new Date(weekMonday);
+    d.setUTCDate(weekMonday.getUTCDate() + idx);
+    return d;
+  };
+
+  const dateForSelectedDay = useMemo(
+    () => dayDate(selectedDay).toISOString().slice(0, 10),
+    [selectedDay, weekMonday]
+  );
 
   useEffect(() => {
     (async () => {
@@ -154,15 +165,34 @@ export function DirectorAttendanceView({ showToast }) {
 
   return (
     <div>
-      <div className="flex gap-1.5 mb-5 flex-wrap">
-        {ALL_DAYS.map(day => (
-          <button key={day.index} onClick={() => setSelectedDay(day.index)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-600 transition-all border ${selectedDay === day.index ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'}`}
-            style={{ fontWeight: 600 }}>
-            {day.label}
-            {day.index === todayIndex && <span className="ml-1 text-[10px] opacity-70">Bugün</span>}
-          </button>
-        ))}
+      {/* Haftalık gün şeridi (Figma Date & Time ilhamı): gün adı + tarih kutucuğu. */}
+      <div className="flex gap-1.5 mb-5">
+        {ALL_DAYS.map(day => {
+          const active = selectedDay === day.index;
+          const isToday = day.index === todayIndex;
+          return (
+            <button key={day.index} onClick={() => setSelectedDay(day.index)}
+              className="flex-1 min-w-0 rounded-xl px-1 py-2 flex flex-col items-center gap-0.5 transition-all border"
+              style={{
+                background: active ? 'var(--brand, #6366f1)' : 'var(--bg-surface)',
+                borderColor: active ? 'var(--brand, #6366f1)'
+                  : isToday ? 'color-mix(in srgb, var(--brand, #6366f1) 45%, transparent)'
+                  : 'var(--border-light)',
+                color: active ? '#fff' : 'var(--text-secondary)',
+                boxShadow: active ? '0 2px 8px color-mix(in srgb, var(--brand,#6366f1) 30%, transparent)' : 'none',
+              }}>
+              <span className="text-[10px] font-600 uppercase tracking-wide opacity-80" style={{ fontWeight: 600 }}>
+                {day.label.slice(0, 3)}
+              </span>
+              <span className="text-base font-700 leading-none" style={{ fontWeight: 700 }}>
+                {dayDate(day.index).getUTCDate()}
+              </span>
+              <span className="text-[9px] leading-none h-2.5" style={{ color: active ? 'rgba(255,255,255,0.85)' : 'var(--text-muted)' }}>
+                {isToday ? 'Bugün' : ''}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {loading ? (
