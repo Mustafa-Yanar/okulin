@@ -46,12 +46,15 @@ function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceRev
   );
 }
 
-export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEdit, onDelete, onDeleteClass, onHistory, pendingGuidance, onGuidanceReviewed }) {
+export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEdit, onDelete, onDeleteClass, onHistory, pendingGuidance, onGuidanceReviewed, onSelectChange }) {
   const [searchQ, setSearchQ] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
   const [openCls, setOpenCls] = useState(null);
   const [expandedId, setExpandedId] = useUrlParam('ogrenci'); // inline detay → URL'de görünür
   const [scheduleCls, setScheduleCls] = useState(null);
+
+  // Detay açık/kapalı durumunu dışarı bildir (DirectorPanel liste başlığını gizler).
+  useEffect(() => { onSelectChange?.(expandedId); }, [expandedId, onSelectChange]);
 
   const grouped = useMemo(() => {
     const q = searchQ.toLowerCase();

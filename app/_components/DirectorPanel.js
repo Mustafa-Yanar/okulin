@@ -75,7 +75,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [selectedTeacherForSlots, setSelectedTeacherForSlots] = useState(null);
   const [teacherSlots, setTeacherSlots] = useState(null);
   const [expandedTeacherId, setExpandedTeacherId] = useUrlParam('ogretmen'); // inline detay → URL'de görünür
-  const [expandedStudentId] = useUrlParam('ogrenci'); // öğrenci detay açıkken liste başlığını gizle
+  const [expandedStudentId, setExpandedStudentId] = useState(null); // StudentList onSelectChange ile beslenir → detayda liste başlığını gizle
   const [expandedTeacherTab, setExpandedTeacherTab] = useState('etutler');
   const [historyTarget, setHistoryTarget] = useState(null);
   const [pendingGuidance, setPendingGuidance] = useState({});
@@ -386,6 +386,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
             </div>
           )}
           <StudentList students={students}
+            onSelectChange={setExpandedStudentId}
             allSlots={allSlots} weekKey={weekKey}
             onCancelBooking={async ({ teacherId, day, slotId }) => {
               try {
