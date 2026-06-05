@@ -7,14 +7,21 @@
 /* ─── Tema değişkenleri ──────────────────────────────────────────────────────── */
 :root {
   /* ── Yüzeyler ── */
+  /* Açık temada konteyner zeminleri (sekme şeridi pill'i, sınıf kartı satırı, .input,
+     .btn-ghost) sayfa zemininden (#f0f2f7) ayrılmıyordu — surface-2 #f8f9fc base'e
+     kontrast 1.06, muted #f3f4f6 sadece 1.02 (gözle görünmez). Koyu modda farklı
+     luminance olduğu için orada sorun yoktu. Tonlar koyulaştırıldı: muted→#e2e6ee
+     (1.10), surface-2→#eef1f7 (1.05→ama .input border'ıyla birlikte net). */
   --bg-base:        #f0f2f7;
   --bg-surface:     #ffffff;
-  --bg-surface-2:   #f8f9fc;
-  --bg-muted:       #f3f4f6;
+  --bg-surface-2:   #eef1f7;
+  --bg-muted:       #e2e6ee;
 
   /* ── Kenarlıklar ── */
-  --border-subtle:  rgba(0,0,0,0.07);
-  --border-light:   rgba(0,0,0,0.1);
+  /* .input/.card kenarlıkları açık temada çok soluktu → hafif koyulaştırıldı ki
+     yüzey ayrımı zemin tonuyla birlikte belirginleşsin. */
+  --border-subtle:  rgba(0,0,0,0.09);
+  --border-light:   rgba(0,0,0,0.12);
 
   /* ── Metin ── */
   /* WCAG AA (4.5) için açık temada koyulaştırıldı. Zemin çoğunlukla gri panel (#f0f2f7).
