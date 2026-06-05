@@ -18,7 +18,7 @@ function maskPhone(phone) {
 
 // action'a göre ayrışan gövde — her işlemin yalnız kendi alanları doğrulanır.
 const AuthSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('login'), username: zName, password: zPassword, role: z.enum(['student', 'parent', 'teacher', 'management']).optional() }),
+  z.object({ action: z.literal('login'), username: zName, password: zPassword, role: z.enum(['student', 'parent', 'teacher', 'management', 'superadmin']).optional() }),
   z.object({ action: z.literal('setup_director'), username: zName, password: zPassword, name: z.string().max(200).optional() }),
   z.object({ action: z.literal('update_director_name'), name: zName }),
   z.object({ action: z.literal('logout') }),
@@ -127,16 +127,22 @@ export async function POST(req) {
     }
 
     // Superadmin (global, kurum-bağımsız) — tenantRedis yerine rawRedis.
-    const superadmin = await rawRedis.get('superadmin');
-    if (superadmin && superadmin.username === username) {
-      const ok = await bcrypt.compare(password, superadmin.passwordHash);
-      if (ok) {
-        const gate = gateMismatch('superadmin'); if (gate) return gate;
-        // Superadmin için cihaz tanıma yok — yönetim hesabı, direkt giriş
-        const res = NextResponse.json({ role: 'superadmin', name: superadmin.name });
-        await setSession(res, { role: 'superadmin', id: 'superadmin', name: superadmin.name });
-        return res;
+    // GÜVENLİK: yalnız gizli süper-admin sayfasından (role:'superadmin') denenebilir.
+    // Normal "Yönetim" girişi (role:'management' veya role yok) superadmin'i HİÇ kontrol
+    // etmez → süper-admin varlığı kurum giriş ekranından sızmaz/denenmez.
+    if (selectedRole === 'superadmin') {
+      const superadmin = await rawRedis.get('superadmin');
+      if (superadmin && superadmin.username === username) {
+        const ok = await bcrypt.compare(password, superadmin.passwordHash);
+        if (ok) {
+          const res = NextResponse.json({ role: 'superadmin', name: superadmin.name });
+          await setSession(res, { role: 'superadmin', id: 'superadmin', name: superadmin.name });
+          return res;
+        }
       }
+      // superadmin sayfasından gelen başarısız deneme → sadece superadmin denenir,
+      // başka role'e düşmesin (kurum hesapları bu kapıdan girmesin).
+      return NextResponse.json({ error: 'Kullanıcı adı veya şifre hatalı.' }, { status: 401 });
     }
 
     // Org_admin (kurum-geneli, şube-bağımsız) — rawRedis'te orgadmin:<org> anahtarı.
