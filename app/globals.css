@@ -457,6 +457,19 @@ html.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
 .text-slate-400 { color: var(--text-muted); }
 .text-slate-300 { color: var(--text-muted); }
 
+/* gray-500 (#6b7280) beyaz kartta 4.83 ✅ ama GRİ panel zemininde (#f0f2f7) 4.32 → AA<4.5.
+   Pasif sekme butonları (Denemeler/Muhasebe şeritleri) gri zeminde okunmuyordu →
+   --text-secondary'ye (#5b6270, gride 5.47) bağlanır. gray-600 zaten 6.75, dokunulmaz. */
+html:not(.dark) .text-gray-500 { color: var(--text-secondary); }
+
+/* red-400/500 (#f87171/#ef4444) açık temada metin olarak okunmuyordu (beyazda 3.0/3.76,
+   AA<4.5) — örn. "Kalan Borç" tutarı, "Programları Temizle" btn-ghost. red-700'e (#b91c1c):
+   beyaz 6.47, gri panel 5.78, btn-ghost zemini (#f3f4f6) 5.88 — hepsi AA ✅. (red-600 #dc2626
+   btn-ghost gri zeminde yalnız 4.39 idi.) DARK'a dokunma: koyu zeminde parlak kırmızı
+   semantik vurgu + zaten yüksek kontrast. İkonlarda koyulaşır, danger anlamı korunur. */
+html:not(.dark) .text-red-500,
+html:not(.dark) .text-red-400 { color: #b91c1c; }
+
 /* amber-500/600 (uyarı metinleri: yoklama alınmadı, branş yok vb.) AÇIK temada okunmuyordu
    (amber-500 2.15 / amber-600 3.19, AA<4.5) → amber-700'e (#b45309, beyazda 5.02 ✅).
    DARK'a dokunma: koyu zeminde parlak amber zaten yüksek kontrast + semantik vurgu. */
