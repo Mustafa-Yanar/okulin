@@ -132,6 +132,10 @@ export default function TeacherPresets({ teacher, onSaved, showToast }) {
             className="btn-primary !px-3 !py-2 text-sm flex items-center gap-1.5 disabled:opacity-50">
             <Plus size={14} /> Ekle
           </button>
+          <button onClick={save} disabled={saving} title="Kaydet"
+            className="btn-primary !px-3 !py-2 text-sm flex items-center gap-1.5 ml-auto">
+            <Save size={14} /> <span className="hidden min-[420px]:inline">{saving ? 'Kaydediliyor…' : 'Kaydet'}</span>
+          </button>
         </div>
       )}
 
@@ -151,12 +155,6 @@ export default function TeacherPresets({ teacher, onSaved, showToast }) {
         </div>
       )}
 
-      <div className="flex justify-end">
-        <button onClick={save} disabled={saving}
-          className="btn-primary !px-4 !py-2 text-sm flex items-center gap-1.5">
-          <Save size={14} /> {saving ? 'Kaydediliyor…' : 'Kaydet'}
-        </button>
-      </div>
     </div>
   );
 }
