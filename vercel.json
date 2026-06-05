@@ -1,5 +1,4 @@
 {
-  "alias": ["cozumetut.vercel.app"],
   "crons": [
     {
       "path": "/api/cron/weekly",

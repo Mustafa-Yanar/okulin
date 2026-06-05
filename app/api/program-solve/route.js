@@ -6,12 +6,11 @@ import { getSession } from '@/lib/auth';
 // kontrolü yapılır, sonra shared-secret ile server-to-server forward edilir.
 
 function solverUrl() {
-  // Production alias'ı (cozumetut.vercel.app) deployment-protection'dan muaf;
-  // VERCEL_URL deployment-spesifik adresi protection'a takılır (401). Bu yüzden
-  // production'da sabit alias, lokalde localhost kullanılır. Override için
-  // SOLVER_BASE_URL env'i.
+  // Production'da kalıcı public domain (okulin.com) kullanılır — proje adına bağlı
+  // değil, deployment-protection'a takılmaz. VERCEL_URL deployment-spesifik adresi
+  // protection'a takılır (401). Override için SOLVER_BASE_URL env'i (öncelikli).
   const base = process.env.SOLVER_BASE_URL
-    || (process.env.VERCEL ? 'https://cozumetut.vercel.app' : 'http://localhost:3000');
+    || (process.env.VERCEL ? 'https://okulin.com' : 'http://localhost:3000');
   return `${base}/solve`;
 }
 
