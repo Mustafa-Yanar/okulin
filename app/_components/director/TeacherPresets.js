@@ -103,9 +103,9 @@ export default function TeacherPresets({ teacher, onSaved, showToast }) {
         <p className="text-xs text-amber-600">Branş ve grup eşleşmesine uygun sınıf yok.</p>
       ) : (
         <div className="flex gap-2 flex-wrap items-end">
-          <div>
+          <div className="min-w-0">
             <label className="text-label block mb-1">Sınıf</label>
-            <select className="input !w-auto text-sm" value={selCls}
+            <select className="input !w-auto text-sm max-w-[7.5rem]" value={selCls}
               onChange={e => { setSelCls(e.target.value); setSelCourse(''); }}>
               <option value="">Seç</option>
               {eligClasses.map(c => <option key={c} value={c}>{classLabel(c)}</option>)}
@@ -115,7 +115,7 @@ export default function TeacherPresets({ teacher, onSaved, showToast }) {
           {selCls && coursesForSel.length > 1 && (
             <div>
               <label className="text-label block mb-1">Ders</label>
-              <select className="input !w-auto text-sm" value={selCourse}
+              <select className="input !w-auto text-sm max-w-[8.5rem]" value={selCourse}
                 onChange={e => setSelCourse(e.target.value)}>
                 <option value="">Seç</option>
                 {coursesForSel.map(c => <option key={c} value={c}>{c}</option>)}
