@@ -17,12 +17,14 @@
   --border-light:   rgba(0,0,0,0.1);
 
   /* ── Metin ── */
-  /* --text-muted eskiden #9ca3af idi → beyaz zeminde kontrast 2.54 (WCAG AA<4.5).
-     .text-caption/.text-label/.text-gray-400 hep buna bağlı, okunmuyordu. Gri-500'e
-     çekildi (4.83 ✅). Hiyerarşi renkle değil boyut/ağırlıkla korunur (label 11px bold). */
+  /* WCAG AA (4.5) için açık temada koyulaştırıldı. Zemin çoğunlukla gri panel (#f0f2f7).
+     --text-secondary #6b7280 idi → gri zeminde 4.32 (AA<4.5); .text-body-sm/.btn-ghost/
+     inline ikincil etiketler okunmuyordu → #5b6270 (gri 5.47, beyaz 6.13) ✅.
+     --text-muted #9ca3af idi → 2.54; .text-caption/.text-label/.text-gray-400 buna bağlı
+     → #646a76 (gri 4.85, beyaz 5.43) ✅. Hiyerarşi renkten çok boyut/ağırlıkla korunur. */
   --text-primary:   #1a1d2e;
-  --text-secondary: #6b7280;
-  --text-muted:     #6b7280;
+  --text-secondary: #5b6270;
+  --text-muted:     #646a76;
 
   /* ── Gölge ── */
   --shadow-inset:   rgba(255,255,255,0.9);
