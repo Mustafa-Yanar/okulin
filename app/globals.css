@@ -559,10 +559,12 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
   background: var(--bg-muted);
   border: 1px solid var(--border-light);
   width: fit-content;
+  max-width: 100%;
 }
 .pill-tab {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 6px 14px;
   border-radius: 9999px;
@@ -572,6 +574,32 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
   color: var(--text-secondary);
   background: transparent;
   transition: all var(--transition-base);
+  min-width: 0;
+}
+.pill-tab > svg { flex-shrink: 0; }
+
+/* Dar ekran: şerit tam genişliğe yayılır, sekmeler eşit böler, sığması için
+   padding/font küçülür ve uzun metin (…) ile kısalır — kaydırma/taşma yok. */
+@media (max-width: 480px) {
+  .pill-tabs {
+    width: 100%;
+    gap: 2px;
+    padding: 3px;
+  }
+  .pill-tab {
+    flex: 1 1 0;
+    padding: 6px 6px;
+    font-size: 11px;
+    gap: 4px;
+    overflow: hidden;
+  }
+  /* metin sığmazsa … ile kısalsın (kaydırma/taşma yerine) */
+  .pill-tab > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
 }
 .pill-tab:hover {
   color: var(--text-primary);

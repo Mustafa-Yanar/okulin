@@ -24,7 +24,7 @@ function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceRev
         ].map(([key, label, Icon]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`pill-tab${tab === key ? ' is-active' : ''}`}>
-            <Icon size={12} /> {label}
+            <Icon size={12} /> <span>{label}</span>
           </button>
         ))}
       </div>

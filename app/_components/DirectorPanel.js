@@ -232,7 +232,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                       {[['etutler','Etütler',CalendarRange],['gecmis','Etüt Geçmişi',Clock],['program','Program',CalendarDays]].map(([k,l,Icon]) => (
                         <button key={k} onClick={() => setExpandedTeacherTab(k)}
                           className={`pill-tab press-effect${expandedTeacherTab === k ? ' is-active' : ''}`}>
-                          <Icon size={12} /> {l}
+                          <Icon size={12} /> <span>{l}</span>
                         </button>
                       ))}
                     </div>
@@ -459,7 +459,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
             {[['upload','Deneme Yükle',Upload],['list','Yüklenen Denemeler',FileText],['optik','Optik Form',ScanLine]].map(([k,l,Icon]) => (
               <button key={k} onClick={() => setDenemeTab(k)}
                 className={`pill-tab press-effect${denemeTab === k ? ' is-active' : ''}`}>
-                <Icon size={13} /> {l}
+                <Icon size={13} /> <span>{l}</span>
               </button>
             ))}
           </div>
