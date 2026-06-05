@@ -33,39 +33,34 @@ export default function DenemeAnaliz({ studentId }) {
 
   return (
     <div className="space-y-4">
-      {/* TYT/AYT */}
-      <div className="inline-flex rounded-lg bg-gray-100 p-1">
-        {['TYT', 'AYT'].map((t) => (
-          <button
-            key={t}
-            onClick={() => setExamType(t)}
-            className={`px-4 py-1.5 rounded-md text-sm font-600 transition-colors ${
-              examType === t ? 'bg-white shadow text-gray-800' : 'text-gray-500'
-            }`}
-            style={{ fontWeight: 600 }}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+      {/* Sınav türü + iç sekmeler — tek satır, pill tasarımı */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="pill-tabs">
+          {['TYT', 'AYT'].map((t) => (
+            <button
+              key={t}
+              onClick={() => setExamType(t)}
+              className={`pill-tab${examType === t ? ' is-active' : ''}`}
+            >
+              <span>{t}</span>
+            </button>
+          ))}
+        </div>
 
-      {/* İç sekmeler */}
-      <div className="inline-flex rounded-lg bg-gray-100 p-1 ml-2">
-        {[
-          ['liste', 'Denemeler'],
-          ['grafik', 'Gelişim Grafiği'],
-        ].map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className={`px-4 py-1.5 rounded-md text-sm font-600 transition-colors ${
-              tab === k ? 'bg-white shadow text-gray-800' : 'text-gray-500'
-            }`}
-            style={{ fontWeight: 600 }}
-          >
-            {label}
-          </button>
-        ))}
+        <div className="pill-tabs">
+          {[
+            ['liste', 'Denemeler'],
+            ['grafik', 'Gelişim Grafiği'],
+          ].map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={`pill-tab${tab === k ? ' is-active' : ''}`}
+            >
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -240,7 +235,7 @@ function GrowthChart({ points, examType }) {
   return (
     <div>
       <div className="flex items-center gap-2 flex-wrap mb-3">
-        <div className="inline-flex rounded-lg bg-gray-100 p-1">
+        <div className="pill-tabs">
           {[
             ['toplam', 'Toplam Net'],
             ['ders', 'Ders Bazlı'],
@@ -248,12 +243,9 @@ function GrowthChart({ points, examType }) {
             <button
               key={m}
               onClick={() => setMode(m)}
-              className={`px-3 py-1.5 rounded-md text-sm font-600 transition-colors ${
-                mode === m ? 'bg-white shadow text-gray-800' : 'text-gray-500'
-              }`}
-              style={{ fontWeight: 600 }}
+              className={`pill-tab${mode === m ? ' is-active' : ''}`}
             >
-              {label}
+              <span>{label}</span>
             </button>
           ))}
         </div>
