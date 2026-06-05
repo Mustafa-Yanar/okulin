@@ -561,8 +561,9 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
   gap: 4px;
   padding: 4px;
   border-radius: 9999px;
-  background: var(--bg-muted);
-  border: 1px solid var(--border-light);
+  /* Hafif brand tonlu zemin — gri yerine markayla uyumlu, ferah duruş. */
+  background: color-mix(in srgb, var(--brand, #6366f1) 6%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--brand, #6366f1) 14%, transparent);
   width: fit-content;
   max-width: 100%;
 }
@@ -611,8 +612,10 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
 }
 .pill-tab.is-active {
   color: var(--brand, #6366f1);
-  background: color-mix(in srgb, var(--brand, #6366f1) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand, #6366f1) 22%, transparent);
+  /* Brand tonlu şeritte net ayrışsın: surface zemin + brand çerçeve + yumuşak gölge. */
+  background: var(--bg-surface);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand, #6366f1) 28%, transparent),
+              0 1px 3px color-mix(in srgb, var(--brand, #6366f1) 18%, transparent);
 }
 
 /* ─── Pull-to-refresh animasyonları ─────────────────────────────────────────── */
