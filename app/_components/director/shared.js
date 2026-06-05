@@ -64,17 +64,30 @@ export function Label({ children, htmlFor }) {
 
 // label'ı ilk form elemanı child'ına useId ile bağlar (ekran okuyucu + otomatik doldurma).
 // Birden çok / element olmayan child varsa güvenle olduğu gibi bırakır.
-export function FormField({ label, children }) {
+// error: doluysa alan altında kırmızı mesaj + ilk input'a .input-error eklenir.
+// hint: nötr yardımcı metin (error yokken gösterilir).
+export function FormField({ label, children, error, hint }) {
   const id = React.useId();
   let associatedId;
   const content = React.Children.map(children, child => {
     if (!associatedId && React.isValidElement(child) && !child.props.id) {
       associatedId = id;
-      return React.cloneElement(child, { id });
+      // İlk form elemanına id ver; error varsa hata stilini de ekle.
+      const cls = error && typeof child.props.className === 'string' && child.props.className.includes('input')
+        ? `${child.props.className} input-error`
+        : child.props.className;
+      return React.cloneElement(child, { id, className: cls, 'aria-invalid': error ? true : undefined });
     }
     return child;
   });
-  return <div className="mb-4"><Label htmlFor={associatedId}>{label}</Label>{content}</div>;
+  return (
+    <div className="mb-4">
+      <Label htmlFor={associatedId}>{label}</Label>
+      {content}
+      {error ? <p className="input-hint input-hint--error">{error}</p>
+        : hint ? <p className="input-hint">{hint}</p> : null}
+    </div>
+  );
 }
 
 export function getAdjacentWeek(weekKey, delta) {

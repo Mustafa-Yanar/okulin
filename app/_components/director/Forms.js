@@ -75,8 +75,8 @@ export function TeacherForm({ initial, onClose, onSave }) {
         </FormField>
         <div>
           <Label>Telefon <span className="font-400" style={{fontWeight:400, color:'var(--text-secondary)'}}>(opsiyonel)</span></Label>
-          <input className={`input ${phoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={phone} onChange={e=>setPhone(e.target.value)} />
-          {phoneInvalid && <p className="text-xs text-red-500 mt-1">Geçersiz numara. Örnek: 0532 123 45 67</p>}
+          <input className={`input ${phoneInvalid ? 'input-error' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={phone} onChange={e=>setPhone(e.target.value)} aria-invalid={phoneInvalid || undefined} />
+          {phoneInvalid && <p className="input-hint input-hint--error">Geçersiz numara. Örnek: 0532 123 45 67</p>}
         </div>
         <div>
           <Label>Hangi gruplara ders girebilir?</Label>
@@ -167,18 +167,18 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
           </select>
         </FormField>
         <FormField label="Öğrenci Telefonu">
-          <input className={`input ${phoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={phone} onChange={e=>setPhone(e.target.value)} />
-          {phoneInvalid && <p className="text-xs text-red-500 mt-1">Geçersiz numara. Örnek: 0532 123 45 67</p>}
+          <input className={`input ${phoneInvalid ? 'input-error' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={phone} onChange={e=>setPhone(e.target.value)} aria-invalid={phoneInvalid || undefined} />
+          {phoneInvalid && <p className="input-hint input-hint--error">Geçersiz numara. Örnek: 0532 123 45 67</p>}
         </FormField>
         <FormField label="Veli Adı Soyadı *">
           <input className="input" type="text" placeholder="Örn. Ayşe Yılmaz" value={parentName} onChange={e=>setParentName(e.target.value)} required={!initial} />
           {!initial && parentName.trim()==='' && <p className="text-xs text-gray-400 mt-1">Veli adı zorunlu.</p>}
         </FormField>
         <FormField label="Veli Telefonu *">
-          <input className={`input ${parentPhoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={parentPhone} onChange={e=>setParentPhone(e.target.value)} required={!initial} />
+          <input className={`input ${parentPhoneInvalid ? 'input-error' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={parentPhone} onChange={e=>setParentPhone(e.target.value)} required={!initial} aria-invalid={parentPhoneInvalid || undefined} />
           {parentPhoneInvalid
-            ? <p className="text-xs text-red-500 mt-1">Geçersiz numara. Örnek: 0532 123 45 67</p>
-            : (!initial && parentPhone.trim()==='' && <p className="text-xs text-gray-400 mt-1">Veli telefonu zorunlu (veli paneli girişi bu numarayla).</p>)}
+            ? <p className="input-hint input-hint--error">Geçersiz numara. Örnek: 0532 123 45 67</p>
+            : (!initial && parentPhone.trim()==='' && <p className="input-hint">Veli telefonu zorunlu (veli paneli girişi bu numarayla).</p>)}
         </FormField>
         <FormField label="Doğum Tarihi">
           <input className="input" type="date" value={birthDate} onChange={e=>setBirthDate(e.target.value)}
