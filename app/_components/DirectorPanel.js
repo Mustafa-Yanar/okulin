@@ -17,6 +17,7 @@ import DirectorMuhasebeTab from './director/MuhasebeTab';
 import HistoryModal from './director/HistoryModal';
 import { StudentList } from './director/StudentList';
 import VeliPanel from './director/VeliPanel';
+import TeacherPresets from './director/TeacherPresets';
 import ProgramEditor from './director/ProgramEditor';
 import { useUrlTab } from './useUrlTab';
 import { useUrlParam } from './useUrlParam';
@@ -317,6 +318,16 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                     />
                   )}
                 </div>
+              </div>
+
+              {/* Sabit dersler (ön eşleştirme) — sekmeden bağımsız, her zaman görünür */}
+              <div className="mt-4">
+                <TeacherPresets
+                  key={`presets-${t.id}`}
+                  teacher={t}
+                  showToast={showToast}
+                  onSaved={(presets) => setTeachers(prev => prev.map(x => x.id === t.id ? { ...x, presets } : x))}
+                />
               </div>
             </div>
           );

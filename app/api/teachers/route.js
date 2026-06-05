@@ -8,13 +8,41 @@ import { normalizeTeacher } from '@/lib/teacherMigrate';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
 import { parseBody, z, zName, zPassword, zId, zStringArray } from '@/lib/validate';
+import { COL_COURSES, colKeyForClass, classToGroup, ALL_CLASSES } from '@/lib/constants';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+// Ön eşleştirme listesini öğretmenin branşlarına + grup izinlerine göre süz.
+// Geçersiz (branş dışı ders / izin dışı grup / bilinmeyen sınıf) satırlar sessizce atılır.
+function sanitizePresets(list, teacher) {
+  if (!Array.isArray(list)) return [];
+  const branches = new Set(teacher.branches || []);
+  const ag = teacher.allowedGroups || [];
+  const groups = ag.length > 0 ? new Set(ag) : new Set(['ortaokul', 'lise', 'mezun']);
+  const seen = new Set();
+  const out = [];
+  for (const p of list) {
+    const cls = String(p?.cls || '');
+    const course = String(p?.course || '');
+    if (!ALL_CLASSES.includes(cls)) continue;
+    if (seen.has(cls)) continue;                       // sınıf başına tek ders
+    if (!groups.has(classToGroup(cls))) continue;
+    if (!branches.has(course)) continue;
+    if (!(COL_COURSES[colKeyForClass(cls)] || []).includes(course)) continue;
+    seen.add(cls);
+    out.push({ cls, course });
+  }
+  return out;
+}
+
 const zPhotoUrl = z.string().max(1_000_000).optional(); // base64 data URL (~400KB)
 const zPhone = z.string().max(40).optional();
+const zPresets = z.array(z.object({
+  cls: z.string().max(10),
+  course: z.string().max(40),
+})).max(200);
 const TeacherCreateSchema = z.object({
   name: zName, password: zPassword,
   branches: zStringArray.refine(a => a.length > 0, { message: 'En az bir branş gerekli' }),
@@ -23,6 +51,7 @@ const TeacherCreateSchema = z.object({
 // PUT: ya toggle_off_day özel aksiyonu ya normal güncelleme.
 const TeacherUpdateSchema = z.union([
   z.object({ action: z.literal('toggle_off_day'), id: zId, dayIndex: z.coerce.number().int().min(0).max(6), off: z.boolean() }),
+  z.object({ action: z.literal('set_presets'), id: zId, presets: zPresets }),
   z.object({
     action: z.undefined().optional(), id: zId, name: zName,
     password: z.string().max(200).optional(), branches: zStringArray.optional(),
@@ -45,6 +74,7 @@ export async function GET() {
     id: t.id, name: t.name, username: t.username, branches: t.branches || [],
     allowedGroups: t.allowedGroups || [], photoUrl: t.photoUrl || '',
     offDays: t.offDays || [], phone: t.phone || '',
+    presets: Array.isArray(t.presets) ? t.presets : [],
   }));
   return NextResponse.json(teachers);
 }
@@ -132,6 +162,18 @@ export async function PUT(req) {
     return NextResponse.json({ ok: true, offDays: updated.offDays });
   }
 
+  // Özel aksiyon: ön eşleştirme (sabit dersler) listesini güncelle.
+  // CP-SAT preset'i — sınıf+ders düzeyinde, slot serbest. Branşa/gruba göre süzülür.
+  if (body.action === 'set_presets') {
+    const { id, presets } = body;
+    const teacher = await redis.get(`teacher:${id}`);
+    if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
+    const clean = sanitizePresets(presets, teacher);
+    const updated = { ...teacher, presets: clean };
+    await redis.set(`teacher:${id}`, updated);
+    return NextResponse.json({ ok: true, presets: clean });
+  }
+
   const { id, name, password, branches, allowedGroups, photoUrl, phone } = body;
   const teacher = await redis.get(`teacher:${id}`);
   if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
@@ -145,6 +187,10 @@ export async function PUT(req) {
   };
   delete updated.branch;        // eski şema alanlarını temizle
   delete updated.extraBranches;
+  // Branş/grup değiştiyse ön eşleştirmeleri yeni izinlere göre süz (artık geçersizleri at).
+  if (Array.isArray(teacher.presets) && teacher.presets.length) {
+    updated.presets = sanitizePresets(teacher.presets, updated);
+  }
   if (password) {
     updated.passwordHash = await bcrypt.hash(password, 10);
   }

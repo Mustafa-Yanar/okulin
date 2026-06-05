@@ -88,7 +88,6 @@ function colKeyFor(cls) {
   return 'Lise Ortak_9';
 }
 function coursesForCol(key) { return COL_COURSES[key] || []; }
-function coursesForClass(cls) { return coursesForCol(colKeyFor(cls)); }
 
 const ALL_CLASSES = [...STUDENT_GROUPS.ortaokul.classes,...STUDENT_GROUPS.lise.classes,...STUDENT_GROUPS.mezun.classes];
 
@@ -273,11 +272,6 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
   const [preview, setPreview]     = useState(null);
   const [previewId, setPreviewId] = useState(null);
   const [analysis, setAnalysis]   = useState(null);
-  // Ön eşleştirme (preset) paneli
-  const [presets, setPresets]         = useState([]); // [{teacherId, cls, course}]
-  const [presetCls, setPresetCls]       = useState('');
-  const [presetCourse, setPresetCourse] = useState('');
-  const [presetTeacher, setPresetTeacher] = useState('');
 
   const classes = useMemo(() => {
     const base = (activeClasses?.length) ? activeClasses : ALL_CLASSES;
@@ -338,6 +332,11 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
           teacherSlots[t.id] = pairs;
         } catch { teacherSlots[t.id] = []; }
       }));
+
+      // Ön eşleştirmeler artık öğretmen kayıtlarında (teacher.presets) — düzleştir.
+      const presets = teachers.flatMap(t =>
+        (t.presets || []).map(p => ({ teacherId: t.id, cls: p.cls, course: p.course }))
+      );
 
       const payload = { classes, teachers, load, maxWeekly, blocks, colKey, group, teacherSlots, presets };
       const data = await api('/api/program-solve', { method: 'POST', body: JSON.stringify(payload) });
@@ -450,25 +449,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
 
   if (!teachers) return <div className="flex items-center justify-center h-48 text-gray-400">Yükleniyor...</div>;
 
-  const teacherById = {}; teachers.forEach(t => teacherById[t.id] = t);
-
-  // Bir ders+sınıf için uygun öğretmenler (analyzeLoad'daki eligible mantığıyla aynı)
-  function eligibleTeachersForPreset(cls, course) {
-    if (!cls || !course) return [];
-    const grp = classToGroup(cls);
-    return teachers.filter(t => teacherTeaches(t, course) && teacherGroups(t).includes(grp));
-  }
-  function addPreset() {
-    if (!presetTeacher || !presetCls || !presetCourse) return;
-    setPresets(prev => {
-      const filtered = prev.filter(p => !(p.cls === presetCls && p.course === presetCourse));
-      return [...filtered, { teacherId: presetTeacher, cls: presetCls, course: presetCourse }];
-    });
-    setPresetTeacher('');
-  }
-  function removePreset(i) {
-    setPresets(prev => prev.filter((_, idx) => idx !== i));
-  }
+  // Ön eşleştirme artık öğretmen kartında (teacher.presets) — burada panel yok.
 
   let totalDemand=0;
   classes.forEach(cls => {
@@ -522,58 +503,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         <LoadTable load={load} setLoad={setLoad} cols={activeCols} />
       </div>
 
-      {/* Ön eşleştirmeler (sabit öğretmen-ders kilidi) */}
-      <div className="card p-4 space-y-3">
-        <div>
-          <h4 className="font-600 text-sm" style={{fontWeight:600}}>Ön Eşleştirmeler</h4>
-          <p className="text-xs text-gray-400">Seçtiğiniz dersler bu öğretmenlere kilitlenir; çözücü mutlaka uyar.</p>
-        </div>
-        <div className="flex gap-2 flex-wrap items-end">
-          <div>
-            <label className="text-[11px] text-gray-400 block mb-1">Sınıf</label>
-            <select value={presetCls} onChange={e=>{setPresetCls(e.target.value); setPresetCourse(''); setPresetTeacher('');}}
-              className="input !w-auto !py-1.5 text-xs">
-              <option value="">Seç</option>
-              {classes.map(c=><option key={c} value={c}>{c.toUpperCase()}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-[11px] text-gray-400 block mb-1">Ders</label>
-            <select value={presetCourse} disabled={!presetCls}
-              onChange={e=>{setPresetCourse(e.target.value); setPresetTeacher('');}}
-              className="input !w-auto !py-1.5 text-xs disabled:opacity-50">
-              <option value="">Seç</option>
-              {presetCls && coursesForClass(presetCls).map(c=><option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-[11px] text-gray-400 block mb-1">Öğretmen</label>
-            <select value={presetTeacher} disabled={!presetCourse}
-              onChange={e=>setPresetTeacher(e.target.value)}
-              className="input !w-auto !py-1.5 text-xs disabled:opacity-50">
-              <option value="">Seç</option>
-              {eligibleTeachersForPreset(presetCls, presetCourse).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </div>
-          <button onClick={addPreset} disabled={!presetTeacher||!presetCls||!presetCourse}
-            className="btn-primary !px-3 !py-1.5 text-xs disabled:opacity-50">Ekle</button>
-        </div>
-        {presetCourse && eligibleTeachersForPreset(presetCls, presetCourse).length === 0 && (
-          <p className="text-[11px] text-amber-600">Bu derse uygun öğretmen yok.</p>
-        )}
-        {presets.length > 0 && (
-          <div className="space-y-1">
-            {presets.map((p,i)=>(
-              <div key={i} className="flex items-center justify-between text-xs bg-indigo-50 rounded-lg px-3 py-1.5">
-                <span className="text-gray-700">
-                  <b>{teacherById[p.teacherId]?.name || p.teacherId}</b> → {p.cls.toUpperCase()} → {p.course}
-                </span>
-                <button onClick={()=>removePreset(i)} className="text-gray-400 hover:text-red-500 px-1" title="Sil">✕</button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Ön eşleştirme (sabit dersler) artık öğretmen kartında: Öğretmen → detay sayfası. */}
 
       {/* Ön analiz paneli */}
       {analysis && (
