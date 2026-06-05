@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { v4 as uuid } from 'crypto';
 import redis from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, initialPassword } from '@/lib/auth';
 import { getWeekKey, initWeekForTeacher } from '@/lib/slots';
 import { normalizeTeacher } from '@/lib/teacherMigrate';
+import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
-import { parseBody, z, zName, zPassword, zId, zStringArray } from '@/lib/validate';
+import { parseBody, z, zName, zId, zStringArray } from '@/lib/validate';
 import { COL_COURSES, colKeyForClass, classToGroup, ALL_CLASSES } from '@/lib/constants';
 
 function makeId() {
@@ -44,7 +45,8 @@ const zPresets = z.array(z.object({
   course: z.string().max(40),
 })).max(200);
 const TeacherCreateSchema = z.object({
-  name: zName, password: zPassword,
+  // Şifre opsiyonel: boşsa öğretmen telefonu, o da yoksa "12345678" (lib/auth.initialPassword).
+  name: zName, password: z.string().max(200).optional(),
   branches: zStringArray.refine(a => a.length > 0, { message: 'En az bir branş gerekli' }),
   allowedGroups: zStringArray.optional(), photoUrl: zPhotoUrl, phone: zPhone,
 });
@@ -105,11 +107,15 @@ export async function POST(req) {
   }
 
   const id = makeId();
-  const hash = await bcrypt.hash(password, 10);
+  // Telefonu kanonik forma çevir (giriş şifresi = telefon olunca tutarlı olsun).
+  const normPhone = phone ? (normalizeTurkishMobile(phone) || '') : '';
+  // İlk şifre: girilen şifre → telefon → "12345678". İlk girişte zorunlu değişim.
+  const initPassword = initialPassword(password, normPhone);
+  const hash = await bcrypt.hash(initPassword, 10);
   const teacher = {
     id, name, username, passwordHash: hash, branches,
     allowedGroups: allowedGroups || [], photoUrl: photoUrl || '',
-    phone: phone || '',
+    phone: normPhone,
     mustChangePassword: true,  // ilk girişte öğretmen kendi şifresini belirleyecek
   };
   await redis.set(`teacher:${id}`, teacher);
@@ -183,7 +189,8 @@ export async function PUT(req) {
     branches: branches !== undefined ? branches : (teacher.branches || []),
     allowedGroups: allowedGroups || teacher.allowedGroups,
     photoUrl: photoUrl !== undefined ? photoUrl : teacher.photoUrl,
-    phone: phone !== undefined ? phone : (teacher.phone || ''),
+    // Telefonu kanonik forma çevir (geçersizse ham değeri koru, veri kaybetme).
+    phone: phone !== undefined ? (normalizeTurkishMobile(phone) || phone || '') : (teacher.phone || ''),
   };
   delete updated.branch;        // eski şema alanlarını temizle
   delete updated.extraBranches;

@@ -68,8 +68,10 @@ export function TeacherForm({ initial, onClose, onSave }) {
           </div>
         </div>
         <FormField label="Ad Soyad"><input className="input" value={name} onChange={e=>setName(e.target.value)} required /></FormField>
-        <FormField label={initial?'Şifre (boş bırakırsan değişmez)':'Şifre'}>
-          <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} required={!initial} />
+        <FormField label={initial?'Şifre (boş bırakırsan değişmez)':'Şifre (boş bırakırsan telefon)'}>
+          <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)}
+            placeholder={initial?'':'Boş = telefon (yoksa 12345678)'} />
+          {!initial && <p className="text-caption mt-1">Boş bırakırsan ilk şifre öğretmenin telefonu olur; telefon da yoksa <b>12345678</b>. İlk girişte değiştirmesi istenir.</p>}
         </FormField>
         <div>
           <Label>Telefon <span className="text-gray-400 font-400" style={{fontWeight:400}}>(opsiyonel)</span></Label>
@@ -126,14 +128,13 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
 
   const phoneInvalid = phone.trim() !== '' && !isValidTurkishMobile(phone);
   const parentPhoneInvalid = parentPhone.trim() !== '' && !isValidTurkishMobile(parentPhone);
-  // Veli zorunlu; şifre boşsa öğrenci telefonu ilk şifre olur — telefon da yoksa şifre zorunlu.
+  // Veli zorunlu. Şifre boşsa öğrenci telefonu ilk şifre olur; telefon da yoksa "12345678".
   const parentMissing = !initial && (parentName.trim() === '' || parentPhone.trim() === '');
-  const passwordRequired = !initial && password.trim() === '' && phone.trim() === '';
 
   const submit = async e => {
     e.preventDefault();
     if (phoneInvalid || parentPhoneInvalid) return; // geçersiz telefonla gönderme
-    if (parentMissing || passwordRequired) return;
+    if (parentMissing) return;
     setLoading(true);
     await onSave({ name, username: name, password, cls, phone, parentPhone, parentName, birthDate });
     setLoading(false);
@@ -151,9 +152,9 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
       )}
       <form onSubmit={submit} className="space-y-4">
         <FormField label="Ad Soyad"><input className="input" value={name} onChange={e=>setName(e.target.value)} required /></FormField>
-        <FormField label={initial?'Şifre (boş bırakırsan değişmez)':'Şifre (boş bırakırsan telefonu ilk şifre olur)'}>
-          <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={initial?'':'Boş = öğrenci telefonu'} />
-          {passwordRequired && <p className="text-xs text-red-500 mt-1">Telefon girilmediği için şifre zorunlu.</p>}
+        <FormField label={initial?'Şifre (boş bırakırsan değişmez)':'Şifre (boş bırakırsan telefon)'}>
+          <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={initial?'':'Boş = öğrenci telefonu (yoksa 12345678)'} />
+          {!initial && <p className="text-caption mt-1">Boş bırakırsan ilk şifre öğrencinin telefonu olur; telefon da yoksa <b>12345678</b>. İlk girişte değiştirmesi istenir.</p>}
         </FormField>
         <FormField label="Grup">
           <select className="input" value={selectedGroup} onChange={e=>setSelectedGroup(e.target.value)} disabled={!!initial}>
@@ -184,7 +185,7 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
             max={new Date().toISOString().split('T')[0]} />
         </FormField>
         <div className="flex gap-3 pt-2">
-          <button className="btn-primary flex-1" disabled={loading || phoneInvalid || parentPhoneInvalid || parentMissing || passwordRequired}>{loading?'Kaydediliyor...':'Kaydet'}</button>
+          <button className="btn-primary flex-1" disabled={loading || phoneInvalid || parentPhoneInvalid || parentMissing}>{loading?'Kaydediliyor...':'Kaydet'}</button>
           <button type="button" className="btn-ghost" onClick={onClose}>İptal</button>
         </div>
       </form>

@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import redis from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, initialPassword } from '@/lib/auth';
 import { classToGroup } from '@/lib/constants';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
-import { parseBody, z, zName, zPassword, zId } from '@/lib/validate';
+import { parseBody, z, zName, zId } from '@/lib/validate';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -100,15 +100,9 @@ export async function POST(req) {
     if (!normParent2Phone) return NextResponse.json({ error: '2. iletişim telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
   }
 
-  // Şifre kuralı: girilmişse o; boşsa öğrenci telefonu ilk şifre olur.
-  // Telefon da yoksa şifre zorunlu (ya telefon ya şifre).
-  let initialPassword = (password || '').trim();
-  if (!initialPassword) {
-    if (!normPhone) {
-      return NextResponse.json({ error: 'Şifre boş bırakıldı — öğrenci telefonu yoksa şifre zorunludur' }, { status: 400 });
-    }
-    initialPassword = normPhone; // ilk şifre = telefon
-  }
+  // Şifre kuralı (lib/auth.initialPassword): girilmişse o; boşsa öğrenci telefonu;
+  // telefon da yoksa sabit "12345678". İlk girişte zorunlu değişim (mustChangePassword).
+  const initPassword = initialPassword(password, normPhone);
 
   // Aynı isimde öğrenci var mı kontrol et
   const studentIds = await redis.smembers('students');
@@ -123,7 +117,7 @@ export async function POST(req) {
   }
 
   const id = makeId();
-  const hash = await bcrypt.hash(initialPassword, 10);
+  const hash = await bcrypt.hash(initPassword, 10);
   const student = {
     id, name, username, passwordHash: hash, cls, group,
     phone: normPhone, parentPhone: normParentPhone,

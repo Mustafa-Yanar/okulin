@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import * as XLSX from 'xlsx';
 import redis from '@/lib/db';
-import { getSession, randomPassword } from '@/lib/auth';
+import { getSession, initialPassword } from '@/lib/auth';
 import { classToGroup } from '@/lib/constants';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { addToIndex } from '@/lib/userIndex';
@@ -82,7 +82,8 @@ export async function POST(req) {
       if (!normParentPhone) results.errors.push(`${name}: veli telefonu geçersiz ("${parentPhone}"), boş bırakıldı`);
     }
 
-    const password = randomPassword(8);
+    // İlk şifre: öğrenci telefonu (varsa), yoksa sabit "12345678". İlk girişte zorunlu değişim.
+    const password = initialPassword('', normPhone);
     const hash = await bcrypt.hash(password, 10);
     const id = makeId();
     const student = {

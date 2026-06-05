@@ -33,7 +33,6 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
   async function handleSave(e) {
     e.preventDefault();
     if (!form.name.trim()) { showToast('İsim gerekli', 'error'); return; }
-    if (!editAcc && !form.password) { showToast('Şifre gerekli', 'error'); return; }
     setSaving(true);
     try {
       const body = editAcc
@@ -159,17 +158,17 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
                   </div>
                   <div>
                     <label className="text-label block mb-1.5">
-                      Şifre {editAcc && <span className="normal-case font-400" style={{ color: 'var(--text-muted)' }}>(boş bırakırsan değişmez)</span>}
+                      Şifre <span className="normal-case font-400" style={{ color: 'var(--text-muted)' }}>{editAcc ? '(boş bırakırsan değişmez)' : '(opsiyonel)'}</span>
                     </label>
                     <input
                       type="password"
                       value={form.password}
                       onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                       className="input"
-                      placeholder={editAcc ? 'Yeni şifre (opsiyonel)' : 'Şifre girin'}
+                      placeholder={editAcc ? 'Yeni şifre (opsiyonel)' : 'Boş = telefon (yoksa 12345678)'}
                       aria-label="Muhasebeci şifresi"
-                      required={!editAcc}
                     />
+                    {!editAcc && <p className="text-caption mt-1">Boş bırakırsan ilk şifre telefon olur; telefon da yoksa <b>12345678</b>. İlk girişte değiştirmesi istenir.</p>}
                   </div>
                   <div>
                     <label className="text-label block mb-1.5">Telefon</label>

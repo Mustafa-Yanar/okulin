@@ -102,7 +102,7 @@ export function CounselorSection({ showToast }) {
 
   async function add(e) {
     e.preventDefault();
-    if (!form.name.trim() || !form.password) { showToast('İsim ve şifre gerekli', 'error'); return; }
+    if (!form.name.trim()) { showToast('İsim gerekli', 'error'); return; }
     setSaving(true);
     try {
       await api('/api/counselors', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), password: form.password, phone: form.phone }) });
@@ -136,8 +136,8 @@ export function CounselorSection({ showToast }) {
           <input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Örn: Ayşe Kaya" />
         </div>
         <div className="flex-1 min-w-[120px]">
-          <label className="text-label block mb-1">Şifre</label>
-          <input className="input" type="text" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Şifre" autoComplete="new-password" />
+          <label className="text-label block mb-1">Şifre <span className="font-400" style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(opsiyonel)</span></label>
+          <input className="input" type="text" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Boş = telefon (yoksa 12345678)" autoComplete="new-password" />
         </div>
         <div className="flex-1 min-w-[120px]">
           <label className="text-label block mb-1">Telefon</label>

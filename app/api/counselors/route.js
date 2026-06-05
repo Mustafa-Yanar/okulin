@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import redis from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, initialPassword } from '@/lib/auth';
+import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
-import { parseBody, z, zName, zPassword, zId } from '@/lib/validate';
+import { parseBody, z, zName, zId } from '@/lib/validate';
 
 // Rehber (guidance counselor) hesapları — müdür oluşturur/yönetir.
 // Rehber = müdür yetkileri eksi muhasebe (bkz lib/auth.js isManager).
@@ -15,7 +16,8 @@ function makeId() {
 }
 
 const zPhone = z.string().max(40).optional();
-const CreateSchema = z.object({ name: zName, password: zPassword, phone: zPhone });
+// Şifre opsiyonel: boşsa telefon, o da yoksa "12345678" (lib/auth.initialPassword).
+const CreateSchema = z.object({ name: zName, password: z.string().max(200).optional(), phone: zPhone });
 const UpdateSchema = z.object({ id: zId, name: zName, password: z.string().max(200).optional(), phone: zPhone });
 const DeleteSchema = z.object({ id: zId });
 
@@ -60,10 +62,13 @@ export async function POST(req) {
   }
 
   const id = makeId();
-  const hash = await bcrypt.hash(password, 10);
+  const normPhone = phone ? (normalizeTurkishMobile(phone) || '') : '';
+  // İlk şifre: girilen şifre → telefon → "12345678". İlk girişte zorunlu değişim.
+  const initPassword = initialPassword(password, normPhone);
+  const hash = await bcrypt.hash(initPassword, 10);
   const counselor = {
     id, name, username, passwordHash: hash,
-    phone: phone || '',
+    phone: normPhone,
     mustChangePassword: true, // ilk girişte rehber kendi şifresini belirler
   };
   await redis.set(`counselor:${id}`, counselor);
@@ -86,7 +91,7 @@ export async function PUT(req) {
   if (!counselor) return NextResponse.json({ error: 'Rehber bulunamadı' }, { status: 404 });
 
   const updated = { ...counselor, name, username: name,
-    phone: phone !== undefined ? phone : (counselor.phone || ''),
+    phone: phone !== undefined ? (normalizeTurkishMobile(phone) || phone || '') : (counselor.phone || ''),
   };
   if (password) updated.passwordHash = await bcrypt.hash(password, 10);
   await redis.set(`counselor:${id}`, updated);

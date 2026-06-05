@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import redis from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, initialPassword } from '@/lib/auth';
+import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
-import { parseBody, z, zName, zPassword, zId } from '@/lib/validate';
+import { parseBody, z, zName, zId } from '@/lib/validate';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
 const zPhone = z.string().max(40).optional();
-const AccountantCreateSchema = z.object({ name: zName, password: zPassword, phone: zPhone });
+// Şifre opsiyonel: boşsa telefon, o da yoksa "12345678" (lib/auth.initialPassword).
+const AccountantCreateSchema = z.object({ name: zName, password: z.string().max(200).optional(), phone: zPhone });
 const AccountantUpdateSchema = z.object({ id: zId, name: zName, password: z.string().max(200).optional(), phone: zPhone });
 const AccountantDeleteSchema = z.object({ id: zId });
 
@@ -58,10 +60,13 @@ export async function POST(req) {
   }
 
   const id = makeId();
-  const hash = await bcrypt.hash(password, 10);
+  const normPhone = phone ? (normalizeTurkishMobile(phone) || '') : '';
+  // İlk şifre: girilen şifre → telefon → "12345678". İlk girişte zorunlu değişim.
+  const initPassword = initialPassword(password, normPhone);
+  const hash = await bcrypt.hash(initPassword, 10);
   const accountant = {
     id, name, username, passwordHash: hash,
-    phone: phone || '',
+    phone: normPhone,
     mustChangePassword: true,  // ilk girişte muhasebeci kendi şifresini belirleyecek
   };
   await redis.set(`accountant:${id}`, accountant);
@@ -84,7 +89,7 @@ export async function PUT(req) {
   if (!accountant) return NextResponse.json({ error: 'Muhasebeci bulunamadı' }, { status: 404 });
 
   const updated = { ...accountant, name, username: name,
-    phone: phone !== undefined ? phone : (accountant.phone || ''),
+    phone: phone !== undefined ? (normalizeTurkishMobile(phone) || phone || '') : (accountant.phone || ''),
   };
   if (password) {
     updated.passwordHash = await bcrypt.hash(password, 10);
