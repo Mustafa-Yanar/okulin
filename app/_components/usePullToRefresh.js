@@ -6,7 +6,8 @@ export function usePullToRefresh(onRefresh) {
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshState, setRefreshState] = useState('idle'); // idle | pulling | ready | refreshing | popping
 
-  const scrollContainerRef = useRef(null);
+  const scrollContainerRef = useRef(null); // scrollTop okunan içerik alanı (<main>)
+  const gestureTargetRef = useRef(null);   // touch dinleyicilerin bağlandığı kapsayıcı (header dahil)
   const stateRef = useRef({ refreshState, pullDistance });
   useEffect(() => { stateRef.current = { refreshState, pullDistance }; }, [refreshState, pullDistance]);
 
@@ -93,19 +94,26 @@ export function usePullToRefresh(onRefresh) {
     }
   }, [onRefresh]);
 
+  // scrollTop'un okunacağı içerik alanını (<main>) işaretler — dinleyici bağlamaz.
   const setScrollContainerRef = useCallback((node) => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.removeEventListener('touchstart', handleTouchStart);
-      scrollContainerRef.current.removeEventListener('touchmove', handleTouchMove);
-      scrollContainerRef.current.removeEventListener('touchend', handleTouchEnd);
+    scrollContainerRef.current = node;
+  }, []);
+
+  // Touch dinleyicilerini bağlanan kapsayıcıya kurar. Header'ı da kapsayan üst
+  // kapsayıcıya verilirse, üst bardan çekince de uygulama animasyonu çalışır.
+  const setGestureContainerRef = useCallback((node) => {
+    if (gestureTargetRef.current) {
+      gestureTargetRef.current.removeEventListener('touchstart', handleTouchStart);
+      gestureTargetRef.current.removeEventListener('touchmove', handleTouchMove);
+      gestureTargetRef.current.removeEventListener('touchend', handleTouchEnd);
     }
     if (node) {
       node.addEventListener('touchstart', handleTouchStart, { passive: false });
       node.addEventListener('touchmove', handleTouchMove, { passive: false });
       node.addEventListener('touchend', handleTouchEnd, { passive: true });
     }
-    scrollContainerRef.current = node;
+    gestureTargetRef.current = node;
   }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
 
-  return { pullDistance, refreshState, setScrollContainerRef };
+  return { pullDistance, refreshState, setScrollContainerRef, setGestureContainerRef };
 }

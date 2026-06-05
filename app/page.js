@@ -332,7 +332,7 @@ function AppContent() {
   const handleRefresh = useCallback(async () => {
     window.location.reload();
   }, []);
-  const { pullDistance, refreshState, setScrollContainerRef } = usePullToRefresh(handleRefresh);
+  const { pullDistance, refreshState, setScrollContainerRef, setGestureContainerRef } = usePullToRefresh(handleRefresh);
 
   useEffect(() => {
     (async () => {
@@ -458,7 +458,7 @@ function AppContent() {
         onSettings={session.role === 'director' ? () => handleTabChange('ayarlar') : undefined}
       />
 
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+      <div ref={setGestureContainerRef} className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {/* TopBar */}
         <header className="h-14 flex items-center justify-between px-4 shrink-0 z-20"
           style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' }}>
