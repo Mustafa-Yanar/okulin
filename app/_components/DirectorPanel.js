@@ -227,7 +227,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                 <div className="px-4 py-3" style={{ background: 'var(--bg-surface-2)' }}>
                   {/* Sekme başlığı + tarih nav (sadece Etütler sekmesinde) */}
                   <div className="flex items-center justify-between gap-2 mb-3">
-                    <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)' }}>
+                    <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-light)' }}>
                       {[['etutler','Etütler'],['gecmis','Etüt Geçmişi'],['program','Program']].map(([k,l]) => (
                         <button key={k} onClick={() => setExpandedTeacherTab(k)} className="press-effect"
                           style={{
@@ -456,11 +456,16 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
       {tab === 'denemeler' && (
         <div>
-          <div className="flex gap-1 mb-4 p-1 bg-gray-100 rounded-xl w-fit">
+          <div className="flex gap-1 mb-4 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-light)' }}>
             {[['upload','Deneme Yükle'],['list','Yüklenen Denemeler'],['optik','Optik Form']].map(([k,l]) => (
-              <button key={k} onClick={() => setDenemeTab(k)}
-                className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${denemeTab===k?'bg-white shadow text-gray-900':'text-gray-500 hover:text-gray-700'}`}
-                style={{ fontWeight: 600 }}>{l}</button>
+              <button key={k} onClick={() => setDenemeTab(k)} className="press-effect"
+                style={{
+                  padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  transition: 'all var(--transition-base)',
+                  background: denemeTab === k ? 'var(--bg-surface)' : 'transparent',
+                  color: denemeTab === k ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  boxShadow: denemeTab === k ? 'var(--shadow-sm)' : 'none',
+                }}>{l}</button>
             ))}
           </div>
           {denemeTab === 'optik'

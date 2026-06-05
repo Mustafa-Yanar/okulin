@@ -184,7 +184,7 @@ export default function VeliPanel({ students, onChanged, showToast }) {
             <div key={grp.cls}>
               <button onClick={() => toggle(grp.cls)}
                 className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-700 transition-colors hover:brightness-95"
-                style={{ fontWeight: 700, background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
+                style={{ fontWeight: 700, background: 'var(--bg-muted)', border: '1px solid var(--border-light)', color: 'var(--text-secondary)' }}>
                 <span>{grp.label} <span className="font-500 opacity-60" style={{ fontWeight: 500 }}>({grp.students.length} veli)</span></span>
                 <ChevronRight size={14} className="transition-transform" style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
               </button>

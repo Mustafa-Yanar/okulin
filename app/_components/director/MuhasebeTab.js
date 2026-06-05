@@ -70,7 +70,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
 
   return (
     <div>
-      <div className="flex gap-1 mb-6 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)' }}>
+      <div className="flex gap-1 mb-6 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-light)' }}>
         {[['finance', 'Öğrenci Ödemeleri'], ['expenses', 'Giderler'], ['accountants', 'Muhasebeciler']].map(([k, l]) => (
           <button key={k} onClick={() => setSubTab(k)} className="press-effect"
             style={{

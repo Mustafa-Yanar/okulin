@@ -144,11 +144,16 @@ export default function ExpensePanel({ session, showToast }) {
 
       {/* Kontrol satırı: görünüm + dönem */}
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
+        <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-light)' }}>
           {[['personnel', '👥 Personel Ödemeleri'], ['general', '🧾 Diğer Giderler']].map(([k, l]) => (
-            <button key={k} onClick={() => { setView(k); setCatFilter(''); }}
-              className={`px-4 py-2 rounded-lg text-sm font-600 transition-all ${view === k ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-              style={{ fontWeight: 600 }}>{l}</button>
+            <button key={k} onClick={() => { setView(k); setCatFilter(''); }} className="press-effect"
+              style={{
+                padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                transition: 'all var(--transition-base)',
+                background: view === k ? 'var(--bg-surface)' : 'transparent',
+                color: view === k ? 'var(--text-primary)' : 'var(--text-secondary)',
+                boxShadow: view === k ? 'var(--shadow-sm)' : 'none',
+              }}>{l}</button>
           ))}
         </div>
 
