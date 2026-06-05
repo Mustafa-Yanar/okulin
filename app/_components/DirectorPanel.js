@@ -75,6 +75,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [selectedTeacherForSlots, setSelectedTeacherForSlots] = useState(null);
   const [teacherSlots, setTeacherSlots] = useState(null);
   const [expandedTeacherId, setExpandedTeacherId] = useUrlParam('ogretmen'); // inline detay → URL'de görünür
+  const [expandedStudentId] = useUrlParam('ogrenci'); // öğrenci detay açıkken liste başlığını gizle
   const [expandedTeacherTab, setExpandedTeacherTab] = useState('etutler');
   const [historyTarget, setHistoryTarget] = useState(null);
   const [pendingGuidance, setPendingGuidance] = useState({});
@@ -374,19 +375,21 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       {/* STUDENTS TAB */}
       {tab === 'students' && (
         <div>
-          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-            <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğrenciler ({students.length})</h3>
-            <div className="flex gap-2 flex-wrap">
-              <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditStudent(null); setShowStudentForm(true); }}>
-                <Plus size={14} /> Öğrenci Ekle
-              </button>
-              {!isCounselor && (
-                <button className="btn-ghost !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => setShowCounselorForm(true)}>
-                  <Compass size={14} /> Rehberlik Öğretmeni Ekle
+          {!expandedStudentId && (
+            <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+              <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğrenciler ({students.length})</h3>
+              <div className="flex gap-2 flex-wrap">
+                <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditStudent(null); setShowStudentForm(true); }}>
+                  <Plus size={14} /> Öğrenci Ekle
                 </button>
-              )}
+                {!isCounselor && (
+                  <button className="btn-ghost !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => setShowCounselorForm(true)}>
+                    <Compass size={14} /> Rehberlik Öğretmeni Ekle
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          )}
           <StudentList students={students}
             allSlots={allSlots} weekKey={weekKey}
             onCancelBooking={async ({ teacherId, day, slotId }) => {
