@@ -17,6 +17,10 @@
   --bg-surface-2:   #eef1f7;
   --bg-muted:       #e2e6ee;
 
+  /* ── Grafik (recharts) ── açık tema */
+  --chart-grid:     #e5e7eb;
+  --chart-axis:     #6b7280;
+
   /* ── Kenarlıklar ── */
   /* .input/.card kenarlıkları açık temada çok soluktu → hafif koyulaştırıldı ki
      yüzey ayrımı zemin tonuyla birlikte belirginleşsin. */
@@ -78,6 +82,8 @@ html.dark {
   --bg-muted:       #2d3144;
   --border-subtle:  rgba(255,255,255,0.07);
   --border-light:   rgba(255,255,255,0.1);
+  --chart-grid:     rgba(255,255,255,0.1);
+  --chart-axis:     #9ca3af;
   --text-primary:   #e8eaf0;
   --text-secondary: #9ca3af;
   /* Dark'ta #6b7280 idi → koyu zeminde kontrast 3.45 (AA<4.5). #9ca3af'e çekildi (6.57 ✅). */
