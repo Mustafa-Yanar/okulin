@@ -74,7 +74,7 @@ export function TeacherForm({ initial, onClose, onSave }) {
           {!initial && <p className="text-caption mt-1">Boş bırakırsan ilk şifre öğretmenin telefonu olur; telefon da yoksa <b>12345678</b>. İlk girişte değiştirmesi istenir.</p>}
         </FormField>
         <div>
-          <Label>Telefon <span className="text-gray-400 font-400" style={{fontWeight:400}}>(opsiyonel)</span></Label>
+          <Label>Telefon <span className="font-400" style={{fontWeight:400, color:'var(--text-secondary)'}}>(opsiyonel)</span></Label>
           <input className={`input ${phoneInvalid ? '!border-red-400 !bg-red-50' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={phone} onChange={e=>setPhone(e.target.value)} />
           {phoneInvalid && <p className="text-xs text-red-500 mt-1">Geçersiz numara. Örnek: 0532 123 45 67</p>}
         </div>
@@ -92,7 +92,7 @@ export function TeacherForm({ initial, onClose, onSave }) {
           </div>
         </div>
         <div>
-          <Label>Branşlar <span className="text-gray-400 font-400" style={{fontWeight:400}}>(verebildiği dersler)</span></Label>
+          <Label>Branşlar <span className="font-400" style={{fontWeight:400, color:'var(--text-secondary)'}}>(verebildiği dersler)</span></Label>
           <p className="text-caption mb-2">Öğretmenin girebileceği dersleri işaretleyin. Sadece işaretli dersler atanabilir.</p>
           <div className="flex gap-2 flex-wrap">
             {visibleBranches.map(b => (

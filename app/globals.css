@@ -17,9 +17,12 @@
   --border-light:   rgba(0,0,0,0.1);
 
   /* ── Metin ── */
+  /* --text-muted eskiden #9ca3af idi → beyaz zeminde kontrast 2.54 (WCAG AA<4.5).
+     .text-caption/.text-label/.text-gray-400 hep buna bağlı, okunmuyordu. Gri-500'e
+     çekildi (4.83 ✅). Hiyerarşi renkle değil boyut/ağırlıkla korunur (label 11px bold). */
   --text-primary:   #1a1d2e;
   --text-secondary: #6b7280;
-  --text-muted:     #9ca3af;
+  --text-muted:     #6b7280;
 
   /* ── Gölge ── */
   --shadow-inset:   rgba(255,255,255,0.9);
@@ -32,7 +35,9 @@
   --color-success-bg:     #f0fdf4;
   --color-success-border: rgba(22,163,74,0.2);
 
-  --color-warning:        #d97706;
+  /* Metin/badge olarak kullanılıyor; #d97706 beyaz/açık-sarı zeminde 3.19 (AA<4.5).
+     amber-700'e çekildi (5.02 ✅). Dark değeri (#fbbf24) ayrı, dokunulmadı. */
+  --color-warning:        #b45309;
   --color-warning-bg:     #fffbeb;
   --color-warning-border: rgba(217,119,6,0.2);
 
@@ -66,7 +71,8 @@ html.dark {
   --border-light:   rgba(255,255,255,0.1);
   --text-primary:   #e8eaf0;
   --text-secondary: #9ca3af;
-  --text-muted:     #6b7280;
+  /* Dark'ta #6b7280 idi → koyu zeminde kontrast 3.45 (AA<4.5). #9ca3af'e çekildi (6.57 ✅). */
+  --text-muted:     #9ca3af;
   --shadow-inset:   rgba(255,255,255,0.04);
   --shadow-sm:      0 1px 3px rgba(0,0,0,0.2),  0 1px 2px rgba(0,0,0,0.15);
   --shadow-md:      0 2px 8px rgba(0,0,0,0.3),  0 4px 16px rgba(0,0,0,0.2);
@@ -437,6 +443,12 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 3px; }
 html.dark ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+
+/* Light + dark ORTAK: en soluk gri metinler (gray-400/300) okunmuyordu (beyaz zeminde
+   kontrast 2.5, AA<4.5). --text-muted'a bağlanır → light #6b7280 (4.83 ✅), dark #9ca3af
+   (6.57 ✅). İkonlarda da koyulaşır ama dekoratif/opacity'li, kabul edilebilir. */
+.text-gray-400 { color: var(--text-muted); }
+.text-gray-300 { color: var(--text-muted); }
 
 /* ─── Dark mode genel overrides — Tailwind hardcoded class'larını ezer ──────── */
 html.dark .text-gray-900 { color: var(--text-primary) !important; }
