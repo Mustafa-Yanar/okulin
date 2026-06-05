@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { upload } from '@vercel/blob/client';
+import EmptyState from '../EmptyState';
 import {
   BookOpen, FileText, Youtube, Link2, Plus, Trash2, X, Upload,
   ExternalLink, Play, Filter,
@@ -108,10 +109,9 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
       {loading ? (
         <p className="text-caption py-8 text-center">Yükleniyor…</p>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-12 text-caption">
-          <BookOpen size={36} className="mx-auto mb-2 opacity-40" />
-          <p className="text-sm">{resources.length === 0 ? 'Henüz kaynak eklenmemiş.' : 'Filtreye uygun kaynak yok.'}</p>
-        </div>
+        <EmptyState icon={BookOpen}
+          title={resources.length === 0 ? 'Henüz kaynak eklenmemiş' : 'Filtreye uygun kaynak yok'}
+          description={resources.length === 0 ? 'PDF, video veya bağlantı ekleyerek kütüphaneyi oluşturun.' : 'Farklı bir filtre deneyin.'} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filtered.map(r => {

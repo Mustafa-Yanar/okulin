@@ -22,6 +22,7 @@ import ProgramEditor from './director/ProgramEditor';
 import { useUrlTab } from './useUrlTab';
 import { useUrlParam } from './useUrlParam';
 import LoadingBox, { SkeletonList } from './Loading';
+import EmptyState from './EmptyState';
 import OptikFormTab from './director/OptikFormTab';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementSender } from './announcements/Announcements';
@@ -361,7 +362,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                   </button>
                 </div>
               ))}
-              {teachers.length===0 && <div className="card p-8 text-center text-gray-400"><Users size={32} className="mx-auto mb-2 opacity-30" /><p>Henüz öğretmen eklenmemiş</p></div>}
+              {teachers.length===0 && <EmptyState card icon={Users} title="Henüz öğretmen eklenmemiş" description="Yeni öğretmen ekleyerek başlayın." />}
             </div>
           </div>
         );

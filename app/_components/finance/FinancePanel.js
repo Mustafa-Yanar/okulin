@@ -7,6 +7,7 @@ import {
   ChevronDown, ChevronUp, Printer, Trash2, AlertCircle, Edit3,
   Search, CreditCard, Banknote, Building2
 } from 'lucide-react';
+import EmptyState from '../EmptyState';
 
 const DERSHANE = {
   name: 'Akyazı Çözüm Özel Öğretim Kursu',
@@ -759,9 +760,9 @@ export default function FinancePanel({ session, showToast }) {
       {/* Liste */}
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <div className="text-center py-12 text-caption">
-            {search || filterStatus !== 'all' ? 'Eşleşen öğrenci bulunamadı' : 'Henüz öğrenci kaydı yok'}
-          </div>
+          <EmptyState icon={Users}
+            title={search || filterStatus !== 'all' ? 'Eşleşen öğrenci bulunamadı' : 'Henüz öğrenci kaydı yok'}
+            description={search || filterStatus !== 'all' ? 'Aramayı veya filtreyi değiştirin.' : undefined} />
         ) : (
           filtered.map(item => (
             <StudentFinanceRow

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import LoadingBox from './Loading';
+import EmptyState from './EmptyState';
 import {
   BookOpen, Calendar, Clock, Save, X, ClipboardList
 } from 'lucide-react';
@@ -175,7 +176,7 @@ function AvailableTree({ available, onBook, selectableBranchesFor }) {
   const toggleDay = key => setOpenDays(p => ({ ...p, [key]: !p[key] }));
 
   if (tree.length === 0) {
-    return <div className="card p-8 text-center text-gray-400"><Calendar size={32} className="mx-auto mb-2 opacity-30" /><p>Uygun etüt bulunamadı</p></div>;
+    return <EmptyState card icon={Calendar} title="Uygun etüt bulunamadı" description="Bu hafta için seçebileceğin etüt yok." />;
   }
 
   return (
@@ -286,7 +287,7 @@ export function StudentBookingsView({ student, allSlots, onCancel }) {
   const toggleDay = key => setOpenDays(p => ({ ...p, [key]: !p[key] }));
 
   if (days.length === 0) {
-    return <div className="text-center py-8 text-gray-400"><BookOpen size={28} className="mx-auto mb-2 opacity-30" /><p>Bu hafta hiç etüt yok</p></div>;
+    return <EmptyState compact icon={BookOpen} title="Bu hafta hiç etüt yok" />;
   }
 
   return (

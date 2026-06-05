@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import LoadingBox from './Loading';
+import EmptyState from './EmptyState';
 import {
   Calendar, ClipboardList, User, ChevronRight, Users, LayoutGrid, List, GraduationCap, Clock, X, BookOpen, Megaphone
 } from 'lucide-react';
@@ -185,10 +186,7 @@ export function TeacherBookingsList({ bookedList, listColorMap, onCancel, canCan
 
   if (days.length === 0) {
     return (
-      <div className="card p-10 text-center text-gray-400">
-        <Calendar size={32} className="mx-auto mb-2 opacity-30" />
-        <p>Bu hafta hiç rezervasyon yok</p>
-      </div>
+      <EmptyState card icon={Calendar} title="Bu hafta hiç rezervasyon yok" description="Öğrenciler etüt aldıkça burada görünür." />
     );
   }
 
@@ -605,10 +603,7 @@ function TeacherStudentsView({ students, branches = [] }) {
       </div>
       <div className="grid gap-2">
         {grouped.length === 0 && (
-          <div className="card p-8 text-center text-gray-400">
-            <GraduationCap size={32} className="mx-auto mb-2 opacity-30" />
-            <p>Öğrenci bulunamadı</p>
-          </div>
+          <EmptyState card icon={GraduationCap} title="Öğrenci bulunamadı" />
         )}
         {grouped.map((grp) => {
           const isOpen = openCls === grp.cls;

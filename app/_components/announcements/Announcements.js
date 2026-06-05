@@ -4,6 +4,7 @@ import {
   Megaphone, Send, Trash2, X, Check, Users, Eye, ChevronDown, ChevronUp, Mail, MailOpen,
 } from 'lucide-react';
 import { STUDENT_GROUPS, classLabel } from '@/lib/constants';
+import EmptyState from '../EmptyState';
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -244,10 +245,7 @@ export function AnnouncementInbox({ showToast }) {
 
   if (loading) return <p className="text-caption py-8 text-center">Yükleniyor…</p>;
   if (list.length === 0) return (
-    <div className="text-center py-12 text-gray-400">
-      <Megaphone size={36} className="mx-auto mb-2 opacity-40" />
-      <p className="text-sm">Henüz duyuru yok.</p>
-    </div>
+    <EmptyState icon={Megaphone} title="Henüz duyuru yok" description="Gönderilen duyurular burada listelenir." />
   );
 
   return (

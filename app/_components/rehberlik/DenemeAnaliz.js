@@ -1,8 +1,9 @@
 'use client';
 import LoadingBox from '../Loading';
+import EmptyState from '../EmptyState';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, BarChart3 } from 'lucide-react';
 import NetChart from './NetChart';
 import { calcNet, TYT_GROUPS, AYT_CATEGORIES } from '@/lib/deneme/config';
 
@@ -64,9 +65,7 @@ export default function DenemeAnaliz({ studentId }) {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="text-caption py-6 text-center">
-          {examType} için henüz sonuç yok.
-        </div>
+        <EmptyState compact icon={BarChart3} title={`${examType} için henüz sonuç yok`} description="Deneme sonucu eklendiğinde burada görünür." />
       ) : tab === 'liste' ? (
         <ExamList points={filtered} />
       ) : (
