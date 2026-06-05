@@ -1,18 +1,33 @@
 'use client';
 
-// Gizli süper-admin giriş sayfası. URL yalnızca süper-admin tarafından bilinir.
-// Normal kurum giriş ekranından (Yönetim kartı) süper-admin DENENMEZ — auth route
-// superadmin'i yalnız role:'superadmin' ile (yani buradan) kontrol eder.
-// Başarılı girişte oturum cookie'si kurulur, ana sayfa süper-admin paneline yönlendirir.
+// Gizli süper-admin sayfası — hem giriş hem panel BURADA (kurum subdomain'inin
+// kökünde değil). Süper-admin kurum-üstü bir roldür; URL gizli yolda kalır,
+// kurum giriş ekranından tamamen ayrıdır.
+// - Oturum yoksa / süper-admin değilse → gizli giriş formu.
+// - Oturum süper-admin ise → SuperAdminPanel (URL değişmez, gizli yolda kalır).
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck } from 'lucide-react';
+import SuperAdminPanel from '../_components/SuperAdminPanel';
 
-export default function SuperAdminLoginPage() {
+export default function SuperAdminPage() {
+  const [session, setSession] = useState(undefined); // undefined=yükleniyor, null=yok
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Mevcut oturumu kontrol et (sayfa yenilenince panel açık kalsın).
+  const loadSession = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth');
+      const data = await res.json().catch(() => ({}));
+      setSession(data.session && data.session.role === 'superadmin' ? data.session : null);
+    } catch {
+      setSession(null);
+    }
+  }, []);
+  useEffect(() => { loadSession(); }, [loadSession]);
 
   async function submit(e) {
     e.preventDefault();
@@ -30,14 +45,42 @@ export default function SuperAdminLoginPage() {
         setLoading(false);
         return;
       }
-      // Oturum kuruldu → kök sayfaya git, App süper-admin panelini gösterir.
-      window.location.href = '/';
+      setSession({ role: 'superadmin', id: 'superadmin', name: data.name });
     } catch {
       setError('Bağlantı hatası.');
       setLoading(false);
     }
   }
 
+  async function logout() {
+    try {
+      await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'logout' }),
+      });
+    } catch {}
+    setSession(null);
+    setUsername('');
+    setPassword('');
+    setLoading(false);
+  }
+
+  // Yükleniyor
+  if (session === undefined) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-base)' }}>
+        <div className="text-gray-400 text-sm">Yükleniyor…</div>
+      </div>
+    );
+  }
+
+  // Süper-admin oturumu açık → panel (URL gizli yolda kalır)
+  if (session) {
+    return <SuperAdminPanel session={session} onLogout={logout} />;
+  }
+
+  // Giriş formu
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg-base)' }}>
       <div className="card-elevated w-full max-w-sm p-8">

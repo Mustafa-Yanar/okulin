@@ -8,7 +8,7 @@ import StudentPanel from './_components/StudentPanel';
 import TeacherPanel from './_components/TeacherPanel';
 import AccountantPanel from './_components/AccountantPanel';
 import ParentPanel from './_components/ParentPanel';
-import SuperAdminPanel from './_components/SuperAdminPanel';
+// SuperAdminPanel artık gizli /yonetim-... sayfasında render ediliyor (kökte değil).
 import OrgAdminPanel from './_components/OrgAdminPanel';
 import DirectorPanel, { DirectorSettingsInline } from './_components/DirectorPanel';
 import ChangePasswordModal from './_components/ChangePasswordModal';
@@ -419,9 +419,13 @@ function AppContent() {
     <><OrgAdminPanel session={session} onLogout={logout} /><Toast toast={toast} /></>
   );
 
-  if (session.role === 'superadmin') return (
-    <><SuperAdminPanel session={session} onLogout={logout} /><Toast toast={toast} /></>
-  );
+  // Süper-admin paneli kökte DEĞİL — gizli /yonetim-... sayfasında render edilir
+  // (kurum-üstü rol, kurum subdomain kökünde görünmemeli). Güvenlik gereği, kökte
+  // bir şekilde süper-admin oturumu varsa kurum paneli açma; gizli sayfaya yönlendir.
+  if (session.role === 'superadmin') {
+    if (typeof window !== 'undefined') window.location.href = '/yonetim-42cfbe9908';
+    return null;
+  }
 
   if (session.mustChangePassword) return (
     <>
