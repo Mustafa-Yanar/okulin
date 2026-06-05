@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, ClipboardList, Compass
+  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, ClipboardList, Compass, CalendarRange, CalendarDays
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
 import DirectorDenemeYonetimi from './rehberlik/DirectorDenemeYonetimi';
@@ -228,17 +228,12 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                 <div className="px-4 py-3" style={{ background: 'var(--bg-surface-2)' }}>
                   {/* Sekme başlığı + tarih nav (sadece Etütler sekmesinde) */}
                   <div className="flex items-center justify-between gap-2 mb-3">
-                    <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-light)' }}>
-                      {[['etutler','Etütler'],['gecmis','Etüt Geçmişi'],['program','Program']].map(([k,l]) => (
-                        <button key={k} onClick={() => setExpandedTeacherTab(k)} className="press-effect"
-                          style={{
-                            padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                            transition: 'all var(--transition-base)',
-                            background: expandedTeacherTab === k ? 'var(--bg-surface)' : 'transparent',
-                            color: expandedTeacherTab === k ? 'var(--text-primary)' : 'var(--text-secondary)',
-                            boxShadow: expandedTeacherTab === k ? 'var(--shadow-sm)' : 'none',
-                            whiteSpace: 'nowrap',
-                          }}>{l}</button>
+                    <div className="pill-tabs">
+                      {[['etutler','Etütler',CalendarRange],['gecmis','Etüt Geçmişi',Clock],['program','Program',CalendarDays]].map(([k,l,Icon]) => (
+                        <button key={k} onClick={() => setExpandedTeacherTab(k)}
+                          className={`pill-tab press-effect${expandedTeacherTab === k ? ' is-active' : ''}`}>
+                          <Icon size={12} /> {l}
+                        </button>
                       ))}
                     </div>
                     {expandedTeacherTab === 'etutler' && (

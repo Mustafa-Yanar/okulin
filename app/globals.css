@@ -548,6 +548,40 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand, #6366f1) 10%, transparent);
 }
 
+/* ─── Pill sekme (yuvarlatılmış dikdörtgen şerit) ─────────────────────────────
+   Konteyner = .pill-tabs, her sekme = .pill-tab, aktif = .pill-tab.is-active.
+   Aktif görünüm sidebar ile aynı: brand renginin hafif şeffaf tonlaması. */
+.pill-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 9999px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-light);
+  width: fit-content;
+}
+.pill-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: all var(--transition-base);
+}
+.pill-tab:hover {
+  color: var(--text-primary);
+}
+.pill-tab.is-active {
+  color: var(--brand, #6366f1);
+  background: color-mix(in srgb, var(--brand, #6366f1) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand, #6366f1) 22%, transparent);
+}
+
 /* ─── Pull-to-refresh animasyonları ─────────────────────────────────────────── */
 @keyframes bubble-pop {
   0%   { transform: scale(0.5); opacity: 0.8; }

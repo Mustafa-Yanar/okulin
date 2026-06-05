@@ -16,24 +16,17 @@ function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceRev
   const [tab, setTab] = useState('rehberlik');
   return (
     <div className="px-3 py-2">
-      <div className="flex gap-1 mb-3 p-1 bg-white rounded-full w-fit border border-gray-200 shadow-sm">
+      <div className="pill-tabs mb-3">
         {[
           ['rehberlik', 'Rehberlik', BookOpen],
           ['devamsizlik', 'Devamsızlık Bilgisi', ClipboardList],
           ['etut', 'Etüt Geçmişi', Clock],
-        ].map(([key, label, Icon]) => {
-          const active = tab === key;
-          return (
-            <button key={key} onClick={() => setTab(key)}
-              className={`px-3.5 py-1.5 rounded-full text-xs flex items-center gap-1.5 transition-all ${active ? 'text-white shadow-md' : 'text-gray-500 hover:text-gray-700'}`}
-              style={{
-                fontWeight: 600,
-                background: active ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : undefined,
-              }}>
-              <Icon size={12} /> {label}
-            </button>
-          );
-        })}
+        ].map(([key, label, Icon]) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`pill-tab${tab === key ? ' is-active' : ''}`}>
+            <Icon size={12} /> {label}
+          </button>
+        ))}
       </div>
       {tab === 'etut' && (
         <StudentBookingsView student={student} allSlots={allSlots} onCancel={onCancelBooking} />
