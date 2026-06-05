@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, ClipboardList, Compass, CalendarRange, CalendarDays
+  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, ClipboardList, Compass, CalendarRange, CalendarDays, Upload, FileText, ScanLine
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
 import DirectorDenemeYonetimi from './rehberlik/DirectorDenemeYonetimi';
@@ -455,16 +455,12 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
       {tab === 'denemeler' && (
         <div>
-          <div className="flex gap-1 mb-4 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-light)' }}>
-            {[['upload','Deneme Yükle'],['list','Yüklenen Denemeler'],['optik','Optik Form']].map(([k,l]) => (
-              <button key={k} onClick={() => setDenemeTab(k)} className="press-effect"
-                style={{
-                  padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                  transition: 'all var(--transition-base)',
-                  background: denemeTab === k ? 'var(--bg-surface)' : 'transparent',
-                  color: denemeTab === k ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  boxShadow: denemeTab === k ? 'var(--shadow-sm)' : 'none',
-                }}>{l}</button>
+          <div className="pill-tabs mb-4">
+            {[['upload','Deneme Yükle',Upload],['list','Yüklenen Denemeler',FileText],['optik','Optik Form',ScanLine]].map(([k,l,Icon]) => (
+              <button key={k} onClick={() => setDenemeTab(k)}
+                className={`pill-tab press-effect${denemeTab === k ? ' is-active' : ''}`}>
+                <Icon size={13} /> {l}
+              </button>
             ))}
           </div>
           {denemeTab === 'optik'
