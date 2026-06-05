@@ -165,9 +165,9 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
                 <div className="grid gap-1.5 mt-1.5 ml-2">
                   {grp.students.map(s => (
                     <div key={s.id} className="card card-interactive overflow-hidden text-sm">
-                      <button className="w-full flex items-center gap-3 px-3 py-3 text-left" onClick={() => setExpandedId(s.id)}>
+                      <button className="w-full flex items-center gap-3 px-3 py-2.5 text-left" onClick={() => setExpandedId(s.id)}>
                         <div className="relative shrink-0">
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-700"
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-700"
                             style={{ background: colors.dot, fontWeight:700 }}>
                             {s.name.slice(0,2).toUpperCase()}
                           </div>
@@ -177,8 +177,11 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
                             </span>
                           )}
                         </div>
-                        <span className="font-600 truncate" style={{ fontWeight:600 }}>{s.name}</span>
-                        <ChevronRight size={14} className="text-gray-400 shrink-0 ml-auto" />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-600 truncate" style={{ fontWeight:600 }}>{s.name}</div>
+                          {s.username && <div className="text-caption truncate">@{s.username}</div>}
+                        </div>
+                        <ChevronRight size={14} className="text-gray-400 shrink-0" />
                       </button>
                     </div>
                   ))}
