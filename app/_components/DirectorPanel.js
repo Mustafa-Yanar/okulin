@@ -227,8 +227,8 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
                 <div className="px-4 py-3" style={{ background: 'var(--bg-surface-2)' }}>
                   {/* Sekme başlığı + tarih nav (sadece Etütler sekmesinde) */}
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <div className="pill-tabs">
+                  <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                    <div className="pill-tabs grow sm:grow-0">
                       {[['etutler','Etütler',CalendarRange],['gecmis','Etüt Geçmişi',Clock],['program','Program',CalendarDays]].map(([k,l,Icon]) => (
                         <button key={k} onClick={() => setExpandedTeacherTab(k)}
                           className={`pill-tab press-effect${expandedTeacherTab === k ? ' is-active' : ''}`}>
