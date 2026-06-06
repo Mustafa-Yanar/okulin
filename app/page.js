@@ -14,6 +14,7 @@ import DirectorPanel, { DirectorSettingsInline } from './_components/DirectorPan
 import ChangePasswordModal from './_components/ChangePasswordModal';
 import ForcedPasswordChange from './_components/ForcedPasswordChange';
 import Sidebar from './_components/Sidebar';
+import Landing from './_components/Landing';
 import PullToRefreshIndicator from './_components/PullToRefreshIndicator';
 import { usePullToRefresh } from './_components/usePullToRefresh';
 import { isPushSupported, subscribeToPush } from '@/lib/push-client';
@@ -312,8 +313,15 @@ export default function App() {
 // Tüm roller sidebar kullanır
 const SIDEBAR_ROLES = ['director', 'counselor', 'accountant', 'teacher', 'student', 'parent'];
 
+// Apex (kök domain) = tanıtım sayfası; subdomain = kurum uygulaması.
+const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || 'okulin.com';
+function isApexHost(host) {
+  return host === APP_DOMAIN || host === `www.${APP_DOMAIN}`;
+}
+
 function AppContent() {
   const [loading, setLoading] = useState(true);
+  const [isApex, setIsApex] = useState(undefined); // undefined=karar verilmedi
   const [session, setSession] = useState(null);
   const [directorExists, setDirectorExists] = useState(false);
   const [branding, setBranding] = useState(BRANDING_DEFAULTS);
@@ -335,6 +343,10 @@ function AppContent() {
   const { pullDistance, refreshState, setScrollContainerRef, setGestureContainerRef } = usePullToRefresh(handleRefresh);
 
   useEffect(() => {
+    // Apex (okulin.com) → tanıtım sayfası; kurum verisi/oturum çekme.
+    const apex = isApexHost(window.location.hostname);
+    setIsApex(apex);
+    if (apex) { setLoading(false); return; }
     (async () => {
       try {
         const status = await api('/api/auth');
@@ -403,7 +415,10 @@ function AppContent() {
     showToast('Çıkış yapıldı');
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-gray-400 text-sm">Yükleniyor...</div></div>;
+  if (loading || isApex === undefined) return <div className="min-h-screen flex items-center justify-center"><div className="text-gray-400 text-sm">Yükleniyor...</div></div>;
+
+  // Apex (okulin.com) → tanıtım sayfası (kurum-bağımsız).
+  if (isApex) return <Landing />;
 
   // Oturum yoksa VEYA süper-admin ise → kurum giriş ekranı. Süper-admin kurum-üstü
   // bir roldür; kurum adresinde (kökte) paneli açılmaz, normal giriş ekranı görünür.
