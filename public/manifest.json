@@ -1,7 +1,7 @@
 {
-  "name": "Akyazı Çözüm Özel Öğretim Kursu",
-  "short_name": "Çözüm Kurs",
-  "description": "Etüt takip ve rezervasyon sistemi",
+  "name": "okulin",
+  "short_name": "okulin",
+  "description": "Eğitim kurumu yönetim platformu",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f8fafc",

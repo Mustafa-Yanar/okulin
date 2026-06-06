@@ -1,15 +1,18 @@
+import { headers } from 'next/headers';
 import { rawRedis, currentOrg } from '@/lib/tenant';
 import { normalizeBranding } from '@/lib/branding';
+import { isApexHost, PLATFORM_BRANDING } from '@/lib/org';
 
 // Kuruma özel PWA manifest'i (multi-tenant Faz B tamamlayıcısı).
 // "Ana ekrana ekle" ile kurulan uygulamanın ADI / KISA ADI / TEMA RENGİ org'a göre gelir.
-// Kurum host'tan (subdomain) çözülür → cookie GEREKMEZ. Her istekte taze (no-store).
+// Apex (okulin.com) → platform (okulin) markası. Kurum host'tan çözülür → cookie GEREKMEZ.
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const apex = isApexHost(headers().get('host'));
   const org = currentOrg();
-  const rec = await rawRedis.get(`org:${org}`);
-  const b = normalizeBranding(rec);
+  const rec = apex ? null : await rawRedis.get(`org:${org}`);
+  const b = apex ? PLATFORM_BRANDING : normalizeBranding(rec);
 
   // Kuruma özel ikon: iconUrl (varsa) > logoUrl > varsayılan. Custom ikon arbitrer
   // görsel olabildiğinden (kare olmayabilir) purpose 'any' — maskable kırpma yok.

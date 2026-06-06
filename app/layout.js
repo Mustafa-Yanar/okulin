@@ -2,12 +2,14 @@ import './globals.css';
 import { cache } from 'react';
 import { headers } from 'next/headers';
 import redis from '@/lib/redis';
-import { DEFAULT_ORG } from '@/lib/org';
+import { DEFAULT_ORG, isApexHost, PLATFORM_BRANDING } from '@/lib/org';
 import { normalizeBranding } from '@/lib/branding';
 
 // İstek başına bir kez okunur (React cache dedupe) — metadata + viewport aynı çağrıyı paylaşır.
 const getBranding = cache(async () => {
   try {
+    // Apex (okulin.com) → platform markası (kurum değil → tanıtım sayfası).
+    if (isApexHost(headers().get('host'))) return PLATFORM_BRANDING;
     const org = headers().get('x-org') || DEFAULT_ORG;
     const rec = await redis.get(`org:${org}`);
     return normalizeBranding(rec);
