@@ -30,7 +30,7 @@ export async function GET() {
   const manifest = {
     name: b.name,
     short_name: b.shortName,
-    description: 'Etüt takip ve rezervasyon sistemi',
+    description: apex ? 'Eğitim kurumu yönetim platformu' : 'Etüt takip ve rezervasyon sistemi',
     start_url: '/',
     display: 'standalone',
     background_color: '#f8fafc',
