@@ -405,7 +405,11 @@ function AppContent() {
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="text-gray-400 text-sm">Yükleniyor...</div></div>;
 
-  if (!session) return (
+  // Oturum yoksa VEYA süper-admin ise → kurum giriş ekranı. Süper-admin kurum-üstü
+  // bir roldür; kurum adresinde (kökte) paneli açılmaz, normal giriş ekranı görünür.
+  // Süper-admin paneli yalnız gizli /yonetim-... sayfasında render edilir (orası
+  // kendi oturum kontrolünü yapar). Böylece kurum adresine gidince yoluna karışmaz.
+  if (!session || session.role === 'superadmin') return (
     <><LoginScreen directorExists={directorExists} branding={branding} onLogin={async (s) => {
       setSession(s);
       try {
@@ -418,14 +422,6 @@ function AppContent() {
   if (session.role === 'org_admin') return (
     <><OrgAdminPanel session={session} onLogout={logout} /><Toast toast={toast} /></>
   );
-
-  // Süper-admin paneli kökte DEĞİL — gizli /yonetim-... sayfasında render edilir
-  // (kurum-üstü rol, kurum subdomain kökünde görünmemeli). Güvenlik gereği, kökte
-  // bir şekilde süper-admin oturumu varsa kurum paneli açma; gizli sayfaya yönlendir.
-  if (session.role === 'superadmin') {
-    if (typeof window !== 'undefined') window.location.href = '/yonetim-42cfbe9908';
-    return null;
-  }
 
   if (session.mustChangePassword) return (
     <>
