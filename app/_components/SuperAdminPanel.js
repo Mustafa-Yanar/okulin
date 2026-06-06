@@ -444,7 +444,16 @@ export default function SuperAdminPanel({ session, onLogout }) {
                       <span className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">Pasif</span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-400 mt-0.5 flex gap-3 flex-wrap">
+                  <div className="text-xs text-slate-400 mt-0.5 flex gap-3 flex-wrap items-center">
+                    {org.code && (
+                      <button
+                        onClick={() => { navigator.clipboard?.writeText(org.code); }}
+                        title="Kurum kodunu kopyala"
+                        className="font-mono font-700 px-2 py-0.5 rounded"
+                        style={{ fontWeight: 700, color: '#6366f1', background: 'color-mix(in srgb, #6366f1 12%, transparent)' }}>
+                        kod: {org.code}
+                      </button>
+                    )}
                     <span>slug: <code className="font-mono">{org.slug}</code></span>
                     {org.directorUsername && <span>müdür: {org.directorUsername}</span>}
                     {org.type === 'multi' && <span>{org.branchCount} şube</span>}

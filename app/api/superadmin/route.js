@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { rawRedis } from '@/lib/tenant';
 import { getSession } from '@/lib/auth';
 import { parseBody, z, zName, zPassword } from '@/lib/validate';
+import { generateOrgCode, formatCode, hostForOrg } from '@/lib/orgcode';
 
 // Tüm işlemler rawRedis (global) — tenant prefix YOK.
 // Erişim: yalnız superadmin rolü.
@@ -39,6 +40,7 @@ export async function GET() {
       active: rec.active !== false,
       createdAt: rec.createdAt || null,
     type: rec.type || 'single',
+    code: rec.code ? formatCode(rec.code) : null,
     };
   }).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
 
@@ -106,6 +108,13 @@ export async function POST(req) {
   const exists = await rawRedis.sismember('orgs', slug);
   if (exists) return NextResponse.json({ error: `"${slug}" zaten kayıtlı` }, { status: 409 });
 
+  // Benzersiz kurum kodu üret (landing girişi için)
+  let code;
+  for (let i = 0; i < 20; i++) {
+    const c = generateOrgCode();
+    if (!(await rawRedis.get(`orgcode:${c}`))) { code = c; break; }
+  }
+
   // org kaydı (global)
   await rawRedis.sadd('orgs', slug);
   const createdAt = new Date().toISOString();
@@ -116,7 +125,10 @@ export async function POST(req) {
     active: true,
     type: orgType,
     createdAt,
+    code,
   });
+  // Kod → subdomain ters araması
+  await rawRedis.set(`orgcode:${code}`, { slug, branch: 'main', name, host: hostForOrg(slug, 'main') });
 
   // Ana şube müdürü (scoped)
   const passwordHash = await bcrypt.hash(directorPassword, 10);
@@ -140,7 +152,7 @@ export async function POST(req) {
     });
   }
 
-  return NextResponse.json({ ok: true, slug, type: orgType });
+  return NextResponse.json({ ok: true, slug, type: orgType, code: formatCode(code) });
 }
 
 // DELETE /api/superadmin — kurumu ve tüm verisini kalıcı sil

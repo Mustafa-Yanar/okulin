@@ -17,6 +17,7 @@
 
 import { Redis } from '@upstash/redis';
 import bcrypt from 'bcryptjs';
+import { generateOrgCode, formatCode, hostForOrg } from '../lib/orgcode.js';
 
 const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
@@ -47,11 +48,23 @@ async function cleanLegacy() {
 async function main() {
   if (args['clean-legacy']) await cleanLegacy();
 
-  // org kaydı (global)
+  // org kaydı (global) + kurum kodu (landing girişi için)
   const createdAt = new Date().toISOString();
+  // Mevcut kodu koru, yoksa benzersiz üret
+  let existingOrg = await redis.get(`org:${org}`);
+  if (typeof existingOrg === 'string') { try { existingOrg = JSON.parse(existingOrg); } catch {} }
+  let code = existingOrg?.code;
+  if (!code) {
+    for (let i = 0; i < 20; i++) {
+      const c = generateOrgCode();
+      if (!(await redis.get(`orgcode:${c}`))) { code = c; break; }
+    }
+  }
   await redis.sadd('orgs', org);
-  await redis.set(`org:${org}`, { slug: org, name, active: true, type, createdAt });
+  await redis.set(`org:${org}`, { slug: org, name, active: true, type, createdAt, code });
+  await redis.set(`orgcode:${code}`, { slug: org, branch: 'main', name, host: hostForOrg(org, 'main') });
   console.log('org kaydı:', org, '→', name, `[${type}]`);
+  console.log('KURUM KODU:', formatCode(code), '( düz:', code, ') →', hostForOrg(org, 'main'));
 
   // director (scoped)
   if (args['director-user'] && args['director-pass']) {
