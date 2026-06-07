@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Trash2, Lock } from 'lucide-react';
+import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Trash2, Lock, Inbox, Phone, Mail } from 'lucide-react';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -337,6 +337,91 @@ function DeleteConfirmModal({ org, onClose, onDone }) {
   );
 }
 
+// ── Demo / İletişim Talepleri ────────────────────────────────────────────────
+
+function DemoRequests() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/superadmin/demo');
+      const data = await res.json();
+      if (res.ok) setItems(data.requests || []);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function remove(id) {
+    await fetch('/api/superadmin/demo', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    setItems(prev => prev.filter(r => r.id !== id));
+  }
+
+  return (
+    <section className="mt-8">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-base font-semibold text-slate-700 flex items-center gap-2">
+          <Inbox size={16} /> Demo Talepleri
+          <span className="text-slate-400 font-normal text-sm">({items.length})</span>
+        </h2>
+        <button onClick={load} aria-label="Yenile" className="p-2 rounded hover:bg-slate-200 text-slate-500">
+          <RefreshCw size={16} />
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-slate-400 text-center py-6">Yükleniyor…</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-slate-400 text-center py-6">Henüz demo talebi yok.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {items.map(r => (
+            <div key={r.id} className="card px-4 py-3 flex flex-col sm:flex-row sm:items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium text-slate-800">{r.name}</span>
+                  <span className="text-xs text-slate-400">·</span>
+                  <span className="text-sm text-slate-600">{r.org}</span>
+                </div>
+                <div className="text-xs text-slate-500 mt-1 flex gap-4 flex-wrap items-center">
+                  {r.phone && (
+                    <a href={`tel:${r.phone}`} className="flex items-center gap-1 hover:text-indigo-600">
+                      <Phone size={12} /> {r.phone}
+                    </a>
+                  )}
+                  {r.email && (
+                    <a href={`mailto:${r.email}`} className="flex items-center gap-1 hover:text-indigo-600">
+                      <Mail size={12} /> {r.email}
+                    </a>
+                  )}
+                  {r.ts && <span>{new Date(r.ts).toLocaleString('tr-TR')}</span>}
+                </div>
+                {r.note && <p className="text-sm text-slate-600 mt-2 whitespace-pre-wrap">{r.note}</p>}
+              </div>
+              <button
+                onClick={() => remove(r.id)}
+                title="Talebi sil"
+                aria-label={`${r.name} talebini sil`}
+                className="p-1.5 rounded hover:bg-red-50 text-red-500 shrink-0"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Ana Panel ────────────────────────────────────────────────────────────────
 
 export default function SuperAdminPanel({ session, onLogout }) {
@@ -500,6 +585,8 @@ export default function SuperAdminPanel({ session, onLogout }) {
             ))}
           </div>
         )}
+
+        <DemoRequests />
       </main>
 
       {/* Modaller */}

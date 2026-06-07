@@ -1,14 +1,17 @@
 'use client';
 
 // okulin apex (okulin.com) tanıtım sayfası. Kurum-bağımsız.
-// "Giriş Yap" → kurum kodu modalı → /api/gate → kurumun subdomain'ine yönlendirir.
+// İki kitle: (1) mevcut kurum kullanıcısı → "Giriş Yap" (kurum kodu) → /api/gate → subdomain.
+//           (2) yeni kurum (satış) → "Kurumunuz için deneyin" → demo formu (/api/demo-request).
 // Modern/sade SaaS dili; uygulamanın mevcut tasarım token'larıyla (card, pill,
-// --brand, brand-tonlu ikon daireleri) uyumlu.
+// --brand, brand-tonlu ikon daireleri) uyumlu. Sahte referans YOK — dürüst hikaye.
 
 import { useState, useEffect, useRef } from 'react';
 import {
   CalendarClock, Users, Sparkles, ClipboardCheck, LineChart, UsersRound,
   Wallet, BookOpen, Megaphone, ArrowRight, X, LogIn, ShieldCheck, Zap, Heart,
+  Building2, GraduationCap, HeartHandshake, User, Quote, Receipt, ChevronDown,
+  Send, CheckCircle2,
 } from 'lucide-react';
 import Logo from './Logo';
 import { formatCode, normalizeCode } from '@/lib/orgcode';
@@ -25,10 +28,45 @@ const FEATURES = [
   { icon: Megaphone, title: 'Duyuru & Bildirim', desc: 'Rol ve kapsam hedefli duyurular, anlık push bildirimleri.' },
 ];
 
+const ROLES = [
+  {
+    icon: Building2, title: 'Müdür & Yönetici',
+    points: ['Tüm kurumu tek panelden yönetin', 'Otomatik ders programı oluşturun', 'Tahsilat, gider ve maaş takibi', 'Rol ve kapsam hedefli duyurular'],
+  },
+  {
+    icon: GraduationCap, title: 'Öğretmen',
+    points: ['Etüt ve ders programını görün', 'Hızlı yoklama alın', 'Deneme sonuçlarını analiz edin', 'Sınıfa kaynak paylaşın'],
+  },
+  {
+    icon: HeartHandshake, title: 'Veli',
+    points: ['Çocuğunun programını takip edin', 'Ödemeleri görün ve online ödeyin', 'Rehberlik notlarına erişin', 'Duyuruları anında alın'],
+  },
+  {
+    icon: User, title: 'Öğrenci',
+    points: ['Etüt rezervasyonu yapın', 'Haftalık programınızı görün', 'Deneme netlerinizi izleyin', 'Ders kaynaklarına ulaşın'],
+  },
+];
+
+const STEPS = [
+  { n: '1', title: 'Kurumunuzu tanımlayın', desc: 'Logo, marka rengi, sınıflar ve branşlar — okulin kurumunuza özel açılır.' },
+  { n: '2', title: 'Ekibinizi ekleyin', desc: 'Öğretmen, öğrenci ve velileri tek tek ya da Excel ile içeri aktarın.' },
+  { n: '3', title: 'Yönetmeye başlayın', desc: 'Program, yoklama, ödeme ve iletişim tek ekranda akıcı şekilde işler.' },
+];
+
 const HIGHLIGHTS = [
   { icon: Zap, title: 'Dakikalar içinde hazır', desc: 'Kurulum yok; kurumunuzun kodu ile giriş yapın, kendi logonuzla başlayın.' },
   { icon: ShieldCheck, title: 'Güvenli ve izole', desc: 'Her kurumun verisi ayrı; rol bazlı yetkiler ve şifreli ödeme altyapısı.' },
+  { icon: Receipt, title: 'Şeffaf fiyat', desc: 'Sabit yıllık lisans. Öğrenci başına ücret yok, işlem komisyonu yok — ne ödeyeceğinizi baştan bilirsiniz.' },
   { icon: Heart, title: 'Öğretmen tarafından tasarlandı', desc: 'Sahadaki gerçek ihtiyaçlardan doğdu; gereksiz karmaşa yok.' },
+];
+
+const FAQ = [
+  { q: 'Verilerim güvende mi?', a: 'Her kurumun verisi tamamen ayrı ve izole tutulur. Şifreler şifrelenerek saklanır, erişim role göre sınırlandırılır. Ödeme altyapısı uçtan uca şifrelidir.' },
+  { q: 'Kendi logomu ve rengimi kullanabilir miyim?', a: 'Evet. Kurumunuz kendi logosu ve marka rengiyle açılır; öğretmen, veli ve öğrenciye okulin değil, sizin kurumunuz olarak görünür.' },
+  { q: 'Mobilde çalışır mı?', a: 'Evet. Tarayıcıdan çalışır ve telefona uygulama gibi eklenebilir (PWA). Ayrı kurulum veya mağaza indirme gerekmez.' },
+  { q: 'Kaç öğrenci veya öğretmen ekleyebilirim?', a: 'Sınır yok. Küçük bir etüt merkezinden çok şubeli kuruma kadar ölçeklenir; veli ve öğrenci erişimi dahildir.' },
+  { q: 'Kurulum ne kadar sürer?', a: 'Kurumunuz tanımlandıktan sonra dakikalar içinde giriş yapıp kullanmaya başlarsınız. İstersek öğrenci ve öğretmen listenizi içeri aktarmanıza yardımcı oluruz.' },
+  { q: 'Ödeme nasıl işliyor?', a: 'Sabit yıllık lisans modeli; öğrenci başına ücret veya işlem komisyonu yoktur. Detaylar için bizimle iletişime geçmeniz yeterli.' },
 ];
 
 export default function Landing() {
@@ -41,7 +79,9 @@ export default function Landing() {
           <Logo size="md" />
           <nav className="hidden md:flex items-center gap-7 text-sm" style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>
             <a href="#ozellikler" className="hover:text-[var(--text-primary)] transition-colors">Özellikler</a>
-            <a href="#neden" className="hover:text-[var(--text-primary)] transition-colors">Neden okulin</a>
+            <a href="#roller" className="hover:text-[var(--text-primary)] transition-colors">Kimler kullanır</a>
+            <a href="#sss" className="hover:text-[var(--text-primary)] transition-colors">SSS</a>
+            <a href="#iletisim" className="hover:text-[var(--text-primary)] transition-colors">İletişim</a>
           </nav>
           <button onClick={() => setModalOpen(true)} className="btn-primary !px-5 !py-2 flex items-center gap-2 text-sm">
             <LogIn size={15} /> Giriş Yap
@@ -64,12 +104,12 @@ export default function Landing() {
             hepsi tek, sade bir sistemde. Dershane, etüt merkezi ve özel öğretim kursları için.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
-            <button onClick={() => setModalOpen(true)} className="btn-primary !px-6 !py-3 flex items-center gap-2 text-base">
-              <LogIn size={18} /> Kurum koduyla giriş
-            </button>
-            <a href="#ozellikler" className="btn-ghost !px-6 !py-3 flex items-center gap-2 text-base">
-              Özellikleri gör <ArrowRight size={16} />
+            <a href="#iletisim" className="btn-primary !px-6 !py-3 flex items-center gap-2 text-base">
+              Kurumunuz için deneyin <ArrowRight size={18} />
             </a>
+            <button onClick={() => setModalOpen(true)} className="btn-ghost !px-6 !py-3 flex items-center gap-2 text-base">
+              <LogIn size={17} /> Kurum koduyla giriş
+            </button>
           </div>
         </div>
         <HeroPreview />
@@ -90,52 +130,107 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Neden okulin ──────────────────────────────────────────── */}
-      <section id="neden" style={{ background: 'var(--bg-surface)', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)' }}>
+      {/* ── Kimler kullanır (Roller) ──────────────────────────────── */}
+      <section id="roller" style={{ background: 'var(--bg-surface)', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)' }}>
         <div className="max-w-6xl mx-auto px-5 py-16 md:py-20">
-          <div className="grid md:grid-cols-3 gap-8">
-            {HIGHLIGHTS.map((h) => {
-              const Icon = h.icon;
-              return (
-                <div key={h.title}>
-                  <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4"
-                    style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 12%, transparent)', color: '#6366f1' }}>
-                    <Icon size={22} strokeWidth={2} />
-                  </div>
-                  <h3 className="text-lg" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{h.title}</h3>
-                  <p className="mt-1.5 text-sm" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{h.desc}</p>
-                </div>
-              );
-            })}
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <h2 className="tracking-tight" style={{ fontSize: 'clamp(1.6rem,4vw,2.25rem)', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+              Herkes için doğru ekran
+            </h2>
+            <p className="mt-3 text-base" style={{ color: 'var(--text-secondary)' }}>
+              Müdürden öğrenciye kadar her rol, yalnızca ihtiyacı olanı görür.
+            </p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {ROLES.map((r) => <RoleCard key={r.title} {...r} />)}
           </div>
         </div>
       </section>
 
-      {/* ── CTA bandı ─────────────────────────────────────────────── */}
-      <section className="max-w-6xl mx-auto px-5 py-20 md:py-24">
-        <div className="card-elevated text-center px-6 py-14 relative overflow-hidden">
-          <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--brand,#6366f1) 14%, transparent), transparent 60%)' }} />
-          <div className="relative">
+      {/* ── Nasıl çalışır ─────────────────────────────────────────── */}
+      <section className="max-w-6xl mx-auto px-5 py-16 md:py-20">
+        <div className="text-center max-w-2xl mx-auto mb-12">
+          <h2 className="tracking-tight" style={{ fontSize: 'clamp(1.6rem,4vw,2.25rem)', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+            Üç adımda başlayın
+          </h2>
+          <p className="mt-3 text-base" style={{ color: 'var(--text-secondary)' }}>
+            Kurmak günler değil, dakikalar sürer.
+          </p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-5">
+          {STEPS.map((s, i) => <StepCard key={s.n} {...s} last={i === STEPS.length - 1} />)}
+        </div>
+      </section>
+
+      {/* ── Hikaye ────────────────────────────────────────────────── */}
+      <section style={{ background: 'var(--bg-surface)', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div className="max-w-3xl mx-auto px-5 py-16 md:py-20 text-center">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-6"
+            style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 12%, transparent)', color: '#6366f1' }}>
+            <Quote size={24} />
+          </div>
+          <h2 className="tracking-tight" style={{ fontSize: 'clamp(1.4rem,3.5vw,2rem)', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+            okulin nasıl doğdu?
+          </h2>
+          <p className="mt-5 text-lg" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+            okulin'i, bir dershanede ders veren bir matematik öğretmeni geliştirdi.
+            Dağınık Excel dosyaları, kaybolan yoklamalar, takip edilemeyen ödemeler ve
+            elle hazırlanan ders programları… Bu günlük sorunları çözmek için yola çıktı.
+          </p>
+          <p className="mt-4 text-lg" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+            Bu yüzden okulin kurumsal bir yazılım gibi karmaşık değil; sahadan gelen,
+            öğretmenin ve yöneticinin gerçekten kullanacağı kadar sade bir sistem.
+          </p>
+        </div>
+      </section>
+
+      {/* ── Neden okulin ──────────────────────────────────────────── */}
+      <section id="neden" className="max-w-6xl mx-auto px-5 py-16 md:py-20">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          {HIGHLIGHTS.map((h) => {
+            const Icon = h.icon;
+            return (
+              <div key={h.title}>
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4"
+                  style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 12%, transparent)', color: '#6366f1' }}>
+                  <Icon size={22} strokeWidth={2} />
+                </div>
+                <h3 className="text-lg" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{h.title}</h3>
+                <p className="mt-1.5 text-sm" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{h.desc}</p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* ── SSS ───────────────────────────────────────────────────── */}
+      <section id="sss" style={{ background: 'var(--bg-surface)', borderTop: '1px solid var(--border-subtle)', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div className="max-w-3xl mx-auto px-5 py-16 md:py-20">
+          <div className="text-center mb-12">
             <h2 className="tracking-tight" style={{ fontSize: 'clamp(1.6rem,4vw,2.25rem)', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
-              Kurumunuzun koduyla hemen başlayın
+              Sık sorulan sorular
             </h2>
-            <p className="mt-3 text-base max-w-lg mx-auto" style={{ color: 'var(--text-secondary)' }}>
-              Kurum kodunuz yoksa yöneticinizden isteyin. Giriş yaptığınızda kurumunuzun kendi
-              logosu ve rengiyle karşılaşacaksınız.
-            </p>
-            <button onClick={() => setModalOpen(true)} className="btn-primary !px-7 !py-3 mt-7 inline-flex items-center gap-2 text-base">
-              <LogIn size={18} /> Giriş Yap
-            </button>
+          </div>
+          <div className="flex flex-col gap-3">
+            {FAQ.map((f, i) => <FaqItem key={i} {...f} />)}
           </div>
         </div>
       </section>
+
+      {/* ── İletişim / Demo ───────────────────────────────────────── */}
+      <DemoSection />
 
       {/* ── Footer ────────────────────────────────────────────────── */}
       <footer style={{ borderTop: '1px solid var(--border-subtle)' }}>
         <div className="max-w-6xl mx-auto px-5 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <Logo size="sm" />
+          <div className="flex items-center gap-5 text-sm" style={{ color: 'var(--text-secondary)' }}>
+            <a href="#ozellikler" className="hover:text-[var(--text-primary)] transition-colors">Özellikler</a>
+            <a href="#sss" className="hover:text-[var(--text-primary)] transition-colors">SSS</a>
+            <button onClick={() => setModalOpen(true)} className="hover:text-[var(--text-primary)] transition-colors">Kurum girişi</button>
+          </div>
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            © {new Date().getFullYear()} okulin · Eğitim kurumu yönetim platformu
+            © {new Date().getFullYear()} okulin
           </p>
         </div>
       </footer>
@@ -154,6 +249,62 @@ function FeatureCard({ icon: Icon, title, desc }) {
       </div>
       <h3 className="text-base" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h3>
       <p className="mt-1.5 text-sm" style={{ color: 'var(--text-secondary)', lineHeight: 1.55 }}>{desc}</p>
+    </div>
+  );
+}
+
+function RoleCard({ icon: Icon, title, points }) {
+  return (
+    <div className="card p-5">
+      <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4"
+        style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff' }}>
+        <Icon size={21} strokeWidth={2} />
+      </div>
+      <h3 className="text-base mb-3" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h3>
+      <ul className="flex flex-col gap-2">
+        {points.map((p) => (
+          <li key={p} className="flex items-start gap-2 text-sm" style={{ color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+            <CheckCircle2 size={15} className="mt-0.5 shrink-0" style={{ color: '#6366f1' }} />
+            <span>{p}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function StepCard({ n, title, desc }) {
+  return (
+    <div className="card p-6">
+      <div className="w-10 h-10 rounded-full flex items-center justify-center mb-4 text-lg"
+        style={{ fontWeight: 800, background: 'color-mix(in srgb, var(--brand,#6366f1) 12%, transparent)', color: '#6366f1' }}>
+        {n}
+      </div>
+      <h3 className="text-lg" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h3>
+      <p className="mt-1.5 text-sm" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{desc}</p>
+    </div>
+  );
+}
+
+function FaqItem({ q, a }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="card overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left"
+        aria-expanded={open}
+      >
+        <span className="text-base" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{q}</span>
+        <ChevronDown
+          size={18}
+          className="shrink-0 transition-transform"
+          style={{ color: 'var(--text-muted)', transform: open ? 'rotate(180deg)' : 'none' }}
+        />
+      </button>
+      {open && (
+        <p className="px-5 pb-4 -mt-1 text-sm" style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>{a}</p>
+      )}
     </div>
   );
 }
@@ -207,6 +358,117 @@ function HeroPreview() {
         </div>
       </div>
     </div>
+  );
+}
+
+// İletişim / demo talebi — yeni kurum bilgilerini bırakır (/api/demo-request).
+function DemoSection() {
+  const [form, setForm] = useState({ name: '', org: '', phone: '', email: '', note: '', website: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+
+  function set(k, v) { setForm(prev => ({ ...prev, [k]: v })); setError(''); }
+
+  async function submit(e) {
+    e.preventDefault();
+    if (form.name.trim().length < 2) { setError('Lütfen adınızı girin.'); return; }
+    if (form.org.trim().length < 2) { setError('Lütfen kurum adını girin.'); return; }
+    if (form.phone.trim().length < 5) { setError('Lütfen geçerli bir telefon girin.'); return; }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/demo-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || 'Bir hata oluştu. Tekrar deneyin.'); setLoading(false); return; }
+      setDone(true);
+    } catch {
+      setError('Bağlantı hatası. Tekrar deneyin.');
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section id="iletisim" className="max-w-6xl mx-auto px-5 py-20 md:py-24">
+      <div className="card-elevated relative overflow-hidden grid md:grid-cols-2 gap-8 p-8 md:p-12">
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--brand,#6366f1) 12%, transparent), transparent 55%)' }} />
+        {/* Sol: davet metni */}
+        <div className="relative">
+          <h2 className="tracking-tight" style={{ fontSize: 'clamp(1.6rem,4vw,2.25rem)', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+            Kurumunuz okulin'i denesin
+          </h2>
+          <p className="mt-4 text-base" style={{ color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+            Bilgilerinizi bırakın, kurumunuza özel bir demo için sizinle iletişime geçelim.
+            Kurulumda ve mevcut listelerinizi aktarmada size yardımcı oluruz.
+          </p>
+          <ul className="mt-6 flex flex-col gap-3">
+            {['Taahhüt yok, ücretsiz demo', 'Kurumunuza özel logo ve renk', 'Kurulumda birebir destek'].map(t => (
+              <li key={t} className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                <CheckCircle2 size={16} style={{ color: '#6366f1' }} /> {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Sağ: form */}
+        <div className="relative">
+          {done ? (
+            <div className="h-full flex flex-col items-center justify-center text-center py-8">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4"
+                style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 14%, transparent)', color: '#6366f1' }}>
+                <CheckCircle2 size={28} />
+              </div>
+              <h3 className="text-lg" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Talebiniz alındı</h3>
+              <p className="mt-2 text-sm max-w-xs" style={{ color: 'var(--text-secondary)' }}>
+                En kısa sürede sizinle iletişime geçeceğiz. İlginiz için teşekkürler.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={submit} className="flex flex-col gap-3">
+              {/* honeypot — botlar doldurur, insan görmez */}
+              <input
+                type="text" tabIndex={-1} autoComplete="off"
+                value={form.website} onChange={e => set('website', e.target.value)}
+                style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, opacity: 0 }}
+                aria-hidden="true"
+              />
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-caption block mb-1">Ad Soyad *</label>
+                  <input className="input" value={form.name} onChange={e => set('name', e.target.value)} placeholder="Adınız" />
+                </div>
+                <div>
+                  <label className="text-caption block mb-1">Kurum Adı *</label>
+                  <input className="input" value={form.org} onChange={e => set('org', e.target.value)} placeholder="Dershane / kurs adı" />
+                </div>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-caption block mb-1">Telefon *</label>
+                  <input className="input" value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="05xx xxx xx xx" inputMode="tel" />
+                </div>
+                <div>
+                  <label className="text-caption block mb-1">E-posta</label>
+                  <input className="input" value={form.email} onChange={e => set('email', e.target.value)} placeholder="opsiyonel" inputMode="email" />
+                </div>
+              </div>
+              <div>
+                <label className="text-caption block mb-1">Mesaj</label>
+                <textarea className="input resize-none" rows={3} value={form.note} onChange={e => set('note', e.target.value)} placeholder="Kurumunuz hakkında kısa bilgi (opsiyonel)" />
+              </div>
+              {error && <p className="input-hint input-hint--error">{error}</p>}
+              <button className="btn-primary w-full !py-3 flex items-center justify-center gap-2" disabled={loading}>
+                {loading ? 'Gönderiliyor…' : <>Demo talep et <Send size={16} /></>}
+              </button>
+              <p className="text-caption text-center">Bilgileriniz yalnızca sizinle iletişim için kullanılır.</p>
+            </form>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
