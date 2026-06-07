@@ -7,7 +7,7 @@
 Eğitim/etüt takip uygulaması: öğrenci-öğretmen-ders-yoklama-program yönetimi + otomatik ders programı oluşturucu.
 - **Stack:** Next.js 14 (App Router) + Upstash Redis (KV) + bcryptjs/jose (JWT auth) + Tailwind + lucide-react + xlsx.
 - **Çözücü:** Google OR-Tools CP-SAT (Python serverless, Vercel).
-- **Deploy:** Vercel, her push otomatik (~40-50s). Canlı: https://cozumetut.vercel.app
+- **Deploy:** Vercel, her push otomatik (~40-50s). Canlı: https://okulin.com (aktif test kurumu: https://testkurs.okulin.com)
 - **Dil:** Türkçe (kod yorumları + UI + commit mesajları Türkçe).
 
 ## Çalışma kuralı (commit & deploy)
@@ -41,7 +41,7 @@ Her özellik/düzeltme tamamlanınca onay beklemeden: değişen dosyaları `git 
 
 ## Otomatik ders programı (CP-SAT)
 - Akış: `ProgramOlusturucu.js generate()` → `POST /api/program-solve` (Node, director auth) → `/solve` (next.config.js rewrite → `api/solve.py`) → `api/solver/model.py`.
-- **Proxy URL kritik:** production'da sabit alias `cozumetut.vercel.app` kullanır (VERCEL_URL deployment-protection'a takılır). `SOLVER_SHARED_SECRET` ile korunur.
+- **Proxy URL kritik:** production'da sabit domain `okulin.com` kullanır (`SOLVER_BASE_URL` env, [program-solve/route.js](app/api/program-solve/route.js)); VERCEL_URL deployment-protection'a takılır. `SOLVER_SHARED_SECRET` ile korunur.
 - Blok = aynı gün 2 ardışık slot, aynı öğretmen. Mezun: Pzt-Per × w1-w6 (12 blok). Lise: hafta sonu e1-e12 (6 blok/gün, sınır yok — 2026-05-29 kaldırıldı) + hafta içi w10-w11. Ortaokul: hafta sonu e1-e10 + hafta içi w10-w11. Hafta içi w1-w6 sadece mezun.
 - Kısıtlar (HARD): bir sınıf-ders tek öğretmen (TYT/AYT/Geometri ayrı); aynı sınıf+ders aynı gün max 1 blok; öğretmen/sınıf (gün,slot) tek; izin günü (offDays); KATI aktif-slot (sadece müdürün `available` işaretlediği slotlar — işaretsiz öğretmene ders YOK). SOFT: maxWeekly aşımı + yük dengeleme.
 - Ön eşleştirme (preset): müdür öğretmen→sınıf→ders kilitler (HARD).
