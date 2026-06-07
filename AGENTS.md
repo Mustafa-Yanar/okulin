@@ -1,4 +1,4 @@
-# Etüttakip — AI Agent Bağlamı
+# okulin — AI Agent Bağlamı
 
 > Araç-bağımsız proje bağlamı. Claude Code, Gemini Code Assist, Cursor vb. hepsi bunu okur.
 > Hassas bilgiler (credential, token, şifre) burada DEĞİL — `CLAUDE.local.md`'de (gitignore'da).

@@ -1,4 +1,4 @@
-// Etüttakip Service Worker — Web Push + temel offline fallback.
+// okulin Service Worker — Web Push + temel offline fallback.
 // v2 (2026-05): push + notificationclick handler'ları eklendi.
 
 const SW_VERSION = 'v2';

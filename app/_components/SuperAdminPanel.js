@@ -81,7 +81,7 @@ function NewOrgModal({ onClose, onCreated }) {
               onChange={e => { setSlugManual(true); set('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')); }}
               placeholder="akyazi-cozum"
             />
-            <p className="text-xs text-slate-400">Subdomain olarak kullanılır: {form.slug || 'slug'}.etuttakip.app</p>
+            <p className="text-xs text-slate-400">Subdomain olarak kullanılır: {form.slug || 'slug'}.okulin.com</p>
           </Field>
           <Field label="Kısa Ad" id="org-short">
             <Input id="org-short" value={form.shortName} onChange={e => set('shortName', e.target.value)} placeholder="Çözüm" />

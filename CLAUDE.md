@@ -1,4 +1,4 @@
-# Etüttakip — Claude Talimatları
+# okulin — Claude Talimatları
 
 > Detaylı proje bağlamı (mimari, branş sistemi, CP-SAT çözücü, Redis şeması) için: @AGENTS.md
 > Hassas bilgiler (credential): CLAUDE.local.md (gitignore'da).
@@ -34,7 +34,7 @@ Her özellik veya düzeltme tamamlandığında **onay beklemeden:**
 Gemini ortak, rakip değil — çıktısını tamamla, hata avlama. Dosya üzerinden haberleşme deseni:
 **Sen yazarsın** `ai-bridge/claude-to-gemini.md` (yeni mesaj en alta: `## [tarih saat] #N` + `---`), **okursun** `ai-bridge/gemini-to-claude.md` (Mustafa "Gemini yazdı, oku" deyince). Gemini'nin dosyasına ASLA yazma.
 
-> NOT (2026-05-23): Bu köprünün geçmiş içeriği (üçlü AI konsol = **ai-bridge projesi** geliştirme sohbeti) artık ayrı projeye taşındı: `~/Workspace/active/ai-bridge/bridge/`. Buradaki `ai-bridge/` klasörü artık YOK; etüttakip'e özel Gemini koordinasyonu gerekirse yeniden oluşur (gitignore'da). ai-bridge'i geliştirmek için o projenin dizininden çalış (`cd ~/Workspace/active/ai-bridge && claude`).
+> NOT (2026-05-23): Bu köprünün geçmiş içeriği (üçlü AI konsol = **ai-bridge projesi** geliştirme sohbeti) artık ayrı projeye taşındı: `~/Workspace/active/ai-bridge/bridge/`. Buradaki `ai-bridge/` klasörü artık YOK; okulin'e özel Gemini koordinasyonu gerekirse yeniden oluşur (gitignore'da). ai-bridge'i geliştirmek için o projenin dizininden çalış (`cd ~/Workspace/active/ai-bridge && claude`).
 
 ## Yapma
 - Mock/test endpoint'leri prod kodda bırakma
