@@ -33,7 +33,7 @@ export { DirectorSettingsModal, DirectorSettingsInline } from './director/Settin
 import { CounselorSection } from './director/Settings';
 
 // ─── MAIN DIRECTOR PANEL ────────────────────────────────────────────────────────
-export default function DirectorPanel({ session, showToast, externalTab, onExternalTabChange }) {
+export default function DirectorPanel({ session, showToast, externalTab, onExternalTabChange, branding }) {
   // Rehber (counselor) = müdür paneli EKSİ muhasebe. Sekme listesi role göre.
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
@@ -178,7 +178,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       {/* DERS PROGRAMI TAB — otomatik program oluşturucu (sidebar > Sistem) */}
       {tab === 'ders-programi' && (
         <ProgramOlusturucu api={api} showToast={showToast}
-          activeClasses={[...new Set(students.map(s => s.cls))]} />
+          activeClasses={[...new Set(students.map(s => s.cls))]} branding={branding} />
       )}
 
       {/* TEACHERS TAB — öğretmen listesi + inline detay sayfası (?ogretmen=ID) */}

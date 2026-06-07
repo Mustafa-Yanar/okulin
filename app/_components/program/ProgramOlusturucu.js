@@ -260,7 +260,7 @@ function analyzeLoad(classes, load, teachers) {
 }
 
 // ── Ana bileşen ──
-export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
+export default function ProgramOlusturucu({ api, showToast, activeClasses, branding }) {
   const [teachers, setTeachers] = useState(null);
   const [load, setLoad]         = useState(() => JSON.parse(JSON.stringify(DEFAULT_LOAD)));
   const [result, setResult]     = useState(null);
@@ -588,6 +588,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses }) {
         <PrintPreview
           type={preview} id={previewId}
           result={result} teachers={teachers} classes={classes}
+          brandName={branding?.name}
           onClose={()=>setPreview(null)}
         />
       )}
@@ -817,7 +818,7 @@ function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsC
 }
 
 // ── Yazdırma önizleme (print-only div) ──
-function PrintPreview({ type, id, result, teachers, classes, onClose }) {
+function PrintPreview({ type, id, result, teachers, classes, brandName, onClose }) {
   const teacherById={}; teachers.forEach(t=>teacherById[t.id]=t);
 
   // Bir öğretmenin programını veya bir sınıfın programını oluştur
@@ -854,13 +855,13 @@ function PrintPreview({ type, id, result, teachers, classes, onClose }) {
         </div>
       </div>
       {filteredPages.map((pg,pi)=>(
-        <SchedulePage key={pi} title={pg.title} lessons={pg.lessons} />
+        <SchedulePage key={pi} title={pg.title} lessons={pg.lessons} brandName={brandName} />
       ))}
     </div>
   );
 }
 
-function SchedulePage({ title, lessons }) {
+function SchedulePage({ title, lessons, brandName }) {
   const usedDays = [...new Set(lessons.map(a=>a.day))].sort();
   // Her gün için slotları sıralı dizi — sıra numarası = slot sırası
   const dayLessons = usedDays.map(d =>
@@ -872,7 +873,7 @@ function SchedulePage({ title, lessons }) {
     <div className="print-page p-8" style={{pageBreakAfter:'always',minHeight:'100vh'}}>
       <div className="mb-4 border-b pb-2">
         <h2 style={{fontWeight:700,fontSize:16}}>{title}</h2>
-        <p style={{fontSize:11,color:'#9ca3af'}}>Çözüm Etüt Merkezi — Haftalık Ders Programı</p>
+        <p style={{fontSize:11,color:'#9ca3af'}}>{brandName ? `${brandName} — ` : ''}Haftalık Ders Programı</p>
       </div>
       {lessons.length===0 ? (
         <p style={{color:'#9ca3af',fontSize:12}}>Bu program için tanımlı ders bulunmuyor.</p>

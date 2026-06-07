@@ -81,7 +81,7 @@ function BrandHeader({ branding, subtitle }) {
         </div>
       )}
       <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.03em', color: 'var(--text-primary)' }}>
-        {branding?.shortName || 'Etüt Takip'}
+        {branding?.shortName || 'okulin'}
       </h1>
       <p className="text-caption mt-1.5">{subtitle}</p>
     </div>
@@ -495,7 +495,7 @@ function AppContent() {
                 onError={e => { e.currentTarget.style.display = 'none'; }} />
             ) : (
               <span className="md:hidden text-sm truncate" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                {branding.shortName || 'Etüt Takip'}
+                {branding.shortName || 'okulin'}
               </span>
             )}
           </div>
@@ -533,7 +533,7 @@ function AppContent() {
                   }}
                 />
               ) : (
-                <DirectorPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />
+                <DirectorPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} branding={branding} />
               )}
             </>
           )}

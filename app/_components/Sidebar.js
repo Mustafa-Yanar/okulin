@@ -148,7 +148,7 @@ export default function Sidebar({
         {!collapsed && (
           <>
             <span className="text-sm leading-tight truncate flex-1 min-w-0" style={{ fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
-              {branding?.shortName || 'Etüt Takip'}
+              {branding?.shortName || 'okulin'}
             </span>
             <NotificationButton showToast={showToast} />
           </>
