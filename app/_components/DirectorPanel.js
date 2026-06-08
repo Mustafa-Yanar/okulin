@@ -341,13 +341,13 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
         // Liste / kart görünümü
         return (
           <div>
-            <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-              <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğretmen ({teachers.length})</h3>
-              <div className="flex gap-2 flex-wrap items-center">
-                <div className="pill-tabs" role="group" aria-label="Görünüm modu">
+            <div className="flex items-center justify-between mb-4 gap-2">
+              <h3 className="font-700 text-lg truncate min-w-0" style={{ fontWeight:700 }}>Öğretmen ({teachers.length})</h3>
+              <div className="flex gap-2 items-center shrink-0">
+                <div className="pill-tabs shrink-0" role="group" aria-label="Görünüm modu" style={{ width:'fit-content' }}>
                   <button
                     type="button"
-                    className={`pill-tab ${teacherView === 'list' ? 'is-active' : ''}`}
+                    className={`pill-tab !px-2.5 !flex-none ${teacherView === 'list' ? 'is-active' : ''}`}
                     aria-pressed={teacherView === 'list'}
                     title="Liste görünümü"
                     onClick={() => changeTeacherView('list')}
@@ -356,7 +356,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                   </button>
                   <button
                     type="button"
-                    className={`pill-tab ${teacherView === 'grid' ? 'is-active' : ''}`}
+                    className={`pill-tab !px-2.5 !flex-none ${teacherView === 'grid' ? 'is-active' : ''}`}
                     aria-pressed={teacherView === 'grid'}
                     title="Kart görünümü"
                     onClick={() => changeTeacherView('grid')}
@@ -364,7 +364,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                     <LayoutGrid size={15} />
                   </button>
                 </div>
-                <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
+                <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm shrink-0" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
                   <Plus size={14} /> Öğretmen Ekle
                 </button>
               </div>
