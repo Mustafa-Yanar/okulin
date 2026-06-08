@@ -51,7 +51,7 @@ function ReceiptPrintArea({ data, onClose }) {
             >
               <Printer size={14} /> Yazdır
             </button>
-            <button onClick={onClose} aria-label="Kapat" className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+            <button onClick={onClose} aria-label="Kapat" className="btn-icon">
               <X size={16} />
             </button>
           </div>
@@ -133,7 +133,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
       <div role="dialog" aria-modal="true" aria-label="Ödeme ekle" className="modal w-full max-w-md animate-modal-in">
         <div className="flex items-center justify-between p-5 border-b border-gray-100">
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>Ödeme Ekle — {studentName}</h3>
-          <button onClick={onClose} aria-label="Kapat" className="p-2 rounded-lg hover:bg-gray-100"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Kapat" className="btn-icon"><X size={16} /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-4">
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center justify-between">
@@ -295,7 +295,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>
             {existing ? 'Kaydı Güncelle' : 'Finansal Kayıt Oluştur'} — {student.name || student.studentName}
           </h3>
-          <button onClick={onClose} aria-label="Kapat" className="p-2 rounded-lg hover:bg-gray-100"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Kapat" className="btn-icon"><X size={16} /></button>
         </div>
         <form onSubmit={submit} className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -554,12 +554,12 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
                       <span className="font-800 text-green-600 text-sm shrink-0" style={{ fontWeight: 800 }}>+₺{fmt(p.amount)}</span>
                       <button
                         onClick={() => setPrintData({ studentName, studentCls, payment: p, dershane: DERSHANE })}
-                        className="p-1.5 rounded-lg hover:bg-indigo-50 text-indigo-400 hover:text-indigo-600 transition-colors"
+                        className="btn-icon btn-icon-primary"
                         title="Makbuz yazdır"
                       ><Printer size={13} /></button>
                       <button
                         onClick={() => handleDeletePayment(p.id)}
-                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-400 transition-colors"
+                        className="btn-icon btn-icon-danger"
                         title="Ödemeyi geri al"
                       ><Trash2 size={13} /></button>
                     </div>

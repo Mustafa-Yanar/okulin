@@ -161,8 +161,8 @@ export function CounselorSection({ showToast }) {
                 {c.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
               </span>
               <span className="flex-1 text-sm font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</span>
-              <button onClick={() => resetPw(c)} title="Şifre sıfırla" className="p-1.5 rounded hover:bg-amber-50 text-amber-600"><KeyRound size={14} /></button>
-              <button onClick={() => remove(c)} title="Sil" className="p-1.5 rounded hover:bg-red-50 text-red-500"><Trash2 size={14} /></button>
+              <button onClick={() => resetPw(c)} title="Şifre sıfırla" className="btn-icon btn-icon-warning"><KeyRound size={14} /></button>
+              <button onClick={() => remove(c)} title="Sil" className="btn-icon btn-icon-danger"><Trash2 size={14} /></button>
             </div>
           ))}
         </div>

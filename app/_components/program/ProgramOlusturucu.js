@@ -736,7 +736,7 @@ function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsC
                 <div className="h-full rounded-full" style={{width:`${r.n/maxN*100}%`,background:r.n>maxWeekly?'#ef4444':COURSE_COLOR[r.branch]||'#6366f1'}}/>
               </div>
               <span className="w-7 text-right" style={{fontWeight:600,color:r.n>maxWeekly?'#dc2626':'#374151'}}>{r.n}</span>
-              <button onClick={()=>onPrintTeacher(r.id)} className="ml-1 p-1 rounded hover:bg-indigo-50 text-gray-400 hover:text-indigo-600" title="PDF / Yazdır">
+              <button onClick={()=>onPrintTeacher(r.id)} className="btn-icon btn-icon-primary ml-1" title="PDF / Yazdır">
                 <Download size={11}/>
               </button>
             </div>

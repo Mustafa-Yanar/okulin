@@ -230,8 +230,8 @@ export function TeacherBookingsList({ bookedList, listColorMap, onCancel, canCan
                         )}
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-500 ${c.badge}`} style={{ fontWeight: 500 }}>{c.label}</span>
                         {canCancel && (
-                          <button onClick={() => onCancel(item)} className="p-1 rounded hover:bg-red-100 transition-colors" title="İptal et">
-                            <X size={13} className="text-red-400" />
+                          <button onClick={() => onCancel(item)} className="btn-icon btn-icon-danger" title="İptal et">
+                            <X size={13} />
                           </button>
                         )}
                       </div>

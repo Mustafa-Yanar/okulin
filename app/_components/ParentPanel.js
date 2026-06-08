@@ -229,7 +229,7 @@ function PayModal({ child, idx, inst, showToast, onClose, onPaid }) {
           <div className="text-sm font-700 text-gray-800 flex items-center gap-1.5" style={{ fontWeight: 700 }}>
             <CreditCard size={15} className="text-emerald-600" /> {idx + 1}. Taksit · {tl(inst.amount)}
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><X size={16} /></button>
+          <button onClick={onClose} className="btn-icon"><X size={16} /></button>
         </div>
         <div className="p-2">
           {loading && <div className="text-center py-10 text-gray-400 text-sm">Ödeme ekranı hazırlanıyor…</div>}

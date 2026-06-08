@@ -372,7 +372,7 @@ function DemoRequests() {
           <Inbox size={16} /> Demo Talepleri
           <span className="text-slate-400 font-normal text-sm">({items.length})</span>
         </h2>
-        <button onClick={load} aria-label="Yenile" className="p-2 rounded hover:bg-slate-200 text-slate-500">
+        <button onClick={load} aria-label="Yenile" className="btn-icon">
           <RefreshCw size={16} />
         </button>
       </div>
@@ -410,7 +410,7 @@ function DemoRequests() {
                 onClick={() => remove(r.id)}
                 title="Talebi sil"
                 aria-label={`${r.name} talebini sil`}
-                className="p-1.5 rounded hover:bg-red-50 text-red-500 shrink-0"
+                className="btn-icon btn-icon-danger shrink-0"
               >
                 <Trash2 size={15} />
               </button>
@@ -491,7 +491,7 @@ export default function SuperAdminPanel({ session, onLogout }) {
             <button
               onClick={loadOrgs}
               aria-label="Yenile"
-              className="p-2 rounded hover:bg-slate-200 text-slate-500"
+              className="btn-icon"
             >
               <RefreshCw size={16} />
             </button>
@@ -552,7 +552,7 @@ export default function SuperAdminPanel({ session, onLogout }) {
                     onClick={() => setModal({ type: 'rename', org })}
                     title="Adını düzenle"
                     aria-label={`${org.name} adını düzenle`}
-                    className="p-1.5 rounded hover:bg-slate-100 text-slate-500"
+                    className="btn-icon btn-icon-primary"
                   >
                     <Pencil size={15} />
                   </button>
@@ -560,7 +560,7 @@ export default function SuperAdminPanel({ session, onLogout }) {
                     onClick={() => setModal({ type: 'reset', org })}
                     title="Müdür şifresi sıfırla"
                     aria-label={`${org.name} müdür şifresini sıfırla`}
-                    className="p-1.5 rounded hover:bg-amber-50 text-amber-600"
+                    className="btn-icon btn-icon-warning"
                   >
                     <KeyRound size={15} />
                   </button>
@@ -568,7 +568,7 @@ export default function SuperAdminPanel({ session, onLogout }) {
                     onClick={() => toggleActive(org)}
                     title={org.active ? 'Pasife al' : 'Aktif et'}
                     aria-label={org.active ? `${org.name} pasife al` : `${org.name} aktif et`}
-                    className={`p-1.5 rounded ${org.active ? 'hover:bg-orange-50 text-orange-500' : 'hover:bg-green-50 text-green-600'}`}
+                    className={`btn-icon ${org.active ? 'btn-icon-danger' : 'btn-icon-success'}`}
                   >
                     {org.active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
                   </button>
@@ -576,7 +576,7 @@ export default function SuperAdminPanel({ session, onLogout }) {
                     onClick={() => setModal({ type: 'delete', org })}
                     title="Kurumu sil"
                     aria-label={`${org.name} sil`}
-                    className="p-1.5 rounded hover:bg-red-50 text-red-500"
+                    className="btn-icon btn-icon-danger"
                   >
                     <Trash2 size={15} />
                   </button>

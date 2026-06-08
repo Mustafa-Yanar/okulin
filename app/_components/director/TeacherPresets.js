@@ -147,7 +147,7 @@ export default function TeacherPresets({ teacher, onSaved, showToast }) {
               <span style={{ color: 'var(--text-secondary)' }}>
                 <b style={{ color: 'var(--text-primary)' }}>{classLabel(p.cls)}</b> → {p.course}
               </span>
-              <button onClick={() => remove(i)} className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-500" title="Kaldır">
+              <button onClick={() => remove(i)} className="btn-icon btn-icon-danger" title="Kaldır">
                 <X size={14} />
               </button>
             </div>

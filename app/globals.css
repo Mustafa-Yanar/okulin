@@ -257,30 +257,44 @@ body {
   border-color: #3b82f6 !important;
 }
 
+/* İkincil/nötr aksiyon butonu (Geri, Düzenle, Sil vb.) — pill-tab ile uyumlu
+   yuvarlak kapsül, surface zemin, yumuşak hover + hafif bas-bırak. */
 .btn-ghost {
-  background: var(--bg-muted);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg-surface);
   color: var(--text-secondary);
   border: 1px solid var(--border-light);
-  border-radius: 10px;
-  padding: 10px 20px;
-  font-weight: 500;
+  border-radius: 9999px;
+  padding: 9px 18px;
+  font-weight: 600;
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .12s ease;
 }
-.btn-ghost:hover { filter: brightness(0.95); color: var(--text-primary); }
+.btn-ghost:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+  border-color: color-mix(in srgb, var(--text-muted) 35%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+.btn-ghost:active { transform: scale(0.97); }
+.btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
-/* Küçük ikon buton — sadece ikon, padding küçük */
+/* Küçük ikon buton — sadece ikon, padding küçük. Yuvarlak + bas-bırak efekti. */
 .btn-icon {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; border-radius: 8px;
+  width: 32px; height: 32px; border-radius: 9999px;
   border: none; background: transparent; cursor: pointer;
   color: var(--text-muted);
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast), color var(--transition-fast), transform .12s ease;
 }
 .btn-icon:hover { background: var(--bg-muted); color: var(--text-secondary); }
+.btn-icon:active { transform: scale(0.9); }
+.btn-icon:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 .btn-icon-danger:hover { background: var(--color-danger-bg); color: var(--color-danger); }
 .btn-icon-primary:hover { background: var(--color-info-bg); color: var(--color-info); }
+.btn-icon-warning:hover { background: var(--color-warning-bg); color: var(--color-warning); }
+.btn-icon-success:hover { background: var(--color-success-bg); color: var(--color-success); }
 
 .input {
   width: 100%;

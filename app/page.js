@@ -479,8 +479,7 @@ function AppContent() {
           style={{ background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)' }}>
           <div className="flex items-center gap-3 min-w-0">
             <button
-              className="md:hidden p-2 rounded-lg hover:bg-[var(--bg-muted)]"
-              style={{ color: 'var(--text-secondary)' }}
+              className="btn-icon md:hidden"
               onClick={() => setMobileSidebarOpen(true)}
               aria-label="Menüyü aç"
             >

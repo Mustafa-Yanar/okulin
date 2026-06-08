@@ -301,7 +301,7 @@ export default function OrgAdminPanel({ session, onLogout }) {
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-base font-semibold text-slate-700">Şubeler</h1>
           <div className="flex gap-2">
-            <button onClick={load} aria-label="Yenile" className="p-2 rounded hover:bg-slate-200 text-slate-500">
+            <button onClick={load} aria-label="Yenile" className="btn-icon">
               <RefreshCw size={16} />
             </button>
             <button
@@ -355,7 +355,7 @@ export default function OrgAdminPanel({ session, onLogout }) {
                     onClick={() => setModal({ type: 'rename', branch })}
                     title="Adını düzenle"
                     aria-label={`${branch.name} adını düzenle`}
-                    className="p-1.5 rounded hover:bg-slate-100 text-slate-500"
+                    className="btn-icon btn-icon-primary"
                   >
                     <Pencil size={15} />
                   </button>
@@ -363,7 +363,7 @@ export default function OrgAdminPanel({ session, onLogout }) {
                     onClick={() => setModal({ type: 'reset', branch })}
                     title="Müdür şifresi sıfırla"
                     aria-label={`${branch.name} müdür şifresini sıfırla`}
-                    className="p-1.5 rounded hover:bg-amber-50 text-amber-600"
+                    className="btn-icon btn-icon-warning"
                   >
                     <KeyRound size={15} />
                   </button>
@@ -372,7 +372,7 @@ export default function OrgAdminPanel({ session, onLogout }) {
                       onClick={() => toggleActive(branch)}
                       title={branch.active ? 'Pasife al' : 'Aktif et'}
                       aria-label={branch.active ? `${branch.name} pasife al` : `${branch.name} aktif et`}
-                      className={`p-1.5 rounded ${branch.active ? 'hover:bg-red-50 text-red-500' : 'hover:bg-green-50 text-green-600'}`}
+                      className={`btn-icon ${branch.active ? 'btn-icon-danger' : 'btn-icon-success'}`}
                     >
                       {branch.active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
                     </button>

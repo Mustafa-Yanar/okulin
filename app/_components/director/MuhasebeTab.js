@@ -137,7 +137,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
                   <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>
                     {editAcc ? 'Muhasebeci Düzenle' : 'Yeni Muhasebeci'}
                   </h3>
-                  <button onClick={() => setShowForm(false)} className="p-2 rounded-lg hover:bg-gray-100"><X size={16} /></button>
+                  <button onClick={() => setShowForm(false)} className="btn-icon"><X size={16} /></button>
                 </div>
                 <form onSubmit={handleSave} className="p-5 space-y-4">
                   <div>

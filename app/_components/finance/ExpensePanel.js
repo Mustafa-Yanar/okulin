@@ -356,7 +356,7 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>
             {type === 'personnel' ? 'Personel Ödemesi' : 'Gider'} {isEdit ? 'Düzenle' : 'Ekle'}
           </h3>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100"><X size={16} /></button>
+          <button onClick={onClose} className="btn-icon"><X size={16} /></button>
         </div>
 
         <div className="p-5 space-y-3.5">

@@ -18,7 +18,7 @@ function Modal({ title, onClose, children }) {
       <div role="dialog" aria-modal="true" aria-label="Slot detayı" className="modal w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h3 className="font-700 text-gray-900 text-base" style={{ fontWeight: 700 }}>{title}</h3>
-          <button onClick={onClose} aria-label="Kapat" className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
+          <button onClick={onClose} aria-label="Kapat" className="btn-icon">
             <X size={18} />
           </button>
         </div>

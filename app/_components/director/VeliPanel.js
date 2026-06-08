@@ -97,7 +97,7 @@ function VeliDetay({ student, onSaved, showToast }) {
         <div className="rounded-xl p-3 space-y-3" style={{ background: 'var(--bg-muted)' }}>
           <div className="flex items-center justify-between">
             <span className="text-label">2. İletişim</span>
-            <button onClick={() => setShowSecond(false)} className="p-1 rounded hover:bg-gray-200 text-gray-400" title="Kaldır"><X size={14} /></button>
+            <button onClick={() => setShowSecond(false)} className="btn-icon" title="Kaldır"><X size={14} /></button>
           </div>
           <div className="grid sm:grid-cols-2 gap-3">
             <label className="block">

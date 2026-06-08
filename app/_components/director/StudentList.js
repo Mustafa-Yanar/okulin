@@ -154,7 +154,7 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
                   </button>
                   {onDeleteClass && (
                     <button onClick={() => onDeleteClass(grp.cls, grp.students)}
-                      className="p-1 rounded hover:bg-red-100 text-red-400 hover:text-red-600 transition-colors"
+                      className="btn-icon btn-icon-danger"
                       title="Sınıfı sil">
                       <Trash2 size={12} />
                     </button>
