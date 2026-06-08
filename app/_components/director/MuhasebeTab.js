@@ -70,16 +70,12 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
 
   return (
     <div>
-      <div className="flex gap-1 mb-6 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-light)' }}>
+      <div className="pill-tabs mb-6">
         {[['finance', 'Öğrenci Ödemeleri'], ['expenses', 'Giderler'], ['accountants', 'Muhasebeciler']].map(([k, l]) => (
-          <button key={k} onClick={() => setSubTab(k)} className="press-effect"
-            style={{
-              padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-              transition: 'all var(--transition-base)',
-              background: subTab === k ? 'var(--bg-surface)' : 'transparent',
-              color: subTab === k ? 'var(--text-primary)' : 'var(--text-secondary)',
-              boxShadow: subTab === k ? 'var(--shadow-sm)' : 'none',
-            }}>{l}</button>
+          <button key={k} onClick={() => setSubTab(k)}
+            className={`pill-tab${subTab === k ? ' is-active' : ''}`}>
+            <span>{l}</span>
+          </button>
         ))}
       </div>
 

@@ -790,16 +790,16 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
       {activeTab === 'rezervasyon' && (
         <>
           <div className="flex items-center justify-between mb-4">
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden shrink-0">
+            <div className="pill-tabs shrink-0">
               <button
                 onClick={() => setViewMode('table')}
-                className={`px-3 py-1.5 text-xs flex items-center gap-1 transition-colors ${viewMode === 'table' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
-                <LayoutGrid size={13} /> Tablo
+                className={`pill-tab${viewMode === 'table' ? ' is-active' : ''}`}>
+                <LayoutGrid size={13} /> <span>Tablo</span>
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`px-3 py-1.5 text-xs flex items-center gap-1 transition-colors ${viewMode === 'list' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}>
-                <List size={13} /> Liste
+                className={`pill-tab${viewMode === 'list' ? ' is-active' : ''}`}>
+                <List size={13} /> <span>Liste</span>
               </button>
             </div>
             {(() => {

@@ -144,16 +144,12 @@ export default function ExpensePanel({ session, showToast }) {
 
       {/* Kontrol satırı: görünüm + dönem */}
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ background: 'var(--bg-muted)', border: '1px solid var(--border-light)' }}>
-          {[['personnel', '👥 Personel Ödemeleri'], ['general', '🧾 Diğer Giderler']].map(([k, l]) => (
-            <button key={k} onClick={() => { setView(k); setCatFilter(''); }} className="press-effect"
-              style={{
-                padding: '6px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                transition: 'all var(--transition-base)',
-                background: view === k ? 'var(--bg-surface)' : 'transparent',
-                color: view === k ? 'var(--text-primary)' : 'var(--text-secondary)',
-                boxShadow: view === k ? 'var(--shadow-sm)' : 'none',
-              }}>{l}</button>
+        <div className="pill-tabs">
+          {[['personnel', 'Personel Ödemeleri'], ['general', 'Diğer Giderler']].map(([k, l]) => (
+            <button key={k} onClick={() => { setView(k); setCatFilter(''); }}
+              className={`pill-tab${view === k ? ' is-active' : ''}`}>
+              <span>{l}</span>
+            </button>
           ))}
         </div>
 

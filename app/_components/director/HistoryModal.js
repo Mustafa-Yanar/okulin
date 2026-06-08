@@ -242,18 +242,16 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
   const inner = (
     <>
       {isStudent && (
-        <div className="flex rounded-xl border border-gray-200 overflow-hidden mb-4 w-fit">
+        <div className="pill-tabs mb-4">
           <button
             onClick={() => setActiveTab('etut')}
-            className={`px-4 py-2 text-xs flex items-center gap-1.5 transition-colors ${activeTab === 'etut' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-            style={{ fontWeight: 600 }}>
-            <Clock size={13} /> Geçmiş Etütler
+            className={`pill-tab${activeTab === 'etut' ? ' is-active' : ''}`}>
+            <Clock size={13} /> <span>Geçmiş Etütler</span>
           </button>
           <button
             onClick={() => setActiveTab('devamsizlik')}
-            className={`px-4 py-2 text-xs flex items-center gap-1.5 transition-colors ${activeTab === 'devamsizlik' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-            style={{ fontWeight: 600 }}>
-            <ClipboardList size={13} /> Devamsızlık Bilgisi
+            className={`pill-tab${activeTab === 'devamsizlik' ? ' is-active' : ''}`}>
+            <ClipboardList size={13} /> <span>Devamsızlık Bilgisi</span>
           </button>
         </div>
       )}
