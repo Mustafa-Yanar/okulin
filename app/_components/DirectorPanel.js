@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, ClipboardList, Compass, CalendarRange, CalendarDays, Upload, FileText, ScanLine
+  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, ClipboardList, Compass, CalendarRange, CalendarDays, Upload, FileText, ScanLine, LayoutGrid, List
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
 import DirectorDenemeYonetimi from './rehberlik/DirectorDenemeYonetimi';
@@ -78,6 +78,14 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [expandedTeacherId, setExpandedTeacherId] = useUrlParam('ogretmen'); // inline detay → URL'de görünür
   const [expandedStudentId, setExpandedStudentId] = useState(null); // StudentList onSelectChange ile beslenir → detayda liste başlığını gizle
   const [expandedTeacherTab, setExpandedTeacherTab] = useState('etutler');
+  const [teacherView, setTeacherView] = useState('list'); // 'list' | 'grid' — öğretmen listesi görünüm modu
+  useEffect(() => {
+    try { const v = localStorage.getItem('okulin:teacherView'); if (v === 'grid' || v === 'list') setTeacherView(v); } catch {}
+  }, []);
+  const changeTeacherView = useCallback((v) => {
+    setTeacherView(v);
+    try { localStorage.setItem('okulin:teacherView', v); } catch {}
+  }, []);
   const [historyTarget, setHistoryTarget] = useState(null);
   const [pendingGuidance, setPendingGuidance] = useState({});
 
@@ -330,40 +338,87 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           );
         }
 
-        // Liste görünümü
+        // Liste / kart görünümü
         return (
           <div>
             <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
               <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğretmen ({teachers.length})</h3>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap items-center">
+                <div className="pill-tabs" role="group" aria-label="Görünüm modu">
+                  <button
+                    type="button"
+                    className={`pill-tab ${teacherView === 'list' ? 'is-active' : ''}`}
+                    aria-pressed={teacherView === 'list'}
+                    title="Liste görünümü"
+                    onClick={() => changeTeacherView('list')}
+                  >
+                    <List size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    className={`pill-tab ${teacherView === 'grid' ? 'is-active' : ''}`}
+                    aria-pressed={teacherView === 'grid'}
+                    title="Kart görünümü"
+                    onClick={() => changeTeacherView('grid')}
+                  >
+                    <LayoutGrid size={15} />
+                  </button>
+                </div>
                 <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
                   <Plus size={14} /> Öğretmen Ekle
                 </button>
               </div>
             </div>
-            <div className="grid gap-2">
-              {teachers.map(t => (
-                <div key={t.id} className="card card-interactive overflow-hidden">
-                  <button className="w-full flex items-center gap-3 px-4 py-3.5 text-left" onClick={() => { setExpandedTeacherTab('etutler'); setExpandedTeacherId(t.id); }}>
-                    <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
+            {teachers.length === 0 ? (
+              <EmptyState card icon={Users} title="Henüz öğretmen eklenmemiş" description="Yeni öğretmen ekleyerek başlayın." />
+            ) : teacherView === 'grid' ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {teachers.map(t => (
+                  <button
+                    key={t.id}
+                    className="card card-interactive press-effect flex flex-col items-center text-center gap-2 p-4"
+                    onClick={() => { setExpandedTeacherTab('etutler'); setExpandedTeacherId(t.id); }}
+                  >
+                    <div className="w-16 h-16 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
                       {t.photoUrl
                         ? <img src={t.photoUrl} alt={t.name} className="w-full h-full object-cover" />
-                        : <User size={22} className="text-gray-400" />}
+                        : <User size={30} className="text-gray-400" />}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-600" style={{ fontWeight:600 }}>{t.name}</div>
-                      <div className="text-caption">{(t.branches||[]).join(', ')}</div>
-                      <div className="flex gap-1 mt-1 flex-wrap">
-                        {(t.allowedGroups||[]).map(g => <span key={g} className="badge badge-info">{GROUPS[g]}</span>)}
-                        {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'var(--bg-muted)',color:'var(--text-muted)' }}>Tüm gruplar</span>}
-                      </div>
+                    <div className="min-w-0 w-full">
+                      <div className="font-600 truncate" style={{ fontWeight:600 }}>{t.name}</div>
+                      <div className="text-caption truncate">{(t.branches||[]).join(', ')}</div>
                     </div>
-                    <ChevronRight size={16} className="text-gray-400 shrink-0 ml-2" />
+                    <div className="flex gap-1 flex-wrap justify-center">
+                      {(t.allowedGroups||[]).map(g => <span key={g} className="badge badge-info">{GROUPS[g]}</span>)}
+                      {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'var(--bg-muted)',color:'var(--text-muted)' }}>Tüm gruplar</span>}
+                    </div>
                   </button>
-                </div>
-              ))}
-              {teachers.length===0 && <EmptyState card icon={Users} title="Henüz öğretmen eklenmemiş" description="Yeni öğretmen ekleyerek başlayın." />}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                {teachers.map(t => (
+                  <div key={t.id} className="card card-interactive overflow-hidden">
+                    <button className="w-full flex items-center gap-3 px-4 py-3.5 text-left" onClick={() => { setExpandedTeacherTab('etutler'); setExpandedTeacherId(t.id); }}>
+                      <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
+                        {t.photoUrl
+                          ? <img src={t.photoUrl} alt={t.name} className="w-full h-full object-cover" />
+                          : <User size={22} className="text-gray-400" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-600" style={{ fontWeight:600 }}>{t.name}</div>
+                        <div className="text-caption">{(t.branches||[]).join(', ')}</div>
+                        <div className="flex gap-1 mt-1 flex-wrap">
+                          {(t.allowedGroups||[]).map(g => <span key={g} className="badge badge-info">{GROUPS[g]}</span>)}
+                          {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'var(--bg-muted)',color:'var(--text-muted)' }}>Tüm gruplar</span>}
+                        </div>
+                      </div>
+                      <ChevronRight size={16} className="text-gray-400 shrink-0 ml-2" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       })()}
