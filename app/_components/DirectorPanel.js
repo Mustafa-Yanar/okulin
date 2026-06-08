@@ -435,7 +435,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                 </button>
                 {!isCounselor && (
                   <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => setShowCounselorForm(true)}>
-                    <Compass size={14} /> Rehberlik Öğretmeni Ekle
+                    <Plus size={14} /> Rehberlik Öğretmeni Ekle
                   </button>
                 )}
               </div>
