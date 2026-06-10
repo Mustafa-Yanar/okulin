@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, ChevronLeft, FileText, KeyRound, Upload, BarChart3 } from 'lucide-react';
+import { Plus, Trash2, ChevronLeft, KeyRound, Upload, BarChart3 } from 'lucide-react';
 import AnswerKeyForm from './AnswerKeyForm';
 import VeriGirisi from './VeriGirisi';
+import SonucListesi from './SonucListesi';
 
 const TYPE_LABEL = { TYT: 'TYT', AYT: 'AYT', LGS: 'LGS' };
 
@@ -163,9 +164,7 @@ function CreateExam({ showToast, onCancel, onCreated }) {
 
 function ExamDetail({ examId, showToast, onBack }) {
   const [exam, setExam] = useState(null);
-  const [ranking, setRanking] = useState([]);
   const [step, setStep] = useState('cevap'); // 'cevap' | 'veri' | 'sonuc'
-
   const [rows, setRows] = useState([]);
 
   async function load() {
@@ -173,7 +172,6 @@ function ExamDetail({ examId, showToast, onBack }) {
     if (res.ok) {
       const d = await res.json();
       setExam(d.exam);
-      setRanking(d.ranking || []);
       setRows(d.exam?.rows || []);
     }
   }
@@ -213,40 +211,7 @@ function ExamDetail({ examId, showToast, onBack }) {
         <VeriGirisi exam={exam} rows={rows} onChanged={load} showToast={showToast} />
       )}
 
-      {step === 'sonuc' && (
-        ranking.length === 0 ? (
-          <div className="card p-8 text-center text-gray-400">
-            <FileText size={28} className="mx-auto mb-2 opacity-50" />
-            Henüz veri yok. Önce cevap anahtarı + öğrenci verisi ekle.
-          </div>
-        ) : (
-          <div className="card overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500">
-                <tr>
-                  <th className="text-left px-4 py-2" style={{ fontWeight: 600 }}>Sıra</th>
-                  <th className="text-left px-4 py-2" style={{ fontWeight: 600 }}>İsim</th>
-                  <th className="text-right px-4 py-2" style={{ fontWeight: 600 }}>Toplam Net</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ranking.map((r) => (
-                  <tr key={r.rank} className="border-t border-gray-50">
-                    <td className="px-4 py-2 text-gray-500">{r.rank}</td>
-                    <td className="px-4 py-2 text-gray-700">
-                      {r.excelName}
-                      {!r.studentId && <span className="text-xs text-amber-500 ml-2">(eşleşmedi)</span>}
-                    </td>
-                    <td className="px-4 py-2 text-right font-700 text-indigo-600" style={{ fontWeight: 700 }}>
-                      {Number(r.toplamNet).toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
-      )}
+      {step === 'sonuc' && <SonucListesi exam={exam} showToast={showToast} />}
     </div>
   );
 }
