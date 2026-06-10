@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, ClipboardList, Compass, CalendarRange, CalendarDays, Upload, FileText, ScanLine, LayoutGrid, List
+  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, ClipboardList, Compass, CalendarRange, CalendarDays, FileText, ScanLine, LayoutGrid, List
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
 import DirectorDenemeYonetimi from './rehberlik/DirectorDenemeYonetimi';
@@ -53,7 +53,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     setTabInternal(key);
     onExternalTabChange?.(key);
   }, [setTabInternal, onExternalTabChange]);
-  const [denemeTab, setDenemeTab] = useState('upload');
+  const [denemeTab, setDenemeTab] = useState('sinavlar');
   const [slotWeekday, setSlotWeekday] = useState([]);
   const [slotWeekend, setSlotWeekend] = useState([]);
   const [slotEtutSuresi, setSlotEtutSuresi] = useState(60);
@@ -512,7 +512,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       {tab === 'denemeler' && (
         <div>
           <div className="pill-tabs mb-4">
-            {[['upload','Deneme Yükle',Upload],['list','Yüklenen Denemeler',FileText],['optik','Optik Form',ScanLine]].map(([k,l,Icon]) => (
+            {[['sinavlar','Sınavlar',FileText],['optik','Optik Form',ScanLine]].map(([k,l,Icon]) => (
               <button key={k} onClick={() => setDenemeTab(k)}
                 className={`pill-tab press-effect${denemeTab === k ? ' is-active' : ''}`}>
                 <Icon size={13} /> <span>{l}</span>
@@ -521,7 +521,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           </div>
           {denemeTab === 'optik'
             ? <OptikFormTab showToast={showToast} />
-            : <DirectorDenemeYonetimi showToast={showToast} view={denemeTab} />}
+            : <DirectorDenemeYonetimi showToast={showToast} />}
         </div>
       )}
 

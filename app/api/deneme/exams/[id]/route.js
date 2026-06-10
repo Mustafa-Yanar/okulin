@@ -15,6 +15,8 @@ export async function GET(_req, { params }) {
   const exam = await redis.get(dkeys.exam(params.id));
   if (!exam) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
 
+  const isManager = session.role === 'director' || session.role === 'counselor';
+
   return NextResponse.json({
     exam: {
       id: exam.id,
@@ -22,7 +24,11 @@ export async function GET(_req, { params }) {
       examType: exam.examType,
       category: exam.category,
       date: exam.date,
+      kitapcikSayisi: exam.kitapcikSayisi || 1,
       subjectKeys: exam.subjectKeys,
+      // Cevap anahtarı yalnız yöneticiye (öğretmene gitmez).
+      ...(isManager ? { answerKey: exam.answerKey || {} } : {}),
+      rowCount: Array.isArray(exam.rows) ? exam.rows.length : 0,
     },
     ranking: rankedList(exam),
   });
