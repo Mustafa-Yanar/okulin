@@ -67,6 +67,80 @@ async function loadTurkishFont(doc) {
   }
 }
 
+// ---- TYT+AYT birleştirme çıktısı (kolonlar: Sıra/İsim/Sınıf/TYT/AYT/Yerleştirme) ----
+
+function mergeListToMatrix(list) {
+  const head = ['Sıra', 'İsim', 'Sınıf', 'TYT', 'AYT', 'Yerleştirme'];
+  const body = list.rows.map((r) => [
+    r.rank,
+    r.name,
+    r.cls || '',
+    r.tytPuan != null ? f2(r.tytPuan) : '—',
+    r.aytPuan != null ? f2(r.aytPuan) : '—',
+    r.yerlestirme != null ? f2(r.yerlestirme) : '—',
+  ]);
+  const o = list.ortalama || {};
+  const avgRow = [
+    '', 'OKUL ORTALAMASI', '',
+    o.tytPuan != null ? f2(o.tytPuan) : '—',
+    o.aytPuan != null ? f2(o.aytPuan) : '—',
+    o.yerlestirme != null ? f2(o.yerlestirme) : '—',
+  ];
+  return { head, body, avgRow };
+}
+
+function mergeFileBase(report) {
+  return fileSafe(`${report.tyt?.name || 'TYT'}_${report.ayt?.name || 'AYT'}_birlestirme`);
+}
+
+export async function exportMergeExcel(report) {
+  const XLSX = await import('xlsx');
+  const wb = XLSX.utils.book_new();
+  for (const list of report.lists) {
+    const { head, body, avgRow } = mergeListToMatrix(list);
+    const ws = XLSX.utils.aoa_to_sheet([head, ...body, avgRow]);
+    XLSX.utils.book_append_sheet(wb, ws, fileSafe(list.label).slice(0, 28) || 'Liste');
+  }
+  XLSX.writeFile(wb, `${mergeFileBase(report)}.xlsx`);
+}
+
+export async function exportMergePdf(report) {
+  const { jsPDF } = await import('jspdf');
+  const autoTableMod = await import('jspdf-autotable');
+  const autoTable = autoTableMod.default || autoTableMod.autoTable;
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+  const hasFont = await loadTurkishFont(doc);
+  const font = hasFont ? 'Roboto' : 'helvetica';
+
+  report.lists.forEach((list, i) => {
+    if (i > 0) doc.addPage();
+    doc.setFont(font);
+    doc.setFontSize(12);
+    doc.text(`Yerleştirme — ${list.label}`, 30, 28);
+    doc.setFontSize(8);
+    doc.text(`${report.tyt?.name || ''} + ${report.ayt?.name || ''}  (OBP hariç)`, 30, 40);
+
+    const { head, body, avgRow } = mergeListToMatrix(list);
+    autoTable(doc, {
+      head: [head],
+      body: [...body, avgRow],
+      startY: 48,
+      styles: { font, fontSize: 8, cellPadding: 2, overflow: 'linebreak' },
+      headStyles: { font, fillColor: [79, 70, 229], textColor: 255, fontSize: 8 },
+      columnStyles: { 1: { cellWidth: 160 } },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.row.index === body.length) {
+          data.cell.styles.fillColor = [241, 242, 245];
+          data.cell.styles.fontStyle = 'bold';
+        }
+      },
+    });
+  });
+
+  doc.save(`${mergeFileBase(report)}.pdf`);
+}
+
 export async function exportPdf(report) {
   const { jsPDF } = await import('jspdf');
   const autoTableMod = await import('jspdf-autotable');

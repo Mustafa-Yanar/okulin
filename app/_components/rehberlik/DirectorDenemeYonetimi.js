@@ -1,16 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, ChevronLeft, KeyRound, Upload, BarChart3 } from 'lucide-react';
+import { Plus, Trash2, ChevronLeft, KeyRound, Upload, BarChart3, GitMerge } from 'lucide-react';
 import AnswerKeyForm from './AnswerKeyForm';
 import VeriGirisi from './VeriGirisi';
 import SonucListesi from './SonucListesi';
+import MergeListesi from './MergeListesi';
 
 const TYPE_LABEL = { TYT: 'TYT', AYT: 'AYT', LGS: 'LGS' };
 
 // Müdür/rehber: sınav oluştur → cevap anahtarı gir → (Faz 2) veri gir → (Faz 3) sonuç.
 export default function DirectorDenemeYonetimi({ showToast }) {
-  const [mode, setMode] = useState('list'); // 'list' | 'create' | 'detail'
+  const [mode, setMode] = useState('list'); // 'list' | 'create' | 'detail' | 'merge'
   const [exams, setExams] = useState([]);
   const [detailId, setDetailId] = useState(null);
 
@@ -49,10 +50,17 @@ export default function DirectorDenemeYonetimi({ showToast }) {
     return <ExamDetail examId={detailId} showToast={showToast} onBack={() => { setMode('list'); loadList(); }} />;
   }
 
+  if (mode === 'merge') {
+    return <MergeListesi exams={exams} showToast={showToast} onBack={() => setMode('list')} />;
+  }
+
   // Liste
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <button onClick={() => setMode('merge')} className="btn-ghost !px-4 !py-2 flex items-center gap-2">
+          <GitMerge size={16} /> TYT+AYT Birleştir
+        </button>
         <button onClick={() => setMode('create')} className="btn-primary !px-5 !py-2 flex items-center gap-2">
           <Plus size={16} /> Yeni Sınav
         </button>
