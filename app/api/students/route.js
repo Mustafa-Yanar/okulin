@@ -14,6 +14,18 @@ function makeId() {
 
 const zPhone = z.string().max(40).optional();
 const zBirthDate = z.string().max(20).optional(); // YYYY-MM-DD
+const zDiplomaNotu = z.string().max(10).optional(); // mezun diploma notu 50-100 (OBP = ×5)
+
+// Diploma notu string'ini doğrula → number (50-100) veya '' döndür; geçersizse null.
+// group !== 'mezun' ise her zaman '' (OBP yalnız mezunda tutulur).
+function normDiplomaNotu(raw, group) {
+  if (group !== 'mezun') return '';
+  const s = String(raw ?? '').trim();
+  if (s === '') return '';
+  const v = parseFloat(s.replace(',', '.'));
+  if (isNaN(v) || v < 50 || v > 100) return null; // geçersiz
+  return Math.round(v * 100) / 100;
+}
 const zParentName = z.string().max(120).optional(); // veli adı soyadı (opsiyonel)
 const zRelation = z.string().max(40).optional();    // yakınlık derecesi (Anne, Baba...)
 const zNote = z.string().max(2000).optional();      // veliye özel not (yönetim görür)
@@ -26,12 +38,14 @@ const StudentCreateSchema = z.object({
   // Şifre opsiyonel: boş bırakılırsa öğrenci telefonu ilk şifre olur (aşağıda kontrol).
   name: zName, password: z.string().max(200).optional(), cls: z.string().min(1).max(40),
   phone: zPhone, parentPhone: zPhone, parentName: zParentName, birthDate: zBirthDate,
+  diplomaNotu: zDiplomaNotu,
   ...parentExtraFields,
 });
 const StudentUpdateSchema = z.object({
   id: zId, name: zName, cls: z.string().min(1).max(40),
   password: z.string().max(200).optional(),
   phone: zPhone, parentPhone: zPhone, parentName: zParentName, birthDate: zBirthDate,
+  diplomaNotu: zDiplomaNotu,
   ...parentExtraFields,
 });
 // Tekil { id } veya toplu { ids:[...] } silme.
@@ -53,6 +67,7 @@ export async function GET() {
   const students = results.filter(Boolean).map(s => ({
     id: s.id, name: s.name, username: s.username, cls: s.cls, group: s.group,
     phone: s.phone || '', parentPhone: s.parentPhone || '', parentName: s.parentName || '', birthDate: s.birthDate || '',
+    diplomaNotu: s.diplomaNotu ?? '', obp: s.diplomaNotu ? Math.round(s.diplomaNotu * 5 * 100) / 100 : null,
     parentRelation: s.parentRelation || '', parentNote: s.parentNote || '',
     parent2Name: s.parent2Name || '', parent2Phone: s.parent2Phone || '', parent2Relation: s.parent2Relation || '',
   }));
@@ -67,7 +82,7 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, StudentCreateSchema);
   if (!parsed.ok) return parsed.response;
-  const { name, password, cls, phone, parentPhone, parentName, birthDate,
+  const { name, password, cls, phone, parentPhone, parentName, birthDate, diplomaNotu,
           parentRelation, parentNote, parent2Name, parent2Phone, parent2Relation } = parsed.data;
 
   // İsim soyisim kullanıcı adı olarak kullanılır
@@ -75,6 +90,10 @@ export async function POST(req) {
 
   const group = classToGroup(cls);
   if (!group) return NextResponse.json({ error: 'Geçersiz sınıf' }, { status: 400 });
+
+  // Diploma notu (yalnız mezun): geçerli değilse hata; OBP = ×5 türetilir.
+  const diploma = normDiplomaNotu(diplomaNotu, group);
+  if (diploma === null) return NextResponse.json({ error: 'Diploma notu 50 ile 100 arasında olmalı' }, { status: 400 });
 
   // Telefon doğrulama (opsiyonel ama verilmişse geçerli Türk cep olmalı)
   let normPhone = '';
@@ -128,6 +147,7 @@ export async function POST(req) {
     parent2Phone: normParent2Phone,
     parent2Relation: (parent2Relation || '').trim(),
     birthDate: birthDate || '',
+    diplomaNotu: diploma, // '' (mezun değil/boş) veya 50-100 arası sayı; OBP = ×5
     mustChangePassword: true,  // ilk girişte öğrenci kendi şifresini belirleyecek
   };
   await redis.set(`student:${id}`, student);
@@ -145,13 +165,22 @@ export async function PUT(req) {
 
   const parsed = await parseBody(req, StudentUpdateSchema);
   if (!parsed.ok) return parsed.response;
-  const { id, name, password, cls, phone, parentPhone, parentName, birthDate,
+  const { id, name, password, cls, phone, parentPhone, parentName, birthDate, diplomaNotu,
           parentRelation, parentNote, parent2Name, parent2Phone, parent2Relation } = parsed.data;
   const student = await redis.get(`student:${id}`);
   if (!student) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
 
   const group = classToGroup(cls) || student.group;
-  const updated = { ...student, name, username: name, cls, group,
+  // Diploma notu: alan gönderildiyse yeniden değerlendir; mezun değilse '' olur.
+  // Gönderilmediyse mevcut değeri koru (yine de mezun değilse temizle).
+  let diploma = student.diplomaNotu ?? '';
+  if (diplomaNotu !== undefined) {
+    diploma = normDiplomaNotu(diplomaNotu, group);
+    if (diploma === null) return NextResponse.json({ error: 'Diploma notu 50 ile 100 arasında olmalı' }, { status: 400 });
+  } else if (group !== 'mezun') {
+    diploma = '';
+  }
+  const updated = { ...student, name, username: name, cls, group, diplomaNotu: diploma,
     birthDate: birthDate !== undefined ? birthDate : (student.birthDate || ''),
     parentName: parentName !== undefined ? (parentName || '').trim() : (student.parentName || ''),
     parentRelation: parentRelation !== undefined ? (parentRelation || '').trim() : (student.parentRelation || ''),

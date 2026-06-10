@@ -123,6 +123,7 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
   const [parentPhone, setParentPhone] = useState(initial?.parentPhone ? formatTurkishMobile(initial.parentPhone) : '');
   const [parentName, setParentName] = useState(initial?.parentName || '');
   const [birthDate, setBirthDate] = useState(initial?.birthDate || '');
+  const [diplomaNotu, setDiplomaNotu] = useState(initial?.diplomaNotu != null ? String(initial.diplomaNotu) : '');
   const [loading, setLoading] = useState(false);
   useEffect(() => { if (!initial) setCls(STUDENT_GROUPS[selectedGroup].classes[0]); }, [selectedGroup]);
 
@@ -131,12 +132,21 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
   // Veli zorunlu. Şifre boşsa öğrenci telefonu ilk şifre olur; telefon da yoksa "12345678".
   const parentMissing = !initial && (parentName.trim() === '' || parentPhone.trim() === '');
 
+  // OBP (yalnız mezun): diploma notu 50-100 girilir, OBP = not × 5 (250-500).
+  const isMezun = selectedGroup === 'mezun';
+  const dnNum = parseFloat(diplomaNotu.replace(',', '.'));
+  const diplomaInvalid = isMezun && diplomaNotu.trim() !== '' && (isNaN(dnNum) || dnNum < 50 || dnNum > 100);
+  const obpPreview = isMezun && !isNaN(dnNum) && dnNum >= 50 && dnNum <= 100 ? dnNum * 5 : null;
+
   const submit = async e => {
     e.preventDefault();
-    if (phoneInvalid || parentPhoneInvalid) return; // geçersiz telefonla gönderme
+    if (phoneInvalid || parentPhoneInvalid || diplomaInvalid) return; // geçersiz veriyle gönderme
     if (parentMissing) return;
     setLoading(true);
-    await onSave({ name, username: name, password, cls, phone, parentPhone, parentName, birthDate });
+    await onSave({
+      name, username: name, password, cls, phone, parentPhone, parentName, birthDate,
+      diplomaNotu: isMezun ? diplomaNotu.trim() : '',
+    });
     setLoading(false);
   };
   return (
@@ -166,6 +176,19 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
             {STUDENT_GROUPS[selectedGroup].classes.map(c=><option key={c} value={c}>{classLabel(c)}</option>)}
           </select>
         </FormField>
+        {isMezun && (
+          <FormField label="Diploma Notu">
+            <input className={`input ${diplomaInvalid ? 'input-error' : ''}`} type="number" inputMode="decimal"
+              min="50" max="100" step="0.01" placeholder="Örn. 82.50"
+              value={diplomaNotu} onChange={e=>setDiplomaNotu(e.target.value)}
+              aria-invalid={diplomaInvalid || undefined} />
+            {diplomaInvalid
+              ? <p className="input-hint input-hint--error">Diploma notu 50 ile 100 arasında olmalı.</p>
+              : obpPreview != null
+                ? <p className="text-caption mt-1">OBP (otomatik): <b style={{fontWeight:700}}>{obpPreview.toFixed(2)}</b> · Yerleştirmeye katkı ≈ {(obpPreview*0.12).toFixed(2)}</p>
+                : <p className="text-caption mt-1">Diploma notu (50-100). OBP = not × 5 olarak hesaplanır. Boş bırakılabilir.</p>}
+          </FormField>
+        )}
         <FormField label="Öğrenci Telefonu">
           <input className={`input ${phoneInvalid ? 'input-error' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={phone} onChange={e=>setPhone(e.target.value)} aria-invalid={phoneInvalid || undefined} />
           {phoneInvalid && <p className="input-hint input-hint--error">Geçersiz numara. Örnek: 0532 123 45 67</p>}
@@ -185,7 +208,7 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
             max={new Date().toISOString().split('T')[0]} />
         </FormField>
         <div className="flex gap-3 pt-2">
-          <button className="btn-primary flex-1" disabled={loading || phoneInvalid || parentPhoneInvalid || parentMissing}>{loading?'Kaydediliyor...':'Kaydet'}</button>
+          <button className="btn-primary flex-1" disabled={loading || phoneInvalid || parentPhoneInvalid || parentMissing || diplomaInvalid}>{loading?'Kaydediliyor...':'Kaydet'}</button>
           <button type="button" className="btn-ghost" onClick={onClose}>İptal</button>
         </div>
       </form>
