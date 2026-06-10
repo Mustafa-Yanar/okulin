@@ -1,19 +1,24 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Upload, ScanLine, FileText, Image as ImageIcon, Trash2, Plus, Save, ChevronDown, Keyboard } from 'lucide-react';
+import { Upload, ScanLine, FileText, Image as ImageIcon, Trash2, Plus, Save, ChevronDown, Keyboard, HardDriveDownload, AlertTriangle } from 'lucide-react';
 import { getTemplate, boxLength, normalizeRaw, CHOICES } from '@/lib/deneme/template';
+import { parseDat, datSupports } from '@/lib/deneme/dat';
 
 // Sınav detayındaki "Veri Girişi" adımı: optik (foto/PDF) + manuel giriş + öğrenci eşleştirme.
 // Excel yükleme kaldırıldı — girdi artık optik/.dat (.dat Faz 2b).
 export default function VeriGirisi({ exam, rows = [], onChanged, showToast }) {
   const kitapciklar = (exam.kitapcikSayisi || 1) === 2 ? ['A', 'B'] : ['A'];
   const [kitapcik, setKitapcik] = useState('A');
-  const [mode, setMode] = useState('optik'); // 'optik' | 'manuel'
+  const [mode, setMode] = useState('optik'); // 'optik' | 'dat' | 'manuel'
+  const datOk = datSupports(exam.examType);
+
+  // Kitapçık seçici optik/manuel için (.dat kitapçığı dosyadan öğrenci-başına okur)
+  const showKitapcik = kitapciklar.length > 1 && mode !== 'dat';
 
   return (
     <div className="space-y-5">
-      {kitapciklar.length > 1 && (
+      {showKitapcik && (
         <div className="flex items-center gap-2 text-sm">
           <span className="text-gray-500">Kitapçık:</span>
           <div className="pill-tabs">
@@ -30,18 +35,135 @@ export default function VeriGirisi({ exam, rows = [], onChanged, showToast }) {
         <button onClick={() => setMode('optik')} className={`pill-tab${mode === 'optik' ? ' is-active' : ''}`}>
           <ScanLine size={13} /> <span>Optik (foto/PDF)</span>
         </button>
+        {datOk && (
+          <button onClick={() => setMode('dat')} className={`pill-tab${mode === 'dat' ? ' is-active' : ''}`}>
+            <HardDriveDownload size={13} /> <span>Optik .dat</span>
+          </button>
+        )}
         <button onClick={() => setMode('manuel')} className={`pill-tab${mode === 'manuel' ? ' is-active' : ''}`}>
           <Keyboard size={13} /> <span>Manuel</span>
         </button>
       </div>
 
-      {mode === 'optik' ? (
-        <OptikEkle exam={exam} kitapcik={kitapcik} onChanged={onChanged} showToast={showToast} />
-      ) : (
-        <ManuelEkle exam={exam} kitapcik={kitapcik} onChanged={onChanged} showToast={showToast} />
-      )}
+      {mode === 'optik' && <OptikEkle exam={exam} kitapcik={kitapcik} onChanged={onChanged} showToast={showToast} />}
+      {mode === 'dat' && datOk && <DatEkle exam={exam} onChanged={onChanged} showToast={showToast} />}
+      {mode === 'manuel' && <ManuelEkle exam={exam} kitapcik={kitapcik} onChanged={onChanged} showToast={showToast} />}
 
       <KayitListesi exam={exam} rows={rows} onChanged={onChanged} showToast={showToast} />
+    </div>
+  );
+}
+
+// ---- Optik .dat: okuyucu çıktısı (cp1254 sabit genişlik) → öğrenci-başına kitapçık + cevaplar ----
+function DatEkle({ exam, onChanged, showToast }) {
+  const [fileName, setFileName] = useState('');
+  const [parsed, setParsed] = useState(null); // { students, warnings, total }
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef(null);
+
+  async function onFile(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) return showToast("Dosya 10 MB'dan büyük", 'error');
+    try {
+      const buf = await f.arrayBuffer();
+      const text = new TextDecoder('windows-1254').decode(buf); // optik okuyucu cp1254 üretir
+      const res = parseDat(text, exam.examType);
+      if (!res.ok) {
+        setParsed(null);
+        return showToast(res.error || 'Dosya okunamadı', 'error');
+      }
+      setFileName(f.name);
+      setParsed(res);
+      showToast(`${res.students.length} öğrenci okundu — ilk satırı kontrol edip ekleyin`);
+    } catch {
+      showToast('Dosya okunamadı (cp1254 değil olabilir)', 'error');
+    }
+  }
+
+  function setName(i, v) {
+    setParsed((p) => ({ ...p, students: p.students.map((s, idx) => (idx === i ? { ...s, name: v } : s)) }));
+  }
+  function removeRow(i) {
+    setParsed((p) => ({ ...p, students: p.students.filter((_, idx) => idx !== i) }));
+  }
+
+  async function addAll() {
+    if (!parsed?.students?.length) return;
+    const students = parsed.students.map((s) => ({
+      name: (s.name || '').trim() || 'İsimsiz',
+      kitapcik: s.kitapcik === 'B' ? 'B' : 'A',
+      answers: s.answers,
+    }));
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/deneme/exams/${exam.id}/rows`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ source: 'dat', students }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return showToast(data.error || 'Eklenemedi', 'error');
+      const not = data.graded ? '' : ' (cevap anahtarı yok → puan 0, anahtar girince Hesapla)';
+      showToast(`${data.added} kayıt eklendi, ${data.matched} eşleşti${not}`);
+      setParsed(null); setFileName('');
+      if (inputRef.current) inputRef.current.value = '';
+      onChanged?.();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card p-4 space-y-4">
+      <div
+        onClick={() => inputRef.current?.click()}
+        className="border-2 border-dashed border-gray-300 rounded-xl p-5 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition"
+      >
+        <div className="flex flex-col items-center gap-1.5 text-gray-400">
+          <HardDriveDownload size={28} />
+          <p className="text-sm text-gray-700">{fileName || 'Optik okuyucu .dat dosyası yükle'}</p>
+          <p className="text-xs">{exam.examType} · 222-karakter optik şablonu</p>
+        </div>
+        <input ref={inputRef} type="file" accept=".dat,text/plain" className="hidden" onChange={onFile} />
+      </div>
+
+      {parsed && (
+        <div className="space-y-3">
+          {parsed.warnings.map((w, i) => (
+            <div key={i} className="flex items-start gap-2 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-lg px-3 py-2">
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" /> <span>{w}</span>
+            </div>
+          ))}
+
+          <div className="text-xs text-gray-500">
+            <span style={{ fontWeight: 600 }}>{parsed.students.length}</span> öğrenci · her satır {parsed.total} soru.
+            İlk satır doğru görünüyorsa şablon eşleşiyordur — isimleri kontrol edip ekleyin.
+          </div>
+
+          <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-80 overflow-y-auto">
+            {parsed.students.map((s, i) => (
+              <div key={i} className={`flex items-center gap-2 p-2 ${i === 0 ? 'bg-indigo-50/40' : ''}`}>
+                <span className="text-[10px] text-gray-400 w-7 shrink-0 text-right">{i + 1}.</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${s.kitapcik === 'B' ? 'bg-purple-100 text-purple-600' : 'bg-sky-100 text-sky-600'}`}>{s.kitapcik}</span>
+                <input
+                  value={s.name}
+                  onChange={(e) => setName(i, e.target.value)}
+                  placeholder="Öğrenci adı"
+                  className="input !py-1 flex-1 text-sm"
+                />
+                <span className={`text-xs shrink-0 ${s.answered < parsed.total * 0.25 ? 'text-amber-500' : 'text-gray-400'}`}>{s.answered}/{parsed.total}</span>
+                <button onClick={() => removeRow(i)} className="text-gray-300 hover:text-red-600 shrink-0"><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={addAll} disabled={saving || !parsed.students.length} className="btn-primary !px-5 !py-2 flex items-center gap-2 disabled:opacity-60">
+            <Plus size={15} /> {saving ? 'Ekleniyor…' : `${parsed.students.length} Kaydı Sınava Ekle`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

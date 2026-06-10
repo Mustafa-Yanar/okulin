@@ -20,6 +20,8 @@ const AddSchema = z.object({
     .array(
       z.object({
         name: z.string().max(200),
+        // Öğrenci başına kitapçık (.dat karışık A/B içerir); yoksa batch kitapcik.
+        kitapcik: z.enum(['A', 'B']).optional(),
         // Cevaplar düz dizi: 'A'..'E' | null | '' (booklet sırası)
         answers: z.array(z.string().nullable()).max(400),
       })
@@ -62,11 +64,12 @@ export async function POST(req, { params }) {
     if (studentId) matched++;
     else unmatched.push(name);
 
-    const graded = gradeFlat(exam, st.answers, kitapcik); // anahtar yoksa null
+    const kit = st.kitapcik === 'B' ? 'B' : st.kitapcik === 'A' ? 'A' : kitapcik;
+    const graded = gradeFlat(exam, st.answers, kit); // anahtar yoksa null
     exam.rows.push({
       id: rowId(),
       source,
-      kitapcik,
+      kitapcik: kit,
       excelName: name, // alt akış uyumu için alan adı korunur
       studentId,
       rawAnswers: st.answers,
