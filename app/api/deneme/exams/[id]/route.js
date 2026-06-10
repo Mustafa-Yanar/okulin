@@ -26,8 +26,20 @@ export async function GET(_req, { params }) {
       date: exam.date,
       kitapcikSayisi: exam.kitapcikSayisi || 1,
       subjectKeys: exam.subjectKeys,
-      // Cevap anahtarı yalnız yöneticiye (öğretmene gitmez).
-      ...(isManager ? { answerKey: exam.answerKey || {} } : {}),
+      // Cevap anahtarı + ham satırlar yalnız yöneticiye (öğretmene gitmez).
+      ...(isManager
+        ? {
+            answerKey: exam.answerKey || {},
+            rows: (exam.rows || []).map((r) => ({
+              id: r.id,
+              source: r.source,
+              kitapcik: r.kitapcik,
+              excelName: r.excelName,
+              studentId: r.studentId || '',
+              toplamNet: r.toplamNet,
+            })),
+          }
+        : {}),
       rowCount: Array.isArray(exam.rows) ? exam.rows.length : 0,
     },
     ranking: rankedList(exam),

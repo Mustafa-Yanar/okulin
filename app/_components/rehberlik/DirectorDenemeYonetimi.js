@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2, ChevronLeft, FileText, KeyRound, Upload, BarChart3 } from 'lucide-react';
 import AnswerKeyForm from './AnswerKeyForm';
+import VeriGirisi from './VeriGirisi';
 
 const TYPE_LABEL = { TYT: 'TYT', AYT: 'AYT', LGS: 'LGS' };
 
@@ -165,12 +166,15 @@ function ExamDetail({ examId, showToast, onBack }) {
   const [ranking, setRanking] = useState([]);
   const [step, setStep] = useState('cevap'); // 'cevap' | 'veri' | 'sonuc'
 
+  const [rows, setRows] = useState([]);
+
   async function load() {
     const res = await fetch(`/api/deneme/exams/${examId}`, { credentials: 'same-origin' });
     if (res.ok) {
       const d = await res.json();
       setExam(d.exam);
       setRanking(d.ranking || []);
+      setRows(d.exam?.rows || []);
     }
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [examId]);
@@ -206,10 +210,7 @@ function ExamDetail({ examId, showToast, onBack }) {
       {step === 'cevap' && <AnswerKeyForm exam={exam} showToast={showToast} />}
 
       {step === 'veri' && (
-        <div className="card p-8 text-center text-gray-400">
-          <Upload size={28} className="mx-auto mb-2 opacity-50" />
-          Veri girişi (.dat / taranmış PDF / optik) yakında — Faz 2.
-        </div>
+        <VeriGirisi exam={exam} rows={rows} onChanged={load} showToast={showToast} />
       )}
 
       {step === 'sonuc' && (
