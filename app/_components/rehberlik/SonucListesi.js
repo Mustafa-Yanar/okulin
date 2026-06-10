@@ -99,7 +99,7 @@ export default function SonucListesi({ exam, showToast }) {
           )}
 
           <p className="text-xs text-gray-400">
-            Puan değerleri yaklaşıktır (katsayılar OGM Materyal ile kalibre edilecek). Net ve sıralama kesindir.
+            Puan değerleri yaklaşıktır (ÖSYM kamuya açık katsayıları; gerçek puanı sınav sonrası ÖSYM ülke geneliyle hesaplar). Net ve sıralama kesindir.
           </p>
 
           {list && <ListeTablosu list={list} />}
