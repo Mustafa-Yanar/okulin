@@ -53,6 +53,7 @@ export async function POST(req) {
     const phone = String(row[2] || '').trim();
     const parentPhone = String(row[3] || '').trim();
     const parentName = String(row[4] || '').trim(); // 5. sütun — opsiyonel, sona eklendi (eski dosyalar bozulmaz)
+    const rawDiploma = String(row[5] || '').trim(); // 6. sütun — diploma notu (yalnız mezun, opsiyonel)
 
     if (!rawName || !rawCls) continue;
 
@@ -63,6 +64,14 @@ export async function POST(req) {
     if (!group) {
       results.errors.push(`${name}: geçersiz sınıf "${cls}"`);
       continue;
+    }
+
+    // Diploma notu (yalnız mezun): geçersizse öğrenciyi atlamadan boş bırak ve uyar.
+    let diplomaNotu = '';
+    if (group === 'mezun' && rawDiploma) {
+      const v = parseFloat(rawDiploma.replace(',', '.'));
+      if (!isNaN(v) && v >= 50 && v <= 100) diplomaNotu = Math.round(v * 100) / 100;
+      else results.errors.push(`${name}: diploma notu geçersiz ("${rawDiploma}"), boş bırakıldı`);
     }
 
     if (existingUsernames.has(name)) {
@@ -90,6 +99,7 @@ export async function POST(req) {
       id, name, username: name, passwordHash: hash, cls, group,
       phone: normPhone, parentPhone: normParentPhone,
       parentName,
+      diplomaNotu, // '' (mezun değil/boş) veya 50-100 arası sayı; OBP = ×5
       mustChangePassword: true,  // ilk girişte öğrenci kendi şifresini belirleyecek
     };
     await redis.set(`student:${id}`, student);
