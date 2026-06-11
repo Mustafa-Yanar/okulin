@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import redis from '@/lib/redis';
 import { DEFAULT_ORG, isApexHost, PLATFORM_BRANDING } from '@/lib/org';
 import { normalizeBranding } from '@/lib/branding';
+import Providers from './_components/Providers';
 
 // İstek başına bir kez okunur (React cache dedupe) — metadata + viewport aynı çağrıyı paylaşır.
 const getBranding = cache(async () => {
@@ -63,7 +64,7 @@ export default function RootLayout({ children }) {
           __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js')); }`
         }} />
       </head>
-      <body>{children}</body>
+      <body><Providers>{children}</Providers></body>
     </html>
   );
 }
