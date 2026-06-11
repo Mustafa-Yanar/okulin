@@ -7,8 +7,53 @@ import redis from '@/lib/redis';
 //
 // Cron tarafından Authorization: Bearer $CRON_SECRET ile çağrılır.
 // Manuel test için aynı header gerekli.
+//
+// ⚠️ Snapshot TYPE-AWARE olmalı: eski sürüm yalnız redis.get kullanıyordu, set/list/
+// hash anahtarlarında WRONGTYPE fırlatıp pipeline.exec()'i çökertiyordu → yedek HİÇ
+// alınamıyordu (sessiz veri-kaybı riski). Format: data[key] = { type, val }
+// (scripts/restore-redis.mjs bu formatı okur).
 
 const BACKUP_DIR = 'backups';
+
+// Type sorguları nedeniyle daha çok REST çağrısı olur; süre güvenliği için.
+export const maxDuration = 60;
+
+// Tüm anahtarları tipe göre güvenli oku. Tek anahtar hatası tüm yedeği bozmaz.
+async function snapshotAll(client) {
+  const data = {};
+  let cursor = '0';
+  let total = 0;
+  do {
+    const [next, keys] = await client.scan(cursor, { count: 200 });
+    cursor = String(next);
+    if (!keys.length) continue;
+    // Tipleri toplu al — `type` her anahtarda güvenli (WRONGTYPE fırlatmaz).
+    const tp = client.pipeline();
+    keys.forEach((k) => tp.type(k));
+    const types = await tp.exec();
+    // Değerleri tipe göre TEK TEK oku (bir anahtar hatası diğerlerini etkilemesin).
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      const type = types[i];
+      try {
+        let val;
+        if (type === 'string') val = await client.get(k);
+        else if (type === 'set') val = await client.smembers(k);
+        else if (type === 'list') val = await client.lrange(k, 0, -1);
+        else if (type === 'hash') val = await client.hgetall(k);
+        else if (type === 'zset') val = await client.zrange(k, 0, -1, { withScores: true });
+        else continue; // none/bilinmeyen → atla
+        if (val !== null && val !== undefined) {
+          data[k] = { type, val };
+          total++;
+        }
+      } catch {
+        // tek anahtar okunamadıysa yedeği komple bozma; atla
+      }
+    }
+  } while (cursor !== '0');
+  return { data, total };
+}
 
 function todayStamp() {
   // Türkiye saati ile YYYY-MM-DD
@@ -80,30 +125,14 @@ export async function GET(req) {
     return NextResponse.json({ error: 'Backup yapılandırması eksik' }, { status: 500 });
   }
 
-  // 1. Tüm Redis key'lerini topla
-  const dump = {};
-  let cursor = '0';
-  let total = 0;
-  do {
-    const [next, keys] = await redis.scan(cursor, { count: 500 });
-    cursor = String(next);
-    if (keys.length > 0) {
-      const pipeline = redis.pipeline();
-      keys.forEach(k => pipeline.get(k));
-      const values = await pipeline.exec();
-      keys.forEach((k, i) => {
-        if (values[i] !== null && values[i] !== undefined) {
-          dump[k] = values[i];
-          total++;
-        }
-      });
-    }
-  } while (cursor !== '0');
+  // 1. Tüm Redis verisini TYPE-AWARE topla (set/list/hash dahil).
+  const { data: dump, total } = await snapshotAll(redis);
 
   // 2. JSON üret
   const payload = {
     snapshotAt: nowStamp(),
     keyCount: total,
+    format: 'typed-v1', // data[key] = { type, val }
     data: dump,
   };
   const jsonStr = JSON.stringify(payload, null, 2);
