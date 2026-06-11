@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import useSWR from 'swr';
 import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Users, GraduationCap, Copy, Check, Link2 } from 'lucide-react';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -218,22 +219,8 @@ function RenameModal({ branch, onClose, onDone }) {
 // ── Ana Panel ────────────────────────────────────────────────────────────────
 
 export default function OrgAdminPanel({ session, onLogout }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading: loading, mutate } = useSWR('/api/hq');
   const [modal, setModal] = useState(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/hq');
-      const json = await res.json();
-      if (res.ok) setData(json);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   async function toggleActive(branch) {
     await fetch('/api/hq', {
@@ -241,11 +228,11 @@ export default function OrgAdminPanel({ session, onLogout }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'toggle_active', branchSlug: branch.slug }),
     });
-    load();
+    mutate();
   }
 
   function closeModal() { setModal(null); }
-  function afterAction() { setModal(null); load(); }
+  function afterAction() { setModal(null); mutate(); }
 
   const branches = data?.branches || [];
   const totalStudents = branches.reduce((s, b) => s + (b.studentCount || 0), 0);

@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import useSWR from 'swr';
 import {
   Megaphone, Send, Trash2, X, Check, Users, Eye, ChevronDown, ChevronUp, Mail, MailOpen,
 } from 'lucide-react';
@@ -25,26 +26,23 @@ function fmtDate(iso) {
 
 // ════════════════════ GÖNDEREN (müdür + rehber) ════════════════════
 export function AnnouncementSender({ showToast }) {
-  const [list, setList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading: loading, mutate } = useSWR('/api/announcements');
+  const list = data?.announcements || [];
   const [detail, setDetail] = useState(null); // kim okudu modalı
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try { const d = await api('/api/announcements'); setList(d.announcements || []); }
-    catch { /* sessiz */ } finally { setLoading(false); }
-  }, []);
-  useEffect(() => { load(); }, [load]);
 
   async function remove(a) {
     if (!confirm(`"${a.title}" duyurusu silinsin mi?`)) return;
-    try { await api(`/api/announcements?id=${encodeURIComponent(a.id)}`, { method: 'DELETE' }); setList(p => p.filter(x => x.id !== a.id)); showToast?.('Duyuru silindi'); }
+    try {
+      await api(`/api/announcements?id=${encodeURIComponent(a.id)}`, { method: 'DELETE' });
+      mutate({ announcements: list.filter(x => x.id !== a.id) }, { revalidate: false });
+      showToast?.('Duyuru silindi');
+    }
     catch (e) { showToast?.(e.message, 'error'); }
   }
 
   return (
     <div className="max-w-2xl">
-      <Composer showToast={showToast} onSent={load} />
+      <Composer showToast={showToast} onSent={mutate} />
 
       <h4 className="text-subheading mt-7 mb-3">Gönderilen Duyurular</h4>
       {loading ? (
@@ -88,15 +86,11 @@ function Composer({ showToast, onSent }) {
   const [group, setGroup] = useState('lise');
   const [cls, setCls] = useState('');
   const [teacherIds, setTeacherIds] = useState([]); // teacher 'selected'
-  const [teachers, setTeachers] = useState([]);
   const [busy, setBusy] = useState(false);
 
-  // Öğretmen 'selected' için liste
-  useEffect(() => {
-    if (role === 'teacher') {
-      api('/api/teachers').then(d => setTeachers(Array.isArray(d) ? d : [])).catch(() => {});
-    }
-  }, [role]);
+  // Öğretmen 'selected' için liste — yalnız role==='teacher' iken çek (koşullu SWR anahtarı).
+  const { data: teachersData } = useSWR(role === 'teacher' ? '/api/teachers' : null);
+  const teachers = Array.isArray(teachersData) ? teachersData : [];
 
   // Rol değişince kapsamı geçerli hale getir
   useEffect(() => {
@@ -222,22 +216,16 @@ function ReadDetailModal({ ann, onClose }) {
 
 // ════════════════════ ALICI GELEN KUTUSU (öğretmen/öğrenci/veli) ════════════════════
 export function AnnouncementInbox({ showToast }) {
-  const [list, setList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading: loading, mutate } = useSWR('/api/announcements');
+  const list = data?.announcements || [];
   const [openId, setOpenId] = useState(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try { const d = await api('/api/announcements'); setList(d.announcements || []); }
-    catch { /* sessiz */ } finally { setLoading(false); }
-  }, []);
-  useEffect(() => { load(); }, [load]);
 
   async function toggle(a) {
     if (openId === a.id) { setOpenId(null); return; }
     setOpenId(a.id);
     if (!a.read) {
-      setList(p => p.map(x => x.id === a.id ? { ...x, read: true } : x));
+      // Okundu işaretini iyimser uygula (refetch yok), sonra sunucuya bildir.
+      mutate({ announcements: list.map(x => x.id === a.id ? { ...x, read: true } : x) }, { revalidate: false });
       try { await api('/api/announcements', { method: 'POST', body: JSON.stringify({ action: 'read', id: a.id }) }); }
       catch { /* sessiz */ }
     }

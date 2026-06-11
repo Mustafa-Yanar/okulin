@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef } from 'react';
+import useSWR from 'swr';
 import { upload } from '@vercel/blob/client';
 import EmptyState from '../EmptyState';
 import {
@@ -24,23 +25,12 @@ function embedUrl(url) {
 }
 
 export default function ResourceLibrary({ canManage, branches = [], userRole, userId, showToast }) {
-  const [resources, setResources] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading: loading, mutate } = useSWR('/api/resources');
+  const resources = data?.resources || [];
   const [filterBranch, setFilterBranch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [video, setVideo] = useState(null); // {url, title} embed modal
-
-  async function load() {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/resources', { credentials: 'same-origin' });
-      const data = await res.json();
-      if (res.ok) setResources(data.resources || []);
-    } catch { /* sessiz */ }
-    finally { setLoading(false); }
-  }
-  useEffect(() => { load(); }, []);
 
   const filtered = useMemo(() => resources.filter(r =>
     (!filterBranch || r.branch === filterBranch) &&
@@ -60,7 +50,7 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Silinemedi');
-      setResources(prev => prev.filter(r => r.id !== id));
+      mutate({ resources: resources.filter(r => r.id !== id) }, { revalidate: false });
       showToast?.('Kaynak silindi');
     } catch (err) { showToast?.(err.message, 'error'); }
   }
@@ -167,7 +157,7 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
         <ResourceForm
           branches={branches}
           onClose={() => setShowForm(false)}
-          onSaved={(rec) => { setResources(prev => [rec, ...prev]); setShowForm(false); showToast?.('Kaynak eklendi'); }}
+          onSaved={(rec) => { mutate({ resources: [rec, ...resources] }, { revalidate: false }); setShowForm(false); showToast?.('Kaynak eklendi'); }}
           showToast={showToast}
         />
       )}

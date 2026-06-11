@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import useSWR from 'swr';
 import {
   TrendingUp, TrendingDown, Scale, Plus, X, Trash2, Edit3,
   Users, Receipt, Calendar,
@@ -19,58 +20,44 @@ function thisMonth() {
 
 export default function ExpensePanel({ session, showToast }) {
   const [view, setView] = useState('personnel'); // 'personnel' | 'general'
-  const [expenses, setExpenses] = useState([]);
-  const [payments, setPayments] = useState([]); // gelir (öğrenci ödemeleri) — özet için
-  const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState(''); // '' = tüm zamanlar, yoksa YYYY-MM
   const [catFilter, setCatFilter] = useState('');
-  const [staff, setStaff] = useState([]); // personel önerileri
   const [form, setForm] = useState(null); // {mode:'new'|'edit', type, data}
 
-  const loadExpenses = useCallback(async () => {
-    try {
-      const res = await fetch('/api/finance/expense', { credentials: 'same-origin' });
-      const data = await res.json();
-      setExpenses(Array.isArray(data) ? data : []);
-    } catch { showToast?.('Giderler yüklenemedi', 'error'); }
-  }, [showToast]);
+  // Giderler (ana veri) — SWR. mutateExpenses ile silme/ekleme sonrası iyimser güncellenir.
+  const { data: expData, isLoading: loading, mutate: mutateExpenses } = useSWR('/api/finance/expense');
+  const expenses = Array.isArray(expData) ? expData : [];
 
-  const loadIncome = useCallback(async () => {
-    try {
-      const res = await fetch('/api/finance', { credentials: 'same-origin' });
-      const data = await res.json();
-      const flat = [];
-      (Array.isArray(data) ? data : []).forEach(item => {
-        (item.finance?.payments || []).forEach(p => flat.push(p));
-      });
-      setPayments(flat);
-    } catch { /* gelir özeti opsiyonel */ }
-  }, []);
+  // Gelir (öğrenci ödemeleri) — özet için. FinancePanel ile aynı anahtar → SWR paylaşır.
+  const { data: incomeData } = useSWR('/api/finance');
+  const payments = useMemo(() => {
+    const flat = [];
+    (Array.isArray(incomeData) ? incomeData : []).forEach(item => {
+      (item.finance?.payments || []).forEach(p => flat.push(p));
+    });
+    return flat;
+  }, [incomeData]);
 
-  const loadStaff = useCallback(async () => {
-    const names = [];
-    try {
-      const tRes = await fetch('/api/teachers', { credentials: 'same-origin' });
-      const t = await tRes.json();
-      (Array.isArray(t) ? t : []).forEach(x => names.push({ id: x.id, name: x.name }));
-    } catch { /* yoksay */ }
-    try {
-      const aRes = await fetch('/api/accountants', { credentials: 'same-origin' });
-      if (aRes.ok) {
-        const a = await aRes.json();
-        (Array.isArray(a) ? a : []).forEach(x => names.push({ id: x.id, name: x.name }));
-      }
-    } catch { /* muhasebeci listesi müdüre özel — sessizce geç */ }
-    setStaff(names);
-  }, []);
-
+  // Personel önerileri — iki endpoint birleşimi (öğretmen + muhasebeci), SWR'a uygun değil → manuel.
+  const [staff, setStaff] = useState([]);
   useEffect(() => {
     (async () => {
-      setLoading(true);
-      await Promise.all([loadExpenses(), loadIncome(), loadStaff()]);
-      setLoading(false);
+      const names = [];
+      try {
+        const tRes = await fetch('/api/teachers', { credentials: 'same-origin' });
+        const t = await tRes.json();
+        (Array.isArray(t) ? t : []).forEach(x => names.push({ id: x.id, name: x.name }));
+      } catch { /* yoksay */ }
+      try {
+        const aRes = await fetch('/api/accountants', { credentials: 'same-origin' });
+        if (aRes.ok) {
+          const a = await aRes.json();
+          (Array.isArray(a) ? a : []).forEach(x => names.push({ id: x.id, name: x.name }));
+        }
+      } catch { /* muhasebeci listesi müdüre özel — sessizce geç */ }
+      setStaff(names);
     })();
-  }, [loadExpenses, loadIncome, loadStaff]);
+  }, []);
 
   // Dönem filtresi (client-side)
   const periodMatch = useCallback((dateStr, periodStr) => {
@@ -106,7 +93,7 @@ export default function ExpensePanel({ session, showToast }) {
         body: JSON.stringify({ id: exp.id }),
       });
       if (!res.ok) throw new Error('Silinemedi');
-      setExpenses(prev => prev.filter(e => e.id !== exp.id));
+      mutateExpenses(expenses.filter(e => e.id !== exp.id), { revalidate: false });
       showToast?.('Gider silindi');
     } catch (err) { showToast?.(err.message, 'error'); }
   }
@@ -201,7 +188,7 @@ export default function ExpensePanel({ session, showToast }) {
           mode={form.mode} type={form.type} initial={form.data} staff={staff}
           onClose={() => setForm(null)}
           onSaved={(rec, isEdit) => {
-            setExpenses(prev => isEdit ? prev.map(e => e.id === rec.id ? rec : e) : [rec, ...prev]);
+            mutateExpenses(isEdit ? expenses.map(e => e.id === rec.id ? rec : e) : [rec, ...expenses], { revalidate: false });
             setForm(null);
             showToast?.(isEdit ? 'Gider güncellendi' : 'Gider eklendi');
           }}

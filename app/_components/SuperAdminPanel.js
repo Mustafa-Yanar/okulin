@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import useSWR from 'swr';
 import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Trash2, Lock, Inbox, Phone, Mail, Globe, CheckCircle2, AlertTriangle, Copy, Check } from 'lucide-react';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -396,21 +397,8 @@ function DeleteConfirmModal({ org, onClose, onDone }) {
 // ── Demo / İletişim Talepleri ────────────────────────────────────────────────
 
 function DemoRequests() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/superadmin/demo');
-      const data = await res.json();
-      if (res.ok) setItems(data.requests || []);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
+  const { data: demoData, isLoading: loading, mutate } = useSWR('/api/superadmin/demo');
+  const items = demoData?.requests || [];
 
   async function remove(id) {
     await fetch('/api/superadmin/demo', {
@@ -418,7 +406,7 @@ function DemoRequests() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     });
-    setItems(prev => prev.filter(r => r.id !== id));
+    mutate({ requests: items.filter(r => r.id !== id) }, { revalidate: false });
   }
 
   return (
@@ -481,24 +469,11 @@ function DemoRequests() {
 // ── Ana Panel ────────────────────────────────────────────────────────────────
 
 export default function SuperAdminPanel({ session, onLogout }) {
-  const [orgs, setOrgs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: orgsData, isLoading: loading, mutate: loadOrgs } = useSWR('/api/superadmin');
+  const orgs = orgsData?.orgs || [];
   const [modal, setModal] = useState(null); // null | {type, org?}
   const [provisioning, setProvisioning] = useState(null); // domain ekleniyor (slug)
   const [domainNote, setDomainNote] = useState(null); // { ok, text }
-
-  const loadOrgs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/superadmin');
-      const data = await res.json();
-      if (res.ok) setOrgs(data.orgs || []);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadOrgs(); }, [loadOrgs]);
 
   async function toggleActive(org) {
     await fetch('/api/superadmin', {

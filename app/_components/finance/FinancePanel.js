@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import useSWR from 'swr';
 import LoadingBox from '../Loading';
 import {
   TrendingUp, TrendingDown, DollarSign, Users, Plus, X, Check,
@@ -681,22 +682,10 @@ function FilterDropdown({ value, onChange }) {
 
 // ── Ana panel ────────────────────────────────────────────────────────────────
 export default function FinancePanel({ session, showToast }) {
-  const [list, setList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { data: financeData, isLoading: loading, mutate: load } = useSWR('/api/finance');
+  const list = Array.isArray(financeData) ? financeData : [];
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/finance', { credentials: 'same-origin' });
-      const data = await res.json();
-      setList(Array.isArray(data) ? data : []);
-    } catch { showToast('Veri yüklenemedi', 'error'); }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
 
   // Özet istatistikler
   const stats = list.reduce((acc, item) => {
