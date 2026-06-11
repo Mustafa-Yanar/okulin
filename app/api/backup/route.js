@@ -18,40 +18,80 @@ const BACKUP_DIR = 'backups';
 // Type sorguları nedeniyle daha çok REST çağrısı olur; süre güvenliği için.
 export const maxDuration = 60;
 
-// Tüm anahtarları tipe göre güvenli oku. Tek anahtar hatası tüm yedeği bozmaz.
+// Tek anahtarı tipine uygun komutla pipeline'a ekle (set/list'e get çağırmayız → WRONGTYPE yok).
+function readByType(p, key, type) {
+  if (type === 'string') p.get(key);
+  else if (type === 'set') p.smembers(key);
+  else if (type === 'list') p.lrange(key, 0, -1);
+  else if (type === 'hash') p.hgetall(key);
+  else if (type === 'zset') p.zrange(key, 0, -1, { withScores: true });
+}
+
+// Tüm anahtarları tipe göre topla. CHUNK'lı pipeline kullanır:
+// 2300+ anahtarı tek tek `await` ile okumak ~3 dk sürer (fonksiyon timeout'unu aşar);
+// chunk'lı pipeline ~20 round-trip'e indirir. Pipeline TİPE UYGUN kurulduğu için
+// (set/list/hash'e get yok) WRONGTYPE oluşmaz. Format: data[key] = { type, val }.
 async function snapshotAll(client) {
-  const data = {};
+  const CHUNK = 256;
+
+  // 1. Tüm anahtarları topla
+  const allKeys = [];
   let cursor = '0';
-  let total = 0;
   do {
-    const [next, keys] = await client.scan(cursor, { count: 200 });
+    const [next, keys] = await client.scan(cursor, { count: 300 });
     cursor = String(next);
-    if (!keys.length) continue;
-    // Tipleri toplu al — `type` her anahtarda güvenli (WRONGTYPE fırlatmaz).
+    if (keys.length) allKeys.push(...keys);
+  } while (cursor !== '0');
+
+  // 2. Tipleri chunk'lı pipeline ile al (`type` WRONGTYPE fırlatmaz)
+  const types = new Array(allKeys.length);
+  for (let i = 0; i < allKeys.length; i += CHUNK) {
+    const slice = allKeys.slice(i, i + CHUNK);
     const tp = client.pipeline();
-    keys.forEach((k) => tp.type(k));
-    const types = await tp.exec();
-    // Değerleri tipe göre TEK TEK oku (bir anahtar hatası diğerlerini etkilemesin).
-    for (let i = 0; i < keys.length; i++) {
-      const k = keys[i];
-      const type = types[i];
-      try {
-        let val;
-        if (type === 'string') val = await client.get(k);
-        else if (type === 'set') val = await client.smembers(k);
-        else if (type === 'list') val = await client.lrange(k, 0, -1);
-        else if (type === 'hash') val = await client.hgetall(k);
-        else if (type === 'zset') val = await client.zrange(k, 0, -1, { withScores: true });
-        else continue; // none/bilinmeyen → atla
-        if (val !== null && val !== undefined) {
-          data[k] = { type, val };
-          total++;
-        }
-      } catch {
-        // tek anahtar okunamadıysa yedeği komple bozma; atla
+    slice.forEach((k) => tp.type(k));
+    const res = await tp.exec();
+    for (let j = 0; j < slice.length; j++) types[i + j] = res[j];
+  }
+
+  // 3. Yalnız bilinen tipleri, tipe uygun komutla chunk'lı oku
+  const KNOWN = new Set(['string', 'set', 'list', 'hash', 'zset']);
+  const work = [];
+  for (let i = 0; i < allKeys.length; i++) {
+    if (KNOWN.has(types[i])) work.push([allKeys[i], types[i]]);
+  }
+
+  const data = {};
+  let total = 0;
+  for (let i = 0; i < work.length; i += CHUNK) {
+    const slice = work.slice(i, i + CHUNK);
+    let results;
+    try {
+      const vp = client.pipeline();
+      slice.forEach(([k, t]) => readByType(vp, k, t));
+      results = await vp.exec();
+    } catch {
+      // Nadir yarış (anahtar tipi okuma arasında değişti) → bu chunk'ı tek tek oku.
+      results = [];
+      for (const [k, t] of slice) {
+        try {
+          if (t === 'string') results.push(await client.get(k));
+          else if (t === 'set') results.push(await client.smembers(k));
+          else if (t === 'list') results.push(await client.lrange(k, 0, -1));
+          else if (t === 'hash') results.push(await client.hgetall(k));
+          else if (t === 'zset') results.push(await client.zrange(k, 0, -1, { withScores: true }));
+          else results.push(undefined);
+        } catch { results.push(undefined); }
       }
     }
-  } while (cursor !== '0');
+    for (let j = 0; j < slice.length; j++) {
+      const [k, type] = slice[j];
+      const val = results[j];
+      if (val !== null && val !== undefined) {
+        data[k] = { type, val };
+        total++;
+      }
+    }
+  }
   return { data, total };
 }
 
