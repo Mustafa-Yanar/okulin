@@ -62,10 +62,13 @@
   --color-info-bg:        #eff6ff;
   --color-info-border:    rgba(37,99,235,0.2);
 
-  /* ── Transition ── */
-  --transition-fast:   0.12s ease;
-  --transition-base:   0.18s ease;
-  --transition-slow:   0.28s ease;
+  /* ── Transition ──
+     Tek easing eğrisi (Linear/Stripe hissi: hızlı başla, yumuşak otur).
+     Animasyon shorthand'lerinde bare --ease-out, geçişlerde süre+easing tokenı. */
+  --ease-out:          cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-fast:   0.12s var(--ease-out);
+  --transition-base:   0.18s var(--ease-out);
+  --transition-slow:   0.28s var(--ease-out);
 
   /* ── Radius ── */
   --radius-sm:  8px;
@@ -217,7 +220,7 @@ body {
   font-size: 14px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(99,102,241,0.35), 0 1px 0 rgba(255,255,255,0.2) inset;
-  transition: all 0.15s ease;
+  transition: all var(--transition-base);
 }
 .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(99,102,241,0.45), 0 1px 0 rgba(255,255,255,0.2) inset; }
 .btn-primary:active { transform: translateY(0); }
@@ -233,7 +236,7 @@ body {
   font-size: 14px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(34,197,94,0.3), 0 1px 0 rgba(255,255,255,0.2) inset;
-  transition: all 0.15s ease;
+  transition: all var(--transition-base);
 }
 .btn-success:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(34,197,94,0.4), 0 1px 0 rgba(255,255,255,0.2) inset; }
 .btn-success:active { transform: translateY(0); }
@@ -249,7 +252,7 @@ body {
   font-size: 14px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(239,68,68,0.3), 0 1px 0 rgba(255,255,255,0.2) inset;
-  transition: all 0.15s ease;
+  transition: all var(--transition-base);
 }
 .btn-danger:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(239,68,68,0.4); }
 .btn-danger:active { transform: translateY(0); }
@@ -273,7 +276,7 @@ body {
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
-  transition: color .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .12s ease;
+  transition: color var(--transition-base), background-color var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-fast);
 }
 .btn-ghost:hover {
   color: var(--text-primary);
@@ -290,7 +293,7 @@ body {
   width: 32px; height: 32px; border-radius: 9999px;
   border: none; background: transparent; cursor: pointer;
   color: var(--text-muted);
-  transition: background-color var(--transition-fast), color var(--transition-fast), transform .12s ease;
+  transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
 }
 .btn-icon:hover { background: var(--bg-muted); color: var(--text-secondary); }
 .btn-icon:active { transform: scale(0.9); }
@@ -310,7 +313,7 @@ body {
   font-size: 14px;
   font-family: inherit;
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .input:focus {
   border-color: var(--brand, #6366f1);
@@ -388,7 +391,7 @@ body {
   border: 2px solid var(--border-subtle);
   border-radius: 18px;
   background: var(--bg-surface);
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all var(--transition-slow);
   position: relative;
   overflow: hidden;
 }
@@ -398,7 +401,7 @@ body {
   inset: 0;
   background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--brand, #6366f1) 18%, transparent), transparent 70%);
   opacity: 0;
-  transition: opacity 0.22s ease;
+  transition: opacity var(--transition-slow);
   pointer-events: none;
 }
 .role-card:hover {
@@ -467,13 +470,13 @@ body {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.animate-enter-up { animation: enter-up 0.22s ease forwards; }
+.animate-enter-up { animation: enter-up 0.22s var(--ease-out) forwards; }
 
 @keyframes enter-scale {
   from { opacity: 0; transform: scale(0.95); }
   to   { opacity: 1; transform: scale(1); }
 }
-.animate-enter-scale { animation: enter-scale 0.18s ease forwards; }
+.animate-enter-scale { animation: enter-scale 0.18s var(--ease-out) forwards; }
 
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
@@ -488,19 +491,19 @@ body {
   from { opacity: 0; transform: translate(-50%, 8px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
-.animate-fade-up { animation: fade-up 0.2s ease; }
+.animate-fade-up { animation: fade-up 0.2s var(--ease-out); }
 
 @keyframes slide-in {
   from { opacity: 0; transform: translateY(10px) scale(0.98); }
   to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
-.animate-slide-in { animation: slide-in 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-slide-in { animation: slide-in 0.22s var(--ease-out); }
 
 @keyframes modal-in {
   from { opacity: 0; transform: translateY(16px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
-.animate-modal-in { animation: modal-in 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-modal-in { animation: modal-in 0.28s var(--ease-out); }
 
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -563,7 +566,7 @@ html.dark select { background: var(--bg-surface-2); color: var(--text-primary); 
 html.dark option { background: var(--bg-surface); color: var(--text-primary); }
 
 /* ─── Sidebar ────────────────────────────────────────────────────────────────── */
-.sidebar { transition: width 0.2s ease; }
+.sidebar { transition: width var(--transition-base); }
 
 /* Daralt/genişlet tutamağı — Canva tarzı dikey pill, kenara yapışık.
    Tüm yüzey tek tıklama alanı (eski yarım-taşma + ikon-merkezli hit-area sorunu giderildi). */
@@ -581,7 +584,7 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
   justify-content: center;
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
-  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
   padding: 0;
 }
 .sidebar-toggle:hover {
@@ -629,7 +632,7 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
   color: var(--text-secondary);
   background: transparent;
   /* Renk + zemin + gölge birlikte yumuşak geçsin (iOS inner-rounded hissi). */
-  transition: color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, transform 0.12s ease;
+  transition: color var(--transition-base), background-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-fast);
   min-width: 0;
   cursor: pointer;
 }
@@ -713,7 +716,7 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
   from { opacity: 0; transform: translateX(-100%); }
   to   { opacity: 1; transform: translateX(0); }
 }
-.animate-slide-in-left { animation: slide-in-left 0.22s ease; }
+.animate-slide-in-left { animation: slide-in-left 0.22s var(--ease-out); }
 
 /* ─── Toast bildirimi ────────────────────────────────────────────────────────── */
 .toast-base {
