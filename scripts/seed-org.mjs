@@ -18,6 +18,7 @@
 import { Redis } from '@upstash/redis';
 import bcrypt from 'bcryptjs';
 import { generateOrgCode, formatCode, hostForOrg } from '../lib/orgcode.js';
+import { addProjectDomain, vercelConfigured } from '../lib/vercel.js';
 
 const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
@@ -103,6 +104,16 @@ async function main() {
     await redis.sadd(`org:${org}:branches`, 'main');
     await redis.set(`org:${org}:branch:main`, { slug: 'main', name: 'Ana Şube', active: true, createdAt });
     console.log('Ana şube (main) kaydı oluşturuldu.');
+  }
+
+  // Subdomain'i Vercel projesine ekle (SSL otomatik). VERCEL_TOKEN yoksa atlanır.
+  const domain = hostForOrg(org, 'main');
+  if (vercelConfigured()) {
+    const r = await addProjectDomain(domain);
+    if (r.ok) console.log('Domain:', domain, r.alreadyExists ? '(zaten ekli)' : '→ eklendi, SSL üretiliyor (~30sn)');
+    else console.warn('Domain EKLENEMEDİ:', domain, '—', r.error, '(elle: vercel domains add ' + domain + ')');
+  } else {
+    console.log('Domain adımı atlandı (VERCEL_TOKEN yok). Elle:', 'vercel domains add ' + domain);
   }
 
   console.log('TAMAM. prefix:', prefix);

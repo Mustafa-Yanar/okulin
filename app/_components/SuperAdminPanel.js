@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Trash2, Lock, Inbox, Phone, Mail } from 'lucide-react';
+import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Trash2, Lock, Inbox, Phone, Mail, Globe, CheckCircle2, AlertTriangle, Copy, Check } from 'lucide-react';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,6 +41,8 @@ function NewOrgModal({ onClose, onCreated }) {
   const [slugManual, setSlugManual] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [result, setResult] = useState(null); // başarı ekranı: { slug, code, domain, domainProvisioned, domainWarning }
+  const [copied, setCopied] = useState(false);
 
   function set(k, v) {
     setForm(prev => {
@@ -62,10 +64,64 @@ function NewOrgModal({ onClose, onCreated }) {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Hata'); return; }
-      onCreated();
+      setResult(data); // formu kapatma — kod + domain durumunu göster
     } finally {
       setLoading(false);
     }
+  }
+
+  // Başarı ekranı — kurum kodu + domain (SSL) durumu
+  if (result) {
+    return (
+      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <div className="modal w-full max-w-md p-6 my-4" role="dialog" aria-modal="true" aria-labelledby="new-org-done">
+          <div className="flex flex-col items-center text-center mb-5">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
+              style={{ background: 'color-mix(in srgb, #16a34a 14%, transparent)', color: '#16a34a' }}>
+              <CheckCircle2 size={26} />
+            </div>
+            <h2 id="new-org-done" className="text-lg font-semibold">Kurum oluşturuldu</h2>
+            <p className="text-sm text-slate-500 mt-0.5">{form.name}</p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {/* Kurum kodu */}
+            <div className="card px-4 py-3">
+              <p className="text-xs text-slate-500 mb-1">Kurum Kodu (girişte kullanılır)</p>
+              <div className="flex items-center justify-between gap-2">
+                <code className="font-mono text-lg font-700" style={{ fontWeight: 700, color: '#6366f1' }}>{result.code}</code>
+                <button type="button"
+                  onClick={() => { navigator.clipboard?.writeText(result.code); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+                  className="btn-ghost !px-2 !py-1 text-xs flex items-center gap-1">
+                  {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Kopyalandı' : 'Kopyala'}
+                </button>
+              </div>
+            </div>
+
+            {/* Domain / SSL durumu */}
+            <div className="card px-4 py-3">
+              <p className="text-xs text-slate-500 mb-1">Adres</p>
+              <a href={`https://${result.domain}`} target="_blank" rel="noopener noreferrer"
+                className="font-mono text-sm text-indigo-600 hover:underline break-all">{result.domain}</a>
+              {result.domainProvisioned ? (
+                <p className="text-xs mt-2 flex items-center gap-1.5" style={{ color: '#16a34a' }}>
+                  <CheckCircle2 size={13} /> Domain projeye eklendi — SSL otomatik üretiliyor (~30 sn).
+                </p>
+              ) : (
+                <div className="text-xs mt-2 flex items-start gap-1.5" style={{ color: '#d97706' }}>
+                  <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                  <span>Domain otomatik eklenemedi{result.domainWarning ? `: ${result.domainWarning}` : ''}. Listeden <strong>Domain’i Sağla</strong> ile tekrar dene (veya elle <code>vercel domains add {result.domain}</code>).</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-end mt-5">
+            <button type="button" onClick={onCreated} className="btn-primary !px-4 !py-2 text-sm">Tamam</button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -428,6 +484,8 @@ export default function SuperAdminPanel({ session, onLogout }) {
   const [orgs, setOrgs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null); // null | {type, org?}
+  const [provisioning, setProvisioning] = useState(null); // domain ekleniyor (slug)
+  const [domainNote, setDomainNote] = useState(null); // { ok, text }
 
   const loadOrgs = useCallback(async () => {
     setLoading(true);
@@ -449,6 +507,35 @@ export default function SuperAdminPanel({ session, onLogout }) {
       body: JSON.stringify({ action: 'toggle_active', slug: org.slug }),
     });
     loadOrgs();
+  }
+
+  // Subdomain'i Vercel projesine (yeniden) ekle — mevcut kurum veya başarısız onboarding için.
+  async function provisionDomain(org) {
+    setProvisioning(org.slug);
+    setDomainNote(null);
+    try {
+      const res = await fetch('/api/superadmin', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'provision_domain', slug: org.slug }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDomainNote({ ok: false, text: `${org.slug}.okulin.com eklenemedi: ${data.error || 'hata'}` });
+      } else {
+        setDomainNote({
+          ok: true,
+          text: data.alreadyExists
+            ? `${data.domain} zaten ekli.`
+            : `${data.domain} eklendi — SSL üretiliyor (~30 sn).`,
+        });
+      }
+    } catch {
+      setDomainNote({ ok: false, text: 'Bağlantı hatası.' });
+    } finally {
+      setProvisioning(null);
+      setTimeout(() => setDomainNote(null), 6000);
+    }
   }
 
   function closeModal() { setModal(null); }
@@ -503,6 +590,14 @@ export default function SuperAdminPanel({ session, onLogout }) {
             </button>
           </div>
         </div>
+
+        {/* Domain işlemi bildirimi */}
+        {domainNote && (
+          <div className={`mb-3 px-3 py-2 rounded text-sm flex items-center gap-2 ${domainNote.ok ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+            {domainNote.ok ? <CheckCircle2 size={15} className="shrink-0" /> : <AlertTriangle size={15} className="shrink-0" />}
+            {domainNote.text}
+          </div>
+        )}
 
         {/* Org listesi */}
         {loading ? (
@@ -563,6 +658,17 @@ export default function SuperAdminPanel({ session, onLogout }) {
                     className="btn-icon btn-icon-warning"
                   >
                     <KeyRound size={15} />
+                  </button>
+                  <button
+                    onClick={() => provisionDomain(org)}
+                    disabled={provisioning === org.slug}
+                    title={`Domain'i sağla: ${org.slug}.okulin.com (Vercel + SSL)`}
+                    aria-label={`${org.name} domainini sağla`}
+                    className="btn-icon btn-icon-primary"
+                  >
+                    {provisioning === org.slug
+                      ? <RefreshCw size={15} className="animate-spin" />
+                      : <Globe size={15} />}
                   </button>
                   <button
                     onClick={() => toggleActive(org)}

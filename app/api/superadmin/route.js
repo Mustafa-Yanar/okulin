@@ -4,6 +4,7 @@ import { rawRedis } from '@/lib/tenant';
 import { getSession } from '@/lib/auth';
 import { parseBody, z, zName, zPassword } from '@/lib/validate';
 import { generateOrgCode, formatCode, hostForOrg } from '@/lib/orgcode';
+import { addProjectDomain } from '@/lib/vercel';
 
 // Tüm işlemler rawRedis (global) — tenant prefix YOK.
 // Erişim: yalnız superadmin rolü.
@@ -75,7 +76,7 @@ const CreateOrgSchema = z.object({
 });
 
 const UpdateOrgSchema = z.object({
-  action: z.enum(['toggle_active', 'reset_director', 'rename', 'change_own_password']),
+  action: z.enum(['toggle_active', 'reset_director', 'rename', 'change_own_password', 'provision_domain']),
   slug: z.string().min(2).max(40).optional(),
   // toggle_active: ilave alan yok
   // reset_director / change_own_password:
@@ -152,7 +153,21 @@ export async function POST(req) {
     });
   }
 
-  return NextResponse.json({ ok: true, slug, type: orgType, code: formatCode(code) });
+  // Subdomain'i Vercel projesine ekle (SSL otomatik üretilsin). Org zaten Redis'e
+  // yazıldı; domain eklenemezse kurum yine de oluşmuş sayılır — sonuç yanıtta döner,
+  // panelden "Domain'i Sağla" ile tekrar denenebilir.
+  const domain = hostForOrg(slug, 'main');
+  const domainResult = await addProjectDomain(domain);
+
+  return NextResponse.json({
+    ok: true,
+    slug,
+    type: orgType,
+    code: formatCode(code),
+    domain,
+    domainProvisioned: domainResult.ok,
+    domainWarning: domainResult.ok ? null : (domainResult.error || 'Domain eklenemedi'),
+  });
 }
 
 // DELETE /api/superadmin — kurumu ve tüm verisini kalıcı sil
@@ -224,6 +239,17 @@ export async function PATCH(req) {
     if (shortName !== undefined) next.shortName = shortName || undefined;
     await rawRedis.set(`org:${slug}`, next);
     return NextResponse.json({ ok: true });
+  }
+
+  if (action === 'provision_domain') {
+    // Subdomain'i Vercel projesine (yeniden) ekle — idempotent (zaten ekliyse 409 → ok).
+    // Mevcut kurumlar veya oluşturmada domain eklenemeyen kurumlar için.
+    const domain = hostForOrg(slug, 'main');
+    const result = await addProjectDomain(domain);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error || 'Domain eklenemedi', domain }, { status: 502 });
+    }
+    return NextResponse.json({ ok: true, domain, alreadyExists: result.alreadyExists || false });
   }
 
   if (action === 'change_own_password') {
