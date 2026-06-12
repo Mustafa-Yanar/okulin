@@ -4,7 +4,8 @@ import useSWR from 'swr';
 import {
   Megaphone, Send, Trash2, X, Check, Users, Eye, ChevronDown, ChevronUp, Mail, MailOpen,
 } from 'lucide-react';
-import { STUDENT_GROUPS, classLabel } from '@/lib/constants';
+import { useClasses } from '../ClassesContext';
+import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
 
 async function api(path, opts = {}) {
@@ -79,6 +80,7 @@ export function AnnouncementSender({ showToast }) {
 }
 
 function Composer({ showToast, onSent }) {
+  const { classes } = useClasses();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [role, setRole] = useState('parent');     // parent | student | teacher
@@ -97,7 +99,10 @@ function Composer({ showToast, onSent }) {
     if (role === 'teacher' && (scope === 'group' || scope === 'class')) setScope('all');
   }, [role]); // eslint-disable-line
 
-  const allClasses = Object.values(STUDENT_GROUPS).flatMap(g => g.classes);
+  // Hedefleme listeleri registry'den (özel şube isimleri/grupları görünür); kayıtsızsa
+  // getClasses constants'tan sanal liste döndüğü için davranış bit-bit aynı.
+  const classGroups = groupedClasses(classes);
+  const allClasses = classGroups.flatMap(g => g.items); // [{id, ad}]
 
   async function send() {
     if (!title.trim() || !body.trim()) return showToast?.('Başlık ve içerik gerekli', 'error');
@@ -147,13 +152,13 @@ function Composer({ showToast, onSent }) {
         </select>
         {scope === 'group' && (
           <select value={group} onChange={e => setGroup(e.target.value)} className="input !w-auto !text-xs !py-1.5 !px-2">
-            {Object.entries(STUDENT_GROUPS).map(([k, g]) => <option key={k} value={k}>{g.label}</option>)}
+            {classGroups.map(g => <option key={g.key} value={g.key}>{g.label}</option>)}
           </select>
         )}
         {scope === 'class' && (
           <select value={cls} onChange={e => setCls(e.target.value)} className="input !w-auto !text-xs !py-1.5 !px-2">
             <option value="">Sınıf seç…</option>
-            {allClasses.map(c => <option key={c} value={c}>{classLabel(c)}</option>)}
+            {allClasses.map(c => <option key={c.id} value={c.id}>{c.ad}</option>)}
           </select>
         )}
       </div>

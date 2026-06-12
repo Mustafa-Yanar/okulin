@@ -5,6 +5,7 @@ import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
 import { classToGroup, classLabel, STUDENT_GROUPS } from '@/lib/constants';
+import { getClasses, getClass } from '@/lib/classes';
 
 // Tek yön duyuru/bilgilendirme sistemi (hub-spoke). Gönderen: müdür + rehber.
 // Alıcı: rol×kapsam ile hedeflenir; rol-içi (veli-veli vb.) YOK. Okundu + push.
@@ -23,7 +24,7 @@ const AudienceSchema = z.object({
   role: z.enum(['parent', 'student', 'teacher']),
   scope: z.enum(['all', 'group', 'class', 'selected']),
   group: z.string().max(20).optional(),
-  cls: z.string().max(8).optional(),
+  cls: z.string().max(60).optional(), // şube id (özel şube 's_xxxxxxxx' = 10 krk)
   ids: z.array(z.string().max(100)).max(3000).optional(),
 });
 
@@ -49,7 +50,11 @@ async function resolveRecipients(audience) {
     let recs = (await pipe.exec()).filter(Boolean);
     if (scope === 'selected') recs = recs.filter(r => ids?.includes(r.id));
     else if (scope === 'class') recs = recs.filter(r => (r.children || []).some(c => c.cls === cls));
-    else if (scope === 'group') recs = recs.filter(r => (r.children || []).some(c => classToGroup(c.cls) === group));
+    else if (scope === 'group') {
+      // Çocuğun şube id'sinden grubu çöz — registry-aware (özel şube id'leri classToGroup'ta yok).
+      const groupById = new Map((await getClasses()).map(c => [c.id, c.group]));
+      recs = recs.filter(r => (r.children || []).some(c => (groupById.get(c.cls) ?? classToGroup(c.cls)) === group));
+    }
     return recs.map(r => ({ role: 'parent', id: r.id, name: (r.children || []).map(c => c.name).join(', ') + ' (Veli)' }));
   }
 
@@ -75,11 +80,20 @@ async function resolveRecipients(audience) {
   return recs.map(t => ({ role: 'teacher', id: t.id, name: t.name }));
 }
 
-function audienceLabel(audience) {
+const GROUP_LABELS = { ilkokul: 'İlkokul', ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
+
+async function audienceLabel(audience) {
   const roleLbl = { parent: 'Veli', student: 'Öğrenci', teacher: 'Öğretmen' }[audience.role];
   if (audience.scope === 'all') return `Tüm ${roleLbl === 'Veli' ? 'Veliler' : roleLbl === 'Öğrenci' ? 'Öğrenciler' : 'Öğretmenler'}`;
-  if (audience.scope === 'group') return `${STUDENT_GROUPS[audience.group]?.label || audience.group} ${roleLbl === 'Veli' ? 'Velileri' : roleLbl + 'leri'}`;
-  if (audience.scope === 'class') return `${classLabel(audience.cls)} ${roleLbl === 'Veli' ? 'Velileri' : roleLbl + 'leri'}`;
+  if (audience.scope === 'group') {
+    const gLbl = GROUP_LABELS[audience.group] || STUDENT_GROUPS[audience.group]?.label || audience.group;
+    return `${gLbl} ${roleLbl === 'Veli' ? 'Velileri' : roleLbl + 'leri'}`;
+  }
+  if (audience.scope === 'class') {
+    // Şube etiketi registry'den (özel isim); kayıtsızsa classLabel fallback.
+    const lbl = (await getClass(audience.cls))?.ad || classLabel(audience.cls);
+    return `${lbl} ${roleLbl === 'Veli' ? 'Velileri' : roleLbl + 'leri'}`;
+  }
   return `Seçili ${roleLbl}ler`;
 }
 
@@ -167,7 +181,7 @@ export async function POST(req) {
   const id = genId();
   const rec = {
     id, title, body,
-    audience, audienceLabel: audienceLabel(audience),
+    audience, audienceLabel: await audienceLabel(audience),
     recipients, recipientCount: recipients.length,
     senderId: session.id, senderName: session.name, senderRole: session.role,
     createdAt: new Date().toISOString(),

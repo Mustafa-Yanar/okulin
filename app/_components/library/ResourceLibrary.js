@@ -7,7 +7,8 @@ import {
   BookOpen, FileText, Youtube, Link2, Plus, Trash2, X, Upload,
   ExternalLink, Play, Filter,
 } from 'lucide-react';
-import { STUDENT_GROUPS, classLabel } from '@/lib/constants';
+import { useClasses } from '../ClassesContext';
+import { groupedClasses, classShort } from '@/lib/classCatalog';
 
 const TYPE_META = {
   pdf:   { label: 'PDF Föy', icon: FileText, color: 'text-rose-600',   bg: 'bg-rose-50' },
@@ -25,6 +26,7 @@ function embedUrl(url) {
 }
 
 export default function ResourceLibrary({ canManage, branches = [], userRole, userId, showToast }) {
+  const { classes: regClasses } = useClasses();
   const { data, isLoading: loading, mutate } = useSWR('/api/resources');
   const resources = data?.resources || [];
   const [filterBranch, setFilterBranch] = useState('');
@@ -126,7 +128,7 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
 
                 <div className="flex flex-wrap gap-1">
                   {(r.classes || []).slice(0, 3).map(c => (
-                    <span key={c} className="text-[10px] bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">{c}</span>
+                    <span key={c} className="text-[10px] bg-slate-100 text-slate-500 rounded px-1.5 py-0.5">{classShort(regClasses, c)}</span>
                   ))}
                   {(r.classes || []).length > 3 && (
                     <span className="text-[10px] text-slate-400">+{r.classes.length - 3}</span>
@@ -188,6 +190,7 @@ function VideoModal({ url, title, onClose }) {
 
 // ----- Ekleme formu -----
 function ResourceForm({ branches, onClose, onSaved, showToast }) {
+  const { classes: regClasses } = useClasses();
   const [title, setTitle] = useState('');
   const [type, setType] = useState('pdf');
   const [branch, setBranch] = useState(branches[0] || '');
@@ -335,21 +338,22 @@ function ResourceForm({ branches, onClose, onSaved, showToast }) {
               Hedef Sınıflar <span className="font-400" style={{ color: 'var(--text-muted)' }}>({classes.size} seçili)</span>
             </label>
             <div className="border border-slate-200 rounded-lg p-2 max-h-52 overflow-y-auto flex flex-col gap-2.5">
-              {Object.entries(STUDENT_GROUPS).map(([gKey, g]) => {
-                const allIn = g.classes.every(c => classes.has(c));
+              {groupedClasses(regClasses).map((g) => {
+                const ids = g.items.map(i => i.id);
+                const allIn = ids.length > 0 && ids.every(c => classes.has(c));
                 return (
-                  <div key={gKey}>
-                    <button type="button" onClick={() => toggleGroup(g.classes)}
+                  <div key={g.key}>
+                    <button type="button" onClick={() => toggleGroup(ids)}
                       className={`text-[11px] font-600 mb-1 px-2 py-0.5 rounded ${allIn ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}
                       style={{ fontWeight: 600 }}>
                       {g.label} {allIn ? '✓' : 'tümü'}
                     </button>
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-1">
-                      {g.classes.map(c => (
-                        <label key={c} className={`text-[11px] flex items-center gap-1 px-1.5 py-1 rounded cursor-pointer border
-                          ${classes.has(c) ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-150 text-slate-500 hover:bg-slate-50'}`}>
-                          <input type="checkbox" checked={classes.has(c)} onChange={() => toggleClass(c)} className="hidden" />
-                          {c}
+                      {g.items.map(c => (
+                        <label key={c.id} className={`text-[11px] flex items-center gap-1 px-1.5 py-1 rounded cursor-pointer border
+                          ${classes.has(c.id) ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-150 text-slate-500 hover:bg-slate-50'}`}>
+                          <input type="checkbox" checked={classes.has(c.id)} onChange={() => toggleClass(c.id)} className="hidden" />
+                          {classShort(regClasses, c.id)}
                         </label>
                       ))}
                     </div>
