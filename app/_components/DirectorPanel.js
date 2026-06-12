@@ -10,6 +10,7 @@ import ProgramOlusturucu from './program/ProgramOlusturucu';
 import { TeacherBookingsList } from './TeacherPanel';
 
 import { ALL_DAYS, classLabel, getWeekKey, slotsForDay, allBranches } from '@/lib/constants';
+import { classLabelFrom } from '@/lib/classCatalog';
 import { GROUPS, api, Modal, getAdjacentWeek, WeekNav } from './director/shared';
 import { TeacherForm, StudentForm, ImportModal } from './director/Forms';
 import { DirectorAttendanceView } from './director/Attendance';
@@ -64,6 +65,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const { updateSlotTimes } = useSlotTimesCtx();
   const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
+  const [classes, setClasses] = useState([]); // registry şubeler (/api/classes) — form+liste etiketleri
   const [weekKey, setWeekKey] = useState(getWeekKey());
   const [allSlots, setAllSlots] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -118,14 +120,16 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     try {
       const resolvedWeek = wk || getWeekKey();
       if (!wk) setWeekKey(resolvedWeek);
-      const [teacherData, studentData, slotsData] = await Promise.all([
+      const [teacherData, studentData, slotsData, classData] = await Promise.all([
         api('/api/teachers'),
         api('/api/students'),
         api(`/api/slots?week=${resolvedWeek}`),
+        api('/api/classes'),
       ]);
       setTeachers([...teacherData].sort((a, b) => a.name.localeCompare(b.name, 'tr')));
       setStudents(studentData);
       setAllSlots(slotsData.slots || []);
+      setClasses(classData.classes || []);
     } catch (err) { showToast(err.message, 'error'); }
     finally { setLoading(false); }
   }, []);
@@ -442,7 +446,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
               </div>
             </div>
           )}
-          <StudentList students={students}
+          <StudentList students={students} classes={classes}
             onSelectChange={setExpandedStudentId}
             allSlots={allSlots} weekKey={weekKey}
             onCancelBooking={async ({ teacherId, day, slotId }) => {
@@ -458,7 +462,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
               try { await api('/api/students',{method:'DELETE',body:JSON.stringify({id:s.id})}); showToast('Öğrenci silindi'); loadAll(weekKey); } catch(err){showToast(err.message,'error');}
             }}
             onDeleteClass={async (cls, clsStudents) => {
-              if (!confirm(`${classLabel(cls)} sınıfındaki ${clsStudents.length} öğrenci silinsin mi?`)) return;
+              if (!confirm(`${classLabelFrom(classes, cls, classLabel)} sınıfındaki ${clsStudents.length} öğrenci silinsin mi?`)) return;
               try {
                 await api('/api/students', { method: 'DELETE', body: JSON.stringify({ ids: clsStudents.map(s => s.id) }) });
                 showToast(`${clsStudents.length} öğrenci silindi`);
@@ -476,7 +480,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Veli ({students.length})</h3>
           </div>
-          <VeliPanel students={students} showToast={showToast} onChanged={() => loadAll(weekKey)} />
+          <VeliPanel students={students} classes={classes} showToast={showToast} onChanged={() => loadAll(weekKey)} />
         </div>
       )}
 
@@ -596,7 +600,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
         </Modal>
       )}
       {showStudentForm && (
-        <StudentForm initial={editStudent} onClose={() => { setShowStudentForm(false); setEditStudent(null); }}
+        <StudentForm initial={editStudent} classes={classes} onClose={() => { setShowStudentForm(false); setEditStudent(null); }}
           onSwitchToImport={() => { setShowStudentForm(false); setEditStudent(null); setShowImport(true); }}
           onSave={async data => {
             try {

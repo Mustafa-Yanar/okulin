@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import * as XLSX from 'xlsx';
 import redis from '@/lib/db';
 import { getSession, initialPassword } from '@/lib/auth';
-import { classToGroup } from '@/lib/constants';
+import { getClasses } from '@/lib/classes';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { addToIndex } from '@/lib/userIndex';
 
@@ -37,6 +37,10 @@ export async function POST(req) {
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
+  // Şube → köprü grubu haritası (registry; boşsa constants'tan türetilmiş sanal liste).
+  const allClasses = await getClasses();
+  const groupById = new Map(allClasses.map((c) => [c.id, c.group]));
+
   // Mevcut öğrenci kullanıcı adlarını al
   const existingIds = await redis.smembers('students');
   const existingUsernames = new Set();
@@ -59,7 +63,7 @@ export async function POST(req) {
 
     const name = formatName(rawName);
     const cls = rawCls;
-    const group = classToGroup(cls);
+    const group = groupById.get(cls);
 
     if (!group) {
       results.errors.push(`${name}: geçersiz sınıf "${cls}"`);

@@ -3,7 +3,8 @@
 // Müdür paneli modal formları: öğretmen, öğrenci, Excel import, şifre sıfırlama.
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, Check, BookOpen } from 'lucide-react';
-import { STUDENT_GROUPS, classLabel, branchesForGroups } from '@/lib/constants';
+import { branchesForGroups } from '@/lib/constants';
+import { classesForGroup } from '@/lib/classCatalog';
 import { isValidTurkishMobile, formatTurkishMobile } from '@/lib/phone';
 import { GROUPS, Modal, Label, FormField } from './shared';
 
@@ -114,18 +115,21 @@ export function TeacherForm({ initial, onClose, onSave }) {
   );
 }
 
-export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
+export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchToImport }) {
   const [name, setName] = useState(initial?.name||'');
   const [password, setPassword] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(initial?.group||'ortaokul');
-  const [cls, setCls] = useState(initial?.cls||STUDENT_GROUPS.ortaokul.classes[0]);
+  // Seçili grubun şubeleri registry'den (sabit-kod değil). Düzey/dal kurum tanımına göre.
+  const groupClasses = useMemo(() => classesForGroup(classes, selectedGroup), [classes, selectedGroup]);
+  const [cls, setCls] = useState(initial?.cls || '');
   const [phone, setPhone] = useState(initial?.phone ? formatTurkishMobile(initial.phone) : '');
   const [parentPhone, setParentPhone] = useState(initial?.parentPhone ? formatTurkishMobile(initial.parentPhone) : '');
   const [parentName, setParentName] = useState(initial?.parentName || '');
   const [birthDate, setBirthDate] = useState(initial?.birthDate || '');
   const [diplomaNotu, setDiplomaNotu] = useState(initial?.diplomaNotu != null ? String(initial.diplomaNotu) : '');
   const [loading, setLoading] = useState(false);
-  useEffect(() => { if (!initial) setCls(STUDENT_GROUPS[selectedGroup].classes[0]); }, [selectedGroup]);
+  // Yeni öğrenci: grup (ya da şube listesi) değişince ilk şubeyi seç. Düzenlemede cls korunur.
+  useEffect(() => { if (!initial) setCls(groupClasses[0]?.id || ''); }, [selectedGroup, groupClasses, initial]);
 
   const phoneInvalid = phone.trim() !== '' && !isValidTurkishMobile(phone);
   const parentPhoneInvalid = parentPhone.trim() !== '' && !isValidTurkishMobile(parentPhone);
@@ -142,6 +146,7 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
     e.preventDefault();
     if (phoneInvalid || parentPhoneInvalid || diplomaInvalid) return; // geçersiz veriyle gönderme
     if (parentMissing) return;
+    if (!cls) { alert('Önce bir şube/sınıf seçin (Sınıflar sekmesinden şube ekleyebilirsiniz)'); return; }
     setLoading(true);
     await onSave({
       name, username: name, password, cls, phone, parentPhone, parentName, birthDate,
@@ -173,7 +178,9 @@ export function StudentForm({ initial, onClose, onSave, onSwitchToImport }) {
         </FormField>
         <FormField label="Sınıf">
           <select className="input" value={cls} onChange={e=>setCls(e.target.value)}>
-            {STUDENT_GROUPS[selectedGroup].classes.map(c=><option key={c} value={c}>{classLabel(c)}</option>)}
+            {groupClasses.length === 0
+              ? <option value="">— bu grupta şube yok —</option>
+              : groupClasses.map(c=><option key={c.id} value={c.id}>{c.ad}</option>)}
           </select>
         </FormField>
         {isMezun && (

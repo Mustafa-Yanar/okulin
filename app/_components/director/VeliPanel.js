@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronRight, GraduationCap, Phone, KeyRound, Save, UserPlus, X } from 'lucide-react';
 import { classLabel, PARENT_RELATIONS } from '@/lib/constants';
+import { classLabelFrom } from '@/lib/classCatalog';
 import { GROUPS, api } from './shared';
 import { formatTurkishMobile } from '@/lib/phone';
 
@@ -125,7 +126,7 @@ function VeliDetay({ student, onSaved, showToast }) {
   );
 }
 
-export default function VeliPanel({ students, onChanged, showToast }) {
+export default function VeliPanel({ students, classes = [], onChanged, showToast }) {
   const [searchQ, setSearchQ] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
   const [openCls, setOpenCls] = useState(null);
@@ -148,12 +149,12 @@ export default function VeliPanel({ students, onChanged, showToast }) {
     const groups = [];
     for (const s of sorted) {
       if (!groups.length || groups[groups.length - 1].cls !== s.cls) {
-        groups.push({ cls: s.cls, label: classLabel(s.cls), group: s.group, students: [] });
+        groups.push({ cls: s.cls, label: classLabelFrom(classes, s.cls, classLabel), group: s.group, students: [] });
       }
       groups[groups.length - 1].students.push(s);
     }
     return groups;
-  }, [students, searchQ, filterGroup]);
+  }, [students, classes, searchQ, filterGroup]);
 
   const toggle = cls => { setOpenCls(prev => prev === cls ? null : cls); setExpandedId(null); };
 

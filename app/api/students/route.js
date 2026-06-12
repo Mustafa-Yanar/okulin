@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import redis from '@/lib/db';
 import { getSession, initialPassword } from '@/lib/auth';
-import { classToGroup } from '@/lib/constants';
+import { getClass } from '@/lib/classes';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
@@ -88,7 +88,8 @@ export async function POST(req) {
   // İsim soyisim kullanıcı adı olarak kullanılır
   const username = name;
 
-  const group = classToGroup(cls);
+  // Grup, şube kaydının köprü alanından gelir (registry boşsa constants'tan türetilir).
+  const group = (await getClass(cls))?.group;
   if (!group) return NextResponse.json({ error: 'Geçersiz sınıf' }, { status: 400 });
 
   // Diploma notu (yalnız mezun): geçerli değilse hata; OBP = ×5 türetilir.
@@ -170,7 +171,7 @@ export async function PUT(req) {
   const student = await redis.get(`student:${id}`);
   if (!student) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
 
-  const group = classToGroup(cls) || student.group;
+  const group = (await getClass(cls))?.group || student.group;
   // Diploma notu: alan gönderildiyse yeniden değerlendir; mezun değilse '' olur.
   // Gönderilmediyse mevcut değeri koru (yine de mezun değilse temizle).
   let diploma = student.diplomaNotu ?? '';

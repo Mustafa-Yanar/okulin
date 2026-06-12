@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BookOpen, ClipboardList, Clock, Calendar, ChevronRight, ChevronLeft, Edit3, GraduationCap, Trash2 } from 'lucide-react';
 import { classLabel, ALL_DAYS } from '@/lib/constants';
+import { classLabelFrom } from '@/lib/classCatalog';
 import { GROUPS, api, Modal, guidanceSubjectsFor } from './shared';
 import { StudentAttendanceView } from './Attendance';
 import { StudentBookingsView } from '../StudentPanel';
@@ -46,7 +47,7 @@ function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceRev
   );
 }
 
-export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEdit, onDelete, onDeleteClass, onHistory, pendingGuidance, onGuidanceReviewed, onSelectChange }) {
+export function StudentList({ students, classes = [], allSlots, weekKey, onCancelBooking, onEdit, onDelete, onDeleteClass, onHistory, pendingGuidance, onGuidanceReviewed, onSelectChange }) {
   const [searchQ, setSearchQ] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
   const [openCls, setOpenCls] = useState(null);
@@ -73,12 +74,12 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
     const groups = [];
     for (const s of sorted) {
       if (!groups.length || groups[groups.length-1].cls !== s.cls) {
-        groups.push({ cls: s.cls, label: classLabel(s.cls), group: s.group, students: [] });
+        groups.push({ cls: s.cls, label: classLabelFrom(classes, s.cls, classLabel), group: s.group, students: [] });
       }
       groups[groups.length-1].students.push(s);
     }
     return groups;
-  }, [students, searchQ, filterGroup]);
+  }, [students, classes, searchQ, filterGroup]);
 
   const toggle = cls => setOpenCls(prev => prev === cls ? null : cls);
 
@@ -110,7 +111,7 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
             </div>
             <div>
               <h3 className="font-700 text-base" style={{ fontWeight: 700 }}>{selected.name}</h3>
-              <p className="text-caption">{classLabel(selected.cls)}</p>
+              <p className="text-caption">{classLabelFrom(classes, selected.cls, classLabel)}</p>
             </div>
           </div>
           <StudentExpandedView student={selected} allSlots={allSlots} onCancelBooking={onCancelBooking} onGuidanceReviewed={onGuidanceReviewed} />
@@ -146,7 +147,7 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
                   <ChevronRight size={14} className="transition-transform" style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
                 </button>
                 <div className="flex items-center gap-1 ml-2">
-                  <button onClick={() => setScheduleCls(grp.cls)}
+                  <button onClick={() => setScheduleCls({ cls: grp.cls, label: grp.label })}
                     className="flex items-center gap-1 px-2 py-1 rounded hover:bg-indigo-100 text-slate-600 hover:text-indigo-600 transition-colors text-[11px] font-600"
                     style={{ fontWeight:600 }}
                     title="Sınıfın ders programı">
@@ -192,13 +193,13 @@ export function StudentList({ students, allSlots, weekKey, onCancelBooking, onEd
         })}
       </div>
       {scheduleCls && (
-        <ClassScheduleModal cls={scheduleCls} onClose={() => setScheduleCls(null)} />
+        <ClassScheduleModal cls={scheduleCls.cls} label={scheduleCls.label} onClose={() => setScheduleCls(null)} />
       )}
     </div>
   );
 }
 
-function ClassScheduleModal({ cls, onClose }) {
+function ClassScheduleModal({ cls, label, onClose }) {
   const [schedule, setSchedule] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -247,7 +248,7 @@ function ClassScheduleModal({ cls, onClose }) {
   }, [schedule, visibleDays]);
 
   return (
-    <Modal title={`${cls.toUpperCase()} – Ders Programı`} onClose={onClose} wide>
+    <Modal title={`${label || cls.toUpperCase()} – Ders Programı`} onClose={onClose} wide>
       {loading ? (
         <div className="flex items-center justify-center h-32 text-caption">Yükleniyor...</div>
       ) : visibleDays.length === 0 ? (
