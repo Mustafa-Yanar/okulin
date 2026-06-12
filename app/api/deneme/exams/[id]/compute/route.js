@@ -4,6 +4,9 @@ import { getSession } from '@/lib/auth';
 import { dkeys } from '@/lib/deneme/store';
 import { gradeFlat, hasAnswerKey } from '@/lib/deneme/grade';
 import { computePuanlar } from '@/lib/deneme/score';
+import { notifyExamResults } from '@/lib/notify';
+
+export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
 function isManager(s) {
   return s && (s.role === 'director' || s.role === 'counselor');
@@ -43,6 +46,9 @@ export async function POST(_req, { params }) {
 
   exam.computedAt = Date.now();
   await redis.set(dkeys.exam(exam.id), exam);
+
+  // "Yeni sonuç" tetikleyicisi — eşleşmiş öğrencilerin velilerine push (best-effort, sınav başına bir kez)
+  await notifyExamResults(exam);
 
   return NextResponse.json({
     ok: true,

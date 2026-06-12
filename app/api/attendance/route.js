@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
+import { notifyAbsentParents } from '@/lib/notify';
+
+export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
 const AttendancePostSchema = z.object({
   date: z.string().min(1).max(40),
@@ -47,5 +50,9 @@ export async function POST(req) {
 
   const key = attendanceKey(date, session.id, cls, lessonNo);
   await redis.set(key, attendance, { ex: 60 * 60 * 24 * 90 });
+
+  // "Gelmedi" tetikleyicisi — yok işaretli öğrencilerin velilerine push (best-effort, bir kez/gün)
+  await notifyAbsentParents(date, attendance);
+
   return NextResponse.json({ ok: true });
 }
