@@ -24,6 +24,7 @@ import { useUrlParam } from './useUrlParam';
 import LoadingBox, { SkeletonList } from './Loading';
 import EmptyState from './EmptyState';
 import OptikFormTab from './director/OptikFormTab';
+import ClassManager from './director/ClassManager';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementSender } from './announcements/Announcements';
 import SlotTimeEditor from './director/SlotTimeEditor';
@@ -37,8 +38,8 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   // Rehber (counselor) = müdür paneli EKSİ muhasebe. Sekme listesi role göre.
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
-    ? ['teachers', 'students', 'veliler', 'yoklama', 'kutuphane', 'duyurular', 'ders-programi']
-    : ['teachers', 'students', 'veliler', 'yoklama', 'muhasebe', 'kutuphane', 'duyurular', 'denemeler', 'ders-saatleri', 'ders-programi'];
+    ? ['teachers', 'students', 'veliler', 'yoklama', 'siniflar', 'kutuphane', 'duyurular', 'ders-programi']
+    : ['teachers', 'students', 'veliler', 'yoklama', 'siniflar', 'muhasebe', 'kutuphane', 'duyurular', 'denemeler', 'ders-saatleri', 'ders-programi'];
   const [tab, setTabInternal] = useUrlTab('teachers', validTabs);
 
   // Sidebar'dan gelen externalTab değişince iç state'i güncelle
@@ -490,6 +491,11 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
             teacherId: s.teacherId, teacherName: s.teacherName, branch: s.branch,
             bookedBy: s.bookedBy, fixed: !!s.fixed,
           }))} />
+      )}
+
+      {/* SINIFLAR (şube + ders kataloğu) TAB */}
+      {tab === 'siniflar' && (
+        <ClassManager showToast={showToast} />
       )}
 
       {/* YOKLAMA TAB */}
