@@ -19,6 +19,8 @@ import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementInbox } from './announcements/Announcements';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { useSlotTimes } from './SlotTimesContext';
+import { useClasses } from './ClassesContext';
+import { classLabelFrom } from '@/lib/classCatalog';
 import { useUrlTab } from './useUrlTab';
 
 // Helper API Fetcher
@@ -541,6 +543,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
 }
 
 function TeacherStudentsView({ students, branches = [] }) {
+  const { classes } = useClasses();
   const subjectMatchesAny = (subject) =>
     branches.length === 0 || branches.some(b => subjectMatchesBranch(subject, b));
   const filterSubjectsAny = (subjects) =>
@@ -570,12 +573,12 @@ function TeacherStudentsView({ students, branches = [] }) {
     const groups = [];
     for (const s of sorted) {
       if (!groups.length || groups[groups.length - 1].cls !== s.cls) {
-        groups.push({ cls: s.cls, label: classLabel(s.cls), group: s.group, students: [] });
+        groups.push({ cls: s.cls, label: classLabelFrom(classes, s.cls, classLabel), group: s.group, students: [] });
       }
       groups[groups.length - 1].students.push(s);
     }
     return groups;
-  }, [students, searchQ, filterGroup]);
+  }, [students, classes, searchQ, filterGroup]);
 
   const toggle = (cls) => setOpenCls(prev => prev === cls ? null : cls);
 

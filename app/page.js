@@ -19,6 +19,7 @@ import PullToRefreshIndicator from './_components/PullToRefreshIndicator';
 import { usePullToRefresh } from './_components/usePullToRefresh';
 import { isPushSupported, subscribeToPush } from '@/lib/push-client';
 import { SlotTimesProvider, useSlotTimes } from './_components/SlotTimesContext';
+import { ClassesProvider } from './_components/ClassesContext';
 import { ErrorBoundary, GlobalErrorListener } from './_components/ErrorBoundary';
 import { BRANDING_DEFAULTS, brandGradient } from '@/lib/branding';
 
@@ -459,6 +460,7 @@ function AppContent() {
   const canChangePassword = ['teacher', 'student', 'parent', 'counselor', 'accountant'].includes(session.role);
 
   return (
+    <ClassesProvider>
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
       <Sidebar
         session={session}
@@ -556,5 +558,6 @@ function AppContent() {
       )}
       <Toast toast={toast} />
     </div>
+    </ClassesProvider>
   );
 }

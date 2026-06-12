@@ -10,6 +10,8 @@ import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { guidanceSubjectsFor } from './director/shared';
 import { useUrlTab } from './useUrlTab';
 import { AnnouncementInbox } from './announcements/Announcements';
+import { useClasses } from './ClassesContext';
+import { classLabelFrom } from '@/lib/classCatalog';
 import { getWeekKey, weekRangeLabel, classLabel } from '@/lib/constants';
 
 async function api(path, opts = {}) {
@@ -257,6 +259,7 @@ function GuidanceView({ child }) {
 
 // ─── KÖK ────────────────────────────────────────────────────────────────────────
 export default function ParentPanel({ session, showToast, externalTab, onExternalTabChange }) {
+  const { classes } = useClasses();
   const children = useMemo(() => Array.isArray(session.children) ? session.children : [], [session.children]);
   const [childId, setChildId] = useState(children[0]?.id || null);
   const [tab, setTabInternal] = useUrlTab('program', ['program', 'odeme', 'rehberlik', 'duyurular']);
@@ -309,7 +312,7 @@ export default function ParentPanel({ session, showToast, externalTab, onExterna
         </div>
       )}
 
-      <p className="text-body-sm mb-4">{child.name} · {classLabel(child.cls)}</p>
+      <p className="text-body-sm mb-4">{child.name} · {classLabelFrom(classes, child.cls, classLabel)}</p>
 
       {/* child.id değişince alt bileşenler remount olsun diye key */}
       {tab === 'program' && <ProgramView key={child.id} child={child} />}

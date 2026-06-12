@@ -10,6 +10,8 @@ import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementInbox } from './announcements/Announcements';
 import { useUrlTab } from './useUrlTab';
+import { useClasses } from './ClassesContext';
+import { classLabelFrom, coursesForClass } from '@/lib/classCatalog';
 import {
   allowedBranchesForClass,
   MATH_FAMILY,
@@ -462,6 +464,7 @@ export function StudentGuidancePanelWrapper({ session, showToast }) {
 
 // ─── MAIN STUDENT PANEL ────────────────────────────────────────────────────────
 export default function StudentPanel({ session, showToast, externalTab, onExternalTabChange }) {
+  const { classes } = useClasses();
   const [weekKey, setWeekKey] = useState(getWeekKey());
   const [allSlots, setAllSlots] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -522,7 +525,11 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
   }, [allSlots]);
 
   const myBookings = useMemo(() => allSlots.filter(s => s.booked && s.studentId === session.id), [allSlots, session.id]);
-  const studentAllowedBranches = useMemo(() => allowedBranchesForClass(session.cls), [session.cls]);
+  // Registry'de şubenin ders listesi varsa onu kullan (özel şube/özel ders), yoksa constants fallback.
+  const studentAllowedBranches = useMemo(
+    () => coursesForClass(classes, session.cls) ?? allowedBranchesForClass(session.cls),
+    [classes, session.cls]
+  );
   const bookedBranches = useMemo(() => new Set(myBookings.map(b => b.branch).filter(Boolean)), [myBookings]);
   const mathTaken = useMemo(() => myBookings.some(b => MATH_FAMILY.includes(b.branch)), [myBookings]);
 
@@ -572,7 +579,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">{classLabel(session.cls)} · {GROUPS[session.group]}</p>
+        <p className="text-sm text-gray-500">{classLabelFrom(classes, session.cls, classLabel)} · {GROUPS[session.group]}</p>
         <WeekNav weekKey={weekKey} onPrev={() => { const w = getAdjacentWeek(weekKey,-1); setWeekKey(w); loadData(w); }} onNext={() => { const w = getAdjacentWeek(weekKey,1); setWeekKey(w); loadData(w); }} />
       </div>
 
