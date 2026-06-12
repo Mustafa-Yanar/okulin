@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth';
 import { parseBody, z, zName, zPassword } from '@/lib/validate';
 import { generateOrgCode, formatCode, hostForOrg } from '@/lib/orgcode';
 import { addProjectDomain } from '@/lib/vercel';
+import { normalizeFacets } from '@/lib/institution';
 
 // Tüm işlemler rawRedis (global) — tenant prefix YOK.
 // Erişim: yalnız superadmin rolü.
@@ -33,6 +34,7 @@ export async function GET() {
 
   const orgs = slugs.map((slug, i) => {
     const rec = recs[i] || { slug, name: slug, active: true };
+    const f = normalizeFacets(rec);
     return {
       slug: rec.slug || slug,
       name: rec.name || slug,
@@ -42,6 +44,9 @@ export async function GET() {
       createdAt: rec.createdAt || null,
     type: rec.type || 'single',
     code: rec.code ? formatCode(rec.code) : null,
+    sektor: f.sektor,
+    mulkiyet: f.mulkiyet,
+    kademeler: f.kademeler,
     };
   }).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
 
@@ -66,6 +71,10 @@ const CreateOrgSchema = z.object({
   name: z.string().min(1).max(120),
   shortName: z.string().max(60).optional(),
   type: z.enum(['single', 'multi']).optional(),
+  // Kurum türü facet'leri (additive — bkz lib/institution.js)
+  sektor: z.enum(['okul', 'dershane']).optional(),
+  mulkiyet: z.enum(['devlet', 'ozel']).optional(),
+  kademeler: z.array(z.enum(['ilkokul', 'ortaokul', 'lise', 'mezun'])).optional(),
   directorUsername: zName,
   directorPassword: zPassword,
   directorName: z.string().max(200).optional(),
@@ -94,7 +103,8 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, CreateOrgSchema);
   if (!parsed.ok) return parsed.response;
-  const { slug, name, shortName, type, directorUsername, directorPassword, directorName,
+  const { slug, name, shortName, type, sektor, mulkiyet, kademeler,
+    directorUsername, directorPassword, directorName,
     orgAdminUsername, orgAdminPassword, orgAdminName } = parsed.data;
 
   if (!isValidSlug(slug)) {
@@ -119,6 +129,7 @@ export async function POST(req) {
   // org kaydı (global)
   await rawRedis.sadd('orgs', slug);
   const createdAt = new Date().toISOString();
+  const facets = normalizeFacets({ sektor, mulkiyet, kademeler });
   await rawRedis.set(`org:${slug}`, {
     slug,
     name,
@@ -127,6 +138,10 @@ export async function POST(req) {
     type: orgType,
     createdAt,
     code,
+    // Kurum türü facet'leri
+    sektor: facets.sektor,
+    mulkiyet: facets.mulkiyet,
+    kademeler: facets.kademeler,
   });
   // Kod → subdomain ters araması
   await rawRedis.set(`orgcode:${code}`, { slug, branch: 'main', name, host: hostForOrg(slug, 'main') });

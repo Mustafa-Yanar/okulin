@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Trash2, Lock, Inbox, Phone, Mail, Globe, CheckCircle2, AlertTriangle, Copy, Check } from 'lucide-react';
+import { SEKTORLER, MULKIYETLER, KADEMELER, kademelerForSektor, defaultKademeler } from '@/lib/institution';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,7 @@ function Input({ id, ...props }) {
 function NewOrgModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
     name: '', slug: '', shortName: '', type: 'single',
+    sektor: 'dershane', mulkiyet: 'ozel', kademeler: defaultKademeler('dershane'),
     directorUsername: '', directorPassword: '', directorName: '',
     orgAdminUsername: '', orgAdminPassword: '', orgAdminName: '',
   });
@@ -49,7 +51,19 @@ function NewOrgModal({ onClose, onCreated }) {
     setForm(prev => {
       const next = { ...prev, [k]: v };
       if (k === 'name' && !slugManual) next.slug = slugify(v);
+      if (k === 'sektor') {
+        // dershane → mülkiyet daima özel; kademe kümesi sektöre göre yenilenir
+        next.mulkiyet = v === 'dershane' ? 'ozel' : prev.mulkiyet;
+        next.kademeler = defaultKademeler(v);
+      }
       return next;
+    });
+  }
+
+  function toggleKademe(key) {
+    setForm(prev => {
+      const has = prev.kademeler.includes(key);
+      return { ...prev, kademeler: has ? prev.kademeler.filter(x => x !== key) : [...prev.kademeler, key] };
     });
   }
 
@@ -150,6 +164,41 @@ function NewOrgModal({ onClose, onCreated }) {
               <option value="multi">Çok Şube (zincir/kurumsal)</option>
             </select>
           </Field>
+
+          <hr className="border-slate-200" />
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Kurum Türü</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Sektör *" id="org-sektor">
+              <select id="org-sektor" value={form.sektor} onChange={e => set('sektor', e.target.value)}
+                className="border border-slate-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                {SEKTORLER.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            </Field>
+            <Field label="Mülkiyet *" id="org-mulkiyet">
+              <select id="org-mulkiyet" value={form.mulkiyet} onChange={e => set('mulkiyet', e.target.value)}
+                disabled={form.sektor === 'dershane'}
+                className="border border-slate-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:bg-slate-100 disabled:text-slate-400">
+                {MULKIYETLER.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+              </select>
+            </Field>
+          </div>
+          <Field label="Kademeler *" id="org-kademeler">
+            <div className="flex flex-wrap gap-2">
+              {KADEMELER.filter(k => kademelerForSektor(form.sektor).includes(k.key)).map(k => {
+                const on = form.kademeler.includes(k.key);
+                return (
+                  <button type="button" key={k.key} onClick={() => toggleKademe(k.key)}
+                    className={`px-2.5 py-1 rounded text-xs border transition ${on
+                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                      : 'bg-white border-slate-300 text-slate-600 hover:border-indigo-400'}`}>
+                    {k.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-400">Kurumun sahip olduğu kademeleri seç. {form.sektor === 'dershane' ? 'Dershanede İlkokul yok.' : 'Okulda Mezun yok.'}</p>
+          </Field>
+
           <hr className="border-slate-200" />
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Ana Şube Müdürü</p>
           <Field label="Kullanıcı Adı *" id="dir-user">
@@ -595,6 +644,9 @@ export default function SuperAdminPanel({ session, onLogout }) {
                       ? <span className="text-xs bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">Çok Şube</span>
                       : <span className="text-xs bg-slate-50 text-slate-500 px-1.5 py-0.5 rounded">Tek Şube</span>
                     }
+                    <span className="text-xs bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">
+                      {org.sektor === 'okul' ? 'Okul' : 'Dershane'}{org.mulkiyet === 'devlet' ? ' · Devlet' : ''}
+                    </span>
                     {!org.active && (
                       <span className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">Pasif</span>
                     )}
