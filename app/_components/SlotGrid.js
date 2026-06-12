@@ -10,6 +10,8 @@ import {
   WEEKDAY_SLOTS,
   WEEKEND_SLOTS
 } from '@/lib/constants';
+import { useClasses } from './ClassesContext';
+import { classLabelFrom, coursesForClass } from '@/lib/classCatalog';
 
 // Helper: Modal Component
 function Modal({ title, onClose, children }) {
@@ -233,6 +235,7 @@ function MobileDayCard({ day, grid, program, teacher, weekKey, session, onCellCl
 }
 
 export default function SlotGrid({ grid, program, teacher, weekKey, session, students, onBook, onCancel, hideEmptyDays }) {
+  const { classes } = useClasses();
   const [bookingSlot, setBookingSlot] = useState(null);
   const [searchQ, setSearchQ] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -243,9 +246,9 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
   const bookCls = session.role === 'student' ? session.cls : selectedStudent?.cls;
   const bookableBranches = useMemo(() => {
     if (!bookCls) return teacherBranches;
-    const allowed = allowedBranchesForClass(bookCls);
+    const allowed = coursesForClass(classes, bookCls) ?? allowedBranchesForClass(bookCls);
     return teacherBranches.filter(b => allowed.includes(b));
-  }, [bookCls, teacher.branches]);
+  }, [bookCls, teacher.branches, classes]);
 
   const filteredStudents = useMemo(() => {
     if (!students) return [];
@@ -256,9 +259,9 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
       if (!q) return true;
       return s.name.toLowerCase().includes(q) ||
         s.cls.toLowerCase().includes(q) ||
-        classLabel(s.cls).toLowerCase().includes(q);
+        classLabelFrom(classes, s.cls, classLabel).toLowerCase().includes(q);
     }).slice(0, 20);
-  }, [students, searchQ, teacher.allowedGroups]);
+  }, [students, searchQ, teacher.allowedGroups, classes]);
 
   const visibleDays = useMemo(() => {
     if (!hideEmptyDays) return ALL_DAYS;
@@ -414,7 +417,7 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
                   <button key={s.id} onClick={() => setSelectedStudent(s)}
                     className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${selectedStudent?.id === s.id ? 'bg-indigo-50 border border-indigo-200 text-indigo-700' : 'hover:bg-gray-50'}`}>
                     <span className="font-600" style={{ fontWeight: 600 }}>{s.name}</span>
-                    <span className="text-gray-400 ml-2 text-xs">{classLabel(s.cls)}</span>
+                    <span className="text-gray-400 ml-2 text-xs">{classLabelFrom(classes, s.cls, classLabel)}</span>
                   </button>
                 ))}
                 {filteredStudents.length === 0 && searchQ && <p className="text-sm text-gray-400 text-center py-4">Öğrenci bulunamadı</p>}
