@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, ClipboardList, ListChecks, BarChart3 } from 'lucide-react';
+import { ChevronDown, ClipboardList, ListChecks, BarChart3, Target } from 'lucide-react';
 import KonuTakibi from './KonuTakibi';
 import DenemeAnaliz from './DenemeAnaliz';
+import HedefKarti from './HedefKarti';
 
 // Rehberlik sekmesinin 3 akordiyon kartı.
 // - solvedContent: 1. kart içeriği (çözülen sorular) — panele göre dışarıdan verilir
@@ -14,6 +15,12 @@ export default function RehberlikAccordion({ solvedContent, subjects, editable, 
   const [open, setOpen] = useState(null); // hepsi kapalı başlar
 
   const cards = [
+    {
+      key: 'hedef',
+      label: 'Haftalık Hedef',
+      icon: Target,
+      body: <HedefKarti studentId={studentId} editable={editable} />,
+    },
     { key: 'solved', label: 'Haftalık Çözülen Sorular', icon: ClipboardList, body: solvedContent },
     {
       key: 'topics',
