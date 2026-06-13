@@ -18,7 +18,7 @@ const CreateSchema = z.object({
   url: z.string().url().max(2000),
   branch: z.string().min(1).max(60),
   topic: z.string().max(120).optional(),
-  classes: z.array(z.string().min(2).max(8)).min(1).max(40),
+  classes: z.array(z.string().min(1).max(60)).min(1).max(40), // özel şube id (s_xxxxxxxx) 8'den uzun olabilir
 });
 
 // GET /api/resources — role'e göre filtreli kaynak listesi
