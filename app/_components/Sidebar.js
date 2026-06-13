@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import {
   Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
   BarChart2, CreditCard, TrendingDown, ChevronLeft, ChevronRight,
-  BookMarked, Calendar, CalendarDays, GraduationCap, Star, Clock, Settings, LayoutGrid, Contact, NotebookPen, ListChecks,
+  BookMarked, Calendar, CalendarDays, GraduationCap, Star, Clock, Settings, LayoutGrid, Contact, NotebookPen, ListChecks, UserPlus,
 } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
 import ThemeToggle from './ThemeToggle';
@@ -17,6 +17,7 @@ const ITEMS_BY_ROLE = {
     { group: 'Akademik', key: 'teachers',    label: 'Öğretmen',          icon: Users },
     { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
     { group: 'Akademik', key: 'veliler',     label: 'Veli',              icon: Contact },
+    { group: 'Akademik', key: 'onkayit',     label: 'Ön Kayıt',          icon: UserPlus },
     { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
     { group: 'Akademik', key: 'odev',        label: 'Ödevler',           icon: NotebookPen },
     { group: 'Akademik', key: 'siniflar',    label: 'Sınıflar',          icon: GraduationCap },
@@ -33,6 +34,7 @@ const ITEMS_BY_ROLE = {
     { group: 'Akademik', key: 'teachers',    label: 'Öğretmen',          icon: Users },
     { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
     { group: 'Akademik', key: 'veliler',     label: 'Veli',              icon: Contact },
+    { group: 'Akademik', key: 'onkayit',     label: 'Ön Kayıt',          icon: UserPlus },
     { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
     { group: 'Akademik', key: 'odev',        label: 'Ödevler',           icon: NotebookPen },
     { group: 'Akademik', key: 'siniflar',    label: 'Sınıflar',          icon: GraduationCap },
