@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import {
   Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
   BarChart2, CreditCard, TrendingDown, ChevronLeft, ChevronRight,
-  BookMarked, Calendar, GraduationCap, Star, Clock, Settings, LayoutGrid, Contact,
+  BookMarked, Calendar, GraduationCap, Star, Clock, Settings, LayoutGrid, Contact, NotebookPen,
 } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
 import ThemeToggle from './ThemeToggle';
@@ -18,6 +18,7 @@ const ITEMS_BY_ROLE = {
     { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
     { group: 'Akademik', key: 'veliler',     label: 'Veli',              icon: Contact },
     { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
+    { group: 'Akademik', key: 'odev',        label: 'Ödevler',           icon: NotebookPen },
     { group: 'Akademik', key: 'siniflar',    label: 'Sınıflar',          icon: GraduationCap },
     { group: 'Akademik', key: 'denemeler',   label: 'Denemeler',         icon: BarChart2 },
     { group: 'Finans',   key: 'muhasebe',    label: 'Muhasebe',          icon: Wallet },
@@ -31,6 +32,7 @@ const ITEMS_BY_ROLE = {
     { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
     { group: 'Akademik', key: 'veliler',     label: 'Veli',              icon: Contact },
     { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
+    { group: 'Akademik', key: 'odev',        label: 'Ödevler',           icon: NotebookPen },
     { group: 'Akademik', key: 'siniflar',    label: 'Sınıflar',          icon: GraduationCap },
     { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: 'Sistem',   key: 'duyurular',   label: 'Duyurular',         icon: Bell },
@@ -43,6 +45,7 @@ const ITEMS_BY_ROLE = {
   teacher: [
     { group: null,       key: 'rezervasyon', label: 'Program',           icon: Calendar },
     { group: null,       key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
+    { group: null,       key: 'odev',        label: 'Ödevler',           icon: NotebookPen },
     { group: null,       key: 'ogrenciler',  label: 'Öğrenciler',        icon: Users },
     { group: null,       key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: null,       key: 'duyurular',   label: 'Duyurular',         icon: Bell },
@@ -50,12 +53,14 @@ const ITEMS_BY_ROLE = {
   student: [
     { group: null,       key: 'available',   label: 'Müsait Etütler',    icon: Calendar },
     { group: null,       key: 'myBookings',  label: 'Etütlerim',         icon: BookMarked },
+    { group: null,       key: 'odev',        label: 'Ödevlerim',         icon: NotebookPen },
     { group: null,       key: 'rehberlik',   label: 'Rehberlik',         icon: Compass },
     { group: null,       key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: null,       key: 'duyurular',   label: 'Duyurular',         icon: Bell },
   ],
   parent: [
     { group: null,       key: 'program',     label: 'Program',           icon: Calendar },
+    { group: null,       key: 'odev',        label: 'Ödevler',           icon: NotebookPen },
     { group: null,       key: 'odeme',       label: 'Ödeme',             icon: Wallet },
     { group: null,       key: 'rehberlik',   label: 'Rehberlik',         icon: Star },
     { group: null,       key: 'duyurular',   label: 'Duyurular',         icon: Bell },

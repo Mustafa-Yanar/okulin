@@ -10,6 +10,7 @@ import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { guidanceSubjectsFor } from './director/shared';
 import { useUrlTab } from './useUrlTab';
 import { AnnouncementInbox } from './announcements/Announcements';
+import { OdevParent } from './odev/Odev';
 import { useClasses } from './ClassesContext';
 import { classLabelFrom } from '@/lib/classCatalog';
 import { getWeekKey, weekRangeLabel, classLabel } from '@/lib/constants';
@@ -262,7 +263,7 @@ export default function ParentPanel({ session, showToast, externalTab, onExterna
   const { classes } = useClasses();
   const children = useMemo(() => Array.isArray(session.children) ? session.children : [], [session.children]);
   const [childId, setChildId] = useState(children[0]?.id || null);
-  const [tab, setTabInternal] = useUrlTab('program', ['program', 'odeme', 'rehberlik', 'duyurular']);
+  const [tab, setTabInternal] = useUrlTab('program', ['program', 'odev', 'odeme', 'rehberlik', 'duyurular']);
 
   useEffect(() => {
     if (externalTab && externalTab !== tab) setTabInternal(externalTab);
@@ -316,6 +317,7 @@ export default function ParentPanel({ session, showToast, externalTab, onExterna
 
       {/* child.id değişince alt bileşenler remount olsun diye key */}
       {tab === 'program' && <ProgramView key={child.id} child={child} />}
+      {tab === 'odev' && <OdevParent key={child.id} childId={child.id} showToast={showToast} />}
       {tab === 'odeme' && <PaymentView key={child.id} child={child} showToast={showToast} />}
       {tab === 'rehberlik' && <GuidanceView key={child.id} child={child} />}
       {tab === 'duyurular' && <AnnouncementInbox showToast={showToast} />}

@@ -9,6 +9,7 @@ import {
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementInbox } from './announcements/Announcements';
+import { OdevStudent } from './odev/Odev';
 import { useUrlTab } from './useUrlTab';
 import { useClasses } from './ClassesContext';
 import { classLabelFrom, coursesForClass } from '@/lib/classCatalog';
@@ -471,7 +472,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
   const [filterBranch, setFilterBranch] = useState('');
   const [filterTeacher, setFilterTeacher] = useState('');
   const [filterDay, setFilterDay] = useState('');
-  const [tab, setTabInternal] = useUrlTab('available', ['available', 'myBookings', 'rehberlik', 'kutuphane', 'duyurular']);
+  const [tab, setTabInternal] = useUrlTab('available', ['available', 'myBookings', 'odev', 'rehberlik', 'kutuphane', 'duyurular']);
 
   useEffect(() => {
     if (externalTab && externalTab !== tab) setTabInternal(externalTab);
@@ -592,6 +593,8 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
         />
       ) : tab === 'myBookings' ? (
         <StudentBookingsView student={{ id: session.id }} allSlots={allSlots} onCancel={handleCancel} />
+      ) : tab === 'odev' ? (
+        <OdevStudent showToast={showToast} />
       ) : tab === 'kutuphane' ? (
         <ResourceLibrary canManage={false} userRole="student" userId={session.id} showToast={showToast} />
       ) : tab === 'duyurular' ? (

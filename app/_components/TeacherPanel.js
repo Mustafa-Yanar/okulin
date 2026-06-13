@@ -17,6 +17,7 @@ import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import SlotGrid from './SlotGrid';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementInbox } from './announcements/Announcements';
+import { OdevManager } from './odev/Odev';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { useSlotTimes } from './SlotTimesContext';
 import { useClasses } from './ClassesContext';
@@ -692,7 +693,7 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
   const [program, setProgram] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTabInternal] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama', 'ogrenciler', 'kutuphane', 'duyurular']);
+  const [activeTab, setActiveTabInternal] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama', 'odev', 'ogrenciler', 'kutuphane', 'duyurular']);
   const [viewMode, setViewMode] = useState('table');
   const { slotTimes } = useSlotTimes();
 
@@ -833,6 +834,10 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
 
       {activeTab === 'yoklama' && (
         <TeacherAttendancePanel session={session} weekKey={getWeekKey()} showToast={showToast} />
+      )}
+
+      {activeTab === 'odev' && (
+        <OdevManager showToast={showToast} userRole="teacher" userId={session.id} />
       )}
 
       {activeTab === 'ogrenciler' && (
