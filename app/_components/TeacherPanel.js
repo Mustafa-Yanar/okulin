@@ -18,6 +18,7 @@ import SlotGrid from './SlotGrid';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementInbox } from './announcements/Announcements';
 import { OdevManager } from './odev/Odev';
+import { TakvimView } from './etkinlik/Takvim';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { useSlotTimes } from './SlotTimesContext';
 import { useClasses } from './ClassesContext';
@@ -693,7 +694,7 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
   const [program, setProgram] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTabInternal] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama', 'odev', 'ogrenciler', 'kutuphane', 'duyurular']);
+  const [activeTab, setActiveTabInternal] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama', 'odev', 'ogrenciler', 'kutuphane', 'duyurular', 'takvim']);
   const [viewMode, setViewMode] = useState('table');
   const { slotTimes } = useSlotTimes();
 
@@ -851,6 +852,10 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
 
       {activeTab === 'duyurular' && (
         <AnnouncementInbox showToast={showToast} />
+      )}
+
+      {activeTab === 'takvim' && (
+        <TakvimView />
       )}
     </div>
   );

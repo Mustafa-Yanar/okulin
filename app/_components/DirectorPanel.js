@@ -29,6 +29,7 @@ import ClassManager from './director/ClassManager';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementSender } from './announcements/Announcements';
 import { OdevManager } from './odev/Odev';
+import { TakvimManager } from './etkinlik/Takvim';
 import SlotTimeEditor from './director/SlotTimeEditor';
 import { useSlotTimes as useSlotTimesCtx } from './SlotTimesContext';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
@@ -40,8 +41,8 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   // Rehber (counselor) = müdür paneli EKSİ muhasebe. Sekme listesi role göre.
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
-    ? ['teachers', 'students', 'veliler', 'yoklama', 'odev', 'siniflar', 'kutuphane', 'duyurular', 'ders-programi']
-    : ['teachers', 'students', 'veliler', 'yoklama', 'odev', 'siniflar', 'muhasebe', 'kutuphane', 'duyurular', 'denemeler', 'ders-saatleri', 'ders-programi'];
+    ? ['teachers', 'students', 'veliler', 'yoklama', 'odev', 'siniflar', 'kutuphane', 'duyurular', 'takvim', 'ders-programi']
+    : ['teachers', 'students', 'veliler', 'yoklama', 'odev', 'siniflar', 'muhasebe', 'kutuphane', 'duyurular', 'takvim', 'denemeler', 'ders-saatleri', 'ders-programi'];
   const [tab, setTabInternal] = useUrlTab('teachers', validTabs);
 
   // Sidebar'dan gelen externalTab değişince iç state'i güncelle
@@ -522,6 +523,10 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
       {tab === 'odev' && (
         <OdevManager showToast={showToast} userRole={session.role} userId={session.id} />
+      )}
+
+      {tab === 'takvim' && (
+        <TakvimManager showToast={showToast} />
       )}
 
       {tab === 'denemeler' && (
