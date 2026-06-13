@@ -11,6 +11,7 @@ import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementInbox } from './announcements/Announcements';
 import { OdevStudent } from './odev/Odev';
 import { TakvimView } from './etkinlik/Takvim';
+import { FormRespond } from './form/Formlar';
 import { useUrlTab } from './useUrlTab';
 import { useClasses } from './ClassesContext';
 import { classLabelFrom, coursesForClass } from '@/lib/classCatalog';
@@ -473,7 +474,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
   const [filterBranch, setFilterBranch] = useState('');
   const [filterTeacher, setFilterTeacher] = useState('');
   const [filterDay, setFilterDay] = useState('');
-  const [tab, setTabInternal] = useUrlTab('available', ['available', 'myBookings', 'odev', 'rehberlik', 'kutuphane', 'duyurular', 'takvim']);
+  const [tab, setTabInternal] = useUrlTab('available', ['available', 'myBookings', 'odev', 'rehberlik', 'kutuphane', 'duyurular', 'takvim', 'formlar']);
 
   useEffect(() => {
     if (externalTab && externalTab !== tab) setTabInternal(externalTab);
@@ -602,6 +603,8 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
         <AnnouncementInbox showToast={showToast} />
       ) : tab === 'takvim' ? (
         <TakvimView />
+      ) : tab === 'formlar' ? (
+        <FormRespond showToast={showToast} />
       ) : (
         <div>
           {/* Filters Bar */}

@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import {
   Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
   BarChart2, CreditCard, TrendingDown, ChevronLeft, ChevronRight,
-  BookMarked, Calendar, CalendarDays, GraduationCap, Star, Clock, Settings, LayoutGrid, Contact, NotebookPen,
+  BookMarked, Calendar, CalendarDays, GraduationCap, Star, Clock, Settings, LayoutGrid, Contact, NotebookPen, ListChecks,
 } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
 import ThemeToggle from './ThemeToggle';
@@ -25,6 +25,7 @@ const ITEMS_BY_ROLE = {
     { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: 'Sistem',   key: 'duyurular',   label: 'Duyurular',         icon: Bell },
     { group: 'Sistem',   key: 'takvim',      label: 'Okul Takvimi',      icon: CalendarDays },
+    { group: 'Sistem',   key: 'formlar',     label: 'Formlar',           icon: ListChecks },
     { group: 'Sistem',   key: 'ders-saatleri', label: 'Ders Saatleri',   icon: Clock },
     { group: 'Sistem',   key: 'ders-programi', label: 'Ders Programı',   icon: LayoutGrid },
   ],
@@ -38,6 +39,7 @@ const ITEMS_BY_ROLE = {
     { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: 'Sistem',   key: 'duyurular',   label: 'Duyurular',         icon: Bell },
     { group: 'Sistem',   key: 'takvim',      label: 'Okul Takvimi',      icon: CalendarDays },
+    { group: 'Sistem',   key: 'formlar',     label: 'Formlar',           icon: ListChecks },
     { group: 'Sistem',   key: 'ders-programi', label: 'Ders Programı',   icon: LayoutGrid },
   ],
   accountant: [
@@ -52,6 +54,7 @@ const ITEMS_BY_ROLE = {
     { group: null,       key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: null,       key: 'duyurular',   label: 'Duyurular',         icon: Bell },
     { group: null,       key: 'takvim',      label: 'Takvim',            icon: CalendarDays },
+    { group: null,       key: 'formlar',     label: 'Anketler',          icon: ListChecks },
   ],
   student: [
     { group: null,       key: 'available',   label: 'Müsait Etütler',    icon: Calendar },
@@ -61,6 +64,7 @@ const ITEMS_BY_ROLE = {
     { group: null,       key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: null,       key: 'duyurular',   label: 'Duyurular',         icon: Bell },
     { group: null,       key: 'takvim',      label: 'Takvim',            icon: CalendarDays },
+    { group: null,       key: 'formlar',     label: 'Anketler',          icon: ListChecks },
   ],
   parent: [
     { group: null,       key: 'program',     label: 'Program',           icon: Calendar },
