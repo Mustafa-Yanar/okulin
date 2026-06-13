@@ -32,6 +32,7 @@ import { OdevManager } from './odev/Odev';
 import { TakvimManager } from './etkinlik/Takvim';
 import { FormManager } from './form/Formlar';
 import { OnKayitManager } from './crm/OnKayit';
+import { DavranisManager } from './davranis/Davranis';
 import SlotTimeEditor from './director/SlotTimeEditor';
 import { useSlotTimes as useSlotTimesCtx } from './SlotTimesContext';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
@@ -43,8 +44,8 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   // Rehber (counselor) = müdür paneli EKSİ muhasebe. Sekme listesi role göre.
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
-    ? ['teachers', 'students', 'veliler', 'onkayit', 'yoklama', 'odev', 'siniflar', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'ders-programi']
-    : ['teachers', 'students', 'veliler', 'onkayit', 'yoklama', 'odev', 'siniflar', 'muhasebe', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'denemeler', 'ders-saatleri', 'ders-programi'];
+    ? ['teachers', 'students', 'veliler', 'onkayit', 'yoklama', 'odev', 'davranis', 'siniflar', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'ders-programi']
+    : ['teachers', 'students', 'veliler', 'onkayit', 'yoklama', 'odev', 'davranis', 'siniflar', 'muhasebe', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'denemeler', 'ders-saatleri', 'ders-programi'];
   const [tab, setTabInternal] = useUrlTab('teachers', validTabs);
 
   // Sidebar'dan gelen externalTab değişince iç state'i güncelle
@@ -537,6 +538,10 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
       {tab === 'onkayit' && (
         <OnKayitManager showToast={showToast} />
+      )}
+
+      {tab === 'davranis' && (
+        <DavranisManager showToast={showToast} userRole={session.role} userId={session.id} />
       )}
 
       {tab === 'denemeler' && (

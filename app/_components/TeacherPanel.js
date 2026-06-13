@@ -20,6 +20,7 @@ import { AnnouncementInbox } from './announcements/Announcements';
 import { OdevManager } from './odev/Odev';
 import { TakvimView } from './etkinlik/Takvim';
 import { FormRespond } from './form/Formlar';
+import { DavranisManager } from './davranis/Davranis';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { useSlotTimes } from './SlotTimesContext';
 import { useClasses } from './ClassesContext';
@@ -695,7 +696,7 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
   const [program, setProgram] = useState({});
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTabInternal] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama', 'odev', 'ogrenciler', 'kutuphane', 'duyurular', 'takvim', 'formlar']);
+  const [activeTab, setActiveTabInternal] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama', 'odev', 'davranis', 'ogrenciler', 'kutuphane', 'duyurular', 'takvim', 'formlar']);
   const [viewMode, setViewMode] = useState('table');
   const { slotTimes } = useSlotTimes();
 
@@ -861,6 +862,10 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
 
       {activeTab === 'formlar' && (
         <FormRespond showToast={showToast} />
+      )}
+
+      {activeTab === 'davranis' && (
+        <DavranisManager showToast={showToast} userRole={session.role} userId={session.id} />
       )}
     </div>
   );
