@@ -13,8 +13,8 @@ import EmptyState from '../EmptyState';
 // ders kataloğunu (çekirdek + kendi eklediği) yönetir; her şubeye gördüğü dersleri atar.
 // Veri: GET/POST/PATCH/DELETE /api/classes + /api/courses. Detay: hafıza kurum-turu-sinif-modeli.
 
-const KADEME_LABEL = Object.fromEntries(KADEMELER.map((k) => [k.key, k.label]));
-const KADEME_ORDER = ['ilkokul', 'ortaokul', 'lise', 'mezun'];
+export const KADEME_LABEL = Object.fromEntries(KADEMELER.map((k) => [k.key, k.label]));
+export const KADEME_ORDER = ['ilkokul', 'ortaokul', 'lise', 'mezun'];
 
 const DAL_OPTIONS = [
   { key: '', label: '— (dalsız)' },
@@ -23,7 +23,7 @@ const DAL_OPTIONS = [
   { key: 'sozel', label: 'Sözel' },
   { key: 'dil', label: 'Dil' },
 ];
-const DAL_LABEL = { sayisal: 'Sayısal', ea: 'Eşit Ağırlık', sozel: 'Sözel', dil: 'Dil' };
+export const DAL_LABEL = { sayisal: 'Sayısal', ea: 'Eşit Ağırlık', sozel: 'Sözel', dil: 'Dil' };
 
 // Kademeye göre düzey seçenekleri (UI yardımcısı; mezunda düzey yok).
 function duzeylerFor(kademe) {
@@ -176,7 +176,7 @@ function ClassCard({ c, courses, onEdit, onDelete, busy }) {
 }
 
 // ─── Şube ekle/düzenle modalı ─────────────────────────────────────────────────────
-function ClassFormModal({ initial, courses, sektor, onClose, onSaved, showToast }) {
+export function ClassFormModal({ initial, courses, sektor, onClose, onSaved, showToast }) {
   const isEdit = !!initial.id;
   const [ad, setAd] = useState(initial.ad || '');
   const [kademe, setKademe] = useState(initial.kademe || kademelerForSektor(sektor)[0]);
@@ -314,7 +314,7 @@ function ClassFormModal({ initial, courses, sektor, onClose, onSaved, showToast 
 }
 
 // ─── Ders kataloğu yönetimi ───────────────────────────────────────────────────────
-function CourseCatalog({ courses, onChanged, showToast }) {
+export function CourseCatalog({ courses, onChanged, showToast }) {
   const [yeni, setYeni] = useState('');
   const [busy, setBusy] = useState(false);
 

@@ -2,37 +2,30 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, ClipboardList, Compass, CalendarRange, CalendarDays, FileText, ScanLine, LayoutGrid, List
+  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, CalendarRange, CalendarDays, LayoutGrid, List
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
-import DirectorDenemeYonetimi from './rehberlik/DirectorDenemeYonetimi';
 import ProgramOlusturucu from './program/ProgramOlusturucu';
 import { TeacherBookingsList } from './TeacherPanel';
 
-import { ALL_DAYS, classLabel, getWeekKey, slotsForDay, allBranches } from '@/lib/constants';
-import { classLabelFrom } from '@/lib/classCatalog';
+import { ALL_DAYS, getWeekKey, slotsForDay, allBranches } from '@/lib/constants';
 import { GROUPS, api, Modal, getAdjacentWeek, WeekNav } from './director/shared';
 import { TeacherForm, StudentForm, ImportModal } from './director/Forms';
-import { DirectorAttendanceView } from './director/Attendance';
 import DirectorMuhasebeTab from './director/MuhasebeTab';
 import HistoryModal from './director/HistoryModal';
-import { StudentList } from './director/StudentList';
+import SinifOgrenci from './director/SinifOgrenci';
+import RehberlikHub from './rehberlik/RehberlikHub';
 import VeliPanel from './director/VeliPanel';
-import TeacherPresets from './director/TeacherPresets';
 import ProgramEditor from './director/ProgramEditor';
 import { useUrlTab } from './useUrlTab';
 import { useUrlParam } from './useUrlParam';
 import LoadingBox, { SkeletonList } from './Loading';
 import EmptyState from './EmptyState';
-import OptikFormTab from './director/OptikFormTab';
-import ClassManager from './director/ClassManager';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementSender } from './announcements/Announcements';
-import { OdevManager } from './odev/Odev';
 import { TakvimManager } from './etkinlik/Takvim';
 import { FormManager } from './form/Formlar';
 import { OnKayitManager } from './crm/OnKayit';
-import { DavranisManager } from './davranis/Davranis';
 import SlotTimeEditor from './director/SlotTimeEditor';
 import { useSlotTimes as useSlotTimesCtx } from './SlotTimesContext';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
@@ -44,8 +37,8 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   // Rehber (counselor) = müdür paneli EKSİ muhasebe. Sekme listesi role göre.
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
-    ? ['teachers', 'students', 'veliler', 'onkayit', 'yoklama', 'odev', 'davranis', 'siniflar', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'ders-programi']
-    : ['teachers', 'students', 'veliler', 'onkayit', 'yoklama', 'odev', 'davranis', 'siniflar', 'muhasebe', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'denemeler', 'ders-saatleri', 'ders-programi'];
+    ? ['teachers', 'students', 'rehberlik', 'veliler', 'onkayit', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'ders-programi']
+    : ['teachers', 'students', 'rehberlik', 'veliler', 'onkayit', 'muhasebe', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'ders-saatleri', 'ders-programi'];
   const [tab, setTabInternal] = useUrlTab('teachers', validTabs);
 
   // Sidebar'dan gelen externalTab değişince iç state'i güncelle
@@ -60,7 +53,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     setTabInternal(key);
     onExternalTabChange?.(key);
   }, [setTabInternal, onExternalTabChange]);
-  const [denemeTab, setDenemeTab] = useState('sinavlar');
   const [slotWeekday, setSlotWeekday] = useState([]);
   const [slotWeekend, setSlotWeekend] = useState([]);
   const [slotEtutSuresi, setSlotEtutSuresi] = useState(60);
@@ -84,7 +76,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [selectedTeacherForSlots, setSelectedTeacherForSlots] = useState(null);
   const [teacherSlots, setTeacherSlots] = useState(null);
   const [expandedTeacherId, setExpandedTeacherId] = useUrlParam('ogretmen'); // inline detay → URL'de görünür
-  const [expandedStudentId, setExpandedStudentId] = useState(null); // StudentList onSelectChange ile beslenir → detayda liste başlığını gizle
   const [expandedTeacherTab, setExpandedTeacherTab] = useState('etutler');
   const [teacherView, setTeacherView] = useState('list'); // 'list' | 'grid' — öğretmen listesi görünüm modu
   useEffect(() => {
@@ -334,16 +325,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                   )}
                 </div>
               </div>
-
-              {/* Sabit dersler (ön eşleştirme) — sekmeden bağımsız, her zaman görünür */}
-              <div className="mt-4">
-                <TeacherPresets
-                  key={`presets-${t.id}`}
-                  teacher={t}
-                  showToast={showToast}
-                  onSaved={(presets) => setTeachers(prev => prev.map(x => x.id === t.id ? { ...x, presets } : x))}
-                />
-              </div>
             </div>
           );
         }
@@ -433,51 +414,34 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
         );
       })()}
 
-      {/* STUDENTS TAB */}
+      {/* SINIF / ÖĞRENCİ TAB — eski Sınıflar + Rehberlik birleşik */}
       {tab === 'students' && (
-        <div>
-          {!expandedStudentId && (
-            <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-              <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Öğrenciler ({students.length})</h3>
-              <div className="flex gap-2 flex-wrap">
-                <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => { setEditStudent(null); setShowStudentForm(true); }}>
-                  <Plus size={14} /> Öğrenci Ekle
-                </button>
-                {!isCounselor && (
-                  <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => setShowCounselorForm(true)}>
-                    <Plus size={14} /> Rehberlik Öğretmeni Ekle
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          <StudentList students={students} classes={classes}
-            onSelectChange={setExpandedStudentId}
-            allSlots={allSlots} weekKey={weekKey}
-            onCancelBooking={async ({ teacherId, day, slotId }) => {
-              try {
-                await api('/api/slots', { method: 'DELETE', body: JSON.stringify({ teacherId, day, slotId, weekKey }) });
-                showToast('Etüt iptal edildi');
-                loadAll(weekKey);
-              } catch(err) { showToast(err.message, 'error'); }
-            }}
-            onEdit={s => { setEditStudent(s); setShowStudentForm(true); }}
-            onDelete={async s => {
-              if (!confirm(`${s.name} silinsin mi?`)) return;
-              try { await api('/api/students',{method:'DELETE',body:JSON.stringify({id:s.id})}); showToast('Öğrenci silindi'); loadAll(weekKey); } catch(err){showToast(err.message,'error');}
-            }}
-            onDeleteClass={async (cls, clsStudents) => {
-              if (!confirm(`${classLabelFrom(classes, cls, classLabel)} sınıfındaki ${clsStudents.length} öğrenci silinsin mi?`)) return;
-              try {
-                await api('/api/students', { method: 'DELETE', body: JSON.stringify({ ids: clsStudents.map(s => s.id) }) });
-                showToast(`${clsStudents.length} öğrenci silindi`);
-                loadAll(weekKey);
-              } catch(err) { showToast(err.message, 'error'); }
-            }}
-            onHistory={s => setHistoryTarget({ type: 'student', id: s.id, name: s.name })}
-            pendingGuidance={pendingGuidance}
-            onGuidanceReviewed={loadPendingGuidance} />
-        </div>
+        <SinifOgrenci
+          students={students}
+          classes={classes}
+          weekKey={weekKey}
+          allSlots={allSlots}
+          isCounselor={isCounselor}
+          onAddStudent={() => { setEditStudent(null); setShowStudentForm(true); }}
+          onAddCounselor={() => setShowCounselorForm(true)}
+          onEditStudent={s => { setEditStudent(s); setShowStudentForm(true); }}
+          onDeleteStudent={async s => {
+            if (!confirm(`${s.name} silinsin mi?`)) return;
+            try { await api('/api/students',{method:'DELETE',body:JSON.stringify({id:s.id})}); showToast('Öğrenci silindi'); loadAll(weekKey); } catch(err){showToast(err.message,'error');}
+          }}
+          onCancelBooking={async ({ teacherId, day, slotId }) => {
+            try {
+              await api('/api/slots', { method: 'DELETE', body: JSON.stringify({ teacherId, day, slotId, weekKey }) });
+              showToast('Etüt iptal edildi');
+              loadAll(weekKey);
+            } catch(err) { showToast(err.message, 'error'); }
+          }}
+          onHistory={s => setHistoryTarget({ type: 'student', id: s.id, name: s.name })}
+          onClassesChanged={() => loadAll(weekKey)}
+          pendingGuidance={pendingGuidance}
+          onGuidanceReviewed={loadPendingGuidance}
+          showToast={showToast}
+        />
       )}
 
       {tab === 'veliler' && (
@@ -502,14 +466,9 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           }))} />
       )}
 
-      {/* SINIFLAR (şube + ders kataloğu) TAB */}
-      {tab === 'siniflar' && (
-        <ClassManager showToast={showToast} />
-      )}
-
-      {/* YOKLAMA TAB */}
-      {tab === 'yoklama' && (
-        <DirectorAttendanceView showToast={showToast} />
+      {/* REHBERLİK TAB — yoklama/ödev/davranış/denemeler hub'ı */}
+      {tab === 'rehberlik' && (
+        <RehberlikHub session={session} showToast={showToast} />
       )}
 
       {tab === 'muhasebe' && (
@@ -524,10 +483,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
         <AnnouncementSender showToast={showToast} />
       )}
 
-      {tab === 'odev' && (
-        <OdevManager showToast={showToast} userRole={session.role} userId={session.id} />
-      )}
-
       {tab === 'takvim' && (
         <TakvimManager showToast={showToast} />
       )}
@@ -538,26 +493,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
       {tab === 'onkayit' && (
         <OnKayitManager showToast={showToast} />
-      )}
-
-      {tab === 'davranis' && (
-        <DavranisManager showToast={showToast} userRole={session.role} userId={session.id} />
-      )}
-
-      {tab === 'denemeler' && (
-        <div>
-          <div className="pill-tabs mb-4">
-            {[['sinavlar','Sınavlar',FileText],['optik','Optik Form',ScanLine]].map(([k,l,Icon]) => (
-              <button key={k} onClick={() => setDenemeTab(k)}
-                className={`pill-tab press-effect${denemeTab === k ? ' is-active' : ''}`}>
-                <Icon size={13} /> <span>{l}</span>
-              </button>
-            ))}
-          </div>
-          {denemeTab === 'optik'
-            ? <OptikFormTab showToast={showToast} />
-            : <DirectorDenemeYonetimi showToast={showToast} />}
-        </div>
       )}
 
       {/* Ders Saatleri sekmesi */}

@@ -13,7 +13,7 @@ import RehberlikAccordion from '../rehberlik/RehberlikAccordion';
 import StudentGuidanceView from '../rehberlik/StudentGuidanceView';
 import { useUrlParam } from '../useUrlParam';
 
-function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceReviewed }) {
+export function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceReviewed }) {
   const [tab, setTab] = useState('rehberlik');
   return (
     <div className="px-3 py-2">
@@ -199,7 +199,7 @@ export function StudentList({ students, classes = [], allSlots, weekKey, onCance
   );
 }
 
-function ClassScheduleModal({ cls, label, onClose }) {
+export function ClassScheduleModal({ cls, label, onClose }) {
   const [schedule, setSchedule] = useState(null);
   const [loading, setLoading] = useState(true);
 

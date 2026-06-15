@@ -6,6 +6,7 @@ import {
   STUDENT_GROUPS, classToGroup, WEEKDAY_SLOT_IDS, WEEKEND_SLOT_IDS,
   DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES,
 } from '@/lib/constants';
+import TeacherPresets from '../director/TeacherPresets';
 
 // Ders adı = branş adı; otomatik eşleme yok (çoklu branş modeli).
 
@@ -272,6 +273,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
   const [preview, setPreview]     = useState(null);
   const [previewId, setPreviewId] = useState(null);
   const [analysis, setAnalysis]   = useState(null);
+  const [presetTeacherId, setPresetTeacherId] = useState(''); // ön eşleştirme paneli (madde 11)
 
   const classes = useMemo(() => {
     const base = (activeClasses?.length) ? activeClasses : ALL_CLASSES;
@@ -449,7 +451,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
 
   if (!teachers) return <div className="flex items-center justify-center h-48 text-gray-400">Yükleniyor...</div>;
 
-  // Ön eşleştirme artık öğretmen kartında (teacher.presets) — burada panel yok.
+  // Ön eşleştirme paneli aşağıda (öğretmen seçici + TeacherPresets) — teacher.presets'i düzenler.
 
   let totalDemand=0;
   classes.forEach(cls => {
@@ -503,7 +505,34 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
         <LoadTable load={load} setLoad={setLoad} cols={activeCols} />
       </div>
 
-      {/* Ön eşleştirme (sabit dersler) artık öğretmen kartında: Öğretmen → detay sayfası. */}
+      {/* Ön eşleştirme (sabit dersler) — öğretmen seç → o öğretmene sınıf-ders kilitle (CP-SAT HARD preset). */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="text-label">Ön eşleştirme — öğretmen</label>
+          <select className="input !w-auto text-sm" value={presetTeacherId}
+            onChange={e => setPresetTeacherId(e.target.value)}>
+            <option value="">Seç…</option>
+            {[...teachers].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'tr'))
+              .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+        {presetTeacherId ? (() => {
+          const t = teachers.find(x => x.id === presetTeacherId);
+          return t ? (
+            <TeacherPresets
+              key={`preset-${t.id}`}
+              teacher={t}
+              showToast={showToast}
+              onSaved={(presets) => setTeachers(prev => prev.map(x => x.id === t.id ? { ...x, presets } : x))}
+            />
+          ) : null;
+        })() : (
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Bir öğretmen seçince o öğretmene sınıf-ders kilitleyebilirsiniz; program oluşturulurken çözücü
+            mutlaka uyar (saati kendi seçer).
+          </p>
+        )}
+      </div>
 
       {/* Ön analiz paneli */}
       {analysis && (

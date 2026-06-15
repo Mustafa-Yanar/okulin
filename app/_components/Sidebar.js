@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react';
 import {
   Users, Compass, ClipboardList, Wallet, BookOpen, Bell,
-  BarChart2, CreditCard, TrendingDown, ChevronLeft, ChevronRight,
+  CreditCard, TrendingDown, ChevronLeft, ChevronRight,
   BookMarked, Calendar, CalendarDays, GraduationCap, Star, Clock, Settings, LayoutGrid, Contact, NotebookPen, ListChecks, UserPlus, Award,
 } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
@@ -15,36 +15,29 @@ import NotificationButton from './NotificationButton';
 const ITEMS_BY_ROLE = {
   director: [
     { group: 'Akademik', key: 'teachers',    label: 'Öğretmen',          icon: Users },
-    { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
+    { group: 'Akademik', key: 'students',    label: 'Sınıf/Öğrenci',     icon: GraduationCap },
+    { group: 'Akademik', key: 'rehberlik',   label: 'Rehberlik',         icon: Compass },
     { group: 'Akademik', key: 'veliler',     label: 'Veli',              icon: Contact },
     { group: 'Akademik', key: 'onkayit',     label: 'Ön Kayıt',          icon: UserPlus },
-    { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
-    { group: 'Akademik', key: 'odev',        label: 'Ödevler',           icon: NotebookPen },
-    { group: 'Akademik', key: 'davranis',    label: 'Davranış',          icon: Award },
-    { group: 'Akademik', key: 'siniflar',    label: 'Sınıflar',          icon: GraduationCap },
-    { group: 'Akademik', key: 'denemeler',   label: 'Denemeler',         icon: BarChart2 },
     { group: 'Finans',   key: 'muhasebe',    label: 'Muhasebe',          icon: Wallet },
     { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: 'Sistem',   key: 'duyurular',   label: 'Duyurular',         icon: Bell },
-    { group: 'Sistem',   key: 'takvim',      label: 'Okul Takvimi',      icon: CalendarDays },
+    { group: 'Sistem',   key: 'takvim',      label: 'Etkinlik Takvimi',  icon: CalendarDays },
     { group: 'Sistem',   key: 'formlar',     label: 'Formlar',           icon: ListChecks },
     { group: 'Sistem',   key: 'ders-saatleri', label: 'Ders Saatleri',   icon: Clock },
-    { group: 'Sistem',   key: 'ders-programi', label: 'Ders Programı',   icon: LayoutGrid },
+    { group: 'Sistem',   key: 'ders-programi', label: 'Ders Programı Oluştur', icon: LayoutGrid },
   ],
   counselor: [
     { group: 'Akademik', key: 'teachers',    label: 'Öğretmen',          icon: Users },
-    { group: 'Akademik', key: 'students',    label: 'Rehberlik',         icon: Compass },
+    { group: 'Akademik', key: 'students',    label: 'Sınıf/Öğrenci',     icon: GraduationCap },
+    { group: 'Akademik', key: 'rehberlik',   label: 'Rehberlik',         icon: Compass },
     { group: 'Akademik', key: 'veliler',     label: 'Veli',              icon: Contact },
     { group: 'Akademik', key: 'onkayit',     label: 'Ön Kayıt',          icon: UserPlus },
-    { group: 'Akademik', key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
-    { group: 'Akademik', key: 'odev',        label: 'Ödevler',           icon: NotebookPen },
-    { group: 'Akademik', key: 'davranis',    label: 'Davranış',          icon: Award },
-    { group: 'Akademik', key: 'siniflar',    label: 'Sınıflar',          icon: GraduationCap },
     { group: 'Sistem',   key: 'kutuphane',   label: 'Kütüphane',         icon: BookOpen },
     { group: 'Sistem',   key: 'duyurular',   label: 'Duyurular',         icon: Bell },
-    { group: 'Sistem',   key: 'takvim',      label: 'Okul Takvimi',      icon: CalendarDays },
+    { group: 'Sistem',   key: 'takvim',      label: 'Etkinlik Takvimi',  icon: CalendarDays },
     { group: 'Sistem',   key: 'formlar',     label: 'Formlar',           icon: ListChecks },
-    { group: 'Sistem',   key: 'ders-programi', label: 'Ders Programı',   icon: LayoutGrid },
+    { group: 'Sistem',   key: 'ders-programi', label: 'Ders Programı Oluştur', icon: LayoutGrid },
   ],
   accountant: [
     { group: 'Finans',   key: 'finance',     label: 'Öğrenci Ödemeleri', icon: CreditCard },
@@ -125,6 +118,25 @@ export default function Sidebar({
 }) {
   const items = buildItems(session?.role);
 
+  // Grup akordeon durumu (yalnız gruplu roller: müdür/rehber). Varsayılan: hepsi açık.
+  // false = kapalı; absent/true = açık. localStorage'da kalıcı, oturumlar arası korunur.
+  const [openGroups, setOpenGroups] = React.useState({});
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('okulin:sidebarGroups');
+      if (raw) setOpenGroups(JSON.parse(raw));
+    } catch {}
+  }, []);
+  const isGroupOpen = (g) => openGroups?.[g] !== false;
+  const toggleGroup = (g) => {
+    setOpenGroups(prev => {
+      const cur = prev || {};
+      const next = { ...cur, [g]: cur[g] === false ? true : false };
+      try { localStorage.setItem('okulin:sidebarGroups', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   useEffect(() => {
     if (mobileOpen) {
       document.body.style.overflow = 'hidden';
@@ -182,18 +194,31 @@ export default function Sidebar({
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {groups.map(group => {
           const groupItems = items.filter(i => (i.group || '__top__') === group);
+          const isTop = group === '__top__';
+          const open = isGroupOpen(group);
           return (
             <div key={group}>
-              {group !== '__top__' && !collapsed && (
-                <p className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-widest"
-                  style={{ fontWeight: 700, color: 'var(--text-muted)' }}>
-                  {group}
-                </p>
+              {/* Gruplu + geniş mod: tıklanabilir akordeon başlığı */}
+              {!isTop && !collapsed && (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group)}
+                  aria-expanded={open}
+                  className="w-full flex items-center justify-between px-3 pt-3 pb-1 rounded-lg hover:bg-[var(--bg-muted)] transition-colors"
+                >
+                  <span className="text-[10px] uppercase tracking-widest"
+                    style={{ fontWeight: 700, color: 'var(--text-muted)' }}>
+                    {group}
+                  </span>
+                  <ChevronRight size={12}
+                    style={{ color: 'var(--text-muted)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
+                </button>
               )}
-              {group !== '__top__' && collapsed && (
+              {/* Daraltılmış (ikon rayı) mod: akordeon yok, sadece ayraç */}
+              {!isTop && collapsed && (
                 <div className="my-2" style={{ borderTop: '1px solid var(--border-subtle)' }} />
               )}
-              {groupItems.map(item => (
+              {(isTop || collapsed || open) && groupItems.map(item => (
                 <NavItem
                   key={item.key}
                   item={item}
