@@ -8,6 +8,7 @@ import {
 import { useClasses } from '../ClassesContext';
 import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
+import { useConfirm } from '../ConfirmProvider';
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -35,6 +36,7 @@ function fmtDate(iso) {
 
 // ════════════════════ YÖNETİCİ ════════════════════
 export function FormManager({ showToast }) {
+  const confirm = useConfirm();
   const { data, isLoading, mutate } = useSWR('/api/form');
   const list = data?.formlar || [];
   const [building, setBuilding] = useState(false);
@@ -48,7 +50,7 @@ export function FormManager({ showToast }) {
     } catch (e) { showToast?.(e.message, 'error'); }
   }
   async function remove(f) {
-    if (!confirm(`"${f.title}" formu ve tüm yanıtları silinsin mi?`)) return;
+    if (!(await confirm(`"${f.title}" formu ve tüm yanıtları silinsin mi?`))) return;
     try {
       await api(`/api/form?id=${encodeURIComponent(f.id)}`, { method: 'DELETE' });
       mutate({ formlar: list.filter(x => x.id !== f.id) }, { revalidate: false });

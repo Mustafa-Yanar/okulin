@@ -7,6 +7,7 @@ import {
 import { useClasses } from '../ClassesContext';
 import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
+import { useConfirm } from '../ConfirmProvider';
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -140,6 +141,7 @@ function splitEvents(list) {
 
 // ════════════════════ YÖNETİCİ ════════════════════
 export function TakvimManager({ showToast }) {
+  const confirm = useConfirm();
   const { data, isLoading, mutate } = useSWR('/api/etkinlik');
   const list = data?.etkinlikler || [];
   const classMap = useClassMap();
@@ -148,7 +150,7 @@ export function TakvimManager({ showToast }) {
   const { upcoming, past } = splitEvents(list);
 
   async function remove(ev) {
-    if (!confirm(`"${ev.title}" etkinliği silinsin mi?`)) return;
+    if (!(await confirm(`"${ev.title}" etkinliği silinsin mi?`))) return;
     try {
       await api(`/api/etkinlik?id=${encodeURIComponent(ev.id)}`, { method: 'DELETE' });
       mutate({ ...data, etkinlikler: list.filter(x => x.id !== ev.id) }, { revalidate: false });

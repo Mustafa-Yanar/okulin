@@ -9,6 +9,7 @@ import {
   Search, CreditCard, Banknote, Building2
 } from 'lucide-react';
 import EmptyState from '../EmptyState';
+import { useConfirm } from '../ConfirmProvider';
 
 const DERSHANE = {
   name: 'Akyazı Çözüm Özel Öğretim Kursu',
@@ -376,6 +377,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
 
 // ── Öğrenci finansal detay satırı ───────────────────────────────────────────
 function StudentFinanceRow({ item, onRefresh, showToast, session }) {
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
@@ -399,7 +401,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
   const overdueInstallments = (finance?.installments || []).filter(inst => !inst.paid && isOverdue(inst.dueDate));
 
   async function handleDeletePayment(paymentId) {
-    if (!confirm('Bu ödemeyi geri almak istiyor musunuz?')) return;
+    if (!(await confirm({ message: 'Bu ödemeyi geri almak istiyor musunuz?', confirmLabel: 'Geri Al' }))) return;
     try {
       const res = await fetch('/api/finance/payment', {
         method: 'DELETE',

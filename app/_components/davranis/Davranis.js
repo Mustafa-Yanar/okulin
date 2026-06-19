@@ -7,6 +7,7 @@ import {
 import { useClasses } from '../ClassesContext';
 import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
+import { useConfirm } from '../ConfirmProvider';
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -109,6 +110,7 @@ export function DavranisManager({ showToast, userRole, userId }) {
 }
 
 function StudentDetail({ studentId, showToast, userRole, userId, onChanged }) {
+  const confirm = useConfirm();
   const { data, isLoading, mutate } = useSWR(`/api/davranis?studentId=${encodeURIComponent(studentId)}`);
   const entries = data?.entries || [];
   const [reason, setReason] = useState('');
@@ -133,7 +135,7 @@ function StudentDetail({ studentId, showToast, userRole, userId, onChanged }) {
     setReason(''); setPoints(''); setNote('');
   }
   async function remove(e) {
-    if (!confirm('Bu davranış kaydı silinsin mi?')) return;
+    if (!(await confirm('Bu davranış kaydı silinsin mi?'))) return;
     try {
       await api(`/api/davranis?studentId=${encodeURIComponent(studentId)}&entryId=${encodeURIComponent(e.id)}`, { method: 'DELETE' });
       showToast?.('Silindi');

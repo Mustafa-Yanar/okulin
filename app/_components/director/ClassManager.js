@@ -8,6 +8,7 @@ import { api, Modal, FormField } from './shared';
 import { KADEMELER, kademelerForSektor } from '@/lib/institution';
 import LoadingBox from '../Loading';
 import EmptyState from '../EmptyState';
+import { useConfirm } from '../ConfirmProvider';
 
 // Şube (sınıf) + ders kataloğu yönetimi. Kurum kendi şubelerini açar/düzenler/siler ve
 // ders kataloğunu (çekirdek + kendi eklediği) yönetir; her şubeye gördüğü dersleri atar.
@@ -40,6 +41,7 @@ function dalRelevant(kademe, duzey) {
 }
 
 export default function ClassManager({ showToast, sektor = 'dershane' }) {
+  const confirm = useConfirm();
   const [view, setView] = useState('subeler'); // subeler | dersler
   const [classes, setClasses] = useState([]);
   const [courses, setCourses] = useState([]);
@@ -73,7 +75,7 @@ export default function ClassManager({ showToast, sektor = 'dershane' }) {
   const activeCourses = courses.filter((c) => c.active !== false);
 
   async function deleteClass(c) {
-    if (!confirm(`"${c.ad}" şubesi silinsin mi?`)) return;
+    if (!(await confirm(`"${c.ad}" şubesi silinsin mi?`))) return;
     setBusy(true);
     try {
       await api('/api/classes', { method: 'DELETE', body: JSON.stringify({ id: c.id }) });

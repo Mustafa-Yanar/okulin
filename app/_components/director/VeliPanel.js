@@ -9,6 +9,7 @@ import { classLabel, PARENT_RELATIONS } from '@/lib/constants';
 import { classLabelFrom } from '@/lib/classCatalog';
 import { GROUPS, api } from './shared';
 import { formatTurkishMobile } from '@/lib/phone';
+import { useConfirm } from '../ConfirmProvider';
 
 function RelationSelect({ value, onChange, placeholder = 'Yakınlık seç' }) {
   return (
@@ -21,6 +22,7 @@ function RelationSelect({ value, onChange, placeholder = 'Yakınlık seç' }) {
 
 // Tek velinin (öğrencinin) açılır detayı — düzenlenebilir form.
 function VeliDetay({ student, onSaved, showToast }) {
+  const confirm = useConfirm();
   const [parentName, setParentName] = useState(student.parentName || '');
   const [parentPhone, setParentPhone] = useState(student.parentPhone ? formatTurkishMobile(student.parentPhone) : '');
   const [parentRelation, setParentRelation] = useState(student.parentRelation || '');
@@ -53,7 +55,7 @@ function VeliDetay({ student, onSaved, showToast }) {
 
   const resetPassword = async () => {
     if (!student.parentPhone) { showToast('Veli telefonu yok — önce telefon kaydet', 'error'); return; }
-    if (!confirm(`${parentName || 'Veli'} şifresi sıfırlansın mı? Yeni geçici şifre telefon numarası olur.`)) return;
+    if (!(await confirm({ message: `${parentName || 'Veli'} şifresi sıfırlansın mı? Yeni geçici şifre telefon numarası olur.`, confirmLabel: 'Sıfırla', danger: false }))) return;
     setResetting(true);
     try {
       await api('/api/parents', { method: 'POST', body: JSON.stringify({ action: 'reset', phone: student.parentPhone }) });

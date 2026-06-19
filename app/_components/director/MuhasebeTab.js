@@ -5,8 +5,10 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Wallet, Edit3, Trash2, X } from 'lucide-react';
 import FinancePanel from '../finance/FinancePanel';
 import ExpensePanel from '../finance/ExpensePanel';
+import { useConfirm } from '../ConfirmProvider';
 
 export default function DirectorMuhasebeTab({ session, showToast }) {
+  const confirm = useConfirm();
   const [subTab, setSubTab] = useState('finance');
   const [accountants, setAccountants] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -54,7 +56,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
   }
 
   async function handleDelete(id, name) {
-    if (!confirm(`"${name}" isimli muhasebeci silinsin mi?`)) return;
+    if (!(await confirm(`"${name}" isimli muhasebeci silinsin mi?`))) return;
     try {
       const res = await fetch('/api/accountants', {
         method: 'DELETE',

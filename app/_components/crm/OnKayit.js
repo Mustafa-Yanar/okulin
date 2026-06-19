@@ -5,6 +5,7 @@ import {
   UserPlus, Plus, Trash2, X, Phone, ChevronDown, ChevronUp, Send, Clock,
 } from 'lucide-react';
 import EmptyState from '../EmptyState';
+import { useConfirm } from '../ConfirmProvider';
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -37,6 +38,7 @@ function fmtDateTime(iso) {
 
 // ════════════════════ YÖNETİCİ (müdür / rehber) ════════════════════
 export function OnKayitManager({ showToast }) {
+  const confirm = useConfirm();
   const { data, isLoading, mutate } = useSWR('/api/onkayit');
   const list = data?.leadler || [];
   const stats = data?.stats || {};
@@ -46,7 +48,7 @@ export function OnKayitManager({ showToast }) {
   const filtered = filter === 'hepsi' ? list : list.filter(l => l.status === filter);
 
   async function remove(l) {
-    if (!confirm(`"${l.studentName}" aday kaydı silinsin mi?`)) return;
+    if (!(await confirm(`"${l.studentName}" aday kaydı silinsin mi?`))) return;
     try {
       await api(`/api/onkayit?id=${encodeURIComponent(l.id)}`, { method: 'DELETE' });
       mutate();

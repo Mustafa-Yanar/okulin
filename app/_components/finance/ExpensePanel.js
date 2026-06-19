@@ -7,6 +7,7 @@ import {
   Users, Receipt, Calendar,
 } from 'lucide-react';
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
+import { useConfirm } from '../ConfirmProvider';
 
 function fmt(n) {
   return (n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -19,6 +20,7 @@ function thisMonth() {
 }
 
 export default function ExpensePanel({ session, showToast }) {
+  const confirm = useConfirm();
   const [view, setView] = useState('personnel'); // 'personnel' | 'general'
   const [period, setPeriod] = useState(''); // '' = tüm zamanlar, yoksa YYYY-MM
   const [catFilter, setCatFilter] = useState('');
@@ -84,7 +86,7 @@ export default function ExpensePanel({ session, showToast }) {
 
   async function handleDelete(exp) {
     const label = exp.type === 'personnel' ? exp.personnelName : exp.category;
-    if (!confirm(`"${label}" gideri (₺${fmt(exp.amount)}) silinsin mi?`)) return;
+    if (!(await confirm(`"${label}" gideri (₺${fmt(exp.amount)}) silinsin mi?`))) return;
     try {
       const res = await fetch('/api/finance/expense', {
         method: 'DELETE',

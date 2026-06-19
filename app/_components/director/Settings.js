@@ -5,6 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon } from 'lucide-react';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
+import { useConfirm } from '../ConfirmProvider';
 
 // Ayarlar bölümlerinin ortak gövdesi — hem modal hem inline kullanır.
 function SettingsBody({ current, onSave, onBranding, showToast }) {
@@ -78,6 +79,7 @@ export function DirectorSettingsInline({ current, onSave, onBranding, showToast 
 // ─── REHBER PERSONELİ ─────────────────────────────────────────────────────────
 // Müdür rehber hesaplarını oluşturur/siler. Rehber = müdür yetkileri eksi muhasebe.
 export function CounselorSection({ showToast }) {
+  const confirm = useConfirm();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: '', password: '', phone: '' });
@@ -100,7 +102,7 @@ export function CounselorSection({ showToast }) {
     } catch (e) { showToast(e.message, 'error'); } finally { setSaving(false); }
   }
   async function remove(c) {
-    if (!confirm(`"${c.name}" rehberi silinsin mi?`)) return;
+    if (!(await confirm(`"${c.name}" rehberi silinsin mi?`))) return;
     try { await api('/api/counselors', { method: 'DELETE', body: JSON.stringify({ id: c.id }) }); showToast('Rehber silindi'); load(); }
     catch (e) { showToast(e.message, 'error'); }
   }

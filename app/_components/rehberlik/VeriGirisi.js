@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Upload, ScanLine, FileText, Image as ImageIcon, Trash2, Plus, Save, ChevronDown, Keyboard, HardDriveDownload, AlertTriangle } from 'lucide-react';
 import { getTemplate, boxLength, normalizeRaw, CHOICES } from '@/lib/deneme/template';
 import { parseDat, datSupports } from '@/lib/deneme/dat';
+import { useConfirm } from '../ConfirmProvider';
 
 // Sınav detayındaki "Veri Girişi" adımı: optik (foto/PDF) + manuel giriş + öğrenci eşleştirme.
 // Excel yükleme kaldırıldı — girdi artık optik/.dat (.dat Faz 2b).
@@ -390,6 +391,7 @@ function ManuelEkle({ exam, kitapcik, onChanged, showToast }) {
 
 // ---- Kayıtlar + öğrenci eşleştirme ----
 function KayitListesi({ exam, rows, onChanged, showToast }) {
+  const confirm = useConfirm();
   const [students, setStudents] = useState([]);
   const [matches, setMatches] = useState({}); // rowId -> studentId
   const [saving, setSaving] = useState(false);
@@ -414,7 +416,7 @@ function KayitListesi({ exam, rows, onChanged, showToast }) {
   );
 
   async function del(rowId) {
-    if (!confirm('Bu kaydı sil?')) return;
+    if (!(await confirm('Bu kaydı sil?'))) return;
     const res = await fetch(`/api/deneme/exams/${exam.id}/rows?rowId=${rowId}`, { method: 'DELETE', credentials: 'same-origin' });
     if (res.ok) { showToast('Kayıt silindi'); onChanged?.(); }
   }

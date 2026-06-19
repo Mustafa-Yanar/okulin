@@ -8,6 +8,7 @@ import {
 import { useClasses } from '../ClassesContext';
 import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
+import { useConfirm } from '../ConfirmProvider';
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -40,12 +41,13 @@ function isOverdue(ymd) {
 
 // ════════════════════ YÖNETİCİ / ÖĞRETMEN (ver + kontrol) ════════════════════
 export function OdevManager({ showToast, userRole, userId }) {
+  const confirm = useConfirm();
   const { data, isLoading: loading, mutate } = useSWR('/api/odev');
   const list = data?.odevler || [];
   const [detail, setDetail] = useState(null); // kontrol modalı
 
   async function remove(o) {
-    if (!confirm(`"${o.title}" ödevi silinsin mi? Teslim kayıtları da silinir.`)) return;
+    if (!(await confirm(`"${o.title}" ödevi silinsin mi? Teslim kayıtları da silinir.`))) return;
     try {
       await api(`/api/odev?id=${encodeURIComponent(o.id)}`, { method: 'DELETE' });
       mutate({ odevler: list.filter(x => x.id !== o.id) }, { revalidate: false });

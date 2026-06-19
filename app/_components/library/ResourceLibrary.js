@@ -3,6 +3,7 @@ import { useState, useMemo, useRef } from 'react';
 import useSWR from 'swr';
 import { upload } from '@vercel/blob/client';
 import EmptyState from '../EmptyState';
+import { useConfirm } from '../ConfirmProvider';
 import {
   BookOpen, FileText, Youtube, Link2, Plus, Trash2, X, Upload,
   ExternalLink, Play, Filter, GraduationCap, ChevronDown,
@@ -27,6 +28,7 @@ function embedUrl(url) {
 }
 
 export default function ResourceLibrary({ canManage, branches = [], userRole, userId, showToast }) {
+  const confirm = useConfirm();
   const { classes: regClasses } = useClasses();
   const { data, isLoading: loading, mutate } = useSWR('/api/resources');
   const resources = data?.resources || [];
@@ -46,7 +48,7 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
   }, [resources]);
 
   async function handleDelete(id) {
-    if (!confirm('Bu kaynak silinsin mi?')) return;
+    if (!(await confirm('Bu kaynak silinsin mi?'))) return;
     try {
       const res = await fetch(`/api/resources?id=${encodeURIComponent(id)}`, {
         method: 'DELETE', credentials: 'same-origin',

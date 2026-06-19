@@ -12,8 +12,10 @@ import {
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal, getAdjacentWeek, isSlotPast } from './shared';
 import EtutCalendar, { timeToMin, minToTop, durationToHeight } from './EtutCalendar';
+import { useConfirm } from '../ConfirmProvider';
 
 export default function ProgramEditor({ teacher, onClose, showToast, students, inline = false }) {
+  const confirm = useConfirm();
   const currentWeek = getWeekKey();
   const maxWeek = getAdjacentWeek(getAdjacentWeek(currentWeek, 1), 1);
   const [weekKey, setWeekKey] = useState(currentWeek);
@@ -167,7 +169,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
       const dayProg = program?.[String(dayIndex)] || {};
       const hasEntries = Object.values(dayProg).some(e => e && e.type);
       if (hasEntries) {
-        if (!confirm('Bu güne tanımlı ders/etüt var. İzin günü yapılırsa hepsi silinecek. Devam etmek istiyor musunuz?')) return;
+        if (!(await confirm({ message: 'Bu güne tanımlı ders/etüt var. İzin günü yapılırsa hepsi silinecek.', confirmLabel: 'Devam Et' }))) return;
       }
     }
     setTogglingDay(dayIndex);
@@ -533,6 +535,7 @@ function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, weekKey, s
 
 // ─── Etüt eylem modalı (tıklanan etüt: aktif/pasif/sil) ──────────────────────
 function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle, onAssign, onDelete }) {
+  const confirm = useConfirm();
   const gun = ALL_DAYS.find(d => d.index === sablon.dayIndex)?.label || '';
   // Pasifleştirme onayı: "sadece bu hafta" varsayılan İŞARETLİ
   const [pasifMode, setPasifMode] = useState(false); // pasifleştirme onayı gösteriliyor mu
@@ -584,7 +587,7 @@ function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle
               </button>
             )}
             <button className="btn-ghost w-full justify-center text-red-500 hover:bg-red-50"
-              onClick={() => { if (confirm('Bu etüt kalıcı olarak silinsin mi?')) onDelete(sablon.id); }}>
+              onClick={async () => { if (await confirm('Bu etüt kalıcı olarak silinsin mi?')) onDelete(sablon.id); }}>
               Sil
             </button>
           </div>

@@ -7,6 +7,7 @@ import {
 import { useClasses } from '../ClassesContext';
 import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
+import { useConfirm } from '../ConfirmProvider';
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -27,12 +28,13 @@ function fmtDate(iso) {
 
 // ════════════════════ GÖNDEREN (müdür + rehber) ════════════════════
 export function AnnouncementSender({ showToast }) {
+  const confirm = useConfirm();
   const { data, isLoading: loading, mutate } = useSWR('/api/announcements');
   const list = data?.announcements || [];
   const [detail, setDetail] = useState(null); // kim okudu modalı
 
   async function remove(a) {
-    if (!confirm(`"${a.title}" duyurusu silinsin mi?`)) return;
+    if (!(await confirm(`"${a.title}" duyurusu silinsin mi?`))) return;
     try {
       await api(`/api/announcements?id=${encodeURIComponent(a.id)}`, { method: 'DELETE' });
       mutate({ announcements: list.filter(x => x.id !== a.id) }, { revalidate: false });

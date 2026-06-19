@@ -17,6 +17,7 @@ import { ClassFormModal, CourseCatalog, KADEME_LABEL, KADEME_ORDER, DAL_LABEL } 
 import LoadingBox from '../Loading';
 import EmptyState from '../EmptyState';
 import { useUrlParam } from '../useUrlParam';
+import { useConfirm } from '../ConfirmProvider';
 
 export default function SinifOgrenci({
   students = [], allSlots, weekKey,
@@ -25,6 +26,7 @@ export default function SinifOgrenci({
   onAddStudent, onAddCounselor, isCounselor = false,
   onClassesChanged, showToast, sektor = 'dershane', classes: classesProp = [],
 }) {
+  const confirm = useConfirm();
   const [classes, setClasses] = useState(classesProp);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -86,8 +88,8 @@ export default function SinifOgrenci({
   async function handleDeleteClass(c) {
     const inClass = studentsByClass[c.id] || [];
     if (inClass.length > 0) {
-      if (!confirm(`"${c.ad}" şubesinde ${inClass.length} öğrenci var. Şube ve tüm öğrencileri silinsin mi?`)) return;
-    } else if (!confirm(`"${c.ad}" şubesi silinsin mi?`)) return;
+      if (!(await confirm(`"${c.ad}" şubesinde ${inClass.length} öğrenci var. Şube ve tüm öğrencileri silinsin mi?`))) return;
+    } else if (!(await confirm(`"${c.ad}" şubesi silinsin mi?`))) return;
     setBusy(true);
     try {
       if (inClass.length > 0) {

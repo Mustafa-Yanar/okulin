@@ -6,11 +6,13 @@ import AnswerKeyForm from './AnswerKeyForm';
 import VeriGirisi from './VeriGirisi';
 import SonucListesi from './SonucListesi';
 import MergeListesi from './MergeListesi';
+import { useConfirm } from '../ConfirmProvider';
 
 const TYPE_LABEL = { TYT: 'TYT', AYT: 'AYT', LGS: 'LGS' };
 
 // Müdür/rehber: sınav oluştur → cevap anahtarı gir → (Faz 2) veri gir → (Faz 3) sonuç.
 export default function DirectorDenemeYonetimi({ showToast }) {
+  const confirm = useConfirm();
   const [mode, setMode] = useState('list'); // 'list' | 'create' | 'detail' | 'merge'
   const [exams, setExams] = useState([]);
   const [detailId, setDetailId] = useState(null);
@@ -28,7 +30,7 @@ export default function DirectorDenemeYonetimi({ showToast }) {
 
   async function remove(id, e) {
     e.stopPropagation();
-    if (!confirm('Bu sınavı (cevap anahtarı + tüm veriler) silmek istediğine emin misin?')) return;
+    if (!(await confirm('Bu sınavı (cevap anahtarı + tüm veriler) silmek istediğine emin misin?'))) return;
     const res = await fetch(`/api/deneme/exams/${id}`, { method: 'DELETE', credentials: 'same-origin' });
     if (res.ok) {
       setExams((prev) => prev.filter((x) => x.id !== id));

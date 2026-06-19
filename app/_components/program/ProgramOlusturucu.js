@@ -7,6 +7,7 @@ import {
   DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES,
 } from '@/lib/constants';
 import TeacherPresets from '../director/TeacherPresets';
+import { useConfirm } from '../ConfirmProvider';
 
 // Ders adı = branş adı; otomatik eşleme yok (çoklu branş modeli).
 
@@ -262,6 +263,7 @@ function analyzeLoad(classes, load, teachers) {
 
 // ── Ana bileşen ──
 export default function ProgramOlusturucu({ api, showToast, activeClasses, branding }) {
+  const confirm = useConfirm();
   const [teachers, setTeachers] = useState(null);
   const [load, setLoad]         = useState(() => JSON.parse(JSON.stringify(DEFAULT_LOAD)));
   const [result, setResult]     = useState(null);
@@ -392,7 +394,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
 
   // ── Mevcut programları temizle ──
   async function clearAllPrograms() {
-    if (!window.confirm('Tüm öğretmenlerin izin günleri, ders programları ve etüt rezervasyonları silinecek. Emin misiniz?')) return;
+    if (!(await confirm({ message: 'Tüm öğretmenlerin izin günleri, ders programları ve etüt rezervasyonları silinecek. Emin misiniz?', confirmLabel: 'Tümünü Sil' }))) return;
     setClearing(true);
     try {
       const res = await api('/api/admin/week', { method: 'POST', body: JSON.stringify({ action: 'reset-all' }) });
