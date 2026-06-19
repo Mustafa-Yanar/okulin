@@ -220,7 +220,7 @@ body {
   font-size: 14px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(99,102,241,0.35), 0 1px 0 rgba(255,255,255,0.2) inset;
-  transition: all var(--transition-base);
+  transition: transform var(--transition-fast), box-shadow var(--transition-base);
 }
 .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(99,102,241,0.45), 0 1px 0 rgba(255,255,255,0.2) inset; }
 .btn-primary:active { transform: translateY(0); }
@@ -236,7 +236,7 @@ body {
   font-size: 14px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(34,197,94,0.3), 0 1px 0 rgba(255,255,255,0.2) inset;
-  transition: all var(--transition-base);
+  transition: transform var(--transition-fast), box-shadow var(--transition-base);
 }
 .btn-success:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(34,197,94,0.4), 0 1px 0 rgba(255,255,255,0.2) inset; }
 .btn-success:active { transform: translateY(0); }
@@ -252,7 +252,7 @@ body {
   font-size: 14px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(239,68,68,0.3), 0 1px 0 rgba(255,255,255,0.2) inset;
-  transition: all var(--transition-base);
+  transition: transform var(--transition-fast), box-shadow var(--transition-base);
 }
 .btn-danger:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(239,68,68,0.4); }
 .btn-danger:active { transform: translateY(0); }
@@ -296,7 +296,7 @@ body {
   transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
 }
 .btn-icon:hover { background: var(--bg-muted); color: var(--text-secondary); }
-.btn-icon:active { transform: scale(0.9); }
+.btn-icon:active { transform: scale(0.95); }
 .btn-icon:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 .btn-icon-danger:hover { background: var(--color-danger-bg); color: var(--color-danger); }
 .btn-icon-primary:hover { background: var(--color-info-bg); color: var(--color-info); }
@@ -375,14 +375,14 @@ body {
 }
 .card-interactive {
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: transform var(--transition-fast), box-shadow var(--transition-base), border-color var(--transition-base);
 }
 .card-interactive:hover {
   border-color: var(--border-light);
   box-shadow: var(--shadow-md);
 }
 .card-interactive:active {
-  transform: scale(0.995);
+  transform: scale(0.98);
 }
 
 /* ─── Giriş ekranı rol kartı glow efekti ────────────────────────────────────── */
@@ -391,7 +391,7 @@ body {
   border: 2px solid var(--border-subtle);
   border-radius: 18px;
   background: var(--bg-surface);
-  transition: all var(--transition-slow);
+  transition: transform var(--transition-base), box-shadow var(--transition-slow), border-color var(--transition-slow);
   position: relative;
   overflow: hidden;
 }
@@ -766,5 +766,16 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
     margin: 0 !important;
     background: white !important;
     box-shadow: none !important;
+  }
+}
+
+/* ─── Hareket hassasiyeti (erişilebilirlik) ──────────────────────────────────────
+   prefers-reduced-motion açıksa tüm animasyon/geçişi anında bitir: içerik
+   kayma/zıplama olmadan belirir. Mevcut + gelecekteki tüm hareketi kapsar. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
