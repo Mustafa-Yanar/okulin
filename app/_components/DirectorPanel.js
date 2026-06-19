@@ -9,7 +9,7 @@ import ProgramOlusturucu from './program/ProgramOlusturucu';
 import { TeacherBookingsList } from './TeacherPanel';
 
 import { ALL_DAYS, getWeekKey, slotsForDay, allBranches } from '@/lib/constants';
-import { GROUPS, api, Modal, getAdjacentWeek, WeekNav } from './director/shared';
+import { GROUPS, api, Modal, getAdjacentWeek, WeekNav, SectionHeader } from './director/shared';
 import { TeacherForm, StudentForm, ImportModal } from './director/Forms';
 import DirectorMuhasebeTab from './director/MuhasebeTab';
 import HistoryModal from './director/HistoryModal';
@@ -332,34 +332,31 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
         // Liste / kart görünümü
         return (
           <div>
-            <div className="flex items-center justify-between mb-4 gap-2">
-              <h3 className="text-heading truncate min-w-0">Öğretmen ({teachers.length})</h3>
-              <div className="flex gap-2 items-center shrink-0">
-                <div className="pill-tabs shrink-0" role="group" aria-label="Görünüm modu" style={{ width:'fit-content' }}>
-                  <button
-                    type="button"
-                    className={`pill-tab !px-2.5 !flex-none ${teacherView === 'list' ? 'is-active' : ''}`}
-                    aria-pressed={teacherView === 'list'}
-                    title="Liste görünümü"
-                    onClick={() => changeTeacherView('list')}
-                  >
-                    <List size={15} />
-                  </button>
-                  <button
-                    type="button"
-                    className={`pill-tab !px-2.5 !flex-none ${teacherView === 'grid' ? 'is-active' : ''}`}
-                    aria-pressed={teacherView === 'grid'}
-                    title="Kart görünümü"
-                    onClick={() => changeTeacherView('grid')}
-                  >
-                    <LayoutGrid size={15} />
-                  </button>
-                </div>
-                <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm shrink-0" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
-                  <Plus size={14} /> Öğretmen Ekle
+            <SectionHeader title="Öğretmen" count={teachers.length}>
+              <div className="pill-tabs shrink-0" role="group" aria-label="Görünüm modu" style={{ width:'fit-content' }}>
+                <button
+                  type="button"
+                  className={`pill-tab !px-2.5 !flex-none ${teacherView === 'list' ? 'is-active' : ''}`}
+                  aria-pressed={teacherView === 'list'}
+                  title="Liste görünümü"
+                  onClick={() => changeTeacherView('list')}
+                >
+                  <List size={15} />
+                </button>
+                <button
+                  type="button"
+                  className={`pill-tab !px-2.5 !flex-none ${teacherView === 'grid' ? 'is-active' : ''}`}
+                  aria-pressed={teacherView === 'grid'}
+                  title="Kart görünümü"
+                  onClick={() => changeTeacherView('grid')}
+                >
+                  <LayoutGrid size={15} />
                 </button>
               </div>
-            </div>
+              <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm shrink-0" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
+                <Plus size={14} /> Öğretmen Ekle
+              </button>
+            </SectionHeader>
             {teachers.length === 0 ? (
               <EmptyState card icon={Users} title="Henüz öğretmen eklenmemiş" description="Yeni öğretmen ekleyerek başlayın." />
             ) : teacherView === 'grid' ? (
@@ -446,9 +443,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
       {tab === 'veliler' && (
         <div>
-          <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-            <h3 className="text-heading">Veli ({students.length})</h3>
-          </div>
+          <SectionHeader title="Veli" count={students.length} />
           <VeliPanel students={students} classes={classes} showToast={showToast} onChanged={() => loadAll(weekKey)} />
         </div>
       )}
@@ -498,16 +493,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       {/* Ders Saatleri sekmesi */}
       {tab === 'ders-saatleri' && (
         <div className="max-w-2xl">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 15%, transparent)' }}>
-              <Clock size={20} style={{ color: 'var(--brand,#6366f1)' }} />
-            </div>
-            <div>
-              <h2 className="text-lg" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Ders Saatleri</h2>
-              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Haftalık ders slot başlangıç ve bitiş saatlerini ayarla</p>
-            </div>
-          </div>
+          <SectionHeader icon={Clock} title="Ders Saatleri" subtitle="Haftalık ders slot başlangıç ve bitiş saatlerini ayarla" />
           {slotTimesLoading ? (
             <LoadingBox height="h-48" />
           ) : (

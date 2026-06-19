@@ -10,6 +10,29 @@ import { weekRangeLabel } from '@/lib/constants';
 
 export const GROUPS = { ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
 
+// Tek tip bölüm/sekme başlığı — başlık (+ opsiyonel sayı), opsiyonel ikon + alt
+// başlık, sağda opsiyonel aksiyonlar (children). Panel başlıkları bunu kullanır
+// (eski ad-hoc flex+h3 blokları yerine; .section-header sınıfını kullanır).
+export function SectionHeader({ title, count, subtitle, icon: Icon, children }) {
+  return (
+    <div className="section-header flex-wrap gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        {Icon && (
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 15%, transparent)' }}>
+            <Icon size={20} style={{ color: 'var(--brand,#6366f1)' }} />
+          </div>
+        )}
+        <div className="min-w-0">
+          <h3 className="text-heading truncate">{title}{count != null ? ` (${count})` : ''}</h3>
+          {subtitle && <p className="text-body-sm mt-0.5">{subtitle}</p>}
+        </div>
+      </div>
+      {children && <div className="flex gap-2 items-center shrink-0">{children}</div>}
+    </div>
+  );
+}
+
 // Ortak API fetcher — JSON gönderir, hata mesajını fırlatır.
 export async function api(path, opts = {}) {
   const res = await fetch(path, {
