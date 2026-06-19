@@ -1,12 +1,10 @@
 'use client';
 
-// Müdür ayarlar modalı (isim + ders saatleri) ve içindeki bölümler:
-// bildirim testi, denetim kayıtları (audit log), hata kayıtları (error log).
+// Müdür ayarlar modalı (isim + özelleştirme + ödeme) ve içindeki bölümler.
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Palette, Users, Compass, Plus, Trash2, Trash, KeyRound, CreditCard, Clock, Settings as SettingsIcon } from 'lucide-react';
+import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon } from 'lucide-react';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
-import { formatTurkishMobile } from '@/lib/phone';
 
 // Ayarlar bölümlerinin ortak gövdesi — hem modal hem inline kullanır.
 function SettingsBody({ current, onSave, onBranding, showToast }) {
@@ -44,15 +42,7 @@ function SettingsBody({ current, onSave, onBranding, showToast }) {
         <BrandingSection showToast={showToast} onBranding={onBranding} />
       </div>
 
-      <div className="mb-5 pb-5 border-b border-gray-100">
-        <ParentAccessSection showToast={showToast} />
-      </div>
-
-      <div className="mb-5 pb-5 border-b border-gray-100">
-        <PaymentSection showToast={showToast} />
-      </div>
-
-      <AuditLogSection showToast={showToast} />
+      <PaymentSection showToast={showToast} />
     </>
   );
 }
@@ -77,7 +67,7 @@ export function DirectorSettingsInline({ current, onSave, onBranding, showToast 
         </div>
         <div>
           <h2 className="text-lg" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Ayarlar</h2>
-          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Kurum, veli erişimi, ödeme ve sistem kayıtları</p>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Kurum bilgisi, özelleştirme ve ödeme ayarları</p>
         </div>
       </div>
       <SettingsBody current={current} onSave={onSave} onBranding={onBranding} showToast={showToast} />
@@ -308,7 +298,7 @@ function BrandingSection({ showToast, onBranding }) {
   return (
     <div>
       <h4 className="text-label mb-2 flex items-center gap-1.5">
-        <Palette size={13} className="text-indigo-500" /> Kurum Markası
+        <Palette size={13} className="text-indigo-500" /> Özelleştirme
       </h4>
       {!loaded ? (
         <div className="text-center py-6 text-caption">Yükleniyor...</div>
@@ -356,89 +346,6 @@ function BrandingSection({ showToast, onBranding }) {
   );
 }
 
-// ─── VELİ ERİŞİMİ ───────────────────────────────────────────────────────────────
-function ParentAccessSection({ showToast }) {
-  const [open, setOpen] = useState(false);
-  const [parents, setParents] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-
-  const load = async () => {
-    setLoading(true);
-    try { const d = await api('/api/parents'); setParents(d.parents || []); }
-    catch (e) { showToast(e.message, 'error'); setParents([]); }
-    finally { setLoading(false); }
-  };
-
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    if (next && parents === null) load();
-  };
-
-  const sync = async () => {
-    setSyncing(true);
-    try {
-      const r = await api('/api/parents', { method: 'POST', body: JSON.stringify({ action: 'sync' }) });
-      showToast(`Veli erişimi güncellendi: ${r.created} yeni, ${r.updated} mevcut${r.removed ? `, ${r.removed} kaldırıldı` : ''} · ${r.totalParents} veli / ${r.totalChildren} öğrenci${r.studentsWithoutPhone ? ` (${r.studentsWithoutPhone} öğrencinin veli telefonu yok)` : ''}`);
-      await load();
-    } catch (e) { showToast(e.message, 'error'); }
-    finally { setSyncing(false); }
-  };
-
-  const reset = async (phone) => {
-    try {
-      await api('/api/parents', { method: 'POST', body: JSON.stringify({ action: 'reset', phone }) });
-      showToast('Veli şifresi sıfırlandı (telefon = geçici şifre)');
-      await load();
-    } catch (e) { showToast(e.message, 'error'); }
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between">
-        <h4 className="text-label flex items-center gap-1.5">
-          <Users size={13} className="text-pink-500" /> Veli Erişimi
-        </h4>
-        <button onClick={toggle} className="btn-ghost !px-3 !py-1.5 text-xs">{open ? 'Gizle' : 'Göster'}</button>
-      </div>
-
-      {open && (
-        <div className="mt-3">
-          <p className="text-body-sm mb-3">
-            Veliler, öğrenci kaydındaki <b>veli telefonu</b> ile giriş yapar. İlk şifre = telefonun kendisi; veli ilk girişte kendi şifresini belirler. Aynı telefona bağlı kardeşler tek girişte görünür. Öğrenci ekledikten sonra tekrar senkronize et.
-          </p>
-          <button onClick={sync} disabled={syncing} className="btn-primary !px-4 !py-2 text-sm mb-3">
-            {syncing ? 'Senkronize ediliyor…' : 'Veli erişimini senkronize et'}
-          </button>
-
-          {loading ? (
-            <div className="text-center py-4 text-caption">Yükleniyor...</div>
-          ) : !parents || parents.length === 0 ? (
-            <div className="text-center py-4 text-caption">Henüz veli hesabı yok — yukarıdaki düğmeyle oluştur.</div>
-          ) : (
-            <div className="space-y-1.5 max-h-72 overflow-y-auto">
-              {parents.map((p) => (
-                <div key={p.phone} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
-                  <div className="min-w-0">
-                    <div className="text-xs font-600 flex items-center gap-1.5" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {formatTurkishMobile(p.phone)}
-                      {p.mustChangePassword && <span className="badge badge-warning text-[9px]">ilk giriş bekliyor</span>}
-                    </div>
-                    <div className="text-caption truncate">{p.childrenNames.join(', ')}</div>
-                  </div>
-                  <button onClick={() => reset(p.phone)} className="btn-ghost !px-2.5 !py-1.5 text-[11px] shrink-0">Şifre sıfırla</button>
-                </div>
-              ))}
-            </div>
-          )}
-          <p className="text-caption mt-2">{parents?.length ? `${parents.length} veli hesabı` : ''}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── BİLDİRİM TESTİ ─────────────────────────────────────────────────────────────
 function PushTestSection({ showToast }) {
   const [sending, setSending] = useState(false);
@@ -460,91 +367,6 @@ function PushTestSection({ showToast }) {
       <button onClick={sendTest} disabled={sending} className="btn-ghost !px-4 !py-2 text-sm">
         {sending ? 'Gönderiliyor…' : 'Kendime test bildirimi gönder'}
       </button>
-    </div>
-  );
-}
-
-// ─── DENETİM KAYITLARI (AUDIT LOG) ──────────────────────────────────────────────
-function AuditLogSection({ showToast }) {
-  const [open, setOpen] = useState(false);
-  const [entries, setEntries] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  const ACTION_LABELS = {
-    'student.delete': { label: 'Öğrenci silindi', color: '#dc2626' },
-    'student.bulkDelete': { label: 'Toplu öğrenci silme', color: '#dc2626' },
-    'teacher.delete': { label: 'Öğretmen silindi', color: '#dc2626' },
-    'accountant.delete': { label: 'Muhasebeci silindi', color: '#dc2626' },
-    'finance.payment': { label: 'Ödeme alındı', color: '#16a34a' },
-    'finance.paymentDelete': { label: 'Ödeme silindi', color: '#ea580c' },
-    'finance.create': { label: 'Finansal kayıt', color: '#6366f1' },
-    'finance.update': { label: 'Finansal güncelleme', color: '#6366f1' },
-    'finance.delete': { label: 'Finansal kayıt silindi', color: '#dc2626' },
-    'auth.resetPassword': { label: 'Şifre sıfırlandı', color: '#d97706' },
-    'org.brandingUpdate': { label: 'Kurum markası güncellendi', color: '#6366f1' },
-    'parent.sync': { label: 'Veli erişimi senkronize edildi', color: '#db2777' },
-    'parent.reset': { label: 'Veli şifresi sıfırlandı', color: '#d97706' },
-  };
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const data = await api('/api/audit');
-      setEntries(Array.isArray(data) ? data : []);
-    } catch (e) { showToast(e.message, 'error'); setEntries([]); }
-    finally { setLoading(false); }
-  };
-
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    if (next && entries === null) load();
-  };
-
-  const fmtTime = (iso) => {
-    try {
-      const d = new Date(iso);
-      const tr = new Date(d.getTime() + 3 * 60 * 60 * 1000);
-      const pad = (n) => String(n).padStart(2, '0');
-      return `${pad(tr.getUTCDate())}.${pad(tr.getUTCMonth() + 1)}.${tr.getUTCFullYear()} ${pad(tr.getUTCHours())}:${pad(tr.getUTCMinutes())}`;
-    } catch { return iso; }
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between">
-        <h4 className="text-label">İşlem Kayıtları</h4>
-        <button onClick={toggle} className="btn-ghost !px-3 !py-1.5 text-xs flex items-center gap-1.5">
-          <Clock size={13} /> {open ? 'Gizle' : 'Göster'}
-        </button>
-      </div>
-      {open && (
-        <div className="mt-3">
-          {loading ? (
-            <div className="text-center py-6 text-caption">Yükleniyor...</div>
-          ) : !entries || entries.length === 0 ? (
-            <div className="text-center py-6 text-caption">Henüz kayıt yok</div>
-          ) : (
-            <div className="space-y-1.5 max-h-80 overflow-y-auto">
-              {entries.map((e, i) => {
-                const meta = ACTION_LABELS[e.action] || { label: e.action, color: '#6b7280' };
-                return (
-                  <div key={i} className="flex items-start gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">
-                    <span className="shrink-0 w-1.5 h-1.5 rounded-full mt-1.5" style={{ background: meta.color }} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs" style={{ color: 'var(--text-primary)' }}>{e.detail || meta.label}</div>
-                      <div className="text-caption mt-0.5">
-                        {fmtTime(e.ts)} · {e.actorName} ({e.actorRole === 'director' ? 'Müdür' : e.actorRole === 'accountant' ? 'Muhasebeci' : e.actorRole})
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <p className="text-caption mt-2">Son 500 kayıt gösterilir · kayıtlar 90 gün saklanır</p>
-        </div>
-      )}
     </div>
   );
 }

@@ -11,10 +11,27 @@ import {
   CalendarClock, Users, Sparkles, ClipboardCheck, LineChart, UsersRound,
   Wallet, BookOpen, Megaphone, ArrowRight, X, LogIn, ShieldCheck, Zap, Heart,
   Building2, GraduationCap, HeartHandshake, User, Quote, Receipt, ChevronDown,
-  Send, CheckCircle2,
+  Send, CheckCircle2, Moon, Sun,
 } from 'lucide-react';
 import Logo from './Logo';
+import { useDarkMode } from './ThemeToggle';
 import { formatCode, normalizeCode } from '@/lib/orgcode';
+
+// Landing üst barında tema değiştirici (uygulama içiyle aynı mekanizma: useDarkMode).
+function DarkToggle() {
+  const { dark, toggle } = useDarkMode();
+  return (
+    <button
+      onClick={toggle}
+      aria-label={dark ? 'Aydınlık temaya geç' : 'Karanlık temaya geç'}
+      title={dark ? 'Aydınlık temaya geç' : 'Karanlık temaya geç'}
+      className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--bg-muted)]"
+      style={{ border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}
+    >
+      {dark ? <Sun size={16} /> : <Moon size={16} />}
+    </button>
+  );
+}
 
 const FEATURES = [
   { icon: CalendarClock, title: 'Etüt & Rezervasyon', desc: 'Öğrenciler ders bazlı etüt seçer, slotlar otomatik dolar; haftalık takip tek ekranda.' },
@@ -83,9 +100,12 @@ export default function Landing() {
             <a href="#sss" className="hover:text-[var(--text-primary)] transition-colors">SSS</a>
             <a href="#iletisim" className="hover:text-[var(--text-primary)] transition-colors">İletişim</a>
           </nav>
-          <button onClick={() => setModalOpen(true)} className="btn-primary !px-5 !py-2 flex items-center gap-2 text-sm">
-            <LogIn size={15} /> Giriş Yap
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <DarkToggle />
+            <button onClick={() => setModalOpen(true)} className="btn-primary !px-5 !py-2 flex items-center gap-2 text-sm">
+              <LogIn size={15} /> Giriş Yap
+            </button>
+          </div>
         </div>
       </header>
 
