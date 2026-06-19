@@ -5,6 +5,7 @@
 // Mutasyonlar (POST/PATCH/DELETE) ham fetch ile kalır, sonra ilgili anahtar mutate() ile tazelenir.
 
 import { SWRConfig } from 'swr';
+import { ConfirmProvider } from './ConfirmProvider';
 
 // Ortak fetcher — JSON döner, hata durumunda status + body taşıyan Error fırlatır.
 // (Bileşenler error.status / error.info ile ayrım yapabilir.)
@@ -32,7 +33,7 @@ export default function Providers({ children }) {
         shouldRetryOnError: false,    // hatada otomatik tekrar deneme (yetki/4xx için gürültü olmasın)
       }}
     >
-      {children}
+      <ConfirmProvider>{children}</ConfirmProvider>
     </SWRConfig>
   );
 }

@@ -21,6 +21,7 @@ import { useUrlTab } from './useUrlTab';
 import { useUrlParam } from './useUrlParam';
 import LoadingBox, { SkeletonList } from './Loading';
 import EmptyState from './EmptyState';
+import { useConfirm } from './ConfirmProvider';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementSender } from './announcements/Announcements';
 import { TakvimManager } from './etkinlik/Takvim';
@@ -89,6 +90,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [pendingGuidance, setPendingGuidance] = useState({});
 
   const { slotTimes } = useSlotTimes();
+  const confirm = useConfirm();
 
   const loadPendingGuidance = useCallback(async () => {
     try {
@@ -210,7 +212,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                     <Edit3 size={14} /> Düzenle
                   </button>
                   <button className="btn-ghost btn-ghost-danger !px-3 !py-2 text-sm flex items-center gap-1.5" onClick={async () => {
-                    if (!confirm(`${t.name} silinsin mi?`)) return;
+                    if (!(await confirm(`${t.name} silinsin mi?`))) return;
                     try { await api('/api/teachers',{method:'DELETE',body:JSON.stringify({id:t.id})}); showToast('Öğretmen silindi'); setExpandedTeacherId(null); loadAll(weekKey); } catch(err){showToast(err.message,'error');}
                   }}>
                     <Trash2 size={14} /> Sil
@@ -423,7 +425,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           onAddCounselor={() => setShowCounselorForm(true)}
           onEditStudent={s => { setEditStudent(s); setShowStudentForm(true); }}
           onDeleteStudent={async s => {
-            if (!confirm(`${s.name} silinsin mi?`)) return;
+            if (!(await confirm(`${s.name} silinsin mi?`))) return;
             try { await api('/api/students',{method:'DELETE',body:JSON.stringify({id:s.id})}); showToast('Öğrenci silindi'); loadAll(weekKey); } catch(err){showToast(err.message,'error');}
           }}
           onCancelBooking={async ({ teacherId, day, slotId }) => {
