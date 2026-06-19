@@ -209,7 +209,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                   <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5" onClick={() => { setEditTeacher(t); setShowTeacherForm(true); }}>
                     <Edit3 size={14} /> Düzenle
                   </button>
-                  <button className="btn-ghost !px-3 !py-2 text-sm text-red-500 hover:bg-red-50 flex items-center gap-1.5" onClick={async () => {
+                  <button className="btn-ghost btn-ghost-danger !px-3 !py-2 text-sm flex items-center gap-1.5" onClick={async () => {
                     if (!confirm(`${t.name} silinsin mi?`)) return;
                     try { await api('/api/teachers',{method:'DELETE',body:JSON.stringify({id:t.id})}); showToast('Öğretmen silindi'); setExpandedTeacherId(null); loadAll(weekKey); } catch(err){showToast(err.message,'error');}
                   }}>
@@ -226,7 +226,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                       : <User size={24} className="text-gray-400" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-700 text-base" style={{ fontWeight:700 }}>{t.name}</h3>
+                    <h3 className="text-subheading">{t.name}</h3>
                     <div className="text-caption">{(t.branches||[]).join(', ')}</div>
                     <div className="flex gap-1 mt-1 flex-wrap">
                       {(t.allowedGroups||[]).map(g => <span key={g} className="badge badge-info">{GROUPS[g]}</span>)}
@@ -274,9 +274,9 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                           return items;
                         })()}
                         listColorMap={{
-                          student: { bg:'bg-indigo-50', border:'border-indigo-100', day:'text-indigo-700', time:'text-indigo-400', div:'bg-indigo-200', badge:'bg-indigo-100 text-indigo-500', label:'Öğrenci' },
-                          teacher: { bg:'bg-emerald-50', border:'border-emerald-100', day:'text-emerald-700', time:'text-emerald-400', div:'bg-emerald-200', badge:'bg-emerald-100 text-emerald-600', label:'Öğretmen' },
-                          director: { bg:'bg-amber-50', border:'border-amber-100', day:'text-amber-700', time:'text-amber-400', div:'bg-amber-200', badge:'bg-amber-100 text-amber-600', label:'Müdür' },
+                          student:  { badge: 'tag-student',  label: 'Öğrenci' },
+                          teacher:  { badge: 'tag-teacher',  label: 'Öğretmen' },
+                          director: { badge: 'tag-director', label: 'Müdür' },
                         }}
                         onCancel={item => handleCancel({ teacherId: t.id, day: item.dayIndex, slotId: item.slotId })}
                         canCancelAll
@@ -333,7 +333,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
         return (
           <div>
             <div className="flex items-center justify-between mb-4 gap-2">
-              <h3 className="font-700 text-lg truncate min-w-0" style={{ fontWeight:700 }}>Öğretmen ({teachers.length})</h3>
+              <h3 className="text-heading truncate min-w-0">Öğretmen ({teachers.length})</h3>
               <div className="flex gap-2 items-center shrink-0">
                 <div className="pill-tabs shrink-0" role="group" aria-label="Görünüm modu" style={{ width:'fit-content' }}>
                   <button
@@ -376,7 +376,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                         : <User size={30} className="text-gray-400" />}
                     </div>
                     <div className="min-w-0 w-full">
-                      <div className="font-600 truncate" style={{ fontWeight:600 }}>{t.name}</div>
+                      <div className="font-semibold truncate">{t.name}</div>
                       <div className="text-caption truncate">{(t.branches||[]).join(', ')}</div>
                     </div>
                     <div className="flex gap-1 flex-wrap justify-center">
@@ -397,7 +397,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                           : <User size={22} className="text-gray-400" />}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="font-600" style={{ fontWeight:600 }}>{t.name}</div>
+                        <div className="font-semibold">{t.name}</div>
                         <div className="text-caption">{(t.branches||[]).join(', ')}</div>
                         <div className="flex gap-1 mt-1 flex-wrap">
                           {(t.allowedGroups||[]).map(g => <span key={g} className="badge badge-info">{GROUPS[g]}</span>)}
@@ -447,7 +447,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       {tab === 'veliler' && (
         <div>
           <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-            <h3 className="font-700 text-lg" style={{ fontWeight:700 }}>Veli ({students.length})</h3>
+            <h3 className="text-heading">Veli ({students.length})</h3>
           </div>
           <VeliPanel students={students} classes={classes} showToast={showToast} onChanged={() => loadAll(weekKey)} />
         </div>

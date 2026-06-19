@@ -758,10 +758,11 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
     } catch (err) { showToast(err.message, 'error'); }
   };
 
+  // Yalnız badge + label render ediliyor (TeacherBookingsList); tema-uyumlu pill sınıfları.
   const listColorMap = {
-    student: { bg: 'bg-indigo-50', border: 'border-indigo-100', day: 'text-indigo-700', time: 'text-indigo-400', div: 'bg-indigo-200', badge: 'bg-indigo-100 text-indigo-500', label: 'Öğrenci' },
-    teacher: { bg: 'bg-emerald-50', border: 'border-emerald-100', day: 'text-emerald-700', time: 'text-emerald-400', div: 'bg-emerald-200', badge: 'bg-emerald-100 text-emerald-600', label: 'Öğretmen' },
-    director: { bg: 'bg-amber-50', border: 'border-amber-100', day: 'text-amber-700', time: 'text-amber-400', div: 'bg-amber-200', badge: 'bg-amber-100 text-amber-600', label: 'Müdür' },
+    student:  { badge: 'tag-student',  label: 'Öğrenci' },
+    teacher:  { badge: 'tag-teacher',  label: 'Öğretmen' },
+    director: { badge: 'tag-director', label: 'Müdür' },
   };
 
   const bookedList = useMemo(() => {
