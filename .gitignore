@@ -31,3 +31,8 @@ scratch/
 
 # Geçici çalışma dizini (Redis dökümleri, tatbikat dosyaları — GERÇEK veri içerir, ASLA git'e girmesin)
 tmp/
+/test-results/
+/playwright-report/
+/e2e/shots/
+/.playwright/
+node_modules/.cache/ms-playwright
