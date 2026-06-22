@@ -277,6 +277,9 @@ model BehaviorEntry {
   behaviorId String
   points     Int
   reason     String?
+  note       String?
+  byName     String?
+  byRole     String?
   by         String?
   createdAt  DateTime @default(now())
 }

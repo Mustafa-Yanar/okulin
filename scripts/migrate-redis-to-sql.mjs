@@ -154,7 +154,7 @@ async function main() {
     const beh = await prisma.behavior.create({ data: { orgSlug: ORG, branch: BRANCH, studentId: sid, total: b.total ?? 0 } });
     behN++;
     for (const e of (b.entries || [])) {
-      await prisma.behaviorEntry.create({ data: { behaviorId: beh.id, points: e.points ?? 0, reason: e.reason || null, by: e.by || null, createdAt: e.createdAt ? new Date(e.createdAt) : new Date() } });
+      await prisma.behaviorEntry.create({ data: { behaviorId: beh.id, points: e.points ?? 0, reason: e.reason || null, note: e.note || null, byName: e.byName || null, byRole: e.byRole || null, by: e.by || null, createdAt: e.at ? new Date(e.at) : (e.createdAt ? new Date(e.createdAt) : new Date()) } });
       behEntryN++;
     }
   }
