@@ -1,0 +1,438 @@
+// okulin — PostgreSQL şeması (Redis KV göçü). Faz 0 taslağından onaylandı (2026-06-22).
+// Çok-kiracılık: satır-düzeyi (orgSlug + branch kolonları, tenant-scoped client zorunlu kılar).
+// Kimlik: surrogate cuid + legacyId (eski Redis id eşlemesi). Detay: docs/sql-sema-taslagi.prisma.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════ GLOBAL (tenant'sız) ═══════════════════════════════
+
+model Org {
+  slug       String   @id
+  name       String
+  active     Boolean  @default(true)
+  type       String   @default("single")
+  code       String?  @unique
+  sektor     String   @default("dershane")
+  mulkiyet   String   @default("ozel")
+  kademeler  String[] @default([])
+  shortName  String?
+  logoUrl    String?
+  themeColor String?
+  createdAt  DateTime @default(now())
+}
+
+model SuperAdmin {
+  id           String @id @default(cuid())
+  username     String @unique
+  passwordHash String
+}
+
+model PayOrder {
+  oid       String   @id
+  orgSlug   String
+  branch    String   @default("main")
+  studentId String
+  amount    Int
+  status    String   @default("pending")
+  data      Json?
+  createdAt DateTime @default(now())
+  @@index([orgSlug, branch])
+}
+
+// ═══════════════════════ TENANT-KAPSAMLI ══════════════════════════════════
+
+model Director {
+  id           String @id @default(cuid())
+  orgSlug      String
+  branch       String @default("main")
+  username     String
+  passwordHash String
+  name         String
+  @@unique([orgSlug, branch])
+}
+
+model Counselor {
+  id                 String  @id @default(cuid())
+  orgSlug            String
+  branch             String  @default("main")
+  legacyId           String
+  name               String
+  username           String?
+  passwordHash       String
+  phone              String?
+  mustChangePassword Boolean @default(true)
+  @@unique([orgSlug, branch, legacyId])
+}
+
+model Teacher {
+  id                 String          @id @default(cuid())
+  orgSlug            String
+  branch             String          @default("main")
+  legacyId           String
+  name               String
+  username           String
+  passwordHash       String
+  branches           String[]        @default([])
+  allowedGroups      String[]        @default([])
+  offDays            Int[]           @default([])
+  photoUrl           String?
+  phone              String?
+  mustChangePassword Boolean         @default(true)
+  presets            TeacherPreset[]
+  etutTemplates      EtutTemplate[]
+  slotBookings       SlotBooking[]
+  @@unique([orgSlug, branch, legacyId])
+  @@index([orgSlug, branch])
+}
+
+model TeacherPreset {
+  id        String  @id @default(cuid())
+  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  teacherId String
+  classId   String
+  course    String
+}
+
+model Student {
+  id                 String    @id @default(cuid())
+  orgSlug            String
+  branch             String    @default("main")
+  legacyId           String
+  name               String
+  username           String
+  passwordHash       String
+  class              Class?    @relation(fields: [classId], references: [id])
+  classId            String?
+  group              String
+  phone              String?
+  birthDate          String?
+  mustChangePassword Boolean   @default(false)
+  parentName         String?
+  parentPhone        String?
+  parentRelation     String?
+  parentNote         String?
+  parent2Name        String?
+  parent2Phone       String?
+  parent2Relation    String?
+  finance            Finance?
+  behavior           Behavior?
+  @@unique([orgSlug, branch, legacyId])
+  @@index([orgSlug, branch])
+  @@index([classId])
+}
+
+model Class {
+  id        String    @id @default(cuid())
+  orgSlug   String
+  branch    String    @default("main")
+  legacyId  String
+  ad        String
+  group     String
+  kademe    String
+  duzey     String?
+  dal       String?
+  dersler   String[]  @default([])
+  seeded    Boolean   @default(true)
+  students  Student[]
+  @@unique([orgSlug, branch, legacyId])
+  @@index([orgSlug, branch])
+}
+
+model Course {
+  id      String  @id @default(cuid())
+  orgSlug String
+  branch  String  @default("main")
+  key     String
+  ad      String
+  core    Boolean @default(true)
+  family  String?
+  active  Boolean @default(true)
+  @@unique([orgSlug, branch, key])
+  @@index([orgSlug, branch])
+}
+
+model EtutTemplate {
+  id        String  @id @default(cuid())
+  orgSlug   String
+  branch    String  @default("main")
+  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  teacherId String
+  dayIndex  Int
+  start     String
+  end       String
+  aktif     Boolean @default(true)
+  studentId String?
+  bookedBy  String?
+  @@index([orgSlug, branch])
+}
+
+model SlotBooking {
+  id          String  @id @default(cuid())
+  orgSlug     String
+  branch      String  @default("main")
+  weekKey     String
+  teacher     Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  teacherId   String
+  dayIndex    Int
+  slotId      String
+  booked      Boolean @default(false)
+  disabled    Boolean @default(false)
+  fixed       Boolean @default(false)
+  studentId   String?
+  studentName String?
+  studentCls  String?
+  dersBranch  String?
+  bookedBy    String?
+  @@unique([orgSlug, branch, weekKey, teacherId, dayIndex, slotId])
+  @@index([orgSlug, branch, weekKey])
+}
+
+model TenantConfig {
+  orgSlug         String
+  branch          String  @default("main")
+  slotTimes       Json?
+  currentWeek     String?
+  programTemplate Json?
+  @@id([orgSlug, branch])
+}
+
+model Finance {
+  id               String        @id @default(cuid())
+  orgSlug          String
+  branch           String        @default("main")
+  student          Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId        String        @unique
+  registrationDate String?
+  totalFee         Float
+  discount         Float         @default(0)
+  netFee           Float
+  paymentPlan      String
+  installments     Installment[]
+  @@index([orgSlug, branch])
+}
+
+model Installment {
+  id         String  @id @default(cuid())
+  finance    Finance @relation(fields: [financeId], references: [id], onDelete: Cascade)
+  financeId  String
+  idx        Int
+  dueDate    String
+  amount     Float
+  paid       Boolean @default(false)
+  paidDate   String?
+  paidAmount Float?
+  method     String?
+  receiptNo  String?
+}
+
+model Expense {
+  id       String @id @default(cuid())
+  orgSlug  String
+  branch   String @default("main")
+  legacyId String
+  type     String
+  amount   Float
+  date     String
+  data     Json?
+  @@unique([orgSlug, branch, legacyId])
+  @@index([orgSlug, branch])
+}
+
+model Attendance {
+  id      String @id @default(cuid())
+  orgSlug String
+  branch  String @default("main")
+  date    String
+  classId String
+  records Json
+  @@unique([orgSlug, branch, date, classId])
+  @@index([orgSlug, branch])
+}
+
+model Behavior {
+  id        String          @id @default(cuid())
+  orgSlug   String
+  branch    String          @default("main")
+  student   Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  studentId String          @unique
+  total     Int             @default(0)
+  entries   BehaviorEntry[]
+  @@index([orgSlug, branch])
+}
+
+model BehaviorEntry {
+  id         String   @id @default(cuid())
+  behavior   Behavior @relation(fields: [behaviorId], references: [id], onDelete: Cascade)
+  behaviorId String
+  points     Int
+  reason     String?
+  by         String?
+  createdAt  DateTime @default(now())
+}
+
+model Exam {
+  id             String    @id @default(cuid())
+  orgSlug        String
+  branch         String    @default("main")
+  legacyId       String
+  name           String
+  examType       String
+  category       String?
+  date           String?
+  kitapcikSayisi Int       @default(1)
+  subjectKeys    String[]  @default([])
+  answerKey      Json?
+  rows           ExamRow[]
+  createdAt      DateTime  @default(now())
+  @@unique([orgSlug, branch, legacyId])
+  @@index([orgSlug, branch])
+}
+
+model ExamRow {
+  id        String  @id @default(cuid())
+  exam      Exam    @relation(fields: [examId], references: [id], onDelete: Cascade)
+  examId    String
+  studentId String?
+  data      Json
+}
+
+// ── İkincil modüller (alanlar göç adımında netleşir; uzun kuyruk Json'da) ──
+
+model Odev {
+  id       String @id @default(cuid())
+  orgSlug  String
+  branch   String @default("main")
+  legacyId String
+  data     Json
+  @@unique([orgSlug, branch, legacyId])
+  @@index([orgSlug, branch])
+}
+
+model Hedef {
+  id        String @id @default(cuid())
+  orgSlug   String
+  branch    String @default("main")
+  studentId String
+  week      String
+  data      Json
+  @@unique([orgSlug, branch, studentId, week])
+  @@index([orgSlug, branch])
+}
+
+model Etkinlik {
+  id        String  @id @default(cuid())
+  orgSlug   String
+  branch    String  @default("main")
+  legacyId  String
+  title     String
+  type      String
+  startDate String
+  endDate   String?
+  data      Json
+  @@unique([orgSlug, branch, legacyId])
+  @@index([orgSlug, branch])
+}
+
+model Form {
+  id        String         @id @default(cuid())
+  orgSlug   String
+  branch    String         @default("main")
+  legacyId  String
+  data      Json
+  responses FormResponse[]
+  @@unique([orgSlug, branch, legacyId])
+  @@index([orgSlug, branch])
+}
+
+model FormResponse {
+  id         String   @id @default(cuid())
+  form       Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  formId     String
+  respondent String?
+  data       Json
+  createdAt  DateTime @default(now())
+}
+
+model Lead {
+  id       String @id @default(cuid())
+  orgSlug  String
+  branch   String @default("main")
+  legacyId String
+  name     String
+  stage    String
+  data     Json
+  @@unique([orgSlug, branch, legacyId])
+  @@index([orgSlug, branch])
+}
+
+model Announcement {
+  id        String   @id @default(cuid())
+  orgSlug   String
+  branch    String   @default("main")
+  legacyId  String
+  data      Json
+  createdAt DateTime @default(now())
+  @@unique([orgSlug, branch, legacyId])
+  @@index([orgSlug, branch])
+}
+
+model Resource {
+  id       String  @id @default(cuid())
+  orgSlug  String
+  branch   String  @default("main")
+  legacyId String
+  title    String
+  url      String?
+  data     Json
+  @@unique([orgSlug, branch, legacyId])
+  @@index([orgSlug, branch])
+}
+
+model Guidance {
+  id        String @id @default(cuid())
+  orgSlug   String
+  branch    String @default("main")
+  studentId String
+  data      Json
+  @@index([orgSlug, branch])
+  @@index([studentId])
+}
+
+model AuditLog {
+  id      String   @id @default(cuid())
+  orgSlug String
+  branch  String   @default("main")
+  at      DateTime @default(now())
+  actor   String?
+  action  String
+  data    Json?
+  @@index([orgSlug, branch])
+}
+
+model ErrLog {
+  id      String   @id @default(cuid())
+  orgSlug String
+  branch  String   @default("main")
+  at      DateTime @default(now())
+  message String
+  data    Json?
+  @@index([orgSlug, branch])
+}
+
+model PushSub {
+  id       String @id @default(cuid())
+  orgSlug  String
+  branch   String @default("main")
+  role     String
+  userId   String
+  endpoint String @unique
+  keys     Json
+  @@index([orgSlug, branch])
+}
