@@ -197,6 +197,17 @@ async function main() {
   }
   rec('Lead', leadIds.length, leadN);
 
+  // ── Etkinlik (etkinlikler set + etkinlik:<id>) — data = tam kayıt ──
+  const etkIds = await smem('etkinlikler');
+  let etkN = 0;
+  for (const id of etkIds) {
+    const e = await jget('etkinlik:' + id);
+    if (!e) continue;
+    await prisma.etkinlik.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: e.id, title: e.title || '', type: e.type || 'diger', startDate: e.startDate || '', endDate: e.endDate || null, data: e } });
+    etkN++;
+  }
+  rec('Etkinlik', etkIds.length, etkN);
+
   // ── Exam (deneme:exam:<id>) ──
   const examKeys = (await scanAll('deneme:exam:*')).filter(k => !strip(k).includes(':exams:'));
   let examN = 0, rowN = 0;
