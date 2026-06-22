@@ -3,6 +3,8 @@ import { del } from '@vercel/blob';
 import { tenantRedis } from '@/lib/tenant';
 import { getSession } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 // LMS Lite — ders kaynakları kütüphanesi (PDF föy / video / web linki).
 // Kapsam: kuruma scope'lu (tenantRedis). Sınıf bazlı hedefleme.
@@ -25,6 +27,18 @@ const CreateSchema = z.object({
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz' }, { status: 401 });
+
+  if (useSql()) {
+    const rows = await tdb().resource.findMany();
+    let resources = rows.map(r => r.data);
+    if (session.role === 'student') {
+      resources = resources.filter(r => Array.isArray(r.classes) && r.classes.includes(session.cls));
+    } else if ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'teacher') {
+      resources = [];
+    }
+    resources.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return NextResponse.json({ resources });
+  }
 
   const redis = tenantRedis();
   const ids = await redis.smembers('resources');
@@ -71,8 +85,12 @@ export async function POST(req) {
     uploadedByRole: session.role,
     createdAt: new Date().toISOString(),
   };
-  await redis.set(`resource:${id}`, rec);
-  await redis.sadd('resources', id);
+  if (useSql()) {
+    await tdb().resource.create({ data: { legacyId: id, title, url, data: rec } });
+  } else {
+    await redis.set(`resource:${id}`, rec);
+    await redis.sadd('resources', id);
+  }
   return NextResponse.json({ ok: true, resource: rec });
 }
 
@@ -85,6 +103,18 @@ export async function DELETE(req) {
 
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
+
+  if (useSql()) {
+    const existing = await tdb().resource.findFirst({ where: { legacyId: id } });
+    if (!existing) return NextResponse.json({ error: 'Kaynak bulunamadı' }, { status: 404 });
+    const rec = existing.data;
+    if (session.role === 'teacher' && rec.uploadedBy !== session.id) {
+      return NextResponse.json({ error: 'Yalnız kendi eklediğiniz kaynağı silebilirsiniz' }, { status: 403 });
+    }
+    if (rec.type === 'pdf' && rec.url) { try { await del(rec.url); } catch { /* yoksay */ } }
+    await tdb().resource.delete({ where: { id: existing.id } });
+    return NextResponse.json({ ok: true });
+  }
 
   const redis = tenantRedis();
   const rec = await redis.get(`resource:${id}`);

@@ -208,6 +208,17 @@ async function main() {
   }
   rec('Etkinlik', etkIds.length, etkN);
 
+  // ── Resource (resources set + resource:<id>) — LMS kaynak, data = tam kayıt ──
+  const resIds = await smem('resources');
+  let resN = 0;
+  for (const id of resIds) {
+    const r = await jget('resource:' + id);
+    if (!r) continue;
+    await prisma.resource.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: r.id, title: r.title || '', url: r.url || null, data: r } });
+    resN++;
+  }
+  rec('Resource', resIds.length, resN);
+
   // ── Exam (deneme:exam:<id>) ──
   const examKeys = (await scanAll('deneme:exam:*')).filter(k => !strip(k).includes(':exams:'));
   let examN = 0, rowN = 0;
