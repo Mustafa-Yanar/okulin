@@ -7,8 +7,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_POSTGRES_PRISMA_URL")    // pooled — runtime sorguları
+  directUrl = env("DATABASE_POSTGRES_URL_NON_POOLING") // direct — migration / db push
 }
 
 // ═══════════════════════ GLOBAL (tenant'sız) ═══════════════════════════════
