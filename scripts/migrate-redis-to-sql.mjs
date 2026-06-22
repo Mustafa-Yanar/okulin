@@ -236,6 +236,23 @@ async function main() {
   }
   rec('Odev', odevIds.length, odevN);
 
+  // ── Form (+ yanıtlar) — form:<id> + form:<id>:yanit:<respId>, FormResponse normalize ──
+  const formIds = await smem('formlar');
+  let formN = 0, formRespN = 0;
+  for (const id of formIds) {
+    const f = await jget('form:' + id);
+    if (!f) continue;
+    const formRow = await prisma.form.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: f.id, data: f } });
+    formN++;
+    const respIds = await smem(`form:${id}:yanitlayanlar`);
+    for (const rid of (respIds || [])) {
+      const resp = await jget(`form:${id}:yanit:${rid}`);
+      if (resp) { await prisma.formResponse.create({ data: { formId: formRow.id, respondent: rid, data: resp } }); formRespN++; }
+    }
+  }
+  rec('Form', formIds.length, formN);
+  if (formRespN) rec('FormResponse', formRespN, formRespN);
+
   // ── Exam (deneme:exam:<id>) ──
   const examKeys = (await scanAll('deneme:exam:*')).filter(k => !strip(k).includes(':exams:'));
   let examN = 0, rowN = 0;

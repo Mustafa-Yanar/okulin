@@ -4,6 +4,8 @@ import { getSession, isManager } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 // Form / Anket — müdür/rehber form oluşturur, hedef rollere (öğrenci/veli/öğretmen) dağıtır,
 // yanıtları toplar ve soru bazında özet görür. Soru tipleri: text/single/multi/rating.
@@ -82,15 +84,23 @@ async function resolveAudience(audience) {
   const out = [];
 
   if (roles.includes('student')) {
-    const ids = await redis.smembers('students');
-    if (ids?.length) {
-      const pipe = redis.pipeline();
-      ids.forEach(id => pipe.get(`student:${id}`));
-      let recs = (await pipe.exec()).filter(Boolean);
+    if (useSql()) {
+      const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
+      let recs = rows.map(s => ({ id: s.legacyId, name: s.name, cls: s.class?.legacyId || '' }));
       if (cls.length) recs = recs.filter(s => cls.includes(s.cls));
       recs.forEach(s => out.push({ role: 'student', id: s.id, name: s.name }));
+    } else {
+      const ids = await redis.smembers('students');
+      if (ids?.length) {
+        const pipe = redis.pipeline();
+        ids.forEach(id => pipe.get(`student:${id}`));
+        let recs = (await pipe.exec()).filter(Boolean);
+        if (cls.length) recs = recs.filter(s => cls.includes(s.cls));
+        recs.forEach(s => out.push({ role: 'student', id: s.id, name: s.name }));
+      }
     }
   }
+  // NOT: parents henüz SQL'de YOK → her zaman Redis (parents modülü göçünde güncellenecek).
   if (roles.includes('parent')) {
     const phones = await redis.smembers('parents');
     if (phones?.length) {
@@ -102,12 +112,17 @@ async function resolveAudience(audience) {
     }
   }
   if (roles.includes('teacher')) {
-    const ids = await redis.smembers('teachers');
-    if (ids?.length) {
-      const pipe = redis.pipeline();
-      ids.forEach(id => pipe.get(`teacher:${id}`));
-      const recs = (await pipe.exec()).filter(Boolean);
-      recs.forEach(t => out.push({ role: 'teacher', id: t.id, name: t.name }));
+    if (useSql()) {
+      const rows = await tdb().teacher.findMany();
+      rows.forEach(t => out.push({ role: 'teacher', id: t.legacyId, name: t.name }));
+    } else {
+      const ids = await redis.smembers('teachers');
+      if (ids?.length) {
+        const pipe = redis.pipeline();
+        ids.forEach(id => pipe.get(`teacher:${id}`));
+        const recs = (await pipe.exec()).filter(Boolean);
+        recs.forEach(t => out.push({ role: 'teacher', id: t.id, name: t.name }));
+      }
     }
   }
   return out;
@@ -151,6 +166,37 @@ export async function GET(req) {
 
   // ── Yönetici: sonuç detayı ──
   if (detailId && isManager(session)) {
+    if (useSql()) {
+      const f = await tdb().form.findFirst({ where: { legacyId: detailId }, include: { responses: true } });
+      if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
+      const form = f.data;
+      const responses = f.responses.map(r => r.data);
+      const results = (form.questions || []).map(q => {
+        if (q.type === 'single' || q.type === 'multi') {
+          const counts = {};
+          (q.options || []).forEach(o => { counts[o] = 0; });
+          responses.forEach(r => {
+            const a = r.answers?.[q.id];
+            if (q.type === 'single') { if (a != null && counts[a] !== undefined) counts[a]++; }
+            else if (Array.isArray(a)) a.forEach(x => { if (counts[x] !== undefined) counts[x]++; });
+          });
+          return { id: q.id, label: q.label, type: q.type, counts };
+        }
+        if (q.type === 'rating') {
+          const vals = responses.map(r => r.answers?.[q.id]).filter(n => Number.isFinite(n));
+          const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+          vals.forEach(n => { dist[n] = (dist[n] || 0) + 1; });
+          const avg = vals.length ? (vals.reduce((s, n) => s + n, 0) / vals.length) : 0;
+          return { id: q.id, label: q.label, type: q.type, avg: Math.round(avg * 100) / 100, count: vals.length, dist };
+        }
+        const answers = responses
+          .map(r => ({ text: r.answers?.[q.id], name: form.anonymous ? null : (r.name || '') }))
+          .filter(x => x.text);
+        return { id: q.id, label: q.label, type: q.type, answers };
+      });
+      const eligibleCount = (await resolveAudience(form.audience || {})).length;
+      return NextResponse.json({ form, responseCount: responses.length, eligibleCount, results });
+    }
     const form = await redis.get(`form:${detailId}`);
     if (!form) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
     const respIds = await redis.smembers(`form:${detailId}:yanitlayanlar`);
@@ -191,6 +237,17 @@ export async function GET(req) {
 
   // ── Yönetici: form listesi ──
   if (isManager(session)) {
+    if (useSql()) {
+      const rows = await tdb().form.findMany({ include: { _count: { select: { responses: true } } } });
+      const list = rows.map(r => ({
+        id: r.data.id, title: r.data.title, desc: r.data.desc, audience: r.data.audience,
+        questionCount: (r.data.questions || []).length, anonymous: !!r.data.anonymous,
+        closed: !!r.data.closed, closeDate: r.data.closeDate || '', createdAt: r.data.createdAt,
+        responseCount: r._count.responses,
+      }));
+      list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      return NextResponse.json({ formlar: list });
+    }
     const forms = await loadAllForms();
     if (forms.length === 0) return NextResponse.json({ formlar: [] });
     const pipe = redis.pipeline();
@@ -208,6 +265,12 @@ export async function GET(req) {
 
   // ── Yanıtlayan: kendi cevabı (doldurma için) ──
   if (detailId) {
+    if (useSql()) {
+      const f = await tdb().form.findFirst({ where: { legacyId: detailId } });
+      if (!f || !eligible(f.data, session)) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
+      const mine = await tdb().formResponse.findFirst({ where: { formId: f.id, respondent: session.id } });
+      return NextResponse.json({ form: f.data, mine: mine?.data || null });
+    }
     const form = await redis.get(`form:${detailId}`);
     if (!form || !eligible(form, session)) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
     const mine = await redis.get(`form:${detailId}:yanit:${session.id}`);
@@ -215,6 +278,22 @@ export async function GET(req) {
   }
 
   // ── Yanıtlayan: uygun formlar + kendi durumu ──
+  if (useSql()) {
+    const rows = await tdb().form.findMany();
+    const eligForms = rows.filter(r => eligible(r.data, session));
+    if (eligForms.length === 0) return NextResponse.json({ formlar: [] });
+    const formIds = eligForms.map(r => r.id);
+    const myResp = await tdb().formResponse.findMany({ where: { formId: { in: formIds }, respondent: session.id }, select: { formId: true } });
+    const answeredSet = new Set(myResp.map(r => r.formId));
+    const list = eligForms.map(r => ({
+      id: r.data.id, title: r.data.title, desc: r.data.desc,
+      questionCount: (r.data.questions || []).length, anonymous: !!r.data.anonymous,
+      closed: !!r.data.closed, closeDate: r.data.closeDate || '', createdAt: r.data.createdAt,
+      answered: answeredSet.has(r.id),
+    }));
+    list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return NextResponse.json({ formlar: list });
+  }
   const forms = (await loadAllForms()).filter(f => eligible(f, session));
   if (forms.length === 0) return NextResponse.json({ formlar: [] });
   const pipe = redis.pipeline();
@@ -257,8 +336,12 @@ export async function POST(req) {
       createdBy: session.id, createdByName: session.name || '', createdByRole: session.role,
       createdAt: new Date().toISOString(),
     };
-    await redis.set(`form:${id}`, rec);
-    await redis.sadd('formlar', id);
+    if (useSql()) {
+      await tdb().form.create({ data: { legacyId: id, data: rec } });
+    } else {
+      await redis.set(`form:${id}`, rec);
+      await redis.sadd('formlar', id);
+    }
 
     // Hedef kitleye push (hata toleranslı)
     const targets = await resolveAudience(rec.audience);
@@ -276,6 +359,28 @@ export async function POST(req) {
 
   // ── Yanıtla (uygun rol) ──
   if (data.action === 'submit') {
+    if (useSql()) {
+      const f = await tdb().form.findFirst({ where: { legacyId: data.id } });
+      if (!f || !eligible(f.data, session)) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
+      const form = f.data;
+      if (form.closed) return NextResponse.json({ error: 'Bu form kapatıldı' }, { status: 400 });
+      if (form.closeDate && form.closeDate < new Date().toISOString().slice(0, 10)) {
+        return NextResponse.json({ error: 'Bu formun süresi doldu' }, { status: 400 });
+      }
+      const answers = cleanAnswers(form.questions || [], data.answers);
+      if (missingRequired(form.questions || [], answers)) {
+        return NextResponse.json({ error: 'Zorunlu soruları yanıtlayın' }, { status: 400 });
+      }
+      const rec = {
+        answers, role: session.role,
+        name: form.anonymous ? '' : (session.name || ''),
+        submittedAt: new Date().toISOString(),
+      };
+      const existing = await tdb().formResponse.findFirst({ where: { formId: f.id, respondent: session.id } });
+      if (existing) await tdb().formResponse.update({ where: { id: existing.id }, data: { data: rec } });
+      else await tdb().formResponse.create({ data: { formId: f.id, respondent: session.id, data: rec } });
+      return NextResponse.json({ ok: true });
+    }
     const form = await redis.get(`form:${data.id}`);
     if (!form || !eligible(form, session)) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
     if (form.closed) return NextResponse.json({ error: 'Bu form kapatıldı' }, { status: 400 });
@@ -299,6 +404,12 @@ export async function POST(req) {
   // ── Aç/kapat (müdür/rehber) ──
   if (data.action === 'close') {
     if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+    if (useSql()) {
+      const f = await tdb().form.findFirst({ where: { legacyId: data.id } });
+      if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
+      await tdb().form.update({ where: { id: f.id }, data: { data: { ...f.data, closed: data.closed } } });
+      return NextResponse.json({ ok: true, closed: data.closed });
+    }
     const form = await redis.get(`form:${data.id}`);
     if (!form) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
     await redis.set(`form:${data.id}`, { ...form, closed: data.closed });
@@ -315,6 +426,20 @@ export async function DELETE(req) {
 
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
+
+  if (useSql()) {
+    const f = await tdb().form.findFirst({ where: { legacyId: id } });
+    if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
+    await tdb().form.delete({ where: { id: f.id } }); // yanıtlar cascade ile gider
+    await logAudit({
+      ...actorFrom(session),
+      action: 'form.delete',
+      target: { type: 'form', id, name: f.data?.title || '' },
+      detail: `Form/anket silindi: "${f.data?.title || ''}"`,
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   const form = await redis.get(`form:${id}`);
   if (!form) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
 
