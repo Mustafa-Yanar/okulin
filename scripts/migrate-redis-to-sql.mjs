@@ -186,6 +186,17 @@ async function main() {
   }
   rec('Guidance', guideKeys.length, guideN);
 
+  // ── Lead (leadler set + lead:<id>) — aday öğrenci hunisi, data = tam kayıt ──
+  const leadIds = await smem('leadler');
+  let leadN = 0;
+  for (const id of leadIds) {
+    const l = await jget('lead:' + id);
+    if (!l) continue;
+    await prisma.lead.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: l.id, name: l.studentName || '', stage: l.status || 'yeni', data: l } });
+    leadN++;
+  }
+  rec('Lead', leadIds.length, leadN);
+
   // ── Exam (deneme:exam:<id>) ──
   const examKeys = (await scanAll('deneme:exam:*')).filter(k => !strip(k).includes(':exams:'));
   let examN = 0, rowN = 0;
