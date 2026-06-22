@@ -202,6 +202,7 @@ model TenantConfig {
   slotTimes       Json?
   currentWeek     String?
   programTemplate Json?
+  receiptCounter  Int     @default(0)  // makbuz no sayacı (MKB-YYYY-#####)
   @@id([orgSlug, branch])
 }
 
@@ -216,6 +217,7 @@ model Finance {
   discount         Float         @default(0)
   netFee           Float
   paymentPlan      String
+  payments         Json?         // ödeme ledger'ı [{id,date,amount,method,note,receiptNo,recordedBy}]; balance türetilir
   installments     Installment[]
   @@index([orgSlug, branch])
 }

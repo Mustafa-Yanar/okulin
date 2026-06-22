@@ -120,7 +120,7 @@ async function main() {
   for (const id of studentIds) {
     const s = await jget('student:' + id);
     if (!s) continue;
-    const row = await prisma.student.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: s.id, name: s.name, username: s.username, passwordHash: s.passwordHash, classId: classMap[s.cls] || null, group: s.group || '', phone: s.phone || null, birthDate: s.birthDate || null, mustChangePassword: s.mustChangePassword ?? false, parentName: s.parentName || null, parentPhone: s.parentPhone || null, parentRelation: s.parentRelation || null, parentNote: s.parentNote || null, parent2Name: s.parent2Name || null, parent2Phone: s.parent2Phone || null, parent2Relation: s.parent2Relation || null } });
+    const row = await prisma.student.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: s.id, name: s.name, username: s.username, passwordHash: s.passwordHash, classId: classMap[s.cls] || null, group: s.group || '', phone: s.phone || null, birthDate: s.birthDate || null, diplomaNotu: (typeof s.diplomaNotu === 'number' ? s.diplomaNotu : null), mustChangePassword: s.mustChangePassword ?? false, parentName: s.parentName || null, parentPhone: s.parentPhone || null, parentRelation: s.parentRelation || null, parentNote: s.parentNote || null, parent2Name: s.parent2Name || null, parent2Phone: s.parent2Phone || null, parent2Relation: s.parent2Relation || null } });
     studentMap[s.id] = row.id;
   }
   rec('Student', studentIds.length, Object.keys(studentMap).length);
@@ -133,7 +133,7 @@ async function main() {
     if (!f) continue;
     const sid = studentMap[f.studentId];
     if (!sid) { console.warn('  finance: öğrenci eşleşmedi, atlandı:', f.studentId); continue; }
-    const fin = await prisma.finance.create({ data: { orgSlug: ORG, branch: BRANCH, studentId: sid, registrationDate: f.registrationDate || null, totalFee: f.totalFee ?? 0, discount: f.discount ?? 0, netFee: f.netFee ?? 0, paymentPlan: f.paymentPlan || 'pesin' } });
+    const fin = await prisma.finance.create({ data: { orgSlug: ORG, branch: BRANCH, studentId: sid, registrationDate: f.registrationDate || null, totalFee: f.totalFee ?? 0, discount: f.discount ?? 0, netFee: f.netFee ?? 0, paymentPlan: f.paymentPlan || 'pesin', payments: f.payments ?? null } });
     finN++;
     for (const inst of (f.installments || [])) {
       await prisma.installment.create({ data: { financeId: fin.id, idx: inst.idx ?? 0, dueDate: inst.dueDate || '', amount: inst.amount ?? 0, paid: inst.paid ?? false, paidDate: inst.paidDate || null, paidAmount: inst.paidAmount ?? null, method: inst.method || null, receiptNo: inst.receiptNo || null } });
@@ -178,10 +178,12 @@ async function main() {
   // ── TenantConfig (slot_times + current_week) ──
   const slotTimes = await jget('slot_times');
   const currentWeek = await jget('current_week');
-  if (slotTimes || currentWeek) {
-    await prisma.tenantConfig.create({ data: { orgSlug: ORG, branch: BRANCH, slotTimes: slotTimes ?? null, currentWeek: (typeof currentWeek === 'string' ? currentWeek : null), programTemplate: null } });
+  const rcRaw = await jget('receipt_counter');
+  const receiptCounter = parseInt(rcRaw) || 0;
+  if (slotTimes || currentWeek || rcRaw != null) {
+    await prisma.tenantConfig.create({ data: { orgSlug: ORG, branch: BRANCH, slotTimes: slotTimes ?? null, currentWeek: (typeof currentWeek === 'string' ? currentWeek : null), programTemplate: null, receiptCounter } });
   }
-  rec('TenantConfig', (slotTimes || currentWeek) ? 1 : 0, (slotTimes || currentWeek) ? 1 : 0);
+  rec('TenantConfig', (slotTimes || currentWeek || rcRaw != null) ? 1 : 0, (slotTimes || currentWeek || rcRaw != null) ? 1 : 0);
 
   // ── EtutTemplate (program:<teacherId>.etutSablonlari[]) ──
   const progKeys = await scanAll('program:*');
