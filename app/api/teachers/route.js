@@ -10,6 +10,16 @@ import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
 import { parseBody, z, zName, zId, zStringArray } from '@/lib/validate';
 import { COL_COURSES, colKeyForClass, classToGroup, ALL_CLASSES } from '@/lib/constants';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
+
+// SQL TeacherPreset satırları → {cls, course} sözleşmesi (classId = legacy cls kodu).
+const presetsOut = (rows) => (rows || []).map((p) => ({ cls: p.classId, course: p.course }));
+// presets'i SQL'de değiştir (sil + yeniden oluştur). teacherId = SQL cuid.
+async function replacePresetsSql(teacherCuid, clean) {
+  await tdb().teacherPreset.deleteMany({ where: { teacherId: teacherCuid } });
+  for (const p of clean) await tdb().teacherPreset.create({ data: { teacherId: teacherCuid, classId: p.cls, course: p.course } });
+}
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -66,6 +76,15 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
 
+  if (useSql()) {
+    const rows = await tdb().teacher.findMany({ include: { presets: true } });
+    return NextResponse.json(rows.map((t) => ({
+      id: t.legacyId, name: t.name, username: t.username, branches: t.branches || [],
+      allowedGroups: t.allowedGroups || [], photoUrl: t.photoUrl || '',
+      offDays: t.offDays || [], phone: t.phone || '', presets: presetsOut(t.presets),
+    })));
+  }
+
   const ids = await redis.smembers('teachers');
   if (!ids || ids.length === 0) return NextResponse.json([]);
 
@@ -93,6 +112,20 @@ export async function POST(req) {
 
   // İsim soyisim kullanıcı adı olarak kullanılır
   const username = name;
+
+  if (useSql()) {
+    const dup = await tdb().teacher.findFirst({ where: { username } });
+    if (dup) return NextResponse.json({ error: 'Bu isimde bir öğretmen zaten kayıtlı' }, { status: 400 });
+    const normPhone = phone ? (normalizeTurkishMobile(phone) || '') : '';
+    const hash = await bcrypt.hash(initialPassword(password, normPhone), 10);
+    const legacyId = makeId();
+    await tdb().teacher.create({ data: {
+      legacyId, name, username, passwordHash: hash, branches,
+      allowedGroups: allowedGroups || [], photoUrl: photoUrl || '', phone: normPhone, mustChangePassword: true,
+    } });
+    // NOT: userIndex (SQL'de doğrudan sorgu) + initWeekForTeacher (slot göçü) bayrak-açıkta atlandı.
+    return NextResponse.json({ id: legacyId, name, username, branches, allowedGroups: allowedGroups || [], photoUrl: photoUrl || '' });
+  }
 
   // Aynı isimde öğretmen var mı kontrol et
   const teacherIds = await redis.smembers('teachers');
@@ -138,6 +171,46 @@ export async function PUT(req) {
   const parsed = await parseBody(req, TeacherUpdateSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
+
+  if (useSql()) {
+    if (body.action === 'toggle_off_day') {
+      const { id, dayIndex, off } = body;
+      const t = await tdb().teacher.findFirst({ where: { legacyId: id } });
+      if (!t) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
+      const set = new Set(t.offDays || []);
+      off ? set.add(dayIndex) : set.delete(dayIndex);
+      const offDays = Array.from(set).sort((a, b) => a - b);
+      await tdb().teacher.update({ where: { id: t.id }, data: { offDays } });
+      // NOT: program-gün-sil + initWeekForTeacher → program/slot SQL göçünde ele alınır.
+      return NextResponse.json({ ok: true, offDays });
+    }
+    if (body.action === 'set_presets') {
+      const { id, presets } = body;
+      const t = await tdb().teacher.findFirst({ where: { legacyId: id } });
+      if (!t) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
+      const clean = sanitizePresets(presets, { branches: t.branches, allowedGroups: t.allowedGroups });
+      await replacePresetsSql(t.id, clean);
+      return NextResponse.json({ ok: true, presets: clean });
+    }
+    const { id, name, password, branches, allowedGroups, photoUrl, phone } = body;
+    const t = await tdb().teacher.findFirst({ where: { legacyId: id }, include: { presets: true } });
+    if (!t) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
+    const data = {
+      name, username: name,
+      branches: branches !== undefined ? branches : (t.branches || []),
+      allowedGroups: allowedGroups || t.allowedGroups,
+      photoUrl: photoUrl !== undefined ? photoUrl : t.photoUrl,
+      phone: phone !== undefined ? (normalizeTurkishMobile(phone) || phone || '') : (t.phone || ''),
+    };
+    if (password) data.passwordHash = await bcrypt.hash(password, 10);
+    await tdb().teacher.update({ where: { id: t.id }, data });
+    if ((t.presets || []).length) {
+      const clean = sanitizePresets(presetsOut(t.presets), { branches: data.branches, allowedGroups: data.allowedGroups });
+      await replacePresetsSql(t.id, clean);
+    }
+    // NOT: updateIndexUsername → SQL login doğrudan sorgular (userIndex yok).
+    return NextResponse.json({ ok: true });
+  }
 
   // Özel aksiyon: bir günü izin/aktif yap. Şablonda o güne ait tüm entry'leri siler.
   if (body.action === 'toggle_off_day') {
@@ -216,6 +289,14 @@ export async function DELETE(req) {
   const parsed = await parseBody(req, TeacherDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
+
+  if (useSql()) {
+    const t = await tdb().teacher.findFirst({ where: { legacyId: id } });
+    if (t) await tdb().teacher.delete({ where: { id: t.id } }); // cascade: presets/etut/slot
+    await logAudit({ ...actorFrom(session), action: 'teacher.delete', target: { type: 'teacher', id, name: t?.name || id }, detail: `Öğretmen silindi: ${t?.name || id}` });
+    return NextResponse.json({ ok: true });
+  }
+
   const teacher = await redis.get(`teacher:${id}`);
   await redis.del(`teacher:${id}`);
   await redis.srem('teachers', id);
