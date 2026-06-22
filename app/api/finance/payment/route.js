@@ -3,7 +3,9 @@ import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId, zMoney } from '@/lib/validate';
-import { applyInstallmentPayment } from '@/lib/finance';
+import { applyInstallmentPayment, applyInstallmentPaymentSql } from '@/lib/finance';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 function canAccess(session) {
   return session && (session.role === 'director' || session.role === 'accountant');
@@ -27,9 +29,9 @@ export async function POST(req) {
   if (!parsed.ok) return parsed.response;
   const { studentId, amount, date, method, note, installmentIdx } = parsed.data;
 
-  const result = await applyInstallmentPayment(redis, {
-    studentId, amount, installmentIdx, method, note, date, recordedBy: session.name,
-  });
+  const result = useSql()
+    ? await applyInstallmentPaymentSql({ studentId, amount, installmentIdx, method, note, date, recordedBy: session.name })
+    : await applyInstallmentPayment(redis, { studentId, amount, installmentIdx, method, note, date, recordedBy: session.name });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status || 400 });
 
   const { record, payment, balance, receiptNo } = result;
@@ -50,6 +52,25 @@ export async function DELETE(req) {
   const parsed = await parseBody(req, PaymentDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { studentId, paymentId } = parsed.data;
+
+  if (useSql()) {
+    const stu = await tdb().student.findFirst({ where: { legacyId: studentId } });
+    const record = stu ? await tdb().finance.findFirst({ where: { studentId: stu.id }, include: { installments: true } }) : null;
+    if (!record) return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });
+    const payment = (record.payments || []).find((p) => p.id === paymentId);
+    if (!payment) return NextResponse.json({ error: 'Ödeme bulunamadı' }, { status: 404 });
+    for (const inst of record.installments) {
+      if (inst.receiptNo === payment.receiptNo) {
+        await tdb().installment.update({ where: { id: inst.id }, data: { paid: false, paidDate: null, paidAmount: null, method: null, receiptNo: null } });
+      }
+    }
+    const payments = (record.payments || []).filter((p) => p.id !== paymentId);
+    const balance = record.netFee - payments.reduce((s, p) => s + (p.amount || 0), 0);
+    await tdb().finance.update({ where: { id: record.id }, data: { payments } });
+    await logAudit({ ...actorFrom(session), action: 'finance.paymentDelete', target: { type: 'student', id: studentId, name: stu?.name || studentId }, detail: `Ödeme silindi: ${stu?.name || studentId} — ${payment.amount} TL (makbuz ${payment.receiptNo}). Yeni bakiye: ${balance} TL` });
+    return NextResponse.json({ ok: true, balance });
+  }
+
   const record = await redis.get(`finance:${studentId}`);
   if (!record) return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });
 
