@@ -114,6 +114,7 @@ model Student {
   group              String
   phone              String?
   birthDate          String?
+  diplomaNotu        Float?    // yalnız mezun (50-100); OBP = ×5 türetilir
   mustChangePassword Boolean   @default(false)
   parentName         String?
   parentPhone        String?

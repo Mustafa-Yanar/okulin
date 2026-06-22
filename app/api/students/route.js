@@ -7,10 +7,21 @@ import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
 import { parseBody, z, zName, zId } from '@/lib/validate';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
+
+// SQL satırı (class include) → mevcut sözleşme şekli (id/cls = legacyId).
+const studentOut = (s) => ({
+  id: s.legacyId, name: s.name, username: s.username, cls: s.class?.legacyId || '', group: s.group,
+  phone: s.phone || '', parentPhone: s.parentPhone || '', parentName: s.parentName || '', birthDate: s.birthDate || '',
+  diplomaNotu: s.diplomaNotu ?? '', obp: s.diplomaNotu ? Math.round(s.diplomaNotu * 5 * 100) / 100 : null,
+  parentRelation: s.parentRelation || '', parentNote: s.parentNote || '',
+  parent2Name: s.parent2Name || '', parent2Phone: s.parent2Phone || '', parent2Relation: s.parent2Relation || '',
+});
 
 const zPhone = z.string().max(40).optional();
 const zBirthDate = z.string().max(20).optional(); // YYYY-MM-DD
@@ -57,6 +68,11 @@ const StudentDeleteSchema = z.object({
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
+
+  if (useSql()) {
+    const rows = await tdb().student.findMany({ include: { class: true } });
+    return NextResponse.json(rows.map(studentOut));
+  }
 
   const ids = await redis.smembers('students');
   if (!ids || ids.length === 0) return NextResponse.json([]);
@@ -124,6 +140,22 @@ export async function POST(req) {
   // telefon da yoksa sabit "12345678". İlk girişte zorunlu değişim (mustChangePassword).
   const initPassword = initialPassword(password, normPhone);
 
+  if (useSql()) {
+    const dup = await tdb().student.findFirst({ where: { username } });
+    if (dup) return NextResponse.json({ error: 'Bu isimde bir öğrenci zaten kayıtlı' }, { status: 400 });
+    const clsRow = await tdb().class.findFirst({ where: { legacyId: cls } });
+    const hash = await bcrypt.hash(initPassword, 10);
+    const legacyId = makeId();
+    await tdb().student.create({ data: {
+      legacyId, name, username, passwordHash: hash, classId: clsRow?.id || null, group,
+      phone: normPhone, parentPhone: normParentPhone, parentName: (parentName || '').trim(),
+      parentRelation: (parentRelation || '').trim(), parentNote: (parentNote || '').trim(),
+      parent2Name: (parent2Name || '').trim(), parent2Phone: normParent2Phone, parent2Relation: (parent2Relation || '').trim(),
+      birthDate: birthDate || '', diplomaNotu: (diploma === '' ? null : diploma), mustChangePassword: true,
+    } });
+    return NextResponse.json({ id: legacyId, name, username, cls, group });
+  }
+
   // Aynı isimde öğrenci var mı kontrol et
   const studentIds = await redis.smembers('students');
   if (studentIds && studentIds.length > 0) {
@@ -168,6 +200,43 @@ export async function PUT(req) {
   if (!parsed.ok) return parsed.response;
   const { id, name, password, cls, phone, parentPhone, parentName, birthDate, diplomaNotu,
           parentRelation, parentNote, parent2Name, parent2Phone, parent2Relation } = parsed.data;
+
+  if (useSql()) {
+    const s = await tdb().student.findFirst({ where: { legacyId: id }, include: { class: true } });
+    if (!s) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
+    const group = (await getClass(cls))?.group || s.group;
+    let diploma = s.diplomaNotu ?? '';
+    if (diplomaNotu !== undefined) {
+      diploma = normDiplomaNotu(diplomaNotu, group);
+      if (diploma === null) return NextResponse.json({ error: 'Diploma notu 50 ile 100 arasında olmalı' }, { status: 400 });
+    } else if (group !== 'mezun') diploma = '';
+    const clsRow = await tdb().class.findFirst({ where: { legacyId: cls } });
+    const data = {
+      name, username: name, classId: clsRow?.id ?? s.classId, group, diplomaNotu: (diploma === '' ? null : diploma),
+      birthDate: birthDate !== undefined ? birthDate : (s.birthDate || ''),
+      parentName: parentName !== undefined ? (parentName || '').trim() : (s.parentName || ''),
+      parentRelation: parentRelation !== undefined ? (parentRelation || '').trim() : (s.parentRelation || ''),
+      parentNote: parentNote !== undefined ? (parentNote || '').trim() : (s.parentNote || ''),
+      parent2Name: parent2Name !== undefined ? (parent2Name || '').trim() : (s.parent2Name || ''),
+      parent2Relation: parent2Relation !== undefined ? (parent2Relation || '').trim() : (s.parent2Relation || ''),
+    };
+    if (phone !== undefined) {
+      if (phone) { const n = normalizeTurkishMobile(phone); if (!n) return NextResponse.json({ error: 'Öğrenci telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 }); data.phone = n; }
+      else data.phone = '';
+    }
+    if (parentPhone !== undefined) {
+      if (parentPhone) { const n = normalizeTurkishMobile(parentPhone); if (!n) return NextResponse.json({ error: 'Veli telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 }); data.parentPhone = n; }
+      else data.parentPhone = '';
+    }
+    if (parent2Phone !== undefined) {
+      if (parent2Phone) { const n = normalizeTurkishMobile(parent2Phone); if (!n) return NextResponse.json({ error: '2. iletişim telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 }); data.parent2Phone = n; }
+      else data.parent2Phone = '';
+    }
+    if (password) data.passwordHash = await bcrypt.hash(password, 10);
+    await tdb().student.update({ where: { id: s.id }, data });
+    return NextResponse.json({ ok: true });
+  }
+
   const student = await redis.get(`student:${id}`);
   if (!student) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
 
@@ -234,6 +303,18 @@ export async function DELETE(req) {
   const parsed = await parseBody(req, StudentDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { id, ids } = parsed.data;
+
+  if (useSql()) {
+    if (ids && Array.isArray(ids)) {
+      await tdb().student.deleteMany({ where: { legacyId: { in: ids } } }); // cascade: finance/behavior
+      await logAudit({ ...actorFrom(session), action: 'student.bulkDelete', detail: `${ids.length} öğrenci toplu silindi` });
+      return NextResponse.json({ ok: true, deleted: ids.length });
+    }
+    const s = await tdb().student.findFirst({ where: { legacyId: id }, include: { class: true } });
+    if (s) await tdb().student.delete({ where: { id: s.id } });
+    await logAudit({ ...actorFrom(session), action: 'student.delete', target: { type: 'student', id, name: s?.name || id }, detail: `Öğrenci silindi: ${s?.name || id}${s?.class?.legacyId ? ` (${s.class.legacyId})` : ''}` });
+    return NextResponse.json({ ok: true });
+  }
 
   // Toplu silme — indeks temizliği için önce username'leri oku
   if (ids && Array.isArray(ids)) {
