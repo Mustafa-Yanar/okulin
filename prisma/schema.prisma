@@ -322,14 +322,18 @@ model Odev {
   @@index([orgSlug, branch])
 }
 
+// Haftalık soru-çözüm hedefi — öğrenci başına TEK kayıt (haftaya bağlı değil).
+// "Çözülen soru" trendi guidance'tan türetilir; burada yalnız hedef sayısı tutulur.
 model Hedef {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   orgSlug   String
-  branch    String @default("main")
-  studentId String
-  week      String
-  data      Json
-  @@unique([orgSlug, branch, studentId, week])
+  branch    String   @default("main")
+  studentId String   // legacy öğrenci id (route legacy id ile çalışır, join yok)
+  weekly    Int      @default(0)
+  setBy     String?
+  setByName String?
+  updatedAt DateTime @default(now())
+  @@unique([orgSlug, branch, studentId])
   @@index([orgSlug, branch])
 }
 
@@ -402,12 +406,16 @@ model Resource {
   @@index([orgSlug, branch])
 }
 
+// Rehberlik soru-takibi — öğrenci+hafta bazlı (guidance:<sid>:<weekKey>).
+// data = { entries:{[subject]:{correct,wrong,empty}}, reviewed, submittedAt, reviewedAt }.
 model Guidance {
   id        String @id @default(cuid())
   orgSlug   String
   branch    String @default("main")
-  studentId String
+  studentId String   // legacy öğrenci id (route legacy id ile çalışır, join yok)
+  week      String
   data      Json
+  @@unique([orgSlug, branch, studentId, week])
   @@index([orgSlug, branch])
   @@index([studentId])
 }

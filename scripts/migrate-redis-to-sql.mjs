@@ -160,6 +160,32 @@ async function main() {
   }
   rec('Behavior', behKeys.length, behN);
 
+  // ── Hedef (hedef:<sid>) — öğrenci başına tek kayıt, studentId = legacy (plain) ──
+  const hedefKeys = await scanAll('hedef:*');
+  let hedefN = 0;
+  for (const hk of hedefKeys) {
+    const h = await redis.get(hk);
+    if (!h) continue;
+    const sid = strip(hk).split(':')[1];
+    await prisma.hedef.create({ data: { orgSlug: ORG, branch: BRANCH, studentId: sid, weekly: h.weekly ?? 0, setBy: h.setBy || null, setByName: h.setByName || null, updatedAt: h.updatedAt ? new Date(h.updatedAt) : new Date() } });
+    hedefN++;
+  }
+  rec('Hedef', hedefKeys.length, hedefN);
+
+  // ── Guidance (guidance:<sid>:<weekKey>) — öğrenci+hafta bazlı, studentId = legacy (plain) ──
+  const guideKeys = await scanAll('guidance:*');
+  let guideN = 0;
+  for (const gk of guideKeys) {
+    const g = await redis.get(gk);
+    if (!g) continue;
+    const parts = strip(gk).split(':'); // ['guidance', sid, ...weekKey]
+    const sid = parts[1];
+    const week = parts.slice(2).join(':');
+    await prisma.guidance.create({ data: { orgSlug: ORG, branch: BRANCH, studentId: sid, week, data: g } });
+    guideN++;
+  }
+  rec('Guidance', guideKeys.length, guideN);
+
   // ── Exam (deneme:exam:<id>) ──
   const examKeys = (await scanAll('deneme:exam:*')).filter(k => !strip(k).includes(':exams:'));
   let examN = 0, rowN = 0;
