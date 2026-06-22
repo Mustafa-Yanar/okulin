@@ -219,6 +219,23 @@ async function main() {
   }
   rec('Resource', resIds.length, resN);
 
+  // ── Odev (odevler set + odev:<id> + odev:<id>:sub:<sid>) — teslimler JSON-map'e toplanır ──
+  const odevIds = await smem('odevler');
+  let odevN = 0;
+  for (const id of odevIds) {
+    const o = await jget('odev:' + id);
+    if (!o) continue;
+    const teslimler = await smem(`odev:${id}:teslimler`);
+    const submissions = {};
+    for (const sid of (teslimler || [])) {
+      const sub = await jget(`odev:${id}:sub:${sid}`);
+      if (sub) submissions[sid] = sub; // studentId = legacy (route legacy id ile çalışır)
+    }
+    await prisma.odev.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: o.id, data: { ...o, submissions } } });
+    odevN++;
+  }
+  rec('Odev', odevIds.length, odevN);
+
   // ── Exam (deneme:exam:<id>) ──
   const examKeys = (await scanAll('deneme:exam:*')).filter(k => !strip(k).includes(':exams:'));
   let examN = 0, rowN = 0;
