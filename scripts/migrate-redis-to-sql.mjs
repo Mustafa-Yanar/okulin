@@ -1,0 +1,230 @@
+// Redis (Upstash) → PostgreSQL (Neon/Prisma) veri göçü. TEK YÖNLÜ, idempotent.
+// Çalıştır:  node --env-file=.env scripts/migrate-redis-to-sql.mjs [org]
+// Varsayılan org = testkurs, branch = main. Route'lara DOKUNMAZ; sadece SQL'i doldurur.
+// legacyId→cuid eşlemesiyle ilişkiler (student.classId, finance.studentId, ...) kurulur.
+import { Redis } from '@upstash/redis';
+import { PrismaClient } from '@prisma/client';
+
+const ORG = process.argv[2] || 'testkurs';
+const BRANCH = 'main';
+const P = `t:${ORG}:${BRANCH}:`;
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+});
+const prisma = new PrismaClient();
+
+const jget = (k) => redis.get(P + k);
+const smem = (k) => redis.smembers(P + k);
+async function scanAll(pattern) {
+  let cursor = '0', out = [];
+  do {
+    const [c, ks] = await redis.scan(cursor, { match: P + pattern, count: 500 });
+    cursor = String(c); out.push(...(ks || []));
+  } while (cursor !== '0');
+  return out;
+}
+const strip = (full) => full.startsWith(P) ? full.slice(P.length) : full;
+const summary = {};
+const rec = (name, redisN, sqlN) => { summary[name] = `redis ${redisN} → sql ${sqlN}`; };
+
+async function clearOrg() {
+  // Çocuk tablolar önce (FK güvenli), sonra ebeveynler. Tekrar çalıştırılabilirlik için.
+  const order = [
+    'slotBooking', 'etutTemplate', 'teacherPreset', 'installment', 'behaviorEntry',
+    'examRow', 'formResponse', 'finance', 'behavior', 'exam', 'form', 'student',
+    'teacher', 'class', 'course', 'counselor', 'expense', 'odev', 'hedef', 'etkinlik',
+    'lead', 'announcement', 'resource', 'guidance', 'attendance', 'auditLog', 'errLog',
+    'pushSub', 'tenantConfig', 'director', 'payOrder',
+  ];
+  for (const m of order) {
+    try {
+      // installment/behaviorEntry/examRow/formResponse/teacherPreset orgSlug taşımaz →
+      // ebeveyn silinince cascade ile gider; burada orgSlug filtreli deleteMany atla.
+      if (['installment', 'behaviorEntry', 'examRow', 'formResponse', 'teacherPreset'].includes(m)) continue;
+      await prisma[m].deleteMany({ where: { orgSlug: ORG } });
+    } catch (e) { /* tablo yoksa/boşsa geç */ }
+  }
+}
+
+async function main() {
+  console.log(`Göç başlıyor: org=${ORG} branch=${BRANCH}`);
+  await clearOrg();
+
+  // ── Org (global) ──
+  const orgRec = (await redis.get(`org:${ORG}`)) || { slug: ORG, name: ORG };
+  const kademeler = (Array.isArray(orgRec.kademeler) && orgRec.kademeler.length)
+    ? orgRec.kademeler
+    : (orgRec.sektor === 'okul' ? ['ilkokul', 'ortaokul', 'lise'] : ['ortaokul', 'lise', 'mezun']);
+  await prisma.org.upsert({
+    where: { slug: ORG },
+    update: { name: orgRec.name || ORG },
+    create: {
+      slug: ORG, name: orgRec.name || ORG, active: orgRec.active ?? true,
+      type: orgRec.type || 'single', code: orgRec.code || null,
+      sektor: orgRec.sektor || 'dershane', mulkiyet: orgRec.mulkiyet || 'ozel', kademeler,
+      shortName: orgRec.shortName || null, logoUrl: orgRec.logoUrl || null, themeColor: orgRec.themeColor || null,
+      createdAt: orgRec.createdAt ? new Date(orgRec.createdAt) : new Date(),
+    },
+  });
+  rec('Org', 1, 1);
+
+  // ── Director ──
+  const dir = await jget('director');
+  if (dir) await prisma.director.create({ data: { orgSlug: ORG, branch: BRANCH, username: dir.username, passwordHash: dir.passwordHash, name: dir.name || '' } });
+  rec('Director', dir ? 1 : 0, dir ? 1 : 0);
+
+  // ── Course (dersler set + ders:<key>) ──
+  const courseKeys = await smem('dersler');
+  let cN = 0;
+  for (const key of courseKeys) {
+    const c = await jget('ders:' + key);
+    if (!c) continue;
+    await prisma.course.create({ data: { orgSlug: ORG, branch: BRANCH, key: c.key, ad: c.ad, core: c.core ?? true, family: c.family || null, active: c.active !== false } });
+    cN++;
+  }
+  rec('Course', courseKeys.length, cN);
+
+  // ── Class (classes set + sinif:<id>) ──
+  const classIds = await smem('classes');
+  const classMap = {};
+  for (const id of classIds) {
+    const c = await jget('sinif:' + id);
+    if (!c) continue;
+    const row = await prisma.class.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: c.id, ad: c.ad, group: c.group, kademe: c.kademe, duzey: c.duzey || null, dal: c.dal || null, dersler: c.dersler || [], seeded: c.seeded ?? true } });
+    classMap[c.id] = row.id;
+  }
+  rec('Class', classIds.length, Object.keys(classMap).length);
+
+  // ── Teacher (+ presets) ──
+  const teacherIds = await smem('teachers');
+  const teacherMap = {};
+  let presetN = 0;
+  for (const id of teacherIds) {
+    const t = await jget('teacher:' + id);
+    if (!t) continue;
+    const row = await prisma.teacher.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: t.id, name: t.name, username: t.username, passwordHash: t.passwordHash, branches: t.branches || [], allowedGroups: t.allowedGroups || [], offDays: t.offDays || [], photoUrl: t.photoUrl || null, phone: t.phone || null, mustChangePassword: t.mustChangePassword ?? true } });
+    teacherMap[t.id] = row.id;
+    for (const ps of (Array.isArray(t.presets) ? t.presets : [])) {
+      await prisma.teacherPreset.create({ data: { teacherId: row.id, classId: classMap[ps.cls || ps.classId] || (ps.cls || ps.classId || ''), course: ps.course || ps.branch || '' } });
+      presetN++;
+    }
+  }
+  rec('Teacher', teacherIds.length, Object.keys(teacherMap).length);
+  if (presetN) rec('TeacherPreset', presetN, presetN);
+
+  // ── Student ──
+  const studentIds = await smem('students');
+  const studentMap = {};
+  for (const id of studentIds) {
+    const s = await jget('student:' + id);
+    if (!s) continue;
+    const row = await prisma.student.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: s.id, name: s.name, username: s.username, passwordHash: s.passwordHash, classId: classMap[s.cls] || null, group: s.group || '', phone: s.phone || null, birthDate: s.birthDate || null, mustChangePassword: s.mustChangePassword ?? false, parentName: s.parentName || null, parentPhone: s.parentPhone || null, parentRelation: s.parentRelation || null, parentNote: s.parentNote || null, parent2Name: s.parent2Name || null, parent2Phone: s.parent2Phone || null, parent2Relation: s.parent2Relation || null } });
+    studentMap[s.id] = row.id;
+  }
+  rec('Student', studentIds.length, Object.keys(studentMap).length);
+
+  // ── Finance (+ installments) ──
+  const finKeys = await scanAll('finance:*');
+  let finN = 0, instN = 0;
+  for (const fk of finKeys) {
+    const f = await redis.get(fk);
+    if (!f) continue;
+    const sid = studentMap[f.studentId];
+    if (!sid) { console.warn('  finance: öğrenci eşleşmedi, atlandı:', f.studentId); continue; }
+    const fin = await prisma.finance.create({ data: { orgSlug: ORG, branch: BRANCH, studentId: sid, registrationDate: f.registrationDate || null, totalFee: f.totalFee ?? 0, discount: f.discount ?? 0, netFee: f.netFee ?? 0, paymentPlan: f.paymentPlan || 'pesin' } });
+    finN++;
+    for (const inst of (f.installments || [])) {
+      await prisma.installment.create({ data: { financeId: fin.id, idx: inst.idx ?? 0, dueDate: inst.dueDate || '', amount: inst.amount ?? 0, paid: inst.paid ?? false, paidDate: inst.paidDate || null, paidAmount: inst.paidAmount ?? null, method: inst.method || null, receiptNo: inst.receiptNo || null } });
+      instN++;
+    }
+  }
+  rec('Finance', finKeys.length, finN);
+  if (instN) rec('Installment', instN, instN);
+
+  // ── Behavior (davranis:<sid>) ──
+  const behKeys = await scanAll('davranis:*');
+  let behN = 0, behEntryN = 0;
+  for (const bk of behKeys) {
+    const b = await redis.get(bk);
+    if (!b) continue;
+    const sid = studentMap[b.studentId];
+    if (!sid) continue;
+    const beh = await prisma.behavior.create({ data: { orgSlug: ORG, branch: BRANCH, studentId: sid, total: b.total ?? 0 } });
+    behN++;
+    for (const e of (b.entries || [])) {
+      await prisma.behaviorEntry.create({ data: { behaviorId: beh.id, points: e.points ?? 0, reason: e.reason || null, by: e.by || null, createdAt: e.createdAt ? new Date(e.createdAt) : new Date() } });
+      behEntryN++;
+    }
+  }
+  rec('Behavior', behKeys.length, behN);
+
+  // ── Exam (deneme:exam:<id>) ──
+  const examKeys = (await scanAll('deneme:exam:*')).filter(k => !strip(k).includes(':exams:'));
+  let examN = 0, rowN = 0;
+  for (const ek of examKeys) {
+    const e = await redis.get(ek);
+    if (!e || !e.id) continue;
+    const ex = await prisma.exam.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: e.id, name: e.name || '', examType: e.examType || '', category: e.category || null, date: e.date || null, kitapcikSayisi: e.kitapcikSayisi ?? 1, subjectKeys: e.subjectKeys || [], answerKey: e.answerKey ?? null, createdAt: e.createdAt ? new Date(e.createdAt) : new Date() } });
+    examN++;
+    for (const r of (e.rows || [])) {
+      await prisma.examRow.create({ data: { examId: ex.id, studentId: r.studentId ? (studentMap[r.studentId] || r.studentId) : null, data: r } });
+      rowN++;
+    }
+  }
+  rec('Exam', examKeys.length, examN);
+
+  // ── TenantConfig (slot_times + current_week) ──
+  const slotTimes = await jget('slot_times');
+  const currentWeek = await jget('current_week');
+  if (slotTimes || currentWeek) {
+    await prisma.tenantConfig.create({ data: { orgSlug: ORG, branch: BRANCH, slotTimes: slotTimes ?? null, currentWeek: (typeof currentWeek === 'string' ? currentWeek : null), programTemplate: null } });
+  }
+  rec('TenantConfig', (slotTimes || currentWeek) ? 1 : 0, (slotTimes || currentWeek) ? 1 : 0);
+
+  // ── EtutTemplate (program:<teacherId>.etutSablonlari[]) ──
+  const progKeys = await scanAll('program:*');
+  let etutN = 0;
+  for (const pk of progKeys) {
+    const tid = strip(pk).split(':')[1];
+    const teacherId = teacherMap[tid];
+    if (!teacherId) continue;
+    const prog = await redis.get(pk);
+    for (const e of (prog?.etutSablonlari || [])) {
+      await prisma.etutTemplate.create({ data: { orgSlug: ORG, branch: BRANCH, teacherId, dayIndex: e.dayIndex ?? 0, start: e.start || '', end: e.end || '', aktif: e.aktif ?? true, studentId: e.studentId ? (studentMap[e.studentId] || e.studentId) : null, bookedBy: e.bookedBy || null } });
+      etutN++;
+    }
+  }
+  rec('EtutTemplate', progKeys.length + ' prog', etutN);
+
+  // ── SlotBooking (slot:<week>:<teacher>:<day>:<slotId>) ──
+  const slotKeys = await scanAll('slot:*');
+  const slotRows = [];
+  for (const sk of slotKeys) {
+    const parts = strip(sk).split(':'); // ['slot', weekKey, teacherId, dayIdx, slotId]
+    if (parts.length < 5) continue;
+    const teacherId = teacherMap[parts[2]];
+    if (!teacherId) continue;
+    const v = await redis.get(sk) || {};
+    slotRows.push({
+      orgSlug: ORG, branch: BRANCH, weekKey: parts[1], teacherId, dayIndex: Number(parts[3]) || 0, slotId: parts[4],
+      booked: v.booked ?? false, disabled: v.disabled ?? false, fixed: v.fixed ?? false,
+      studentId: v.studentId ? (studentMap[v.studentId] || v.studentId) : null,
+      studentName: v.studentName || null, studentCls: v.studentCls || null, dersBranch: v.branch || null, bookedBy: v.bookedBy || null,
+    });
+  }
+  let slotN = 0;
+  for (let i = 0; i < slotRows.length; i += 200) {
+    const r = await prisma.slotBooking.createMany({ data: slotRows.slice(i, i + 200) });
+    slotN += r.count;
+  }
+  rec('SlotBooking', slotKeys.length, slotN);
+
+  await prisma.$disconnect();
+  console.log('\n=== GÖÇ ÖZETİ ===');
+  for (const [k, v] of Object.entries(summary)) console.log(`  ${k.padEnd(16)} ${v}`);
+  console.log('\nNOT: log/transient (audit/errlog/push_subs/receipt_counter) ve boş ikincil modüller şimdilik atlandı.');
+}
+
+main().catch(async (e) => { console.error('GÖÇ HATASI:', e); await prisma.$disconnect(); process.exit(1); });
