@@ -4,6 +4,8 @@ import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId, zMoney } from '@/lib/validate';
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 // Kurum giderleri — personel ödemeleri (maaş + ek ödemeler) ve kategorili
 // harcama kalemleri. Tenant-scoped (@/lib/db). Yetki: director + accountant.
@@ -81,6 +83,16 @@ export async function GET(req) {
   const from = searchParams.get('from');
   const to = searchParams.get('to');
 
+  if (useSql()) {
+    let list = (await tdb().expense.findMany()).map((r) => r.data);
+    if (type) list = list.filter(e => e.type === type);
+    if (period) list = list.filter(e => (e.period || e.date?.slice(0, 7)) === period);
+    if (from) list = list.filter(e => (e.date || '') >= from);
+    if (to) list = list.filter(e => (e.date || '') <= to);
+    list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return NextResponse.json(list);
+  }
+
   const ids = await redis.smembers('expenses');
   if (!ids || ids.length === 0) return NextResponse.json([]);
 
@@ -121,6 +133,12 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Tutar sıfırdan büyük olmalı' }, { status: 400 });
   }
 
+  if (useSql()) {
+    await tdb().expense.create({ data: { legacyId: id, type: record.type, amount: record.amount, date: record.date, data: record } });
+    await logAudit({ ...actorFrom(session), action: 'finance.expense.create', target: { type: 'expense', id, name: record.type === 'personnel' ? record.personnelName : record.category }, detail: `Gider eklendi (${record.type === 'personnel' ? 'personel: ' + record.personnelName : record.category}) — ${record.amount} TL` });
+    return NextResponse.json({ ok: true, record });
+  }
+
   await redis.set(`expense:${id}`, record);
   await redis.sadd('expenses', id);
 
@@ -141,6 +159,18 @@ export async function PUT(req) {
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
   if (!data.id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
+
+  if (useSql()) {
+    const ex = await tdb().expense.findFirst({ where: { legacyId: data.id } });
+    if (!ex) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
+    const old = ex.data || {};
+    const record = buildRecord(data, { id: old.id || data.id, createdBy: old.createdBy, createdByRole: old.createdByRole, createdAt: old.createdAt, updatedBy: session.name, updatedAt: new Date().toISOString() }, session);
+    if (record.type === 'personnel' && !record.personnelName) return NextResponse.json({ error: 'Personel adı gerekli' }, { status: 400 });
+    if (record.amount <= 0) return NextResponse.json({ error: 'Tutar sıfırdan büyük olmalı' }, { status: 400 });
+    await tdb().expense.update({ where: { id: ex.id }, data: { type: record.type, amount: record.amount, date: record.date, data: record } });
+    await logAudit({ ...actorFrom(session), action: 'finance.expense.update', target: { type: 'expense', id: data.id, name: record.type === 'personnel' ? record.personnelName : record.category }, detail: `Gider güncellendi — ${record.amount} TL` });
+    return NextResponse.json({ ok: true, record });
+  }
 
   const existing = await redis.get(`expense:${data.id}`);
   if (!existing) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
@@ -179,6 +209,15 @@ export async function DELETE(req) {
   const parsed = await parseBody(req, ExpenseDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
+
+  if (useSql()) {
+    const ex = await tdb().expense.findFirst({ where: { legacyId: id } });
+    if (!ex) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
+    await tdb().expense.delete({ where: { id: ex.id } });
+    const old = ex.data || {};
+    await logAudit({ ...actorFrom(session), action: 'finance.expense.delete', target: { type: 'expense', id, name: old.type === 'personnel' ? old.personnelName : old.category }, detail: `Gider silindi — ${old.amount} TL` });
+    return NextResponse.json({ ok: true });
+  }
 
   const existing = await redis.get(`expense:${id}`);
   if (!existing) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
