@@ -298,6 +298,24 @@ async function main() {
   rec('Form', formIds.length, formN);
   if (formRespN) rec('FormResponse', formRespN, formRespN);
 
+  // ── Announcement (+ alıcılar) — recipients[] normalize, reads set → read bayrağı ──
+  const annIds = await smem('announcements');
+  let annN = 0, annRecipN = 0;
+  for (const id of annIds) {
+    const a = await jget('announcement:' + id);
+    if (!a) continue;
+    const { recipients = [], ...dataNoRecips } = a;
+    const annRow = await prisma.announcement.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: a.id, data: dataNoRecips, createdAt: a.createdAt ? new Date(a.createdAt) : new Date() } });
+    annN++;
+    const reads = new Set((await smem(`announcement:${id}:reads`)) || []);
+    for (const r of recipients) {
+      await prisma.announcementRecipient.create({ data: { orgSlug: ORG, branch: BRANCH, announcementId: annRow.id, role: r.role, recipientId: r.id, name: r.name || null, read: reads.has(r.id) } });
+      annRecipN++;
+    }
+  }
+  rec('Announcement', annIds.length, annN);
+  if (annRecipN) rec('AnnouncementRecipient', annRecipN, annRecipN);
+
   // ── Exam (deneme:exam:<id>) ──
   const examKeys = (await scanAll('deneme:exam:*')).filter(k => !strip(k).includes(':exams:'));
   let examN = 0, rowN = 0;

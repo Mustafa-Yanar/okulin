@@ -6,6 +6,8 @@ import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
 import { classToGroup, classLabel, STUDENT_GROUPS } from '@/lib/constants';
 import { getClasses, getClass } from '@/lib/classes';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 // Tek yön duyuru/bilgilendirme sistemi (hub-spoke). Gönderen: müdür + rehber.
 // Alıcı: rol×kapsam ile hedeflenir; rol-içi (veli-veli vb.) YOK. Okundu + push.
@@ -42,7 +44,21 @@ const BodySchema = z.discriminatedUnion('action', [
 async function resolveRecipients(audience) {
   const { role, scope, cls, group, ids } = audience;
 
+  // group scope için şube→grup haritası (registry-aware). Lazımsa hesaplanır.
+  const groupMap = async () => new Map((await getClasses()).map(c => [c.id, c.group]));
+
   if (role === 'parent') {
+    if (useSql()) {
+      const rows = await tdb().parent.findMany();
+      let recs = rows.map(p => ({ id: p.phone, children: p.children || [] }));
+      if (scope === 'selected') recs = recs.filter(r => ids?.includes(r.id));
+      else if (scope === 'class') recs = recs.filter(r => (r.children || []).some(c => c.cls === cls));
+      else if (scope === 'group') {
+        const groupById = await groupMap();
+        recs = recs.filter(r => (r.children || []).some(c => (groupById.get(c.cls) ?? classToGroup(c.cls)) === group));
+      }
+      return recs.map(r => ({ role: 'parent', id: r.id, name: (r.children || []).map(c => c.name).join(', ') + ' (Veli)' }));
+    }
     const phones = await redis.smembers('parents');
     if (!phones || phones.length === 0) return [];
     const pipe = redis.pipeline();
@@ -52,13 +68,21 @@ async function resolveRecipients(audience) {
     else if (scope === 'class') recs = recs.filter(r => (r.children || []).some(c => c.cls === cls));
     else if (scope === 'group') {
       // Çocuğun şube id'sinden grubu çöz — registry-aware (özel şube id'leri classToGroup'ta yok).
-      const groupById = new Map((await getClasses()).map(c => [c.id, c.group]));
+      const groupById = await groupMap();
       recs = recs.filter(r => (r.children || []).some(c => (groupById.get(c.cls) ?? classToGroup(c.cls)) === group));
     }
     return recs.map(r => ({ role: 'parent', id: r.id, name: (r.children || []).map(c => c.name).join(', ') + ' (Veli)' }));
   }
 
   if (role === 'student') {
+    if (useSql()) {
+      const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
+      let recs = rows.map(s => ({ id: s.legacyId, name: s.name, cls: s.class?.legacyId || '', group: s.group }));
+      if (scope === 'selected') recs = recs.filter(s => ids?.includes(s.id));
+      else if (scope === 'class') recs = recs.filter(s => s.cls === cls);
+      else if (scope === 'group') recs = recs.filter(s => s.group === group);
+      return recs.map(s => ({ role: 'student', id: s.id, name: s.name }));
+    }
     const sids = await redis.smembers('students');
     if (!sids || sids.length === 0) return [];
     const pipe = redis.pipeline();
@@ -71,6 +95,12 @@ async function resolveRecipients(audience) {
   }
 
   // teacher — şimdilik yalnız 'all' veya 'selected' (branş/sınıf hedefi sonra)
+  if (useSql()) {
+    const rows = await tdb().teacher.findMany();
+    let recs = rows.map(t => ({ id: t.legacyId, name: t.name }));
+    if (scope === 'selected') recs = recs.filter(t => ids?.includes(t.id));
+    return recs.map(t => ({ role: 'teacher', id: t.id, name: t.name }));
+  }
   const tids = await redis.smembers('teachers');
   if (!tids || tids.length === 0) return [];
   const pipe = redis.pipeline();
@@ -107,6 +137,12 @@ export async function GET(req) {
 
   // Kim okudu detayı (yönetici)
   if (detailId && isManager(session)) {
+    if (useSql()) {
+      const ann = await tdb().announcement.findFirst({ where: { legacyId: detailId }, include: { recipients: true } });
+      if (!ann) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
+      const recipients = ann.recipients.map(r => ({ id: r.recipientId, name: r.name, read: r.read }));
+      return NextResponse.json({ id: detailId, title: ann.data.title, recipients });
+    }
     const rec = await redis.get(`announcement:${detailId}`);
     if (!rec) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
     const readers = new Set(await redis.smembers(`announcement:${detailId}:reads`) || []);
@@ -115,6 +151,12 @@ export async function GET(req) {
   }
 
   if (isManager(session)) {
+    if (useSql()) {
+      const rows = await tdb().announcement.findMany({ include: { _count: { select: { recipients: { where: { read: true } } } } } });
+      const list = rows.map(r => ({ ...r.data, readCount: r._count.recipients }));
+      list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      return NextResponse.json({ announcements: list });
+    }
     const ids = await redis.smembers('announcements');
     if (!ids || ids.length === 0) return NextResponse.json({ announcements: [] });
     const pipe = redis.pipeline();
@@ -132,6 +174,20 @@ export async function GET(req) {
   }
 
   // Alıcı gelen kutusu
+  if (useSql()) {
+    const myRecs = await tdb().announcementRecipient.findMany({
+      where: { role: session.role, recipientId: session.id },
+      include: { announcement: true },
+    });
+    const list = myRecs
+      .filter(r => r.announcement)
+      .map(r => {
+        const d = r.announcement.data;
+        return { id: d.id, title: d.title, body: d.body, senderName: d.senderName, createdAt: d.createdAt, read: r.read };
+      })
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    return NextResponse.json({ announcements: list });
+  }
   const inboxIds = await redis.smembers(`inbox:${session.role}:${session.id}`);
   if (!inboxIds || inboxIds.length === 0) return NextResponse.json({ announcements: [] });
   const pipe = redis.pipeline();
@@ -161,6 +217,16 @@ export async function POST(req) {
 
   // Alıcı: duyuruyu okundu işaretler
   if (data.action === 'read') {
+    if (useSql()) {
+      const ann = await tdb().announcement.findFirst({ where: { legacyId: data.id } });
+      if (!ann) return NextResponse.json({ error: 'Bu duyuru size ait değil' }, { status: 403 });
+      const r = await tdb().announcementRecipient.updateMany({
+        where: { announcementId: ann.id, role: session.role, recipientId: session.id },
+        data: { read: true },
+      });
+      if (r.count === 0) return NextResponse.json({ error: 'Bu duyuru size ait değil' }, { status: 403 });
+      return NextResponse.json({ ok: true });
+    }
     // yalnız kendi inbox'undaki duyuruyu işaretleyebilir
     const inMy = await redis.sismember(`inbox:${session.role}:${session.id}`, data.id);
     if (!inMy) return NextResponse.json({ error: 'Bu duyuru size ait değil' }, { status: 403 });
@@ -186,13 +252,24 @@ export async function POST(req) {
     senderId: session.id, senderName: session.name, senderRole: session.role,
     createdAt: new Date().toISOString(),
   };
-  await redis.set(`announcement:${id}`, rec, { ex: TTL });
-  await redis.sadd('announcements', id);
+  if (useSql()) {
+    // data = içerik (recipients normalize AnnouncementRecipient'a, recipientCount data'da kalır).
+    const { recipients: _omit, ...dataNoRecips } = rec;
+    const ann = await tdb().announcement.create({ data: { legacyId: id, data: dataNoRecips } });
+    if (recipients.length) {
+      await tdb().announcementRecipient.createMany({
+        data: recipients.map(r => ({ announcementId: ann.id, role: r.role, recipientId: r.id, name: r.name })),
+      });
+    }
+  } else {
+    await redis.set(`announcement:${id}`, rec, { ex: TTL });
+    await redis.sadd('announcements', id);
 
-  // Fan-out: her alıcının inbox'una ekle
-  const pipe = redis.pipeline();
-  recipients.forEach(r => pipe.sadd(`inbox:${r.role}:${r.id}`, id));
-  await pipe.exec();
+    // Fan-out: her alıcının inbox'una ekle
+    const pipe = redis.pipeline();
+    recipients.forEach(r => pipe.sadd(`inbox:${r.role}:${r.id}`, id));
+    await pipe.exec();
+  }
 
   // Push bildirimi (paralel, hata toleranslı)
   const payload = { title: `📢 ${title}`, body: body.slice(0, 120), url: '/', tag: `ann-${id}` };
@@ -215,6 +292,14 @@ export async function DELETE(req) {
 
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
+
+  if (useSql()) {
+    const ann = await tdb().announcement.findFirst({ where: { legacyId: id } });
+    if (!ann) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
+    await tdb().announcement.delete({ where: { id: ann.id } }); // recipients cascade
+    return NextResponse.json({ ok: true });
+  }
+
   const rec = await redis.get(`announcement:${id}`);
   if (!rec) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
 

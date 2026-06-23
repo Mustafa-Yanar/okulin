@@ -411,15 +411,33 @@ model Lead {
   @@index([orgSlug, branch])
 }
 
+// Duyuru — data = içerik (title/body/audience/audienceLabel/recipientCount/sender).
+// Alıcılar + okundu durumu normalize (Redis announcement:<id>:reads + inbox fan-out
+// yerine tek tablo). Inbox = recipients(role,recipientId) sorgusu; readCount = filtered _count.
 model Announcement {
-  id        String   @id @default(cuid())
-  orgSlug   String
-  branch    String   @default("main")
-  legacyId  String
-  data      Json
-  createdAt DateTime @default(now())
+  id         String                  @id @default(cuid())
+  orgSlug    String
+  branch     String                  @default("main")
+  legacyId   String
+  data       Json
+  createdAt  DateTime                @default(now())
+  recipients AnnouncementRecipient[]
   @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch])
+}
+
+model AnnouncementRecipient {
+  id             String       @id @default(cuid())
+  orgSlug        String       // inbox sorgusu (role+recipientId) tenant-scope için ZORUNLU
+  branch         String       @default("main")
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  announcementId String
+  role           String
+  recipientId    String
+  name           String?
+  read           Boolean      @default(false)
+  @@index([orgSlug, branch, role, recipientId])
+  @@index([announcementId])
 }
 
 model Resource {
