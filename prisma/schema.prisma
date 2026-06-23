@@ -72,6 +72,19 @@ model Counselor {
   @@unique([orgSlug, branch, legacyId])
 }
 
+model Accountant {
+  id                 String  @id @default(cuid())
+  orgSlug            String
+  branch             String  @default("main")
+  legacyId           String
+  name               String
+  username           String?
+  passwordHash       String
+  phone              String?
+  mustChangePassword Boolean @default(true)
+  @@unique([orgSlug, branch, legacyId])
+}
+
 model Teacher {
   id                 String          @id @default(cuid())
   orgSlug            String

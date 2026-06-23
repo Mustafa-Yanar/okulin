@@ -34,7 +34,7 @@ async function clearOrg() {
   const order = [
     'slotBooking', 'etutTemplate', 'teacherPreset', 'installment', 'behaviorEntry',
     'examRow', 'formResponse', 'finance', 'behavior', 'exam', 'form', 'student',
-    'teacher', 'class', 'course', 'counselor', 'expense', 'odev', 'hedef', 'etkinlik',
+    'teacher', 'class', 'course', 'counselor', 'accountant', 'expense', 'odev', 'hedef', 'etkinlik',
     'lead', 'announcement', 'resource', 'guidance', 'attendance', 'auditLog', 'errLog',
     'pushSub', 'tenantConfig', 'director', 'payOrder',
   ];
@@ -85,6 +85,17 @@ async function main() {
     counN++;
   }
   rec('Counselor', counselorIds.length, counN);
+
+  // ── Accountant (muhasebeci) — accountants set + accountant:<id> ──
+  const accIds = await smem('accountants');
+  let accN = 0;
+  for (const id of accIds) {
+    const a = await jget('accountant:' + id);
+    if (!a) continue;
+    await prisma.accountant.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: a.id, name: a.name, username: a.username || null, passwordHash: a.passwordHash, phone: a.phone || null, mustChangePassword: a.mustChangePassword ?? true } });
+    accN++;
+  }
+  rec('Accountant', accIds.length, accN);
 
   // ── Course (dersler set + ders:<key>) ──
   const courseKeys = await smem('dersler');
