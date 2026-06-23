@@ -9,6 +9,19 @@ import { lookupIndex } from '@/lib/userIndex';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { parseBody, z, zName, zPassword, zNewPassword, zId } from '@/lib/validate';
 import { sendOtp } from '@/lib/sms';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
+
+// SQL rol satırını makeLoginResponse'un beklediği eski (Redis) kayıt şekline çevirir.
+// id = legacyId (parent: phone); student.cls = class.legacyId (cuid DEĞİL).
+function sqlRecToLegacy(role, r) {
+  if (!r) return null;
+  const base = { name: r.name, phone: r.phone || null, passwordHash: r.passwordHash, mustChangePassword: !!r.mustChangePassword };
+  if (role === 'teacher') return { ...base, id: r.legacyId, branches: r.branches || [], allowedGroups: r.allowedGroups || [] };
+  if (role === 'student') return { ...base, id: r.legacyId, cls: r.class?.legacyId || '', group: r.group };
+  if (role === 'parent') return { ...base, id: r.phone, name: r.name || '', children: r.children || [] };
+  return { ...base, id: r.legacyId }; // accountant | counselor
+}
 
 // Telefon numarasının ortasını maskele: "0532***67"
 function maskPhone(phone) {
@@ -29,7 +42,7 @@ const AuthSchema = z.discriminatedUnion('action', [
 export async function GET() {
   const redis = tenantRedis();
   const session = await getSession();
-  const directorExists = await redis.exists('director');
+  const directorExists = useSql() ? (await tdb().director.count()) > 0 : await redis.exists('director');
   // Marka (org kaydı global — t: prefix YOK) — login ekranı + header bunu kullanır.
   const orgRec = await rawRedis.get(`org:${currentOrg()}`);
   return NextResponse.json({ session, directorExists: !!directorExists, branding: normalizeBranding(orgRec) });
@@ -159,19 +172,44 @@ export async function POST(req) {
       }
     }
 
-    // Try director (zaten O(1))
-    const director = await redis.get('director');
+    // Try director (zaten O(1)) — SQL'de Director tablosundan username ile.
+    const director = useSql()
+      ? await tdb().director.findFirst({ where: { username } })
+      : await redis.get('director');
     if (director && director.username === username) {
       const ok = await bcrypt.compare(password, director.passwordHash);
       if (ok) {
         const gate = gateMismatch('director'); if (gate) return gate;
-        // Director: cihaz tanıma uygula
+        // Director: cihaz tanıma uygula (Director kaydında telefon yok → OTP atlanır)
         const otpRes = await maybeOtp('management', director.phone || null);
         if (otpRes) return otpRes;
         const res = NextResponse.json({ role: 'director', name: director.name });
         await setSession(res, { role: 'director', id: 'director', name: director.name });
         return res;
       }
+    }
+
+    // SQL YOLU: ters indeks yerine rol tablolarını username ile doğrudan sorgula.
+    // Sıra eski tarama sırasıyla hizalı (accountant→counselor→teacher→student), sonra veli.
+    if (useSql()) {
+      const normP = normalizeTurkishMobile(username);
+      const tryRole = async (role, sqlRec) => {
+        const rec = sqlRecToLegacy(role, sqlRec);
+        if (!rec) return null;
+        const ok = await bcrypt.compare(password, rec.passwordHash);
+        if (!ok) return null;
+        return makeLoginResponse(role, rec);
+      };
+      let r;
+      r = await tryRole('accountant', await tdb().accountant.findFirst({ where: { username } })); if (r) return r;
+      r = await tryRole('counselor', await tdb().counselor.findFirst({ where: { username } })); if (r) return r;
+      r = await tryRole('teacher', await tdb().teacher.findFirst({ where: { username } })); if (r) return r;
+      r = await tryRole('student', await tdb().student.findFirst({ where: { username }, include: { class: { select: { legacyId: true } } } })); if (r) return r;
+      // Veli: kullanıcı adı = telefon (ham veya kanonik); kayıtlı phone kanonik.
+      const phones = [username, normP].filter(Boolean);
+      const parent = phones.length ? await tdb().parent.findFirst({ where: { phone: { in: phones } } }) : null;
+      r = await tryRole('parent', parent); if (r) return r;
+      return NextResponse.json({ error: 'Kullanıcı adı veya şifre hatalı' }, { status: 401 });
     }
 
     // HIZLI YOL: ters indeks (O(1)). Başarılı login burada döner, tarama yok.
@@ -215,10 +253,18 @@ export async function POST(req) {
   }
 
   if (action === 'setup_director') {
+    const directorName = name || 'Müdür';
+    const hash = await bcrypt.hash(password, 10);
+    if (useSql()) {
+      const exists = await tdb().director.findFirst();
+      if (exists) return NextResponse.json({ error: 'Müdür zaten kayıtlı' }, { status: 400 });
+      await tdb().director.create({ data: { username, passwordHash: hash, name: directorName } });
+      const res = NextResponse.json({ ok: true });
+      await setSession(res, { role: 'director', id: 'director', name: directorName });
+      return res;
+    }
     const exists = await redis.exists('director');
     if (exists) return NextResponse.json({ error: 'Müdür zaten kayıtlı' }, { status: 400 });
-    const hash = await bcrypt.hash(password, 10);
-    const directorName = name || 'Müdür';
     await redis.set('director', { username, passwordHash: hash, name: directorName });
     const res = NextResponse.json({ ok: true });
     await setSession(res, { role: 'director', id: 'director', name: directorName });
@@ -228,6 +274,14 @@ export async function POST(req) {
   if (action === 'update_director_name') {
     const session = await getSession();
     if (!session || session.role !== 'director') return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+    if (useSql()) {
+      const dir = await tdb().director.findFirst();
+      if (!dir) return NextResponse.json({ error: 'Müdür bulunamadı' }, { status: 404 });
+      await tdb().director.update({ where: { id: dir.id }, data: { name } });
+      const res = NextResponse.json({ ok: true });
+      await setSession(res, { role: 'director', id: 'director', name });
+      return res;
+    }
     const director = await redis.get('director');
     if (!director) return NextResponse.json({ error: 'Müdür bulunamadı' }, { status: 404 });
     await redis.set('director', { ...director, name });
@@ -261,6 +315,19 @@ export async function POST(req) {
     // Şifre değiştirme yardımcısı — başarılı değişimde mustChangePassword:false setler
     // ve session JWT'sini yeniler (frontend, yeni mustChange durumunu görsün).
     async function updatePasswordFor(roleKey, sessionPayloadFields) {
+      if (useSql()) {
+        const rec = roleKey === 'parent'
+          ? await tdb().parent.findFirst({ where: { phone: session.id } })
+          : await tdb()[roleKey].findFirst({ where: { legacyId: session.id } });
+        if (!rec) return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
+        const ok = await bcrypt.compare(password, rec.passwordHash);
+        if (!ok) return NextResponse.json({ error: 'Mevcut şifre hatalı' }, { status: 400 });
+        const newHash = await bcrypt.hash(newPassword, 10);
+        await tdb()[roleKey].update({ where: { id: rec.id }, data: { passwordHash: newHash, mustChangePassword: false } });
+        const res = NextResponse.json({ ok: true });
+        await setSession(res, { ...session, mustChangePassword: false, ...sessionPayloadFields });
+        return res;
+      }
       const key = `${roleKey}:${session.id}`;
       const user = await redis.get(key);
       if (!user) return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
@@ -301,6 +368,15 @@ export async function POST(req) {
     }
 
     const hash = await bcrypt.hash(newPassword, 10);
+
+    if (useSql()) {
+      const labels = { teacher: 'Öğretmen', student: 'Öğrenci', accountant: 'Muhasebeci', counselor: 'Rehber' };
+      const rec = await tdb()[targetRole].findFirst({ where: { legacyId: targetId } });
+      if (!rec) return NextResponse.json({ error: `${labels[targetRole]} bulunamadı` }, { status: 404 });
+      await tdb()[targetRole].update({ where: { id: rec.id }, data: { passwordHash: hash, mustChangePassword: true } });
+      await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: targetRole, id: targetId, name: rec.name || targetId }, detail: `${labels[targetRole]} şifresi sıfırlandı: ${rec.name || targetId}` });
+      return NextResponse.json({ ok: true });
+    }
 
     if (targetRole === 'teacher') {
       const t = await redis.get(`teacher:${targetId}`);
