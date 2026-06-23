@@ -62,6 +62,10 @@ async function loadStudents() {
 }
 
 async function loadParents() {
+  if (useSql()) {
+    const rows = await tdb().parent.findMany();
+    return rows.map(p => ({ id: p.phone, children: p.children || [] }));
+  }
   const phones = await redis.smembers('parents');
   if (!phones || phones.length === 0) return [];
   const pipe = redis.pipeline();

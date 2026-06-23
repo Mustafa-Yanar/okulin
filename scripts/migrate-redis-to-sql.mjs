@@ -36,7 +36,7 @@ async function clearOrg() {
     'examRow', 'formResponse', 'finance', 'behavior', 'exam', 'form', 'student',
     'teacher', 'class', 'course', 'counselor', 'accountant', 'expense', 'odev', 'hedef', 'etkinlik',
     'lead', 'announcement', 'resource', 'guidance', 'topic', 'attendance', 'auditLog', 'errLog',
-    'pushSub', 'tenantConfig', 'director', 'payOrder',
+    'pushSub', 'tenantConfig', 'director', 'parent', 'payOrder',
   ];
   for (const m of order) {
     try {
@@ -85,6 +85,17 @@ async function main() {
     counN++;
   }
   rec('Counselor', counselorIds.length, counN);
+
+  // ── Parent (parents set + parent:<phone>) — children Json snapshot ──
+  const parentPhones = await smem('parents');
+  let parentN = 0;
+  for (const phone of parentPhones) {
+    const p = await jget('parent:' + phone);
+    if (!p) continue;
+    await prisma.parent.create({ data: { orgSlug: ORG, branch: BRANCH, phone: p.id || phone, passwordHash: p.passwordHash, name: p.name || null, mustChangePassword: p.mustChangePassword ?? true, children: p.children || [] } });
+    parentN++;
+  }
+  rec('Parent', parentPhones.length, parentN);
 
   // ── Accountant (muhasebeci) — accountants set + accountant:<id> ──
   const accIds = await smem('accountants');

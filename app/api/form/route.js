@@ -100,15 +100,21 @@ async function resolveAudience(audience) {
       }
     }
   }
-  // NOT: parents henüz SQL'de YOK → her zaman Redis (parents modülü göçünde güncellenecek).
   if (roles.includes('parent')) {
-    const phones = await redis.smembers('parents');
-    if (phones?.length) {
-      const pipe = redis.pipeline();
-      phones.forEach(p => pipe.get(`parent:${p}`));
-      let recs = (await pipe.exec()).filter(Boolean);
+    if (useSql()) {
+      const rows = await tdb().parent.findMany();
+      let recs = rows.map(p => ({ id: p.phone, children: p.children || [] }));
       if (cls.length) recs = recs.filter(p => (p.children || []).some(c => cls.includes(c.cls)));
       recs.forEach(p => out.push({ role: 'parent', id: p.id, name: (p.children || []).map(c => c.name).join(', ') + ' (Veli)' }));
+    } else {
+      const phones = await redis.smembers('parents');
+      if (phones?.length) {
+        const pipe = redis.pipeline();
+        phones.forEach(p => pipe.get(`parent:${p}`));
+        let recs = (await pipe.exec()).filter(Boolean);
+        if (cls.length) recs = recs.filter(p => (p.children || []).some(c => cls.includes(c.cls)));
+        recs.forEach(p => out.push({ role: 'parent', id: p.id, name: (p.children || []).map(c => c.name).join(', ') + ' (Veli)' }));
+      }
     }
   }
   if (roles.includes('teacher')) {

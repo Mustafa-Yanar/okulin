@@ -85,6 +85,21 @@ model Accountant {
   @@unique([orgSlug, branch, legacyId])
 }
 
+// Veli — TELEFON-BAZLI kimlik (phone = id/username). children = öğrencilerden
+// türetilen snapshot [{id,name,cls}] (legacy id'ler). syncParents kurar/günceller.
+model Parent {
+  id                 String  @id @default(cuid())
+  orgSlug            String
+  branch             String  @default("main")
+  phone              String
+  passwordHash       String
+  name               String?
+  mustChangePassword Boolean @default(true)
+  children           Json    @default("[]")
+  @@unique([orgSlug, branch, phone])
+  @@index([orgSlug, branch])
+}
+
 model Teacher {
   id                 String          @id @default(cuid())
   orgSlug            String
