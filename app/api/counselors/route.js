@@ -6,6 +6,8 @@ import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
 import { parseBody, z, zName, zId } from '@/lib/validate';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 // Rehber (guidance counselor) hesapları — müdür oluşturur/yönetir.
 // Rehber = müdür yetkileri eksi muhasebe (bkz lib/auth.js isManager).
@@ -25,6 +27,11 @@ export async function GET() {
   const session = await getSession();
   if (!session || session.role !== 'director') {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  }
+
+  if (useSql()) {
+    const rows = await tdb().counselor.findMany();
+    return NextResponse.json(rows.map(c => ({ id: c.legacyId, name: c.name, username: c.username, phone: c.phone || '' })));
   }
 
   const ids = await redis.smembers('counselors');
@@ -49,6 +56,18 @@ export async function POST(req) {
   if (!parsed.ok) return parsed.response;
   const { name, password, phone } = parsed.data;
   const username = name;
+
+  if (useSql()) {
+    const dup = await tdb().counselor.findFirst({ where: { username } });
+    if (dup) return NextResponse.json({ error: 'Bu isimde bir rehber zaten kayıtlı' }, { status: 400 });
+    const id = makeId();
+    const normPhone = phone ? (normalizeTurkishMobile(phone) || '') : '';
+    const initPassword = initialPassword(password, normPhone);
+    const hash = await bcrypt.hash(initPassword, 10);
+    await tdb().counselor.create({ data: { legacyId: id, name, username, passwordHash: hash, phone: normPhone, mustChangePassword: true } });
+    // NOT: userIndex (SQL'de login doğrudan sorgular) bayrak-açıkta atlandı → auth göçü.
+    return NextResponse.json({ id, name, username });
+  }
 
   // Aynı isimde rehber var mı kontrol et
   const existingIds = await redis.smembers('counselors');
@@ -87,6 +106,17 @@ export async function PUT(req) {
   const parsed = await parseBody(req, UpdateSchema);
   if (!parsed.ok) return parsed.response;
   const { id, name, password, phone } = parsed.data;
+
+  if (useSql()) {
+    const c = await tdb().counselor.findFirst({ where: { legacyId: id } });
+    if (!c) return NextResponse.json({ error: 'Rehber bulunamadı' }, { status: 404 });
+    const data = { name, username: name, phone: phone !== undefined ? (normalizeTurkishMobile(phone) || phone || '') : (c.phone || '') };
+    if (password) data.passwordHash = await bcrypt.hash(password, 10);
+    await tdb().counselor.update({ where: { id: c.id }, data });
+    // NOT: updateIndexUsername → SQL login doğrudan sorgular (userIndex yok) → auth göçü.
+    return NextResponse.json({ ok: true });
+  }
+
   const counselor = await redis.get(`counselor:${id}`);
   if (!counselor) return NextResponse.json({ error: 'Rehber bulunamadı' }, { status: 404 });
 
@@ -108,6 +138,19 @@ export async function DELETE(req) {
   const parsed = await parseBody(req, DeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
+
+  if (useSql()) {
+    const c = await tdb().counselor.findFirst({ where: { legacyId: id } });
+    if (c) await tdb().counselor.delete({ where: { id: c.id } });
+    await logAudit({
+      ...actorFrom(session),
+      action: 'counselor.delete',
+      target: { type: 'counselor', id, name: c?.name || id },
+      detail: `Rehber silindi: ${c?.name || id}`,
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   const counselor = await redis.get(`counselor:${id}`);
   await redis.del(`counselor:${id}`);
   await redis.srem('counselors', id);

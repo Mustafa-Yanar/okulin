@@ -75,6 +75,17 @@ async function main() {
   if (dir) await prisma.director.create({ data: { orgSlug: ORG, branch: BRANCH, username: dir.username, passwordHash: dir.passwordHash, name: dir.name || '' } });
   rec('Director', dir ? 1 : 0, dir ? 1 : 0);
 
+  // ── Counselor (rehber) — counselors set + counselor:<id> ──
+  const counselorIds = await smem('counselors');
+  let counN = 0;
+  for (const id of counselorIds) {
+    const c = await jget('counselor:' + id);
+    if (!c) continue;
+    await prisma.counselor.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: c.id, name: c.name, username: c.username || null, passwordHash: c.passwordHash, phone: c.phone || null, mustChangePassword: c.mustChangePassword ?? true } });
+    counN++;
+  }
+  rec('Counselor', counselorIds.length, counN);
+
   // ── Course (dersler set + ders:<key>) ──
   const courseKeys = await smem('dersler');
   let cN = 0;
