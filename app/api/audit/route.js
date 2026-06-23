@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 // GET /api/audit — son denetim kayıtlarını döndürür (sadece müdür).
 // audit:* key'lerini SCAN ile toplar, ts'ye göre yeniden eskiye sıralar.
@@ -8,6 +10,11 @@ export async function GET() {
   const session = await getSession();
   if (!session || session.role !== 'director') {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  }
+
+  if (useSql()) {
+    const rows = await tdb().auditLog.findMany({ orderBy: { at: 'desc' }, take: 500 });
+    return NextResponse.json(rows.map(r => r.data));
   }
 
   const entries = [];

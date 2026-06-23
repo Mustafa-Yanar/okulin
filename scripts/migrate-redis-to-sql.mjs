@@ -350,6 +350,34 @@ async function main() {
   }
   rec('SlotBooking', slotKeys.length, slotN);
 
+  // ── AuditLog (audit:<ts>:<rand>) — geçmiş denetim kayıtları (90g TTL'liydi) ──
+  const auditKeys = await scanAll('audit:*');
+  let auditN = 0;
+  for (let i = 0; i < auditKeys.length; i += 100) {
+    const chunk = auditKeys.slice(i, i + 100);
+    const vals = await Promise.all(chunk.map(k => redis.get(k)));
+    const rows = vals.filter(Boolean).map(v => ({
+      orgSlug: ORG, branch: BRANCH, at: v.ts ? new Date(v.ts) : new Date(),
+      actor: v.actorName || v.actorId || null, action: v.action || '', data: v,
+    }));
+    if (rows.length) { const r = await prisma.auditLog.createMany({ data: rows }); auditN += r.count; }
+  }
+  rec('AuditLog', auditKeys.length, auditN);
+
+  // ── ErrLog (errlog:<ts>:<rand>) — geçmiş hata kayıtları (30g TTL'liydi) ──
+  const errKeys = await scanAll('errlog:*');
+  let errN = 0;
+  for (let i = 0; i < errKeys.length; i += 100) {
+    const chunk = errKeys.slice(i, i + 100);
+    const vals = await Promise.all(chunk.map(k => redis.get(k)));
+    const rows = vals.filter(Boolean).map(v => ({
+      orgSlug: ORG, branch: BRANCH, at: v.ts ? new Date(v.ts) : new Date(),
+      message: v.message || '', data: v,
+    }));
+    if (rows.length) { const r = await prisma.errLog.createMany({ data: rows }); errN += r.count; }
+  }
+  rec('ErrLog', errKeys.length, errN);
+
   // ── PushSub (push_subs:<role>:<userId> = abonelik dizisi) — endpoint başına satır ──
   const pushKeys = await scanAll('push_subs:*');
   let pushN = 0;
