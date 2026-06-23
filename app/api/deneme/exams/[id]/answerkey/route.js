@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { dkeys } from '@/lib/deneme/store';
+import { getExam, saveExam } from '@/lib/deneme/store';
 import { validateBoxes } from '@/lib/deneme/template';
 import { parseBody, z } from '@/lib/validate';
 
@@ -24,7 +23,7 @@ export async function PUT(req, { params }) {
   if (!parsed.ok) return parsed.response;
   const { kitapcik, answers } = parsed.data;
 
-  const exam = await redis.get(dkeys.exam(params.id));
+  const exam = await getExam(params.id);
   if (!exam) return NextResponse.json({ error: 'Sınav bulunamadı' }, { status: 404 });
 
   const check = validateBoxes(exam.examType, answers);
@@ -43,7 +42,7 @@ export async function PUT(req, { params }) {
 
   exam.answerKey = exam.answerKey || {};
   exam.answerKey[kitapcik] = clean;
-  await redis.set(dkeys.exam(exam.id), exam);
+  await saveExam(exam);
 
   return NextResponse.json({ ok: true });
 }

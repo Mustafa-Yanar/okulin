@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { dkeys, getAllStudents } from '@/lib/deneme/store';
+import { getExam, getAllStudents } from '@/lib/deneme/store';
 import { buildMergeReport } from '@/lib/deneme/report';
 
 function isManager(s) {
@@ -22,8 +21,8 @@ export async function GET(req) {
   }
 
   const [tytExam, aytExam] = await Promise.all([
-    redis.get(dkeys.exam(tytId)),
-    redis.get(dkeys.exam(aytId)),
+    getExam(tytId),
+    getExam(aytId),
   ]);
   if (!tytExam || !aytExam) {
     return NextResponse.json({ error: 'Sınav bulunamadı' }, { status: 404 });

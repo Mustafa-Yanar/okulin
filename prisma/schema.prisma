@@ -231,6 +231,7 @@ model TenantConfig {
   currentWeek     String?
   programTemplate Json?
   receiptCounter  Int     @default(0)  // makbuz no sayacı (MKB-YYYY-#####)
+  denemeNameMap   Json?   // deneme excelName(lower)→studentId kalıcı eşleştirme
   @@id([orgSlug, branch])
 }
 
@@ -324,6 +325,7 @@ model Exam {
   kitapcikSayisi Int       @default(1)
   subjectKeys    String[]  @default([])
   answerKey      Json?
+  computedAt     DateTime? // son yeniden-puanlama (compute route); report okur
   rows           ExamRow[]
   createdAt      DateTime  @default(now())
   @@unique([orgSlug, branch, legacyId])

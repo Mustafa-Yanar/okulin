@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { dkeys } from '@/lib/deneme/store';
+import { listExams, saveExam, addExamToIndex } from '@/lib/deneme/store';
 import { getTemplate, flatSubjects } from '@/lib/deneme/template';
 import { parseBody, z } from '@/lib/validate';
 
@@ -17,7 +16,7 @@ function uuid() {
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-  const index = (await redis.get(dkeys.examsIndex)) || [];
+  const index = await listExams();
   return NextResponse.json({ exams: index });
 }
 
@@ -55,12 +54,10 @@ export async function POST(req) {
     rows: [],
     createdAt: Date.now(),
   };
-  await redis.set(dkeys.exam(id), exam);
+  await saveExam(exam);
 
   const meta = { id, name: exam.name, examType, category: null, date: iso, createdAt: exam.createdAt };
-  const index = (await redis.get(dkeys.examsIndex)) || [];
-  index.unshift(meta);
-  await redis.set(dkeys.examsIndex, index);
+  await addExamToIndex(meta);
 
   return NextResponse.json({ ok: true, examId: id, exam: meta });
 }

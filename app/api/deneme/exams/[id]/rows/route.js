@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { dkeys, normName, getAllStudents } from '@/lib/deneme/store';
+import { getExam, saveExam, getNameMap, normName, getAllStudents } from '@/lib/deneme/store';
 import { gradeFlat } from '@/lib/deneme/grade';
 import { parseBody, z } from '@/lib/validate';
 
@@ -40,12 +39,12 @@ export async function POST(req, { params }) {
   if (!parsed.ok) return parsed.response;
   const { source = 'optik', kitapcik = 'A', students } = parsed.data;
 
-  const exam = await redis.get(dkeys.exam(params.id));
+  const exam = await getExam(params.id);
   if (!exam) return NextResponse.json({ error: 'Sınav bulunamadı' }, { status: 404 });
   if (!Array.isArray(exam.rows)) exam.rows = [];
 
   // İsim → studentId eşleştirme kaynakları
-  const nameMap = (await redis.get(dkeys.nameMap)) || {};
+  const nameMap = await getNameMap();
   const allStudents = await getAllStudents();
   const byName = {};
   for (const s of allStudents) {
@@ -79,7 +78,7 @@ export async function POST(req, { params }) {
     added++;
   }
 
-  await redis.set(dkeys.exam(exam.id), exam);
+  await saveExam(exam);
 
   return NextResponse.json({
     ok: true,
@@ -100,9 +99,9 @@ export async function DELETE(req, { params }) {
   const rid = searchParams.get('rowId');
   if (!rid) return NextResponse.json({ error: 'rowId gerekli' }, { status: 400 });
 
-  const exam = await redis.get(dkeys.exam(params.id));
+  const exam = await getExam(params.id);
   if (!exam) return NextResponse.json({ error: 'Sınav bulunamadı' }, { status: 404 });
   exam.rows = (exam.rows || []).filter((r) => r.id !== rid);
-  await redis.set(dkeys.exam(exam.id), exam);
+  await saveExam(exam);
   return NextResponse.json({ ok: true, rowCount: exam.rows.length });
 }

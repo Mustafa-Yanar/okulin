@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { dkeys } from '@/lib/deneme/store';
+import { getExam, saveExam, getNameMap, saveNameMap } from '@/lib/deneme/store';
 import { parseBody, z } from '@/lib/validate';
 
 const MatchSchema = z.object({
@@ -24,10 +23,10 @@ export async function POST(req, { params }) {
   const parsed = await parseBody(req, MatchSchema);
   if (!parsed.ok) return parsed.response;
   const { matches } = parsed.data;
-  const exam = await redis.get(dkeys.exam(params.id));
+  const exam = await getExam(params.id);
   if (!exam) return NextResponse.json({ error: 'Deneme bulunamadı' }, { status: 404 });
 
-  const nameMap = (await redis.get(dkeys.nameMap)) || {};
+  const nameMap = await getNameMap();
   for (const m of matches || []) {
     const row = m.rowId
       ? exam.rows.find((r) => r.id === m.rowId)
@@ -38,7 +37,7 @@ export async function POST(req, { params }) {
     else delete nameMap[lower];
   }
 
-  await redis.set(dkeys.exam(exam.id), exam);
-  await redis.set(dkeys.nameMap, nameMap);
+  await saveExam(exam);
+  await saveNameMap(nameMap);
   return NextResponse.json({ ok: true });
 }

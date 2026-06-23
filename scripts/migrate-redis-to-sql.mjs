@@ -322,7 +322,7 @@ async function main() {
   for (const ek of examKeys) {
     const e = await redis.get(ek);
     if (!e || !e.id) continue;
-    const ex = await prisma.exam.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: e.id, name: e.name || '', examType: e.examType || '', category: e.category || null, date: e.date || null, kitapcikSayisi: e.kitapcikSayisi ?? 1, subjectKeys: e.subjectKeys || [], answerKey: e.answerKey ?? null, createdAt: e.createdAt ? new Date(e.createdAt) : new Date() } });
+    const ex = await prisma.exam.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: e.id, name: e.name || '', examType: e.examType || '', category: e.category || null, date: e.date || null, kitapcikSayisi: e.kitapcikSayisi ?? 1, subjectKeys: e.subjectKeys || [], answerKey: e.answerKey ?? null, computedAt: e.computedAt ? new Date(e.computedAt) : null, createdAt: e.createdAt ? new Date(e.createdAt) : new Date() } });
     examN++;
     for (const r of (e.rows || [])) {
       await prisma.examRow.create({ data: { examId: ex.id, studentId: r.studentId ? (studentMap[r.studentId] || r.studentId) : null, data: r } });
@@ -331,15 +331,16 @@ async function main() {
   }
   rec('Exam', examKeys.length, examN);
 
-  // ── TenantConfig (slot_times + current_week) ──
+  // ── TenantConfig (slot_times + current_week + deneme namemap) ──
   const slotTimes = await jget('slot_times');
   const currentWeek = await jget('current_week');
   const rcRaw = await jget('receipt_counter');
+  const denemeNameMap = await jget('deneme:namemap');
   const receiptCounter = parseInt(rcRaw) || 0;
-  if (slotTimes || currentWeek || rcRaw != null) {
-    await prisma.tenantConfig.create({ data: { orgSlug: ORG, branch: BRANCH, slotTimes: slotTimes ?? null, currentWeek: (typeof currentWeek === 'string' ? currentWeek : null), programTemplate: null, receiptCounter } });
+  if (slotTimes || currentWeek || rcRaw != null || denemeNameMap) {
+    await prisma.tenantConfig.create({ data: { orgSlug: ORG, branch: BRANCH, slotTimes: slotTimes ?? null, currentWeek: (typeof currentWeek === 'string' ? currentWeek : null), programTemplate: null, receiptCounter, denemeNameMap: denemeNameMap ?? null } });
   }
-  rec('TenantConfig', (slotTimes || currentWeek || rcRaw != null) ? 1 : 0, (slotTimes || currentWeek || rcRaw != null) ? 1 : 0);
+  rec('TenantConfig', (slotTimes || currentWeek || rcRaw != null || denemeNameMap) ? 1 : 0, (slotTimes || currentWeek || rcRaw != null || denemeNameMap) ? 1 : 0);
 
   // ── EtutTemplate (program:<teacherId>.etutSablonlari[]) ──
   const progKeys = await scanAll('program:*');

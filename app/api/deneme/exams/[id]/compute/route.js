@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { dkeys } from '@/lib/deneme/store';
+import { getExam, saveExam } from '@/lib/deneme/store';
 import { gradeFlat, hasAnswerKey } from '@/lib/deneme/grade';
 import { computePuanlar } from '@/lib/deneme/score';
 import { notifyExamResults } from '@/lib/notify';
@@ -19,7 +18,7 @@ export async function POST(_req, { params }) {
   const session = await getSession();
   if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
-  const exam = await redis.get(dkeys.exam(params.id));
+  const exam = await getExam(params.id);
   if (!exam) return NextResponse.json({ error: 'Sınav bulunamadı' }, { status: 404 });
   const rows = Array.isArray(exam.rows) ? exam.rows : [];
 
@@ -45,7 +44,7 @@ export async function POST(_req, { params }) {
   }
 
   exam.computedAt = Date.now();
-  await redis.set(dkeys.exam(exam.id), exam);
+  await saveExam(exam);
 
   // "Yeni sonuç" tetikleyicisi — eşleşmiş öğrencilerin velilerine push (best-effort, sınav başına bir kez)
   await notifyExamResults(exam);

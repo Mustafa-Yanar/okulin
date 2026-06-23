@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { dkeys, getAllStudents } from '@/lib/deneme/store';
+import { getExam, getAllStudents } from '@/lib/deneme/store';
 import { buildReports } from '@/lib/deneme/report';
 import { hasAnswerKey } from '@/lib/deneme/grade';
 
@@ -14,7 +13,7 @@ export async function GET(_req, { params }) {
   const session = await getSession();
   if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
-  const exam = await redis.get(dkeys.exam(params.id));
+  const exam = await getExam(params.id);
   if (!exam) return NextResponse.json({ error: 'Sınav bulunamadı' }, { status: 404 });
 
   // Eşleşmiş öğrenci ad/sınıf bilgisi (rapora gerçek isim + sınıf yazılır)
