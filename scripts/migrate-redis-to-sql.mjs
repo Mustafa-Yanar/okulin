@@ -338,6 +338,22 @@ async function main() {
   }
   rec('SlotBooking', slotKeys.length, slotN);
 
+  // ── PushSub (push_subs:<role>:<userId> = abonelik dizisi) — endpoint başına satır ──
+  const pushKeys = await scanAll('push_subs:*');
+  let pushN = 0;
+  for (const pk of pushKeys) {
+    const parts = strip(pk).split(':'); // ['push_subs', role, userId]
+    const role = parts[1];
+    const userId = parts.slice(2).join(':');
+    const list = await redis.get(pk);
+    for (const sub of (Array.isArray(list) ? list : [])) {
+      if (!sub?.endpoint) continue;
+      try { await prisma.pushSub.create({ data: { orgSlug: ORG, branch: BRANCH, role, userId, endpoint: sub.endpoint, keys: sub.keys || {} } }); pushN++; }
+      catch { /* yinelenen endpoint → atla */ }
+    }
+  }
+  rec('PushSub', pushKeys.length + ' key', pushN);
+
   await prisma.$disconnect();
   console.log('\n=== GÖÇ ÖZETİ ===');
   for (const [k, v] of Object.entries(summary)) console.log(`  ${k.padEnd(16)} ${v}`);
