@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { getSession, isManager } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
-import { slotStartTime } from '@/lib/slots';
+import { slotStartTime, getProgramTemplate, setProgramTemplate } from '@/lib/slots';
 import { getWeekKey } from '@/lib/constants';
+import { useSql } from '@/lib/usesql';
 
 // Etüt şablonları — öğretmenin haftadan bağımsız, serbest saatli etüt blokları.
 // program:<teacherId>.etutSablonlari = [ { id, dayIndex, start, end, aktif } ]
 // Ders slotlarından (w1-w12) BAĞIMSIZ; gerçek saat bazlı (calendar için).
-// Mevcut /api/program slot diff mantığına dokunmaz — ayrı kod yolu.
+// SQL modunda: Teacher.programTemplate.etutSablonlari olarak saklanır.
 
 function programKey(teacherId) {
   return `program:${teacherId}`;
@@ -21,7 +22,6 @@ function makeId() {
 const zTime = z.string().regex(/^\d{2}:\d{2}$/, 'Saat HH:MM olmalı');
 const zDay = z.number().int().min(0).max(6);
 
-// Tek şablon ekle/güncelle
 const SaveSchema = z.object({
   teacherId: zId,
   weekKey: z.string().max(40).optional(),
@@ -35,16 +35,14 @@ const SaveSchema = z.object({
 });
 const DeleteSchema = z.object({ teacherId: zId, id: z.string().max(20) });
 
-// Aktif/pasif değiştir. scope:'all' → kalıcı (aktif alanı); scope:'week' → o haftaya özel (pasifHaftalar listesi)
 const ToggleSchema = z.object({
   teacherId: zId,
   id: z.string().max(20),
   scope: z.enum(['all', 'week']),
   weekKey: z.string().max(40).optional(),
-  aktif: z.boolean(), // hedef durum (true=aktif yap, false=pasif yap)
+  aktif: z.boolean(),
 });
 
-// Öğrenci ata/kaldır (birebir). student null → atamayı kaldır.
 const AssignSchema = z.object({
   teacherId: zId,
   id: z.string().max(20),
@@ -60,18 +58,32 @@ function toMin(t) {
   return h * 60 + m;
 }
 
-// GET /api/etut-sablon?teacherId=...  → şablon listesi
+// SQL yardımcısı: programTemplate'ten etutSablonlari oku, değiştir, geri yaz
+async function updateSablonlar(teacherId, mutFn) {
+  const fullTemplate = await getProgramTemplate(teacherId); // SQL-aware
+  const list = Array.isArray(fullTemplate.etutSablonlari) ? fullTemplate.etutSablonlari : [];
+  const newList = mutFn(list);
+  await setProgramTemplate(teacherId, { ...fullTemplate, etutSablonlari: newList }); // SQL-aware
+  return newList;
+}
+
+// GET /api/etut-sablon?teacherId=...
 export async function GET(req) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
   const teacherId = new URL(req.url).searchParams.get('teacherId');
   if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
 
+  if (useSql()) {
+    const fullTemplate = await getProgramTemplate(teacherId);
+    return NextResponse.json({ sablonlar: fullTemplate.etutSablonlari || [] });
+  }
+
   const template = (await redis.get(programKey(teacherId))) || {};
   return NextResponse.json({ sablonlar: template.etutSablonlari || [] });
 }
 
-// POST /api/etut-sablon  → şablon ekle (id yoksa) veya güncelle (id varsa)
+// POST /api/etut-sablon → şablon ekle (id yoksa) veya güncelle (id varsa)
 export async function POST(req) {
   const session = await getSession();
   if (!session || !isManager(session)) {
@@ -87,31 +99,35 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Bitiş saati başlangıçtan sonra olmalı' }, { status: 400 });
   }
 
-  // Geçmişe etüt eklenemez/düzenlenemez — gösterilen haftanın o gün/saati geçmişse reddet.
-  // Geçmiş hafta zaten currentWeek'ten öncesine gidilemediği için kapalı; bu bu-haftadaki
-  // geçmiş gün/saati de kapatır (müdür dahil).
   const startAt = slotStartTime(weekKey, sablon.dayIndex, sablon.start);
   if (startAt.getTime() <= Date.now()) {
     return NextResponse.json({ error: 'Geçmiş bir gün/saate etüt eklenemez' }, { status: 400 });
+  }
+
+  if (useSql()) {
+    const sablonlar = await updateSablonlar(teacherId, (list) => {
+      if (sablon.id) {
+        const idx = list.findIndex(s => s.id === sablon.id);
+        if (idx === -1) return list;
+        const updated = [...list];
+        updated[idx] = { ...updated[idx], ...sablon };
+        return updated;
+      } else {
+        return [...list, { id: makeId(), dayIndex: sablon.dayIndex, start: sablon.start, end: sablon.end, aktif: sablon.aktif ?? true }];
+      }
+    });
+    return NextResponse.json({ ok: true, sablonlar });
   }
 
   const template = (await redis.get(programKey(teacherId))) || {};
   const list = Array.isArray(template.etutSablonlari) ? template.etutSablonlari : [];
 
   if (sablon.id) {
-    // Güncelle
     const idx = list.findIndex(s => s.id === sablon.id);
     if (idx === -1) return NextResponse.json({ error: 'Şablon bulunamadı' }, { status: 404 });
     list[idx] = { ...list[idx], ...sablon };
   } else {
-    // Yeni ekle
-    list.push({
-      id: makeId(),
-      dayIndex: sablon.dayIndex,
-      start: sablon.start,
-      end: sablon.end,
-      aktif: sablon.aktif ?? true,
-    });
+    list.push({ id: makeId(), dayIndex: sablon.dayIndex, start: sablon.start, end: sablon.end, aktif: sablon.aktif ?? true });
   }
 
   template.etutSablonlari = list;
@@ -119,7 +135,7 @@ export async function POST(req) {
   return NextResponse.json({ ok: true, sablonlar: list });
 }
 
-// PUT /api/etut-sablon  → aktif/pasif değiştir (kalıcı veya o haftaya özel)
+// PUT /api/etut-sablon → aktif/pasif değiştir
 export async function PUT(req) {
   const session = await getSession();
   if (!session || !isManager(session)) {
@@ -133,6 +149,26 @@ export async function PUT(req) {
     return NextResponse.json({ error: 'weekKey gerekli' }, { status: 400 });
   }
 
+  if (useSql()) {
+    const sablonlar = await updateSablonlar(teacherId, (list) => {
+      const idx = list.findIndex(s => s.id === id);
+      if (idx === -1) return list;
+      const sb = { ...list[idx] };
+      if (scope === 'all') {
+        sb.aktif = aktif;
+        if (aktif) sb.pasifHaftalar = [];
+      } else {
+        const set = new Set(Array.isArray(sb.pasifHaftalar) ? sb.pasifHaftalar : []);
+        if (aktif) set.delete(weekKey); else set.add(weekKey);
+        sb.pasifHaftalar = Array.from(set);
+      }
+      const updated = [...list];
+      updated[idx] = sb;
+      return updated;
+    });
+    return NextResponse.json({ ok: true, sablonlar });
+  }
+
   const template = (await redis.get(programKey(teacherId))) || {};
   const list = Array.isArray(template.etutSablonlari) ? template.etutSablonlari : [];
   const idx = list.findIndex(s => s.id === id);
@@ -140,12 +176,9 @@ export async function PUT(req) {
 
   const sb = { ...list[idx] };
   if (scope === 'all') {
-    // Kalıcı: aktif alanını set et. Aktif yapılıyorsa bu-hafta pasif kayıtlarını da temizle
-    // (aksi halde aktif:true ama pasifHaftalar bu haftayı içerirse etüt görünmez kalır).
     sb.aktif = aktif;
     if (aktif) sb.pasifHaftalar = [];
   } else {
-    // O haftaya özel: pasifHaftalar listesini güncelle
     const set = new Set(Array.isArray(sb.pasifHaftalar) ? sb.pasifHaftalar : []);
     if (aktif) set.delete(weekKey); else set.add(weekKey);
     sb.pasifHaftalar = Array.from(set);
@@ -156,7 +189,7 @@ export async function PUT(req) {
   return NextResponse.json({ ok: true, sablonlar: list });
 }
 
-// PATCH /api/etut-sablon  → şablona öğrenci ata / kaldır (birebir)
+// PATCH /api/etut-sablon → şablona öğrenci ata / kaldır
 export async function PATCH(req) {
   const session = await getSession();
   if (!session || !isManager(session)) {
@@ -166,6 +199,26 @@ export async function PATCH(req) {
   const parsed = await parseBody(req, AssignSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id, student } = parsed.data;
+
+  if (useSql()) {
+    const sablonlar = await updateSablonlar(teacherId, (list) => {
+      const idx = list.findIndex(s => s.id === id);
+      if (idx === -1) return list;
+      const sb = { ...list[idx] };
+      if (student) {
+        sb.studentId = student.id;
+        sb.studentName = student.name;
+        sb.studentCls = student.cls || '';
+        sb.bookedBy = session.role;
+      } else {
+        delete sb.studentId; delete sb.studentName; delete sb.studentCls; delete sb.bookedBy;
+      }
+      const updated = [...list];
+      updated[idx] = sb;
+      return updated;
+    });
+    return NextResponse.json({ ok: true, sablonlar });
+  }
 
   const template = (await redis.get(programKey(teacherId))) || {};
   const list = Array.isArray(template.etutSablonlari) ? template.etutSablonlari : [];
@@ -177,12 +230,9 @@ export async function PATCH(req) {
     sb.studentId = student.id;
     sb.studentName = student.name;
     sb.studentCls = student.cls || '';
-    sb.bookedBy = session.role; // atayan: director / counselor / teacher
+    sb.bookedBy = session.role;
   } else {
-    delete sb.studentId;
-    delete sb.studentName;
-    delete sb.studentCls;
-    delete sb.bookedBy;
+    delete sb.studentId; delete sb.studentName; delete sb.studentCls; delete sb.bookedBy;
   }
   list[idx] = sb;
   template.etutSablonlari = list;
@@ -190,7 +240,7 @@ export async function PATCH(req) {
   return NextResponse.json({ ok: true, sablonlar: list });
 }
 
-// DELETE /api/etut-sablon  → şablon sil
+// DELETE /api/etut-sablon → şablon sil
 export async function DELETE(req) {
   const session = await getSession();
   if (!session || !isManager(session)) {
@@ -200,6 +250,11 @@ export async function DELETE(req) {
   const parsed = await parseBody(req, DeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id } = parsed.data;
+
+  if (useSql()) {
+    const sablonlar = await updateSablonlar(teacherId, (list) => list.filter(s => s.id !== id));
+    return NextResponse.json({ ok: true, sablonlar });
+  }
 
   const template = (await redis.get(programKey(teacherId))) || {};
   const list = Array.isArray(template.etutSablonlari) ? template.etutSablonlari : [];

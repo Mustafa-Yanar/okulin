@@ -32,7 +32,7 @@ const rec = (name, redisN, sqlN) => { summary[name] = `redis ${redisN} → sql $
 async function clearOrg() {
   // Çocuk tablolar önce (FK güvenli), sonra ebeveynler. Tekrar çalıştırılabilirlik için.
   const order = [
-    'slotBooking', 'etutTemplate', 'teacherPreset', 'installment', 'behaviorEntry',
+    'slotBooking', 'teacherPreset', 'installment', 'behaviorEntry',
     'examRow', 'formResponse', 'finance', 'behavior', 'exam', 'form', 'student',
     'teacher', 'class', 'course', 'counselor', 'accountant', 'expense', 'odev', 'hedef', 'etkinlik',
     'lead', 'announcement', 'resource', 'guidance', 'topic', 'attendance', 'auditLog', 'errLog',
@@ -130,14 +130,15 @@ async function main() {
   }
   rec('Class', classIds.length, Object.keys(classMap).length);
 
-  // ── Teacher (+ presets) ──
+  // ── Teacher (+ presets + programTemplate) ──
   const teacherIds = await smem('teachers');
   const teacherMap = {};
   let presetN = 0;
   for (const id of teacherIds) {
     const t = await jget('teacher:' + id);
     if (!t) continue;
-    const row = await prisma.teacher.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: t.id, name: t.name, username: t.username, passwordHash: t.passwordHash, branches: t.branches || [], allowedGroups: t.allowedGroups || [], offDays: t.offDays || [], photoUrl: t.photoUrl || null, phone: t.phone || null, mustChangePassword: t.mustChangePassword ?? true } });
+    const prog = await jget('program:' + id); // grid şablonu + etutSablonlari
+    const row = await prisma.teacher.create({ data: { orgSlug: ORG, branch: BRANCH, legacyId: t.id, name: t.name, username: t.username, passwordHash: t.passwordHash, branches: t.branches || [], allowedGroups: t.allowedGroups || [], offDays: t.offDays || [], photoUrl: t.photoUrl || null, phone: t.phone || null, mustChangePassword: t.mustChangePassword ?? true, programTemplate: prog ?? null } });
     teacherMap[t.id] = row.id;
     for (const ps of (Array.isArray(t.presets) ? t.presets : [])) {
       await prisma.teacherPreset.create({ data: { teacherId: row.id, classId: classMap[ps.cls || ps.classId] || (ps.cls || ps.classId || ''), course: ps.course || ps.branch || '' } });
@@ -342,21 +343,6 @@ async function main() {
   }
   rec('TenantConfig', (slotTimes || currentWeek || rcRaw != null || denemeNameMap) ? 1 : 0, (slotTimes || currentWeek || rcRaw != null || denemeNameMap) ? 1 : 0);
 
-  // ── EtutTemplate (program:<teacherId>.etutSablonlari[]) ──
-  const progKeys = await scanAll('program:*');
-  let etutN = 0;
-  for (const pk of progKeys) {
-    const tid = strip(pk).split(':')[1];
-    const teacherId = teacherMap[tid];
-    if (!teacherId) continue;
-    const prog = await redis.get(pk);
-    for (const e of (prog?.etutSablonlari || [])) {
-      await prisma.etutTemplate.create({ data: { orgSlug: ORG, branch: BRANCH, teacherId, dayIndex: e.dayIndex ?? 0, start: e.start || '', end: e.end || '', aktif: e.aktif ?? true, studentId: e.studentId ? (studentMap[e.studentId] || e.studentId) : null, bookedBy: e.bookedBy || null } });
-      etutN++;
-    }
-  }
-  rec('EtutTemplate', progKeys.length + ' prog', etutN);
-
   // ── SlotBooking (slot:<week>:<teacher>:<day>:<slotId>) ──
   const slotKeys = await scanAll('slot:*');
   const slotRows = [];
@@ -369,8 +355,9 @@ async function main() {
     slotRows.push({
       orgSlug: ORG, branch: BRANCH, weekKey: parts[1], teacherId, dayIndex: Number(parts[3]) || 0, slotId: parts[4],
       booked: v.booked ?? false, disabled: v.disabled ?? false, fixed: v.fixed ?? false,
-      studentId: v.studentId ? (studentMap[v.studentId] || v.studentId) : null,
+      studentId: v.studentId || null, // legacy id olarak sakla (SQL de böyle kullanılır)
       studentName: v.studentName || null, studentCls: v.studentCls || null, dersBranch: v.branch || null, bookedBy: v.bookedBy || null,
+      data: v, // tam hücre içeriği (lessonType, cls, subBranch, branch, bookedAt dahil)
     });
   }
   let slotN = 0;

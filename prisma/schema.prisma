@@ -114,8 +114,8 @@ model Teacher {
   photoUrl           String?
   phone              String?
   mustChangePassword Boolean         @default(true)
+  programTemplate    Json?           // program:{legacyId} Redis objesi (grid şablonu + etutSablonlari)
   presets            TeacherPreset[]
-  etutTemplates      EtutTemplate[]
   slotBookings       SlotBooking[]
   @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch])
@@ -188,21 +188,6 @@ model Course {
   @@index([orgSlug, branch])
 }
 
-model EtutTemplate {
-  id        String  @id @default(cuid())
-  orgSlug   String
-  branch    String  @default("main")
-  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  teacherId String
-  dayIndex  Int
-  start     String
-  end       String
-  aktif     Boolean @default(true)
-  studentId String?
-  bookedBy  String?
-  @@index([orgSlug, branch])
-}
-
 model SlotBooking {
   id          String  @id @default(cuid())
   orgSlug     String
@@ -220,6 +205,7 @@ model SlotBooking {
   studentCls  String?
   dersBranch  String?
   bookedBy    String?
+  data        Json?   // hücrenin tam içeriği (lessonType, cls, subBranch, branch, bookedAt dahil)
   @@unique([orgSlug, branch, weekKey, teacherId, dayIndex, slotId])
   @@index([orgSlug, branch, weekKey])
 }

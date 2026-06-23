@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { slotsForDay, ALL_DAYS, MEZUN_ONLY_LESSON_SLOTS, STUDENT_GROUPS } from '@/lib/constants';
-import { getWeekKey, slotKey, isEditableWeek, initWeekForTeacher, slotStartTime, getSlotTimes } from '@/lib/slots';
+import { getWeekKey, slotKey, isEditableWeek, initWeekForTeacher, slotStartTime, getSlotTimes, getProgramTemplate, setProgramTemplate, deleteProgramTemplate } from '@/lib/slots';
 import { parseBody, z, zId } from '@/lib/validate';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 // Derin iç içe grid — üst seviye şekil doğrulanır, hücre mantığı aşağıda işlenir.
 const ProgramPostSchema = z.object({ teacherId: zId, weekKey: z.string().min(1).max(40), program: z.record(z.unknown()) });
@@ -20,19 +22,58 @@ function programKey(teacherId) {
 }
 
 // GET /api/program?teacherId=...&week=...
-// Verilen hafta için efektif program'ı döndürür:
-// - Şablondaki entry'ler (fixed: true)
-// - O haftanın grid'inde fixed: false olarak yazılmış geçici ders/etüt'ler
 export async function GET(req) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const teacherId = searchParams.get('teacherId');
+  const legacyTeacherId = searchParams.get('teacherId');
   const weekKey = searchParams.get('week') || getWeekKey();
-  if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
+  if (!legacyTeacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
 
-  const template = (await redis.get(programKey(teacherId))) || {};
+  if (useSql()) {
+    // Şablonu oku (grid kısmı; etutSablonlari hariç)
+    const fullTemplate = await getProgramTemplate(legacyTeacherId);
+    const { etutSablonlari, ...template } = fullTemplate;
+
+    // SlotBooking'den geçici (fixed:false) entry'leri topla
+    const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
+    const effective = JSON.parse(JSON.stringify(template));
+    for (const dayIdx of Object.keys(effective)) {
+      for (const sid of Object.keys(effective[dayIdx] || {})) {
+        if (effective[dayIdx][sid]) effective[dayIdx][sid].fixed = true;
+      }
+    }
+
+    if (teacher) {
+      const rows = await tdb().slotBooking.findMany({ where: { weekKey, teacherId: teacher.id } });
+      for (const row of rows) {
+        const tmplEntry = template[String(row.dayIndex)]?.[row.slotId];
+        if (tmplEntry) continue; // şablonda var, geçici değil
+
+        const cell = row.data || {};
+        // Geçici ders
+        if (cell.lessonType === 'ders' && cell.fixed === false) {
+          if (!effective[String(row.dayIndex)]) effective[String(row.dayIndex)] = {};
+          const e = { type: 'ders', cls: cell.cls || '', fixed: false };
+          if (cell.subBranch) e.subBranch = cell.subBranch;
+          effective[String(row.dayIndex)][row.slotId] = e;
+        }
+        // Geçici etüt
+        if (row.booked && cell.fixed === false) {
+          if (!effective[String(row.dayIndex)]) effective[String(row.dayIndex)] = {};
+          effective[String(row.dayIndex)][row.slotId] = {
+            type: 'etut', studentId: row.studentId,
+            studentName: row.studentName || '', studentCls: row.studentCls || '', fixed: false,
+          };
+        }
+      }
+    }
+
+    return NextResponse.json({ weekKey, program: effective });
+  }
+
+  const template = (await redis.get(programKey(legacyTeacherId))) || {};
 
   // Grid'i çek, geçici (fixed:false) entry'leri topla
   const slotTimes = await getSlotTimes();
@@ -41,7 +82,7 @@ export async function GET(req) {
   for (const day of ALL_DAYS) {
     for (const slot of slotsForDay(day.index, day.index >= 5 ? slotTimes.weekend : slotTimes.weekday)) {
       slotMeta.push({ dayIndex: day.index, slotId: slot.id });
-      pipeline.get(slotKey(weekKey, teacherId, day.index, slot.id));
+      pipeline.get(slotKey(weekKey, legacyTeacherId, day.index, slot.id));
     }
   }
   const gridResults = await pipeline.exec();
@@ -91,13 +132,6 @@ export async function GET(req) {
 }
 
 // POST /api/program
-// Body: { teacherId, weekKey, program }
-// program: { [dayIndex]: { [slotId]: { type, cls?, studentId?, ..., fixed: bool } | null } }
-//
-// fixed: true  → şablona yazılır (program:{teacherId})
-// fixed: false → o haftanın grid'ine yazılır (slot:{weekKey}:...)
-//
-// null veya undefined entry: o slotu temizle (hem şablon hem grid)
 export async function POST(req) {
   const session = await getSession();
   if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
@@ -106,31 +140,23 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, ProgramPostSchema);
   if (!parsed.ok) return parsed.response;
-  const { teacherId, weekKey, program } = parsed.data;
+  const { teacherId: legacyTeacherId, weekKey, program } = parsed.data;
 
   if (!isEditableWeek(weekKey)) {
     return NextResponse.json({ error: 'Geçmiş hafta düzenlenemez. Sadece mevcut hafta ve sonraki 2 hafta düzenlenebilir.' }, { status: 400 });
   }
 
-  // Şablonu erken oku — geçmiş-silme istisnası için (available slot kaldırma).
-  const templateForGuard = (await redis.get(programKey(teacherId))) || {};
-
-  // Geçmiş slotları diff'ten sessizce kaldır — frontend yanlışlıkla gönderirse
-  // mevcut etüt/ders kayıtlarına dokunulmaz.
-  // İSTİSNA: type:'available' haftadan bağımsız şablon ayarı (öğretmenin genel
-  // müsaitliği); geçmiş-silme kuralından muaf, aksi halde bu haftanın geçmiş
-  // günleri işaretlenemez. Aynı şekilde, şablonda 'available' olan bir slotu
-  // KALDIRMA (null) da geçmiş-silmeden muaf — yoksa geçmiş güne düşen 'Ders'
-  // işaretli slot "Slotu Kapat" ile kapatılamaz (kullanıcı bug raporu).
-  const postSlotTimes = await getSlotTimes();
+  // Geçmiş slotları diff'ten sessizce kaldır
+  const templateForGuard = await getProgramTemplate(legacyTeacherId); // SQL-aware
+  const { etutSablonlari: _ets, ...gridTemplateForGuard } = templateForGuard;
+  const postSlotTimes = await getSlotTimes(); // SQL-aware
   for (const dayIdx of Object.keys(program)) {
     const di = parseInt(dayIdx);
     const slots = slotsForDay(di, di >= 5 ? postSlotTimes.weekend : postSlotTimes.weekday);
     for (const slotId of Object.keys(program[dayIdx] || {})) {
       const entry = program[dayIdx][slotId];
-      if (entry?.type === 'available') continue; // şablon müsaitliği ekleme — koru
-      // available slot kaldırma (null) — şablonda available varsa koru
-      const tmpl = templateForGuard?.[dayIdx]?.[slotId];
+      if (entry?.type === 'available') continue;
+      const tmpl = gridTemplateForGuard?.[dayIdx]?.[slotId];
       if ((entry === null || entry === undefined) && tmpl?.type === 'available') continue;
       const slotDef = slots.find(s => s.id === slotId);
       if (!slotDef) continue;
@@ -142,8 +168,119 @@ export async function POST(req) {
     if (Object.keys(program[dayIdx]).length === 0) delete program[dayIdx];
   }
 
+  if (useSql()) {
+    // İzin günü kontrolü
+    const teacherSql = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
+    if (!teacherSql) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
+    const offDays = new Set(teacherSql.offDays || []);
+    for (const [dayIdx, daySlots] of Object.entries(program)) {
+      if (!offDays.has(parseInt(dayIdx))) continue;
+      for (const [, entry] of Object.entries(daySlots || {})) {
+        if (entry) return NextResponse.json({ error: 'Bu gün öğretmenin izin günü olarak işaretli, ders/etüt eklenemez.' }, { status: 400 });
+      }
+    }
+
+    // Hafta içi w1–w6 ders slotlarına sadece mezun sınıfı atanabilir
+    const mezunClasses = new Set(STUDENT_GROUPS.mezun?.classes || []);
+    for (const [dayIdx, daySlots] of Object.entries(program)) {
+      if (parseInt(dayIdx) >= 5) continue;
+      for (const [slotId, entry] of Object.entries(daySlots || {})) {
+        if (entry?.type === 'ders' && MEZUN_ONLY_LESSON_SLOTS.includes(slotId)) {
+          if (entry.cls && !mezunClasses.has(entry.cls)) {
+            return NextResponse.json({ error: `${slotId} slotu (hafta içi ilk 6) sadece mezun sınıflarına ders eklenebilir` }, { status: 400 });
+          }
+        }
+      }
+    }
+
+    // Sınıf çakışma kontrolü (diğer öğretmenlerin programTemplates'inden)
+    const otherTeachers = await tdb().teacher.findMany({ where: { id: { not: teacherSql.id } } });
+    for (const [dayIdx, daySlots] of Object.entries(program)) {
+      for (const [slotId, entry] of Object.entries(daySlots || {})) {
+        if (entry?.type !== 'ders' || !entry.cls || entry.fixed !== true) continue;
+        for (const ot of otherTeachers) {
+          const otTemplate = ot.programTemplate || {};
+          const otEntry = otTemplate[String(dayIdx)]?.[slotId];
+          if (otEntry?.type === 'ders' && otEntry.cls === entry.cls) {
+            return NextResponse.json({
+              error: `Çakışma: ${entry.cls.toUpperCase()} sınıfı bu gün ve saatte ${ot.name || 'başka bir öğretmen'} ile ders olarak işaretli.`,
+            }, { status: 400 });
+          }
+        }
+      }
+    }
+
+    // 1) Şablonu güncelle: gelen program'da fixed: true entry'ler + etutSablonlari koru
+    const fullOldTemplate = await getProgramTemplate(legacyTeacherId);
+    const { etutSablonlari, ...oldGridTemplate } = fullOldTemplate;
+    const newGridTemplate = JSON.parse(JSON.stringify(oldGridTemplate));
+
+    for (const [dayIdx, daySlots] of Object.entries(program)) {
+      for (const [slotId, entry] of Object.entries(daySlots || {})) {
+        if (entry === null || entry === undefined) {
+          if (newGridTemplate[dayIdx]) delete newGridTemplate[dayIdx][slotId];
+          continue;
+        }
+        if (entry.fixed === true) {
+          if (!newGridTemplate[dayIdx]) newGridTemplate[dayIdx] = {};
+          const toStore = { ...entry };
+          delete toStore.fixed;
+          newGridTemplate[dayIdx][slotId] = toStore;
+        } else if (entry.fixed === false) {
+          if (newGridTemplate[dayIdx]) delete newGridTemplate[dayIdx][slotId];
+        }
+      }
+    }
+
+    // etutSablonlari'nı koru
+    const newFullTemplate = { ...newGridTemplate };
+    if (etutSablonlari !== undefined) newFullTemplate.etutSablonlari = etutSablonlari;
+
+    await setProgramTemplate(legacyTeacherId, newFullTemplate); // SQL-aware
+
+    // 2) O haftayı şablona göre yeniden init et
+    await initWeekForTeacher(legacyTeacherId, weekKey); // SQL-aware
+
+    // 3) Geçici (fixed: false) entry'leri SlotBooking'e doğrudan yaz
+    for (const [dayIdx, daySlots] of Object.entries(program)) {
+      for (const [slotId, entry] of Object.entries(daySlots || {})) {
+        if (entry?.fixed !== false) continue;
+        const existingRow = await tdb().slotBooking.findFirst({
+          where: { weekKey, teacherId: teacherSql.id, dayIndex: parseInt(dayIdx), slotId },
+        });
+        let cell;
+        if (!entry) {
+          cell = { booked: false, disabled: true };
+        } else if (entry.type === 'ders' && entry.cls) {
+          cell = { booked: false, disabled: true, lessonType: 'ders', cls: entry.cls, fixed: false };
+          if (entry.subBranch) cell.subBranch = entry.subBranch;
+        } else if (entry.type === 'etut' && entry.studentId) {
+          cell = { booked: true, disabled: false, studentId: entry.studentId, studentName: entry.studentName || '', studentCls: entry.studentCls || '', bookedBy: 'director', fixed: false };
+        } else if (entry.type === 'etut') {
+          cell = { booked: false, disabled: false };
+        } else {
+          continue;
+        }
+        const rowData = {
+          booked: cell.booked ?? false, disabled: cell.disabled ?? true, fixed: cell.fixed ?? false,
+          studentId: cell.studentId || null, studentName: cell.studentName || null,
+          studentCls: cell.studentCls || null, dersBranch: null, bookedBy: cell.bookedBy || null,
+          data: cell,
+        };
+        if (existingRow) {
+          await tdb().slotBooking.update({ where: { id: existingRow.id }, data: rowData });
+        } else {
+          await tdb().slotBooking.create({ data: { weekKey, teacherId: teacherSql.id, dayIndex: parseInt(dayIdx), slotId, ...rowData } });
+        }
+      }
+    }
+
+    return NextResponse.json({ ok: true });
+  }
+
+  // Redis yolu
   // İzin günü kontrolü
-  const teacherForOff = await redis.get(`teacher:${teacherId}`);
+  const teacherForOff = await redis.get(`teacher:${legacyTeacherId}`);
   const offDays = new Set(teacherForOff?.offDays || []);
   for (const [dayIdx, daySlots] of Object.entries(program)) {
     if (!offDays.has(parseInt(dayIdx))) continue;
@@ -168,7 +305,7 @@ export async function POST(req) {
   }
 
   // Sınıf çakışma kontrolü (sadece sabit dersler için — şablon karşılaştırması)
-  const otherTeacherIds = (await redis.smembers('teachers')).filter(id => id !== teacherId);
+  const otherTeacherIds = (await redis.smembers('teachers')).filter(id => id !== legacyTeacherId);
   if (otherTeacherIds.length > 0) {
     const pipeline = redis.pipeline();
     otherTeacherIds.forEach(id => pipeline.get(programKey(id)));
@@ -194,7 +331,7 @@ export async function POST(req) {
   }
 
   // 1) Şablonu güncelle: gelen program'da fixed: true olan entry'leri al
-  const oldTemplate = (await redis.get(programKey(teacherId))) || {};
+  const oldTemplate = (await redis.get(programKey(legacyTeacherId))) || {};
   const newTemplate = JSON.parse(JSON.stringify(oldTemplate));
 
   for (const [dayIdx, daySlots] of Object.entries(program)) {
@@ -218,17 +355,17 @@ export async function POST(req) {
     }
   }
 
-  await redis.set(programKey(teacherId), newTemplate);
+  await redis.set(programKey(legacyTeacherId), newTemplate);
 
   // 2) O haftayı şablona göre yeniden init et (geçici entry'leri korur)
-  await initWeekForTeacher(teacherId, weekKey);
+  await initWeekForTeacher(legacyTeacherId, weekKey);
 
   // 3) Geçici (fixed: false) entry'leri grid'e doğrudan yaz
   const gridPipeline = redis.pipeline();
   let gridCmds = 0;
   for (const [dayIdx, daySlots] of Object.entries(program)) {
     for (const [slotId, entry] of Object.entries(daySlots || {})) {
-      const k = slotKey(weekKey, teacherId, parseInt(dayIdx), slotId);
+      const k = slotKey(weekKey, legacyTeacherId, parseInt(dayIdx), slotId);
       if (!entry) {
         // Slot temizlendi — grid'de varsa kaldır (kapalı yap)
         gridPipeline.set(k, { booked: false, disabled: true }, { ex: 60 * 60 * 24 * 16 });
@@ -281,8 +418,8 @@ export async function DELETE(req) {
 
   const parsed = await parseBody(req, ProgramDeleteSchema);
   if (!parsed.ok) return parsed.response;
-  const { teacherId } = parsed.data;
+  const { teacherId: legacyTeacherId } = parsed.data;
 
-  await redis.del(programKey(teacherId));
+  await deleteProgramTemplate(legacyTeacherId); // SQL-aware (grid'i siler, etutSablonlari'nı da temizler)
   return NextResponse.json({ ok: true });
 }
