@@ -35,7 +35,7 @@ async function clearOrg() {
     'slotBooking', 'etutTemplate', 'teacherPreset', 'installment', 'behaviorEntry',
     'examRow', 'formResponse', 'finance', 'behavior', 'exam', 'form', 'student',
     'teacher', 'class', 'course', 'counselor', 'accountant', 'expense', 'odev', 'hedef', 'etkinlik',
-    'lead', 'announcement', 'resource', 'guidance', 'attendance', 'auditLog', 'errLog',
+    'lead', 'announcement', 'resource', 'guidance', 'topic', 'attendance', 'auditLog', 'errLog',
     'pushSub', 'tenantConfig', 'director', 'payOrder',
   ];
   for (const m of order) {
@@ -207,6 +207,18 @@ async function main() {
     guideN++;
   }
   rec('Guidance', guideKeys.length, guideN);
+
+  // ── Topic (topics:<sid>) — öğrenci başına tek blob, studentId = legacy ──
+  const topicKeys = await scanAll('topics:*');
+  let topicN = 0;
+  for (const tk of topicKeys) {
+    const t = await redis.get(tk);
+    if (!t) continue;
+    const sid = strip(tk).split(':')[1];
+    await prisma.topic.create({ data: { orgSlug: ORG, branch: BRANCH, studentId: sid, data: t } });
+    topicN++;
+  }
+  rec('Topic', topicKeys.length, topicN);
 
   // ── Lead (leadler set + lead:<id>) — aday öğrenci hunisi, data = tam kayıt ──
   const leadIds = await smem('leadler');
