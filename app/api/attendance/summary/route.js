@@ -3,6 +3,8 @@ import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { ALL_DAYS, slotsForDay } from '@/lib/constants';
 import { getWeekKey, slotKey, getSlotTimes } from '@/lib/slots';
+import { tdb } from '@/lib/sqldb';
+import { useSql } from '@/lib/usesql';
 
 // GET ?date=YYYY-MM-DD
 // Döndürür: { [cls]: { lessons: [ { lessonNo, teacherId, teacherName, attendanceTaken, absent, late } ] } }
@@ -16,6 +18,48 @@ export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get('date');
   if (!date) return NextResponse.json({ error: 'date gerekli' }, { status: 400 });
+
+  if (useSql()) {
+    const records = await tdb().attendance.findMany({
+      where: { date },
+      include: { teacher: true },
+    });
+
+    // Öğrenci isim/telefon için student tablosu
+    const students = await tdb().student.findMany();
+    const studentMap = {};
+    for (const s of students) studentMap[s.legacyId] = s;
+
+    const clsMap = {};
+    for (const rec of records) {
+      const cls = rec.cls;
+      const lessonNo = parseInt(rec.lessonNo) || 1;
+      const recObj = (rec.records) || {};
+      const absent = [], late = [];
+
+      for (const [sid, status] of Object.entries(recObj)) {
+        const s = studentMap[sid];
+        const info = { id: sid, name: s?.name || sid, phone: s?.phone || '', parentPhone: s?.parentPhone || '' };
+        if (status === 'yok') absent.push(info);
+        else if (status === 'gec') late.push(info);
+      }
+
+      if (!clsMap[cls]) clsMap[cls] = { cls, lessons: [] };
+      clsMap[cls].lessons.push({
+        lessonNo,
+        teacherId: rec.teacher.legacyId,
+        teacherName: rec.teacher.name,
+        attendanceTaken: Object.keys(recObj).length > 0,
+        absent,
+        late,
+      });
+    }
+
+    for (const cls of Object.keys(clsMap)) {
+      clsMap[cls].lessons.sort((a, b) => a.lessonNo - b.lessonNo);
+    }
+    return NextResponse.json(clsMap);
+  }
 
   // Tarihin gün indexini bul (0=Pzt ... 6=Paz)
   const d = new Date(date);

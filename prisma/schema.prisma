@@ -117,6 +117,7 @@ model Teacher {
   programTemplate    Json?           // program:{legacyId} Redis objesi (grid şablonu + etutSablonlari)
   presets            TeacherPreset[]
   slotBookings       SlotBooking[]
+  attendances        Attendance[]
   @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch])
 }
@@ -265,14 +266,18 @@ model Expense {
 }
 
 model Attendance {
-  id      String @id @default(cuid())
-  orgSlug String
-  branch  String @default("main")
-  date    String
-  classId String
-  records Json
-  @@unique([orgSlug, branch, date, classId])
+  id        String  @id @default(cuid())
+  orgSlug   String
+  branch    String  @default("main")
+  date      String  // YYYY-MM-DD
+  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  teacherId String
+  cls       String  // sınıf kodu ("101", "m1" vb.)
+  lessonNo  String  // "1","2",... veya "e<etutId>"
+  records   Json    // { [studentId]: 'var' | 'gec' | 'yok' }
+  @@unique([orgSlug, branch, date, teacherId, cls, lessonNo])
   @@index([orgSlug, branch])
+  @@index([orgSlug, branch, date])
 }
 
 model Behavior {

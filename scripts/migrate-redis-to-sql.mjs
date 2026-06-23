@@ -32,10 +32,10 @@ const rec = (name, redisN, sqlN) => { summary[name] = `redis ${redisN} → sql $
 async function clearOrg() {
   // Çocuk tablolar önce (FK güvenli), sonra ebeveynler. Tekrar çalıştırılabilirlik için.
   const order = [
-    'slotBooking', 'teacherPreset', 'installment', 'behaviorEntry',
+    'slotBooking', 'attendance', 'teacherPreset', 'installment', 'behaviorEntry',
     'examRow', 'formResponse', 'finance', 'behavior', 'exam', 'form', 'student',
     'teacher', 'class', 'course', 'counselor', 'accountant', 'expense', 'odev', 'hedef', 'etkinlik',
-    'lead', 'announcement', 'resource', 'guidance', 'topic', 'attendance', 'auditLog', 'errLog',
+    'lead', 'announcement', 'resource', 'guidance', 'topic', 'auditLog', 'errLog',
     'pushSub', 'tenantConfig', 'director', 'parent', 'payOrder',
   ];
   for (const m of order) {
@@ -366,6 +366,25 @@ async function main() {
     slotN += r.count;
   }
   rec('SlotBooking', slotKeys.length, slotN);
+
+  // ── Attendance (attendance:{date}:{legacyTeacherId}:{cls}:{lessonNo}) ──
+  const attKeys = await scanAll('attendance:*');
+  let attN = 0;
+  for (const ak of attKeys) {
+    const parts = strip(ak).split(':'); // ['attendance', date, teacherId, cls, lessonNo]
+    if (parts.length < 5) continue;
+    const [, date, legacyTeacherId, cls, lessonNo] = parts;
+    const teacherId = teacherMap[legacyTeacherId];
+    if (!teacherId) continue;
+    const records = await redis.get(ak) || {};
+    try {
+      await prisma.attendance.create({
+        data: { orgSlug: ORG, branch: BRANCH, date, teacherId, cls, lessonNo, records },
+      });
+      attN++;
+    } catch { /* yinelenen → atla */ }
+  }
+  rec('Attendance', attKeys.length, attN);
 
   // ── AuditLog (audit:<ts>:<rand>) — geçmiş denetim kayıtları (90g TTL'liydi) ──
   const auditKeys = await scanAll('audit:*');

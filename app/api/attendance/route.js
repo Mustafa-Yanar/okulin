@@ -3,6 +3,8 @@ import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
 import { notifyAbsentParents } from '@/lib/notify';
+import { tdb } from '@/lib/sqldb';
+import { useSql } from '@/lib/usesql';
 
 export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
@@ -34,6 +36,15 @@ export async function GET(req) {
     return NextResponse.json({ error: 'date, teacherId, cls ve lessonNo gerekli' }, { status: 400 });
   }
 
+  if (useSql()) {
+    const teacher = await tdb().teacher.findFirst({ where: { legacyId: teacherId } });
+    if (!teacher) return NextResponse.json({});
+    const att = await tdb().attendance.findFirst({
+      where: { date, teacherId: teacher.id, cls, lessonNo: String(lessonNo) },
+    });
+    return NextResponse.json(att?.records || {});
+  }
+
   const data = await redis.get(attendanceKey(date, teacherId, cls, lessonNo));
   return NextResponse.json(data || {});
 }
@@ -47,6 +58,24 @@ export async function POST(req) {
   const parsed = await parseBody(req, AttendancePostSchema);
   if (!parsed.ok) return parsed.response;
   const { date, cls, lessonNo, attendance } = parsed.data;
+
+  if (useSql()) {
+    const teacher = await tdb().teacher.findFirst({ where: { legacyId: session.id } });
+    if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
+    const lessonNoStr = String(lessonNo);
+    const existing = await tdb().attendance.findFirst({
+      where: { date, teacherId: teacher.id, cls, lessonNo: lessonNoStr },
+    });
+    if (existing) {
+      await tdb().attendance.update({ where: { id: existing.id }, data: { records: attendance } });
+    } else {
+      await tdb().attendance.create({
+        data: { date, teacherId: teacher.id, cls, lessonNo: lessonNoStr, records: attendance },
+      });
+    }
+    await notifyAbsentParents(date, attendance);
+    return NextResponse.json({ ok: true });
+  }
 
   const key = attendanceKey(date, session.id, cls, lessonNo);
   await redis.set(key, attendance, { ex: 60 * 60 * 24 * 90 });
