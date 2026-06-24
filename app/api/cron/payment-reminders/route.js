@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { sendPushToUser } from '@/lib/push';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 // Günlük ödeme hatırlatması cron'u.
 // Vadesi gelmiş (dueDate <= bugün) ÖDENMEMİŞ taksiti olan öğrencilerin velilerine push.
@@ -19,32 +21,40 @@ export async function GET(req) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const sids = await redis.smembers('students');
-  if (!sids || sids.length === 0) return NextResponse.json({ ok: true, parents: 0, devices: 0 });
-
-  // Öğrenci + finans kayıtlarını paralel çek
-  const sp = redis.pipeline();
-  sids.forEach(id => sp.get(`student:${id}`));
-  const students = await sp.exec();
-
-  const fp = redis.pipeline();
-  sids.forEach(id => fp.get(`finance:${id}`));
-  const finances = await fp.exec();
+  // Öğrenci + finans/taksit verisini çek (SQL-aware). rows: [{ name, parentPhone, installments }]
+  let rows;
+  if (useSql()) {
+    const studs = await tdb().student.findMany({ include: { finance: { include: { installments: true } } } });
+    rows = studs.map(s => ({ name: s.name, parentPhone: s.parentPhone, installments: s.finance?.installments || [] }));
+  } else {
+    const sids = await redis.smembers('students');
+    if (!sids || sids.length === 0) return NextResponse.json({ ok: true, parents: 0, devices: 0 });
+    const sp = redis.pipeline();
+    sids.forEach(id => sp.get(`student:${id}`));
+    const students = await sp.exec();
+    const fp = redis.pipeline();
+    sids.forEach(id => fp.get(`finance:${id}`));
+    const finances = await fp.exec();
+    rows = sids.map((id, i) => ({
+      name: students[i]?.name,
+      parentPhone: students[i]?.parentPhone,
+      installments: Array.isArray(finances[i]?.installments) ? finances[i].installments : [],
+    })).filter(r => r.name);
+  }
+  if (rows.length === 0) return NextResponse.json({ ok: true, parents: 0, devices: 0 });
 
   const today = todayISO();
   // Vadesi gelmiş ödenmemiş taksitleri veliye (telefon) göre grupla — bir veliye tek push
   const byParent = {}; // phone -> [{name, amount}]
-  sids.forEach((id, i) => {
-    const s = students[i];
-    const f = finances[i];
-    if (!s || !s.parentPhone || !f || !Array.isArray(f.installments)) return;
-    const overdue = f.installments.filter(inst => !inst.paid && inst.dueDate && inst.dueDate <= today);
-    if (overdue.length === 0) return;
+  for (const r of rows) {
+    if (!r.parentPhone || !Array.isArray(r.installments)) continue;
+    const overdue = r.installments.filter(inst => !inst.paid && inst.dueDate && inst.dueDate <= today);
+    if (overdue.length === 0) continue;
     const amount = overdue.reduce((sum, inst) => sum + (parseFloat(inst.amount) || 0), 0);
-    if (amount <= 0) return;
-    if (!byParent[s.parentPhone]) byParent[s.parentPhone] = [];
-    byParent[s.parentPhone].push({ name: s.name, amount });
-  });
+    if (amount <= 0) continue;
+    if (!byParent[r.parentPhone]) byParent[r.parentPhone] = [];
+    byParent[r.parentPhone].push({ name: r.name, amount });
+  }
 
   let parents = 0;
   let devices = 0;

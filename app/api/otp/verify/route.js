@@ -4,6 +4,8 @@ import { tenantRedis, rawRedis } from '@/lib/tenant';
 import { lookupIndex } from '@/lib/userIndex';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { parseBody, z } from '@/lib/validate';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 function makeId() { return Math.random().toString(36).slice(2, 18); }
 
@@ -18,6 +20,27 @@ const THIRTY_DAYS = 60 * 60 * 24 * 30;
 // Kullanıcı adı + rol kategorisinden gerçek telefon numarasını bul.
 // login action ile aynı arama mantığını kullanır.
 async function getPhoneForUser(username, roleCategory) {
+  if (useSql()) {
+    if (roleCategory === 'management') {
+      const dir = await tdb().director.findFirst({ where: { username } });
+      if (dir) return dir.phone || null; // NOT: Director modelinde phone yoksa null
+      const acc = await tdb().accountant.findFirst({ where: { username } });
+      if (acc) return acc.phone || null;
+      const cou = await tdb().counselor.findFirst({ where: { username } });
+      if (cou) return cou.phone || null;
+      return null;
+    }
+    if (roleCategory === 'parent') {
+      const normPhone = normalizeTurkishMobile(username);
+      const p = await tdb().parent.findFirst({ where: { phone: normPhone || username } });
+      return p ? (normPhone || username) : null;
+    }
+    const rec = roleCategory === 'teacher'
+      ? await tdb().teacher.findFirst({ where: { username } })
+      : await tdb().student.findFirst({ where: { username } });
+    return rec ? (rec.phone || null) : null;
+  }
+
   const redis = tenantRedis();
 
   // Management: director, org_admin, superadmin, accountant, counselor

@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession, isManager } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
-import {
-  getCourses, courseKeyFromName, seedCoursesFromConstants,
-} from '@/lib/courses';
+import { getCourses, createCourse, updateCourse } from '@/lib/courses';
 
 export const runtime = 'nodejs';
-
-const COURSES_SET = 'dersler';
-const courseKey = (key) => `ders:${key}`;
 
 // GET /api/courses — ders kataloğu (tüm roller okur).
 export async function GET() {
@@ -30,26 +24,9 @@ export async function POST(req) {
 
   const parsed = await parseBody(req, CreateCourseSchema);
   if (!parsed.ok) return parsed.response;
-  const ad = parsed.data.ad.trim();
 
-  await seedCoursesFromConstants(); // çekirdek katalog gerçek kayda dönsün
-
-  // Benzersiz anahtar üret (çakışmada sonek)
-  const existing = new Set(await redis.smembers(COURSES_SET));
-  let key = courseKeyFromName(ad);
-  if (existing.has(key)) {
-    let i = 2;
-    while (existing.has(`${key}-${i}`)) i++;
-    key = `${key}-${i}`;
-  }
-
-  const rec = {
-    key, ad, core: false, family: null, active: true,
-    seeded: true, createdAt: new Date().toISOString(),
-  };
-  await redis.sadd(COURSES_SET, key);
-  await redis.set(courseKey(key), rec);
-  return NextResponse.json({ ok: true, course: rec });
+  const { course } = await createCourse(parsed.data.ad); // SQL-aware
+  return NextResponse.json({ ok: true, course });
 }
 
 const UpdateCourseSchema = z.object({
@@ -67,15 +44,9 @@ export async function PATCH(req) {
   if (!parsed.ok) return parsed.response;
   const { key, ad, active } = parsed.data;
 
-  await seedCoursesFromConstants();
-  const rec = await redis.get(courseKey(key));
-  if (!rec) return NextResponse.json({ error: 'Ders bulunamadı' }, { status: 404 });
-
-  const next = { ...rec };
-  if (ad !== undefined) next.ad = ad.trim();
-  if (active !== undefined) next.active = active;
-  await redis.set(courseKey(key), next);
-  return NextResponse.json({ ok: true, course: next });
+  const r = await updateCourse(key, { ad, active }); // SQL-aware
+  if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status || 400 });
+  return NextResponse.json({ ok: true, course: r.course });
 }
 
 // DELETE /api/courses — dersi pasifleştir (soft delete; geçmiş/program bozulmaz).
@@ -87,10 +58,7 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { key } = parsed.data;
 
-  await seedCoursesFromConstants();
-  const rec = await redis.get(courseKey(key));
-  if (!rec) return NextResponse.json({ error: 'Ders bulunamadı' }, { status: 404 });
-
-  await redis.set(courseKey(key), { ...rec, active: false });
+  const r = await updateCourse(key, { active: false }); // soft delete, SQL-aware
+  if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status || 400 });
   return NextResponse.json({ ok: true });
 }

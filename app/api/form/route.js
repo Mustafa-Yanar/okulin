@@ -58,6 +58,10 @@ const BodySchema = z.discriminatedUnion('action', [CreateSchema, SubmitSchema, C
 
 // ── Yardımcılar ──
 async function loadAllForms() {
+  if (useSql()) {
+    const rows = await tdb().form.findMany();
+    return rows.map((r) => r.data).filter(Boolean);
+  }
   const ids = await redis.smembers('formlar');
   if (!ids || ids.length === 0) return [];
   const pipe = redis.pipeline();

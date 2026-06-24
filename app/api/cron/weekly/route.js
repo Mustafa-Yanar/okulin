@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
-import { getWeekKey, getMondayOfWeek, initWeekForTeacher, slotKey, getSlotTimes } from '@/lib/slots';
+import {
+  getWeekKey, getMondayOfWeek, initWeekForTeacher,
+  getAllTeachers, getCurrentWeek, setCurrentWeek, getTeacherWeekSlots,
+} from '@/lib/slots';
 import { ALL_DAYS, slotsForDay } from '@/lib/constants';
 
 // Pazar 11:00 UTC+3 = 08:00 UTC → "0 8 * * 0"
+// SQL-aware: öğretmen listesi / current_week / slot okuma / hafta init SQL'den.
+// NOT: haftalık arşiv (archive:teacher|student) hâlâ Redis — arşiv alt-sistemi SQL'e
+// taşınmadı (okuyan /api/archive de Redis). Tutarlı; ayrı bir göç işi.
 export async function GET(req) {
   const authHeader = req.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -15,14 +21,14 @@ export async function GET(req) {
   // Mevcut haftaya sıfırla (düzeltme modu)
   if (searchParams.get('action') === 'reset') {
     const current = getWeekKey();
-    await redis.set('current_week', current);
+    await setCurrentWeek(current);
     return NextResponse.json({ ok: true, weekKey: current });
   }
 
-  const ids = await redis.smembers('teachers');
-  if (!ids || ids.length === 0) return NextResponse.json({ ok: true, message: 'No teachers' });
+  const teachers = await getAllTeachers(); // SQL-aware (legacyId + name)
+  if (!teachers || teachers.length === 0) return NextResponse.json({ ok: true, message: 'No teachers' });
 
-  const stored = await redis.get('current_week');
+  const stored = await getCurrentWeek();
   const currentWeek = stored || getWeekKey();
 
   const monday = getMondayOfWeek(currentWeek);
@@ -30,73 +36,40 @@ export async function GET(req) {
   nextMonday.setDate(monday.getDate() + 7);
   const nextWeek = getWeekKey(nextMonday);
 
-  // 1. Tüm öğretmen nesnelerini tek bir pipeline ile paralel olarak çek
-  const teachersPipeline = redis.pipeline();
-  ids.forEach(tid => teachersPipeline.get(`teacher:${tid}`));
-  const teachersResults = await teachersPipeline.exec();
-  const teachersMap = {};
-  ids.forEach((tid, idx) => {
-    if (teachersResults[idx]) {
-      teachersMap[tid] = teachersResults[idx];
-    }
-  });
-
-  // 2. Tüm öğretmenlerin tüm günlük slot anahtarlarını topla ve tek pipeline ile çek
+  // 1. Her öğretmenin bu haftaki booked slotlarını SQL grid'inden topla (arşiv için)
+  const teacherArchiveMap = {}; // teacherId -> entries[]
   const studentArchiveMap = {}; // studentId -> entries[]
-  const slotTimes = await getSlotTimes();
-  const slotKeysMeta = []; // list of { key, teacherId, dayIndex, slot }
-  const slotPipeline = redis.pipeline();
 
-  for (const tid of ids) {
-    if (!teachersMap[tid]) continue;
+  for (const t of teachers) {
+    const grid = await getTeacherWeekSlots(t.id, currentWeek); // SQL-aware
     for (const day of ALL_DAYS) {
-      const slots = slotsForDay(day.index, day.index >= 5 ? slotTimes.weekend : slotTimes.weekday);
-      for (const slot of slots) {
-        const k = slotKey(currentWeek, tid, day.index, slot.id);
-        slotKeysMeta.push({ k, teacherId: tid, dayIndex: day.index, slot });
-        slotPipeline.get(k);
-      }
+      const slots = slotsForDay(day.index);
+      (grid[day.index] || []).forEach((sd, slotIdx) => {
+        if (!sd || !sd.booked) return;
+        const slot = slots[slotIdx];
+        const entry = {
+          day: day.index,
+          dayLabel: day.label,
+          slotId: slot?.id,
+          slotLabel: slot?.label,
+          studentId: sd.studentId,
+          studentName: sd.studentName,
+          studentCls: sd.studentCls,
+          bookedBy: sd.bookedBy,
+          fixed: !!sd.fixed,
+          teacherId: t.id,
+          teacherName: t.name,
+          branch: sd.branch || '',
+        };
+        (teacherArchiveMap[t.id] ||= []).push(entry);
+        if (sd.studentId) (studentArchiveMap[sd.studentId] ||= []).push(entry);
+      });
     }
   }
 
-  const slotResults = await slotPipeline.exec();
-
-  // 3. Arşiv haritasını doldur
-  const teacherArchiveMap = {}; // teacherId -> entries[]
-
-  slotKeysMeta.forEach((meta, idx) => {
-    const sd = slotResults[idx];
-    if (sd && sd.booked) {
-      const teacher = teachersMap[meta.teacherId];
-      const entry = {
-        day: meta.dayIndex,
-        dayLabel: ALL_DAYS.find(d => d.index === meta.dayIndex)?.label || '',
-        slotId: meta.slot.id,
-        slotLabel: meta.slot.label,
-        studentId: sd.studentId,
-        studentName: sd.studentName,
-        studentCls: sd.studentCls,
-        bookedBy: sd.bookedBy,
-        fixed: !!sd.fixed,
-        teacherId: meta.teacherId,
-        teacherName: teacher.name,
-        branch: sd.branch || '',
-      };
-
-      if (!teacherArchiveMap[meta.teacherId]) teacherArchiveMap[meta.teacherId] = [];
-      teacherArchiveMap[meta.teacherId].push(entry);
-
-      if (sd.studentId) {
-        if (!studentArchiveMap[sd.studentId]) studentArchiveMap[sd.studentId] = [];
-        studentArchiveMap[sd.studentId].push(entry);
-      }
-    }
-  });
-
-  // 4. Arşivleri Redis'e pipelined olarak yaz
+  // 2. Arşivleri Redis'e yaz (arşiv alt-sistemi Redis — yukarıdaki NOT)
   const writePipeline = redis.pipeline();
   let hasWriteOps = false;
-
   for (const [tid, entries] of Object.entries(teacherArchiveMap)) {
     writePipeline.set(`archive:teacher:${tid}:${currentWeek}`, entries);
     hasWriteOps = true;
@@ -105,18 +78,12 @@ export async function GET(req) {
     writePipeline.set(`archive:student:${sid}:${currentWeek}`, entries);
     hasWriteOps = true;
   }
+  if (hasWriteOps) await writePipeline.exec();
 
-  if (hasWriteOps) {
-    await writePipeline.exec();
-  }
+  // 3. Tüm öğretmenlerin yeni haftasını init et (SQL-aware)
+  await Promise.all(teachers.map(t => initWeekForTeacher(t.id, nextWeek)));
 
-  // 5. Tüm öğretmenlerin yeni haftasını paralel (Promise.all) olarak init et
-  const activeTeacherIds = ids.filter(tid => !!teachersMap[tid]);
-  if (activeTeacherIds.length > 0) {
-    await Promise.all(activeTeacherIds.map(tid => initWeekForTeacher(tid, nextWeek)));
-  }
-
-  await redis.set('current_week', nextWeek);
+  await setCurrentWeek(nextWeek); // SQL-aware
 
   return NextResponse.json({ ok: true, previousWeek: currentWeek, newWeek: nextWeek });
 }

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 // GET /api/guidance/pending
 // Müdür için: her öğrencinin bekleyen (reviewed: false) rehberlik hafta sayısı.
@@ -9,6 +11,16 @@ export async function GET() {
   const session = await getSession();
   if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  }
+
+  if (useSql()) {
+    const rows = await tdb().guidance.findMany({ select: { studentId: true, data: true } });
+    const counts = {};
+    for (const r of rows) {
+      if (r.data?.reviewed) continue;
+      counts[r.studentId] = (counts[r.studentId] || 0) + 1;
+    }
+    return NextResponse.json(counts);
   }
 
   let cursor = '0';

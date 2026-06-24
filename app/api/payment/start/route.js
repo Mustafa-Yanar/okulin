@@ -5,6 +5,8 @@ import { getSession, canReadStudent } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
 import { decryptSecret } from '@/lib/payment/crypto';
 import { getProvider } from '@/lib/payment';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 export const runtime = 'nodejs'; // crypto + fetch
 
@@ -38,9 +40,20 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Online ödeme bu kurumda aktif değil' }, { status: 400 });
   }
 
-  // Finans kaydı + taksit doğrulama
-  const finance = await redis.get(`finance:${studentId}`);
-  const inst = finance?.installments?.[installmentIdx];
+  // Finans kaydı + taksit doğrulama (SQL-aware)
+  let inst, studentName;
+  if (useSql()) {
+    const stu = await tdb().student.findFirst({
+      where: { legacyId: studentId },
+      include: { finance: { include: { installments: { orderBy: { idx: 'asc' } } } } },
+    });
+    studentName = stu?.name;
+    inst = stu?.finance?.installments?.find((i) => i.idx === installmentIdx);
+  } else {
+    const finance = await redis.get(`finance:${studentId}`);
+    studentName = finance?.studentName;
+    inst = finance?.installments?.[installmentIdx];
+  }
   if (!inst) return NextResponse.json({ error: 'Taksit bulunamadı' }, { status: 404 });
   if (inst.paid) return NextResponse.json({ error: 'Bu taksit zaten ödenmiş' }, { status: 400 });
   const amountTL = parseFloat(inst.amount) || 0;
@@ -59,7 +72,7 @@ export async function POST(req) {
   const org = currentOrg();
   const branch = currentBranch();
   const merchantOid = newMerchantOid();
-  const childName = (session.children || []).find(c => (c.id || c) === studentId)?.name || finance.studentName || 'Öğrenci';
+  const childName = (session.children || []).find(c => (c.id || c) === studentId)?.name || studentName || 'Öğrenci';
 
   // Global order kaydı — callback bunu okuyup doğru kuruma yazar (host'a güvenmez).
   await rawRedis.set(`payorder:${merchantOid}`, {

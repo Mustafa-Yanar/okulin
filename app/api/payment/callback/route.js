@@ -2,7 +2,8 @@ import { rawRedis, tenantRedis } from '@/lib/tenant';
 import { logAudit } from '@/lib/audit';
 import { decryptSecret } from '@/lib/payment/crypto';
 import { getProvider } from '@/lib/payment';
-import { applyInstallmentPayment } from '@/lib/finance';
+import { applyInstallmentPayment, applyInstallmentPaymentSql } from '@/lib/finance';
+import { useSql } from '@/lib/usesql';
 
 export const runtime = 'nodejs'; // HMAC + crypto
 
@@ -41,8 +42,9 @@ export async function POST(req) {
   if (order.status === 'paid') return ok();
 
   // İlgili kurumun config'ini AÇIKÇA order'ın tenant'ından yükle.
-  const tdb = tenantRedis(order.org, order.branch);
-  const cfg = await tdb.get('payment:config');
+  // (payment:config + payorder/paylock = ödeme akış state'i, Redis-only; finans yazma SQL.)
+  const orderRedis = tenantRedis(order.org, order.branch);
+  const cfg = await orderRedis.get('payment:config');
   if (!cfg || !cfg.keyEnc || !cfg.saltEnc) return fail('config yok');
 
   let key, salt;
@@ -73,13 +75,16 @@ export async function POST(req) {
     const fresh = await rawRedis.get(`payorder:${merchantOid}`);
     if (fresh?.status === 'paid') return ok();
 
-    const result = await applyInstallmentPayment(tdb, {
+    const paymentOpts = {
       studentId: order.studentId,
       installmentIdx: order.installmentIdx,
       method: 'PayTR (online)',
       date: new Date().toISOString().slice(0, 10),
       recordedBy: 'Online ödeme',
-    });
+    };
+    const result = useSql()
+      ? await applyInstallmentPaymentSql({ ...paymentOpts, orgOverride: order.org, branchOverride: order.branch })
+      : await applyInstallmentPayment(orderRedis, paymentOpts);
 
     if (!result.ok) {
       // Finans kaydı yoksa (silinmiş) tekrar denemenin anlamı yok → OK.
