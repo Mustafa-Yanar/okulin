@@ -1,17 +1,13 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession, canReadStudent } from '@/lib/auth';
-import { getAllTeachers } from '@/lib/slots';
+import { getAllTeachers, getProgramTemplate } from '@/lib/slots';
 import { ALL_DAYS, getWeekKey } from '@/lib/constants';
 
 // GET /api/etut-sablon/all?week=YYYY-Www
 // Tüm öğretmenlerin o hafta EFEKTİF AKTİF serbest etüt şablonlarını düz liste döndürür.
 // Öğrenci/veli panelinin "uygun etüt" + "etütlerim" görünümleri bunu kullanır.
 // Ders slot'larından (w1-w12) bağımsız — gerçek saatli etüt blokları.
-
-function programKey(teacherId) {
-  return `program:${teacherId}`;
-}
+// Şablon kaynağı getProgramTemplate (SQL-aware): SQL modunda Teacher.programTemplate.
 
 // Bir şablon verilen haftada efektif aktif mi? (kalıcı aktif + bu hafta pasif listesinde değil)
 function aktifThisWeek(sb, weekKey) {
@@ -32,7 +28,7 @@ export async function GET(req) {
 
   const etutler = [];
   for (const teacher of teachers) {
-    const prog = (await redis.get(programKey(teacher.id))) || {};
+    const prog = await getProgramTemplate(teacher.id); // SQL-aware
     const list = Array.isArray(prog.etutSablonlari) ? prog.etutSablonlari : [];
     for (const sb of list) {
       if (!aktifThisWeek(sb, weekKey)) continue;

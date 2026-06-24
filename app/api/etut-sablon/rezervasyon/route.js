@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession, isManager } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
-import { getAllTeachers, slotStartTime } from '@/lib/slots';
+import { getAllTeachers, getAllStudents, slotStartTime, getProgramTemplate, setProgramTemplate } from '@/lib/slots';
 import {
   ALL_DAYS,
   getWeekKey,
@@ -15,10 +14,6 @@ import {
 // DELETE → rezervasyonu iptal eder
 // Eski slot-etüt (/api/slots) ile aynı kuralları taşır ama veri = program:<tid>.etutSablonlari[].studentId
 // program:<teacherId>.etutSablonlari = [ { id, dayIndex, start, end, aktif, pasifHaftalar?, studentId?, ... } ]
-
-function programKey(teacherId) {
-  return `program:${teacherId}`;
-}
 
 const PostSchema = z.object({
   teacherId: zId,
@@ -46,7 +41,7 @@ async function studentBookedEtuts(studentId, weekKey) {
   const teachers = await getAllTeachers();
   const out = [];
   for (const t of teachers) {
-    const prog = (await redis.get(programKey(t.id))) || {};
+    const prog = await getProgramTemplate(t.id); // SQL-aware
     const list = Array.isArray(prog.etutSablonlari) ? prog.etutSablonlari : [];
     for (const sb of list) {
       if (sb.studentId === studentId && aktifThisWeek(sb, weekKey)) {
@@ -84,13 +79,13 @@ export async function POST(req) {
   }
   if (!targetStudentId) return NextResponse.json({ error: 'Öğrenci belirtilmedi' }, { status: 400 });
 
-  const targetStudent = await redis.get(`student:${targetStudentId}`);
+  const allStudents = await getAllStudents(); // SQL-aware
+  const targetStudent = allStudents.find(s => s.id === targetStudentId);
   if (!targetStudent) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
 
-  const teacherRaw = await redis.get(`teacher:${teacherId}`);
-  if (!teacherRaw) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
-  const teacher = Array.isArray(teacherRaw.branches) ? teacherRaw
-    : { ...teacherRaw, branches: [teacherRaw.branch, ...(teacherRaw.extraBranches || [])].filter(Boolean) };
+  const allTeachers = await getAllTeachers(); // SQL-aware (branches zaten dizi olarak gelir)
+  const teacher = allTeachers.find(t => t.id === teacherId);
+  if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
 
   // Öğretmen grup etiketi + öğrencinin o gruba ait olması
   const allowedGroups = teacher.allowedGroups || [];
@@ -102,7 +97,7 @@ export async function POST(req) {
   }
 
   // Şablonu bul
-  const template = (await redis.get(programKey(teacherId))) || {};
+  const template = await getProgramTemplate(teacherId); // SQL-aware
   const list = Array.isArray(template.etutSablonlari) ? template.etutSablonlari : [];
   const idx = list.findIndex(s => s.id === etutId);
   if (idx === -1) return NextResponse.json({ error: 'Etüt bulunamadı' }, { status: 404 });
@@ -170,7 +165,7 @@ export async function POST(req) {
   sb.bookedAt = new Date().toISOString();
   list[idx] = sb;
   template.etutSablonlari = list;
-  await redis.set(programKey(teacherId), template);
+  await setProgramTemplate(teacherId, template); // SQL-aware
 
   return NextResponse.json({ ok: true, etut: sb });
 }
@@ -184,7 +179,7 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { teacherId, etutId } = parsed.data;
 
-  const template = (await redis.get(programKey(teacherId))) || {};
+  const template = await getProgramTemplate(teacherId); // SQL-aware
   const list = Array.isArray(template.etutSablonlari) ? template.etutSablonlari : [];
   const idx = list.findIndex(s => s.id === etutId);
   if (idx === -1) return NextResponse.json({ error: 'Etüt bulunamadı' }, { status: 404 });
@@ -213,7 +208,7 @@ export async function DELETE(req) {
   delete sb.bookedAt;
   list[idx] = sb;
   template.etutSablonlari = list;
-  await redis.set(programKey(teacherId), template);
+  await setProgramTemplate(teacherId, template); // SQL-aware
 
   return NextResponse.json({ ok: true });
 }
