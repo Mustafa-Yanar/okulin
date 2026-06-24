@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import { rawRedis, currentOrg, tenantRedis } from '@/lib/tenant';
 import { getSession } from '@/lib/auth';
 import { parseBody, z, zName, zPassword } from '@/lib/validate';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 // HQ (Genel Merkez) API — çok şubeli kurumların şube yönetimi.
 // Erişim: org_admin (kendi org'u) veya superadmin (tüm org'lar).
@@ -24,6 +26,37 @@ export async function GET() {
   const session = await getSession();
   const org = currentOrg();
   if (!requireHQ(session, org)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+
+  if (useSql()) {
+    const rows = await tdb().branch.findMany({ where: { orgSlug: org } });
+    const metaMap = {};
+    rows.forEach((r) => { metaMap[r.slug] = r; });
+    const branchSlugs = rows.length > 0 ? rows.map((r) => r.slug) : ['main'];
+
+    const branches = [];
+    for (const slug of branchSlugs) {
+      const meta = metaMap[slug] || { slug, name: slug === 'main' ? 'Ana Şube' : slug, active: true, createdAt: null };
+      const dir = await tdb(org, slug).director.findFirst();
+      const studentCount = await tdb(org, slug).student.count();
+      const teacherCount = await tdb(org, slug).teacher.count();
+      branches.push({
+        slug,
+        name: meta.name || slug,
+        active: meta.active !== false,
+        createdAt: meta.createdAt instanceof Date ? meta.createdAt.toISOString() : (meta.createdAt || null),
+        directorUsername: dir?.username || null,
+        studentCount, teacherCount,
+      });
+    }
+    branches.sort((a, b) => {
+      if (a.slug === 'main') return -1;
+      if (b.slug === 'main') return 1;
+      return (a.createdAt || '').localeCompare(b.createdAt || '');
+    });
+
+    const orgRec = await tdb().org.findFirst({ where: { slug: org } });
+    return NextResponse.json({ org, orgName: orgRec?.name || org, branches, appDomain: process.env.APP_DOMAIN || '' });
+  }
 
   const slugs = await rawRedis.smembers(`org:${org}:branches`);
 
@@ -107,6 +140,42 @@ export async function POST(req) {
   const parsed = await parseBody(req, HQActionSchema);
   if (!parsed.ok) return parsed.response;
   const { action, branchSlug } = parsed.data;
+
+  if (useSql()) {
+    if (action === 'create_branch') {
+      if (!isValidBranchSlug(branchSlug)) {
+        return NextResponse.json({ error: 'Geçersiz slug — küçük harf, rakam ve tire, "main" dışında' }, { status: 400 });
+      }
+      const dup = await tdb().branch.findFirst({ where: { orgSlug: org, slug: branchSlug } });
+      if (dup) return NextResponse.json({ error: `"${branchSlug}" şubesi zaten var` }, { status: 409 });
+      const { name, directorUsername, directorPassword, directorName } = parsed.data;
+      await tdb().branch.create({ data: { orgSlug: org, slug: branchSlug, name, active: true } });
+      const passwordHash = await bcrypt.hash(directorPassword, 10);
+      await tdb(org, branchSlug).director.create({ data: { username: directorUsername, passwordHash, name: directorName || name } });
+      return NextResponse.json({ ok: true, branchSlug });
+    }
+
+    const meta = await tdb().branch.findFirst({ where: { orgSlug: org, slug: branchSlug } });
+    if (!meta && branchSlug !== 'main') return NextResponse.json({ error: 'Şube bulunamadı' }, { status: 404 });
+
+    if (action === 'toggle_active') {
+      if (branchSlug === 'main') return NextResponse.json({ error: 'Ana şube devre dışı bırakılamaz' }, { status: 400 });
+      await tdb().branch.update({ where: { orgSlug_slug: { orgSlug: org, slug: branchSlug } }, data: { active: !meta.active } });
+      return NextResponse.json({ ok: true, active: !meta.active });
+    }
+    if (action === 'reset_director') {
+      const dir = await tdb(org, branchSlug).director.findFirst();
+      if (!dir) return NextResponse.json({ error: 'Müdür kaydı bulunamadı' }, { status: 404 });
+      await tdb(org, branchSlug).director.update({ where: { id: dir.id }, data: { passwordHash: await bcrypt.hash(parsed.data.newPassword, 10) } });
+      return NextResponse.json({ ok: true });
+    }
+    if (action === 'rename') {
+      if (meta) await tdb().branch.update({ where: { orgSlug_slug: { orgSlug: org, slug: branchSlug } }, data: { name: parsed.data.name } });
+      else await tdb().branch.create({ data: { orgSlug: org, slug: branchSlug, name: parsed.data.name, active: true } }); // main fallback
+      return NextResponse.json({ ok: true });
+    }
+    return NextResponse.json({ error: 'Geçersiz action' }, { status: 400 });
+  }
 
   if (action === 'create_branch') {
     if (!isValidBranchSlug(branchSlug)) {

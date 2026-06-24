@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { rawRedis } from '@/lib/tenant';
 import { gateRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
-import { normalizeCode } from '@/lib/orgcode';
+import { normalizeCode, hostForOrg } from '@/lib/orgcode';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 // Landing kurum kodu kapısı: kod → hedef subdomain çözer.
 // Kurum-bağımsız (apex/landing'den çağrılır) → rawRedis (t: prefix YOK).
@@ -22,6 +24,14 @@ export async function POST(req) {
   const code = normalizeCode(body.code);
   if (!code || code.length < 4) {
     return NextResponse.json({ error: 'Geçersiz kurum kodu.' }, { status: 400 });
+  }
+
+  // Kod → kurum (SQL: Org.code; reverse kayda gerek yok). host = hostForOrg(slug,'main').
+  if (useSql()) {
+    const org = await tdb().org.findFirst({ where: { code } });
+    if (!org) return NextResponse.json({ error: 'Bu koda ait kurum bulunamadı.' }, { status: 404 });
+    if (org.active === false) return NextResponse.json({ error: 'Bu kurum şu anda aktif değil.' }, { status: 403 });
+    return NextResponse.json({ ok: true, name: org.name, host: hostForOrg(org.slug, 'main') });
   }
 
   let rec = await rawRedis.get(`orgcode:${code}`);

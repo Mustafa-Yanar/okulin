@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { rawRedis } from '@/lib/tenant';
 import { getSession } from '@/lib/auth';
+import { useSql } from '@/lib/usesql';
+import { prisma } from '@/lib/prisma';
 
 // Landing'den gelen demo/iletişim taleplerini yönetir. Yalnız superadmin.
 // Global `demo:requests` listesi (rawRedis, t: prefix YOK).
@@ -20,6 +22,12 @@ export async function GET() {
   const session = await getSession();
   if (!requireSuperadmin(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
+  if (useSql()) {
+    const rows = await prisma.demoRequest.findMany({ orderBy: { createdAt: 'desc' }, take: 100 });
+    const items = rows.map(({ ip, createdAt, ...rest }) => ({ ...rest, ts: createdAt instanceof Date ? createdAt.getTime() : createdAt }));
+    return NextResponse.json({ requests: items });
+  }
+
   const raw = await rawRedis.lrange(LIST_KEY, 0, 99);
   const items = (raw || [])
     .map(parse)
@@ -38,6 +46,11 @@ export async function DELETE(req) {
   try { body = await req.json(); } catch { body = {}; }
   const id = String(body.id || '').trim();
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
+
+  if (useSql()) {
+    await prisma.demoRequest.delete({ where: { id } }).catch(() => {});
+    return NextResponse.json({ ok: true });
+  }
 
   const raw = await rawRedis.lrange(LIST_KEY, 0, -1);
   const remaining = (raw || []).filter((s) => {

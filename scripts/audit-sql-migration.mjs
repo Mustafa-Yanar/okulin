@@ -67,7 +67,7 @@ function subtreeHasUseSql(node) {
 // redis-köken tespiti: object `redis`, `tenantRedis()`, ya da bilinen pipeline/alias adı
 function isRedisObject(obj, aliases) {
   if (!obj) return false;
-  if (obj.type === 'Identifier') return obj.name === 'redis' || aliases.has(obj.name);
+  if (obj.type === 'Identifier') return obj.name === 'redis' || obj.name === 'rawRedis' || aliases.has(obj.name);
   if (obj.type === 'CallExpression') {
     if (obj.callee?.type === 'Identifier' && obj.callee.name === 'tenantRedis') return true;
     // redis.pipeline() zincirinin devamı: redis.pipeline().X

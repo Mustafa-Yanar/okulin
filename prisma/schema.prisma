@@ -35,6 +35,41 @@ model SuperAdmin {
   passwordHash String
 }
 
+// Kurum şubeleri (org:<slug>:branches + org:<slug>:branch:<x> Redis karşılığı).
+// GLOBAL (tenant-scope DEĞİL — şubeleri TANIMLAR). sqldb SKIP'te.
+model Branch {
+  id        String   @id @default(cuid())
+  orgSlug   String
+  slug      String   // 'main', 'akyazi', ...
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  @@unique([orgSlug, slug])
+  @@index([orgSlug])
+}
+
+// Çok şubeli kurumun genel-merkez yöneticisi (orgadmin:<slug> Redis karşılığı). GLOBAL.
+model OrgAdmin {
+  id           String  @id @default(cuid())
+  orgSlug      String  @unique
+  username     String
+  passwordHash String
+  name         String?
+}
+
+// Landing'den gelen demo/iletişim talepleri (demo:requests Redis listesi). GLOBAL, kurum-bağımsız.
+model DemoRequest {
+  id        String   @id @default(cuid())
+  name      String
+  org       String?
+  phone     String?
+  email     String?
+  note      String?
+  ip        String?
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+}
+
 model PayOrder {
   oid       String   @id
   orgSlug   String
@@ -219,6 +254,7 @@ model TenantConfig {
   programTemplate Json?
   receiptCounter  Int     @default(0)  // makbuz no sayacı (MKB-YYYY-#####)
   denemeNameMap   Json?   // deneme excelName(lower)→studentId kalıcı eşleştirme
+  paymentConfig   Json?   // PayTR ödeme yapılandırması (payment:config Redis karşılığı; şifreli anahtarlar)
   @@id([orgSlug, branch])
 }
 

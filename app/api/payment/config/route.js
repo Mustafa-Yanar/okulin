@@ -4,6 +4,26 @@ import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z } from '@/lib/validate';
 import { encryptSecret } from '@/lib/payment/crypto';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
+
+// payment:config okuma/yazma — SQL-aware (TenantConfig.paymentConfig).
+async function readPaymentConfig() {
+  if (useSql()) {
+    const tc = await tdb().tenantConfig.findFirst();
+    return tc?.paymentConfig || null;
+  }
+  return redis.get('payment:config');
+}
+async function writePaymentConfig(cfg) {
+  if (useSql()) {
+    const tc = await tdb().tenantConfig.findFirst();
+    if (tc) await tdb().tenantConfig.update({ where: { orgSlug_branch: { orgSlug: tc.orgSlug, branch: tc.branch } }, data: { paymentConfig: cfg } });
+    else await tdb().tenantConfig.create({ data: { paymentConfig: cfg } });
+    return;
+  }
+  await redis.set('payment:config', cfg);
+}
 
 export const runtime = 'nodejs'; // crypto
 
@@ -28,7 +48,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
-  const cfg = await redis.get(CONFIG_KEY);
+  const cfg = await readPaymentConfig();
 
   // Müdür dışındaki roller (veli vb.) yalnız "açık mı" bilgisini görür.
   if (session.role !== 'director') {
@@ -57,7 +77,7 @@ export async function POST(req) {
   if (!parsed.ok) return parsed.response;
   const { merchantId, merchantKey, merchantSalt, testMode, active } = parsed.data;
 
-  const existing = (await redis.get(CONFIG_KEY)) || { provider: 'paytr' };
+  const existing = (await readPaymentConfig()) || { provider: 'paytr' };
   const next = { ...existing, provider: 'paytr' };
 
   if (merchantId !== undefined) next.merchantId = merchantId.trim();
@@ -69,7 +89,7 @@ export async function POST(req) {
   next.updatedAt = new Date().toISOString();
   next.updatedBy = session.name;
 
-  await redis.set(CONFIG_KEY, next);
+  await writePaymentConfig(next);
   await logAudit({
     ...actorFrom(session),
     action: 'payment.configUpdate',

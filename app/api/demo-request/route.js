@@ -3,6 +3,8 @@ import { randomUUID } from 'crypto';
 import { rawRedis } from '@/lib/tenant';
 import { demoRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
 import { sendEmail } from '@/lib/email';
+import { useSql } from '@/lib/usesql';
+import { prisma } from '@/lib/prisma';
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"]/g, (c) => (
@@ -82,8 +84,12 @@ export async function POST(req) {
     ip,
   };
 
-  await rawRedis.lpush(LIST_KEY, JSON.stringify(record));
-  await rawRedis.ltrim(LIST_KEY, 0, MAX_KEEP - 1);
+  if (useSql()) {
+    await prisma.demoRequest.create({ data: { name, org, phone, email: email || null, note: note || null, ip } });
+  } else {
+    await rawRedis.lpush(LIST_KEY, JSON.stringify(record));
+    await rawRedis.ltrim(LIST_KEY, 0, MAX_KEEP - 1);
+  }
 
   // Bildirim e-postası — talep zaten kaydedildi; mail hatası isteği bozmamalı.
   try { await notifyOwner(record); } catch (e) { console.error('[demo-request] bildirim hatası:', e); }

@@ -6,6 +6,18 @@ import { parseBody, z, zName, zPassword } from '@/lib/validate';
 import { generateOrgCode, formatCode, hostForOrg } from '@/lib/orgcode';
 import { addProjectDomain } from '@/lib/vercel';
 import { normalizeFacets } from '@/lib/institution';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
+import { prisma } from '@/lib/prisma';
+
+// Kurum silmede temizlenecek tenant tabloları (orgSlug bazında, tüm şubeler). Cascade
+// alt tabloları (Installment/BehaviorEntry/ExamRow/FormResponse/AnnouncementRecipient) otomatik.
+const TENANT_MODELS = [
+  'director', 'counselor', 'accountant', 'parent', 'teacher', 'student', 'class', 'course',
+  'slotBooking', 'tenantConfig', 'finance', 'expense', 'attendance', 'behavior', 'exam',
+  'odev', 'hedef', 'etkinlik', 'form', 'lead', 'announcement', 'resource', 'topic',
+  'guidance', 'auditLog', 'errLog', 'pushSub', 'payOrder',
+];
 
 // Tüm işlemler rawRedis (global) — tenant prefix YOK.
 // Erişim: yalnız superadmin rolü.
@@ -25,42 +37,57 @@ export async function GET() {
   const session = await getSession();
   if (!requireSuperadmin(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
-  const slugs = await rawRedis.smembers('orgs');
-  if (!slugs || slugs.length === 0) return NextResponse.json({ orgs: [] });
+  // Org kayıtlarını ham şekilde topla (rec listesi), sonra ortak biçimlendirme
+  let recs;
+  if (useSql()) {
+    const rows = await tdb().org.findMany(); // global (SKIP)
+    recs = rows.map((r) => ({ ...r, createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt }));
+  } else {
+    const slugs = await rawRedis.smembers('orgs');
+    if (!slugs || slugs.length === 0) return NextResponse.json({ orgs: [] });
+    const pipeline = rawRedis.pipeline();
+    slugs.forEach(slug => pipeline.get(`org:${slug}`));
+    const got = await pipeline.exec();
+    recs = slugs.map((slug, i) => got[i] || { slug, name: slug, active: true });
+  }
+  if (!recs || recs.length === 0) return NextResponse.json({ orgs: [] });
 
-  const pipeline = rawRedis.pipeline();
-  slugs.forEach(slug => pipeline.get(`org:${slug}`));
-  const recs = await pipeline.exec();
-
-  const orgs = slugs.map((slug, i) => {
-    const rec = recs[i] || { slug, name: slug, active: true };
+  const orgs = recs.map((rec) => {
     const f = normalizeFacets(rec);
     return {
-      slug: rec.slug || slug,
-      name: rec.name || slug,
+      slug: rec.slug,
+      name: rec.name || rec.slug,
       shortName: rec.shortName || null,
       themeColor: rec.themeColor || null,
       active: rec.active !== false,
       createdAt: rec.createdAt || null,
-    type: rec.type || 'single',
-    code: rec.code ? formatCode(rec.code) : null,
-    sektor: f.sektor,
-    mulkiyet: f.mulkiyet,
-    kademeler: f.kademeler,
+      type: rec.type || 'single',
+      code: rec.code ? formatCode(rec.code) : null,
+      sektor: f.sektor,
+      mulkiyet: f.mulkiyet,
+      kademeler: f.kademeler,
     };
   }).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
 
-  // Her org için müdür kullanıcı adı ve (multi ise) branch sayısını al
-  const dPipeline = rawRedis.pipeline();
-  orgs.forEach(o => {
-    dPipeline.get(`t:${o.slug}:main:director`);
-    dPipeline.scard(`org:${o.slug}:branches`);
-  });
-  const dResults = await dPipeline.exec();
-  orgs.forEach((o, i) => {
-    o.directorUsername = dResults[i * 2]?.username || null;
-    o.branchCount = dResults[i * 2 + 1] || (o.type === 'multi' ? 0 : 1);
-  });
+  // Her org için müdür kullanıcı adı + (multi ise) branch sayısı
+  if (useSql()) {
+    for (const o of orgs) {
+      const dir = await tdb(o.slug, 'main').director.findFirst();
+      o.directorUsername = dir?.username || null;
+      o.branchCount = o.type === 'multi' ? await tdb().branch.count({ where: { orgSlug: o.slug } }) : 1;
+    }
+  } else {
+    const dPipeline = rawRedis.pipeline();
+    orgs.forEach(o => {
+      dPipeline.get(`t:${o.slug}:main:director`);
+      dPipeline.scard(`org:${o.slug}:branches`);
+    });
+    const dResults = await dPipeline.exec();
+    orgs.forEach((o, i) => {
+      o.directorUsername = dResults[i * 2]?.username || null;
+      o.branchCount = dResults[i * 2 + 1] || (o.type === 'multi' ? 0 : 1);
+    });
+  }
 
   return NextResponse.json({ orgs });
 }
@@ -115,7 +142,43 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Çok şubeli kurum için org_admin bilgileri zorunlu' }, { status: 400 });
   }
 
-  // Çakışma kontrolü
+  if (useSql()) {
+    const dup = await tdb().org.findFirst({ where: { slug } });
+    if (dup) return NextResponse.json({ error: `"${slug}" zaten kayıtlı` }, { status: 409 });
+
+    // Benzersiz kurum kodu (Org.code ile reverse-lookup; ayrı orgcode kaydı gerekmez)
+    let code;
+    for (let i = 0; i < 20; i++) {
+      const c = generateOrgCode();
+      if (!(await tdb().org.findFirst({ where: { code: c } }))) { code = c; break; }
+    }
+    const facets = normalizeFacets({ sektor, mulkiyet, kademeler });
+    await tdb().org.create({ data: {
+      slug, name, shortName: shortName || null, active: true, type: orgType, code,
+      sektor: facets.sektor, mulkiyet: facets.mulkiyet, kademeler: facets.kademeler,
+    } });
+
+    // Ana şube müdürü (tenant-scoped)
+    const passwordHash = await bcrypt.hash(directorPassword, 10);
+    await tdb(slug, 'main').director.create({ data: { username: directorUsername, passwordHash, name: directorName || name } });
+
+    // Çok şubeli: org_admin + 'main' şube kaydı
+    if (orgType === 'multi') {
+      const adminHash = await bcrypt.hash(orgAdminPassword, 10);
+      await tdb().orgAdmin.create({ data: { orgSlug: slug, username: orgAdminUsername, passwordHash: adminHash, name: orgAdminName || name } });
+      await tdb().branch.create({ data: { orgSlug: slug, slug: 'main', name: 'Ana Şube', active: true } });
+    }
+
+    const domain = hostForOrg(slug, 'main');
+    const domainResult = await addProjectDomain(domain);
+    return NextResponse.json({
+      ok: true, slug, type: orgType, code: formatCode(code), domain,
+      domainProvisioned: domainResult.ok,
+      domainWarning: domainResult.ok ? null : (domainResult.error || 'Domain eklenemedi'),
+    });
+  }
+
+  // Çakışma kontrolü (Redis)
   const exists = await rawRedis.sismember('orgs', slug);
   if (exists) return NextResponse.json({ error: `"${slug}" zaten kayıtlı` }, { status: 409 });
 
@@ -194,6 +257,19 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { slug } = parsed.data;
 
+  if (useSql()) {
+    const org = await tdb().org.findFirst({ where: { slug } });
+    if (!org) return NextResponse.json({ error: 'Kurum bulunamadı' }, { status: 404 });
+    let deleted = 0;
+    for (const m of TENANT_MODELS) {
+      try { const r = await prisma[m].deleteMany({ where: { orgSlug: slug } }); deleted += r.count; } catch { /* model yoksa atla */ }
+    }
+    await prisma.branch.deleteMany({ where: { orgSlug: slug } });
+    await prisma.orgAdmin.deleteMany({ where: { orgSlug: slug } });
+    await prisma.org.delete({ where: { slug } });
+    return NextResponse.json({ ok: true, deleted });
+  }
+
   const exists = await rawRedis.sismember('orgs', slug);
   if (!exists) return NextResponse.json({ error: 'Kurum bulunamadı' }, { status: 404 });
 
@@ -230,6 +306,46 @@ export async function PATCH(req) {
   const { action, slug, newPassword, name, shortName } = parsed.data;
 
   if (!slug) return NextResponse.json({ error: 'slug gerekli' }, { status: 400 });
+
+  if (useSql()) {
+    if (action === 'change_own_password') {
+      const { currentPassword, newPassword: newPw } = parsed.data;
+      if (!currentPassword || !newPw) return NextResponse.json({ error: 'currentPassword ve newPassword gerekli' }, { status: 400 });
+      const sa = await tdb().superAdmin.findFirst();
+      if (!sa) return NextResponse.json({ error: 'Superadmin kaydı bulunamadı' }, { status: 404 });
+      if (!(await bcrypt.compare(currentPassword, sa.passwordHash))) return NextResponse.json({ error: 'Mevcut şifre yanlış' }, { status: 401 });
+      await tdb().superAdmin.update({ where: { id: sa.id }, data: { passwordHash: await bcrypt.hash(newPw, 10) } });
+      return NextResponse.json({ ok: true });
+    }
+    if (action === 'provision_domain') {
+      const domain = hostForOrg(slug, 'main');
+      const result = await addProjectDomain(domain);
+      if (!result.ok) return NextResponse.json({ error: result.error || 'Domain eklenemedi', domain }, { status: 502 });
+      return NextResponse.json({ ok: true, domain, alreadyExists: result.alreadyExists || false });
+    }
+    const org = await tdb().org.findFirst({ where: { slug } });
+    if (!org) return NextResponse.json({ error: 'Kurum bulunamadı' }, { status: 404 });
+    if (action === 'toggle_active') {
+      await tdb().org.update({ where: { slug }, data: { active: !org.active } });
+      return NextResponse.json({ ok: true, active: !org.active });
+    }
+    if (action === 'reset_director') {
+      if (!newPassword) return NextResponse.json({ error: 'newPassword gerekli' }, { status: 400 });
+      const dir = await tdb(slug, 'main').director.findFirst();
+      if (!dir) return NextResponse.json({ error: 'Müdür kaydı bulunamadı' }, { status: 404 });
+      await tdb(slug, 'main').director.update({ where: { id: dir.id }, data: { passwordHash: await bcrypt.hash(newPassword, 10) } });
+      return NextResponse.json({ ok: true });
+    }
+    if (action === 'rename') {
+      if (!name) return NextResponse.json({ error: 'name gerekli' }, { status: 400 });
+      const data = { name };
+      if (shortName !== undefined) data.shortName = shortName || null;
+      await tdb().org.update({ where: { slug }, data });
+      return NextResponse.json({ ok: true });
+    }
+    return NextResponse.json({ error: 'Geçersiz action' }, { status: 400 });
+  }
+
   const orgRec = await rawRedis.get(`org:${slug}`);
   if (!orgRec) return NextResponse.json({ error: 'Kurum bulunamadı' }, { status: 404 });
 

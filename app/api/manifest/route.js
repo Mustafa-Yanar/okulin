@@ -2,6 +2,8 @@ import { headers } from 'next/headers';
 import { rawRedis, currentOrg } from '@/lib/tenant';
 import { normalizeBranding } from '@/lib/branding';
 import { isApexHost, PLATFORM_BRANDING } from '@/lib/org';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
 // Kuruma özel PWA manifest'i (multi-tenant Faz B tamamlayıcısı).
 // "Ana ekrana ekle" ile kurulan uygulamanın ADI / KISA ADI / TEMA RENGİ org'a göre gelir.
@@ -11,7 +13,9 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const apex = isApexHost(headers().get('host'));
   const org = currentOrg();
-  const rec = apex ? null : await rawRedis.get(`org:${org}`);
+  const rec = apex
+    ? null
+    : (useSql() ? await tdb().org.findFirst({ where: { slug: org } }) : await rawRedis.get(`org:${org}`));
   const b = apex ? PLATFORM_BRANDING : normalizeBranding(rec);
 
   // Kuruma özel ikon: iconUrl (varsa) > logoUrl > varsayılan. Custom ikon arbitrer

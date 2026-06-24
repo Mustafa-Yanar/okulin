@@ -4,14 +4,18 @@ import { getSession } from '@/lib/auth';
 import { normalizeBranding, isValidHex } from '@/lib/branding';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z } from '@/lib/validate';
+import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
 
-// Kurum (org) markası — `org:<slug>` GLOBAL kayıt (t: prefix YOK; raw redis).
+// Kurum (org) markası — `org:<slug>` GLOBAL kayıt. SQL: Org modeli (name/shortName/logoUrl/themeColor).
 // GET: mevcut kurumun markasını döner (giriş gerekmez — login ekranı da okur).
 // POST: yalnız müdür kendi kurumunun adı/kısa adı/logosu/tema rengini günceller.
 
 export async function GET() {
   const org = currentOrg();
-  const rec = await rawRedis.get(`org:${org}`);
+  const rec = useSql()
+    ? await tdb().org.findFirst({ where: { slug: org } })
+    : await rawRedis.get(`org:${org}`);
   return NextResponse.json({ org, branding: normalizeBranding(rec) });
 }
 
@@ -46,21 +50,36 @@ export async function POST(req) {
   }
 
   const org = currentOrg();
-  const key = `org:${org}`;
-  const existing = (await rawRedis.get(key)) || { slug: org, active: true, createdAt: new Date().toISOString() };
-  const next = { ...existing };
-  if (name !== undefined) next.name = name.trim();
-  if (shortName !== undefined) next.shortName = shortName.trim() || undefined;
-  if (logoUrl !== undefined) next.logoUrl = logoUrl.trim() || undefined;
-  if (themeColor !== undefined) next.themeColor = themeColor || undefined;
+  let nextBranding;
 
-  await rawRedis.set(key, next);
+  if (useSql()) {
+    const data = {};
+    if (name !== undefined) data.name = name.trim();
+    if (shortName !== undefined) data.shortName = shortName.trim() || null;
+    if (logoUrl !== undefined) data.logoUrl = logoUrl.trim() || null;
+    if (themeColor !== undefined) data.themeColor = themeColor || null;
+    const existing = await tdb().org.findFirst({ where: { slug: org } });
+    nextBranding = existing
+      ? await tdb().org.update({ where: { slug: org }, data })
+      : await tdb().org.create({ data: { slug: org, name: data.name || org, ...data, active: true } });
+  } else {
+    const key = `org:${org}`;
+    const existing = (await rawRedis.get(key)) || { slug: org, active: true, createdAt: new Date().toISOString() };
+    const next = { ...existing };
+    if (name !== undefined) next.name = name.trim();
+    if (shortName !== undefined) next.shortName = shortName.trim() || undefined;
+    if (logoUrl !== undefined) next.logoUrl = logoUrl.trim() || undefined;
+    if (themeColor !== undefined) next.themeColor = themeColor || undefined;
+    await rawRedis.set(key, next);
+    nextBranding = next;
+  }
+
   await logAudit({
     ...actorFrom(session),
     action: 'org.brandingUpdate',
-    target: { type: 'org', id: org, name: next.name || org },
-    detail: `Kurum markası güncellendi: ${next.name || org}`,
+    target: { type: 'org', id: org, name: nextBranding.name || org },
+    detail: `Kurum markası güncellendi: ${nextBranding.name || org}`,
   });
 
-  return NextResponse.json({ ok: true, branding: normalizeBranding(next) });
+  return NextResponse.json({ ok: true, branding: normalizeBranding(nextBranding) });
 }

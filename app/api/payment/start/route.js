@@ -7,6 +7,7 @@ import { decryptSecret } from '@/lib/payment/crypto';
 import { getProvider } from '@/lib/payment';
 import { useSql } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
+import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs'; // crypto + fetch
 
@@ -34,8 +35,10 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  // Tenant ödeme yapılandırması
-  const cfg = await redis.get('payment:config');
+  // Tenant ödeme yapılandırması (SQL: TenantConfig.paymentConfig)
+  const cfg = useSql()
+    ? (await tdb().tenantConfig.findFirst())?.paymentConfig
+    : await redis.get('payment:config');
   if (!cfg || !cfg.active || !cfg.merchantId || !cfg.keyEnc || !cfg.saltEnc) {
     return NextResponse.json({ error: 'Online ödeme bu kurumda aktif değil' }, { status: 400 });
   }
@@ -75,13 +78,21 @@ export async function POST(req) {
   const childName = (session.children || []).find(c => (c.id || c) === studentId)?.name || studentName || 'Öğrenci';
 
   // Global order kaydı — callback bunu okuyup doğru kuruma yazar (host'a güvenmez).
-  await rawRedis.set(`payorder:${merchantOid}`, {
-    org, branch, studentId, installmentIdx,
-    amountTL, amountKurus,
-    studentName: childName,
-    status: 'pending',
-    createdAt: new Date().toISOString(),
-  }, { ex: 60 * 60 * 24 * 7 }); // 7 gün
+  if (useSql()) {
+    await prisma.payOrder.create({ data: {
+      oid: merchantOid, orgSlug: org, branch, studentId,
+      amount: amountKurus, status: 'pending',
+      data: { installmentIdx, amountTL, amountKurus, studentName: childName, createdAt: new Date().toISOString() },
+    } });
+  } else {
+    await rawRedis.set(`payorder:${merchantOid}`, {
+      org, branch, studentId, installmentIdx,
+      amountTL, amountKurus,
+      studentName: childName,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    }, { ex: 60 * 60 * 24 * 7 }); // 7 gün
+  }
 
   const origin = new URL(req.url).origin;
   const reqIp = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '';

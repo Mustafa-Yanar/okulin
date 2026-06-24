@@ -4,19 +4,44 @@ import { decryptSecret } from '@/lib/payment/crypto';
 import { getProvider } from '@/lib/payment';
 import { applyInstallmentPayment, applyInstallmentPaymentSql } from '@/lib/finance';
 import { useSql } from '@/lib/usesql';
+import { tdb } from '@/lib/sqldb';
+import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs'; // HMAC + crypto
 
 // PayTR Bildirim (callback) URL'i. Server-to-server, form-urlencoded POST.
 // Kimlik doğrulama: HMAC hash (oturum/cookie YOK). Middleware'de CSRF'ten MUAF.
 // Para kredilendiren KRİTİK uç → idempotent olmalı; her durumda düz metin "OK".
+// SQL-aware: payorder = PayOrder modeli; finans = applyInstallmentPaymentSql.
+// paylock (NX kilit) transient → Redis kalır.
 
 function ok() {
   return new Response('OK', { status: 200, headers: { 'Content-Type': 'text/plain' } });
 }
 function fail(msg) {
-  // Non-OK → PayTR tekrar dener. Yalnız gerçekten işleyemediğimizde (hash/uyumsuzluk).
   return new Response(`FAIL: ${msg}`, { status: 400, headers: { 'Content-Type': 'text/plain' } });
+}
+
+// PayOrder okuma — SQL (PayOrder modeli) veya Redis. Ortak şekle normalize eder.
+async function readOrder(oid) {
+  if (useSql()) {
+    const po = await prisma.payOrder.findUnique({ where: { oid } });
+    if (!po) return null;
+    return {
+      org: po.orgSlug, branch: po.branch, studentId: po.studentId, status: po.status,
+      installmentIdx: po.data?.installmentIdx, studentName: po.data?.studentName, data: po.data || {},
+    };
+  }
+  return rawRedis.get(`payorder:${oid}`);
+}
+// PayOrder durum güncelle (idempotency kaydı).
+async function patchOrder(oid, order, patch, days) {
+  if (useSql()) {
+    const { status, ...rest } = patch;
+    await prisma.payOrder.update({ where: { oid }, data: { status, data: { ...(order.data || {}), ...rest } } });
+  } else {
+    await rawRedis.set(`payorder:${oid}`, { ...order, ...patch }, { ex: 60 * 60 * 24 * (days || 7) });
+  }
 }
 
 export async function POST(req) {
@@ -32,19 +57,14 @@ export async function POST(req) {
   if (!merchantOid) return fail('merchant_oid yok');
 
   // Order kaydı = yönlendirme + idempotency kaynağı (host'a güvenmiyoruz).
-  const order = await rawRedis.get(`payorder:${merchantOid}`);
-  if (!order) {
-    // Bilinmeyen/expired sipariş → işleyecek bir şey yok; PayTR'i susturmak için OK.
-    return ok();
-  }
-
-  // Zaten işlenmişse tekrar kredilendirme YOK (idempotency).
-  if (order.status === 'paid') return ok();
+  const order = await readOrder(merchantOid);
+  if (!order) return ok(); // bilinmeyen/expired sipariş → susmak için OK
+  if (order.status === 'paid') return ok(); // idempotency
 
   // İlgili kurumun config'ini AÇIKÇA order'ın tenant'ından yükle.
-  // (payment:config + payorder/paylock = ödeme akış state'i, Redis-only; finans yazma SQL.)
-  const orderRedis = tenantRedis(order.org, order.branch);
-  const cfg = await orderRedis.get('payment:config');
+  const cfg = useSql()
+    ? (await tdb(order.org, order.branch).tenantConfig.findFirst())?.paymentConfig
+    : await tenantRedis(order.org, order.branch).get('payment:config');
   if (!cfg || !cfg.keyEnc || !cfg.saltEnc) return fail('config yok');
 
   let key, salt;
@@ -61,18 +81,18 @@ export async function POST(req) {
 
   // Başarısız ödeme → işaretle, OK dön (tekrar deneme istemeyiz).
   if (status !== 'success') {
-    await rawRedis.set(`payorder:${merchantOid}`, { ...order, status: 'failed', failedAt: new Date().toISOString() }, { ex: 60 * 60 * 24 * 7 });
+    await patchOrder(merchantOid, order, { status: 'failed', failedAt: new Date().toISOString() }, 7);
     return ok();
   }
 
-  // Çift işlemeye karşı kısa NX kilit (eşzamanlı tekrar callback).
+  // Çift işlemeye karşı kısa NX kilit (transient — Redis).
   const lockKey = `paylock:${merchantOid}`;
   const lock = await rawRedis.set(lockKey, '1', { nx: true, ex: 30 });
   if (!lock) return ok(); // başka bir çağrı işliyor → idempotent çık
 
   try {
     // Son kontrol: kilidi aldıktan sonra order durumunu yeniden oku.
-    const fresh = await rawRedis.get(`payorder:${merchantOid}`);
+    const fresh = await readOrder(merchantOid);
     if (fresh?.status === 'paid') return ok();
 
     const paymentOpts = {
@@ -84,17 +104,14 @@ export async function POST(req) {
     };
     const result = useSql()
       ? await applyInstallmentPaymentSql({ ...paymentOpts, orgOverride: order.org, branchOverride: order.branch })
-      : await applyInstallmentPayment(orderRedis, paymentOpts);
+      : await applyInstallmentPayment(tenantRedis(order.org, order.branch), paymentOpts);
 
     if (!result.ok) {
-      // Finans kaydı yoksa (silinmiş) tekrar denemenin anlamı yok → OK.
-      await rawRedis.set(`payorder:${merchantOid}`, { ...order, status: 'error', error: result.error, at: new Date().toISOString() }, { ex: 60 * 60 * 24 * 7 });
+      await patchOrder(merchantOid, order, { status: 'error', error: result.error, at: new Date().toISOString() }, 7);
       return ok();
     }
 
-    await rawRedis.set(`payorder:${merchantOid}`, {
-      ...order, status: 'paid', paidAt: new Date().toISOString(), receiptNo: result.receiptNo,
-    }, { ex: 60 * 60 * 24 * 30 });
+    await patchOrder(merchantOid, order, { status: 'paid', paidAt: new Date().toISOString(), receiptNo: result.receiptNo }, 30);
 
     await logAudit({
       actorRole: 'system', actorName: 'Online Ödeme (PayTR)', actorId: 'paytr',
@@ -105,7 +122,6 @@ export async function POST(req) {
 
     return ok();
   } catch (e) {
-    // Beklenmedik hata → kilidi bırak ki PayTR tekrarı işleyebilsin.
     await rawRedis.del(lockKey);
     return fail('işleme hatası');
   }
