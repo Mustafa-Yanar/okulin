@@ -34,5 +34,6 @@ tmp/
 /test-results/
 /playwright-report/
 /e2e/shots/
+/e2e/.auth/
 /.playwright/
 node_modules/.cache/ms-playwright

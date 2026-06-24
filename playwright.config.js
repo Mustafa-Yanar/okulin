@@ -15,4 +15,11 @@ module.exports = defineConfig({
     trace: 'off',
   },
   reporter: [['list']],
+  // Projeler: 'setup' rol oturumlarını bir kez kaydeder (storageState), 'sql' testleri
+  // ona bağlıdır (login tekrarı yok → rate-limit'e takılmaz). 'smoke' bağımsız (kendi login'i).
+  projects: [
+    { name: 'setup', testMatch: /auth\.setup\.js/ },
+    { name: 'sql', testMatch: /sql-.*\.spec\.js/, dependencies: ['setup'] },
+    { name: 'smoke', testMatch: /smoke\.spec\.js/ },
+  ],
 });
