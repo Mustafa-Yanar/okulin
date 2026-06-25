@@ -181,9 +181,14 @@ export async function PUT(req) {
       const set = new Set(t.offDays || []);
       off ? set.add(dayIndex) : set.delete(dayIndex);
       const offDays = Array.from(set).sort((a, b) => a - b);
-      await tdb().teacher.update({ where: { id: t.id }, data: { offDays } });
-      // İzin günü değişti → o haftanın slot grid'ini şablondan yeniden kur (Redis ile uyum;
-      // initWeekForTeacher offDays'i dikkate alıp izinli günü kapatır).
+      const data = { offDays };
+      // İzin günü AÇILDIYSA o günün şablon ders/etüt entry'lerini sil (Redis koluyla uyum —
+      // yoksa izin kalkınca eski dersler geri canlanır). Sonra slot grid'i yeniden kur.
+      if (off) {
+        const tmpl = JSON.parse(JSON.stringify(t.programTemplate || {}));
+        if (tmpl[String(dayIndex)]) { delete tmpl[String(dayIndex)]; data.programTemplate = tmpl; }
+      }
+      await tdb().teacher.update({ where: { id: t.id }, data });
       await initWeekForTeacher(id, getWeekKey());
       return NextResponse.json({ ok: true, offDays });
     }

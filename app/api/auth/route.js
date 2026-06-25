@@ -43,8 +43,10 @@ export async function GET() {
   const redis = tenantRedis();
   const session = await getSession();
   const directorExists = useSql() ? (await tdb().director.count()) > 0 : await redis.exists('director');
-  // Marka (org kaydı global — t: prefix YOK) — login ekranı + header bunu kullanır.
-  const orgRec = await rawRedis.get(`org:${currentOrg()}`);
+  // Marka (org kaydı global) — login ekranı + header bunu kullanır. SQL: Org tablosu.
+  const orgRec = useSql()
+    ? await tdb().org.findFirst({ where: { slug: currentOrg() } })
+    : await rawRedis.get(`org:${currentOrg()}`);
   return NextResponse.json({ session, directorExists: !!directorExists, branding: normalizeBranding(orgRec) });
 }
 
@@ -144,12 +146,16 @@ export async function POST(req) {
     // Normal "Yönetim" girişi (role:'management' veya role yok) superadmin'i HİÇ kontrol
     // etmez → süper-admin varlığı kurum giriş ekranından sızmaz/denenmez.
     if (selectedRole === 'superadmin') {
-      const superadmin = await rawRedis.get('superadmin');
+      // SQL: SuperAdmin tablosu (username ile). Redis: tek 'superadmin' kaydı + username kontrol.
+      const superadmin = useSql()
+        ? await tdb().superAdmin.findFirst({ where: { username } })
+        : await rawRedis.get('superadmin');
       if (superadmin && superadmin.username === username) {
         const ok = await bcrypt.compare(password, superadmin.passwordHash);
         if (ok) {
-          const res = NextResponse.json({ role: 'superadmin', name: superadmin.name });
-          await setSession(res, { role: 'superadmin', id: 'superadmin', name: superadmin.name });
+          const saName = superadmin.name || 'Süper Admin';
+          const res = NextResponse.json({ role: 'superadmin', name: saName });
+          await setSession(res, { role: 'superadmin', id: 'superadmin', name: saName });
           return res;
         }
       }
@@ -158,9 +164,11 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Kullanıcı adı veya şifre hatalı.' }, { status: 401 });
     }
 
-    // Org_admin (kurum-geneli, şube-bağımsız) — rawRedis'te orgadmin:<org> anahtarı.
+    // Org_admin (kurum-geneli, şube-bağımsız). SQL: OrgAdmin tablosu. Redis: orgadmin:<org>.
     const org = currentOrg();
-    const orgAdmin = await rawRedis.get(`orgadmin:${org}`);
+    const orgAdmin = useSql()
+      ? await tdb().orgAdmin.findFirst({ where: { orgSlug: org, username } })
+      : await rawRedis.get(`orgadmin:${org}`);
     if (orgAdmin && orgAdmin.username === username) {
       const ok = await bcrypt.compare(password, orgAdmin.passwordHash);
       if (ok) {
