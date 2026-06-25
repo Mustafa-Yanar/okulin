@@ -2,7 +2,7 @@ import { headers } from 'next/headers';
 import { rawRedis, currentOrg } from '@/lib/tenant';
 import { normalizeBranding } from '@/lib/branding';
 import { isApexHost, PLATFORM_BRANDING } from '@/lib/org';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Kuruma özel PWA manifest'i (multi-tenant Faz B tamamlayıcısı).
@@ -15,7 +15,7 @@ export async function GET() {
   const org = currentOrg();
   const rec = apex
     ? null
-    : (useSql() ? await tdb().org.findFirst({ where: { slug: org } }) : await rawRedis.get(`org:${org}`));
+    : (isSqlEnabled() ? await tdb().org.findFirst({ where: { slug: org } }) : await rawRedis.get(`org:${org}`));
   const b = apex ? PLATFORM_BRANDING : normalizeBranding(rec);
 
   // Kuruma özel ikon: iconUrl (varsa) > logoUrl > varsayılan. Custom ikon arbitrer

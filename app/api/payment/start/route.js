@@ -5,7 +5,7 @@ import { getSession, canReadStudent } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
 import { decryptSecret } from '@/lib/payment/crypto';
 import { getProvider } from '@/lib/payment';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 import { prisma } from '@/lib/prisma';
 
@@ -36,7 +36,7 @@ export async function POST(req) {
   }
 
   // Tenant ödeme yapılandırması (SQL: TenantConfig.paymentConfig)
-  const cfg = useSql()
+  const cfg = isSqlEnabled()
     ? (await tdb().tenantConfig.findFirst())?.paymentConfig
     : await redis.get('payment:config');
   if (!cfg || !cfg.active || !cfg.merchantId || !cfg.keyEnc || !cfg.saltEnc) {
@@ -45,7 +45,7 @@ export async function POST(req) {
 
   // Finans kaydı + taksit doğrulama (SQL-aware)
   let inst, studentName;
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const stu = await tdb().student.findFirst({
       where: { legacyId: studentId },
       include: { finance: { include: { installments: { orderBy: { idx: 'asc' } } } } },
@@ -78,7 +78,7 @@ export async function POST(req) {
   const childName = (session.children || []).find(c => (c.id || c) === studentId)?.name || studentName || 'Öğrenci';
 
   // Global order kaydı — callback bunu okuyup doğru kuruma yazar (host'a güvenmez).
-  if (useSql()) {
+  if (isSqlEnabled()) {
     await prisma.payOrder.create({ data: {
       oid: merchantOid, orgSlug: org, branch, studentId,
       amount: amountKurus, status: 'pending',

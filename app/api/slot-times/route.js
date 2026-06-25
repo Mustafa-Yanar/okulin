@@ -3,7 +3,7 @@ import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES, DEFAULT_ETUT_SURESI, DEFAULT_MOLA_SURESI } from '@/lib/constants';
 import { parseBody, z } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Şekil doğrulaması — saat/sıra mantığı aşağıda ayrıca kontrol edilir.
@@ -36,7 +36,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const cfg = await tdb().tenantConfig.findFirst();
     const stored = cfg?.slotTimes;
     return NextResponse.json({
@@ -85,7 +85,7 @@ export async function POST(req) {
     }
   }
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const cfg = await tdb().tenantConfig.findFirst();
     const prev = cfg?.slotTimes;
     const newSlotTimes = {

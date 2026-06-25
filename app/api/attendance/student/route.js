@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 import { ALL_DAYS, slotsForDay } from '@/lib/constants';
 import { getWeekKey, slotKey, getSlotTimes, getProgramTemplate } from '@/lib/slots';
 import { tdb } from '@/lib/sqldb';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 
 // GET /api/attendance/student?studentId=...
 // Bir öğrencinin tüm devamsızlık ve geç kalma kayıtlarını döner.
@@ -22,7 +22,7 @@ export async function GET(req) {
   const studentId = searchParams.get('studentId');
   if (!studentId) return NextResponse.json({ error: 'studentId gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     // Tüm yoklama kayıtlarını öğretmen dahil çek, JS'te filtrele
     const allRecs = await tdb().attendance.findMany({ include: { teacher: true } });
     const slotTimes = await getSlotTimes();

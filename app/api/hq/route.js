@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { rawRedis, currentOrg, tenantRedis } from '@/lib/tenant';
 import { getSession } from '@/lib/auth';
 import { parseBody, z, zName, zPassword } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // HQ (Genel Merkez) API — çok şubeli kurumların şube yönetimi.
@@ -27,7 +27,7 @@ export async function GET() {
   const org = currentOrg();
   if (!requireHQ(session, org)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().branch.findMany({ where: { orgSlug: org } });
     const metaMap = {};
     rows.forEach((r) => { metaMap[r.slug] = r; });
@@ -141,7 +141,7 @@ export async function POST(req) {
   if (!parsed.ok) return parsed.response;
   const { action, branchSlug } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     if (action === 'create_branch') {
       if (!isValidBranchSlug(branchSlug)) {
         return NextResponse.json({ error: 'Geçersiz slug — küçük harf, rakam ve tire, "main" dışında' }, { status: 400 });

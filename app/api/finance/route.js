@@ -3,7 +3,7 @@ import redis from '@/lib/db';
 import { getSession, canReadStudent } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId, zMoney } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 function canAccess(session) {
@@ -50,7 +50,7 @@ export async function GET(req) {
     if (!canReadStudent(session, studentId)) {
       return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     }
-    if (useSql()) { const { stu, f } = await financeByLegacySql(studentId); return NextResponse.json(financeOut(f, stu)); }
+    if (isSqlEnabled()) { const { stu, f } = await financeByLegacySql(studentId); return NextResponse.json(financeOut(f, stu)); }
     const record = await redis.get(`finance:${studentId}`);
     return NextResponse.json(record || null);
   }
@@ -59,12 +59,12 @@ export async function GET(req) {
 
   if (studentId) {
     // Tek öğrenci finansal kaydı
-    if (useSql()) { const { stu, f } = await financeByLegacySql(studentId); return NextResponse.json(financeOut(f, stu)); }
+    if (isSqlEnabled()) { const { stu, f } = await financeByLegacySql(studentId); return NextResponse.json(financeOut(f, stu)); }
     const record = await redis.get(`finance:${studentId}`);
     return NextResponse.json(record || null);
   }
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const studs = await tdb().student.findMany({ include: { class: true, finance: { include: { installments: { orderBy: { idx: 'asc' } } } } } });
     const list = studs.map((s) => ({ studentId: s.legacyId, studentName: s.name, studentCls: s.class?.legacyId || '', finance: financeOut(s.finance, s) }));
     list.sort((a, b) => a.studentName.localeCompare(b.studentName, 'tr'));
@@ -112,7 +112,7 @@ export async function POST(req) {
 
   const netFee = Math.max(0, (parseFloat(totalFee) || 0) - (parseFloat(discount) || 0));
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const stu = await tdb().student.findFirst({ where: { legacyId: studentId } });
     if (!stu) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
     const existing = await tdb().finance.findFirst({ where: { studentId: stu.id }, include: { installments: { orderBy: { idx: 'asc' } } } });
@@ -185,7 +185,7 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { studentId } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const stu = await tdb().student.findFirst({ where: { legacyId: studentId } });
     const f = stu ? await tdb().finance.findFirst({ where: { studentId: stu.id } }) : null;
     if (f) await tdb().finance.delete({ where: { id: f.id } }); // cascade: installments

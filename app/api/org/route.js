@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 import { normalizeBranding, isValidHex } from '@/lib/branding';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Kurum (org) markası — `org:<slug>` GLOBAL kayıt. SQL: Org modeli (name/shortName/logoUrl/themeColor).
@@ -13,7 +13,7 @@ import { tdb } from '@/lib/sqldb';
 
 export async function GET() {
   const org = currentOrg();
-  const rec = useSql()
+  const rec = isSqlEnabled()
     ? await tdb().org.findFirst({ where: { slug: org } })
     : await rawRedis.get(`org:${org}`);
   return NextResponse.json({ org, branding: normalizeBranding(rec) });
@@ -52,7 +52,7 @@ export async function POST(req) {
   const org = currentOrg();
   let nextBranding;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const data = {};
     if (name !== undefined) data.name = name.trim();
     if (shortName !== undefined) data.shortName = shortName.trim() || null;

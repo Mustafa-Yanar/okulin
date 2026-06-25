@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { getSession, canReadStudent } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // topics:{studentId} -> { [subject]: { [topicIndex]: percent 0-100 } }
@@ -33,7 +33,7 @@ export async function GET(req) {
   }
   if (!studentId) return NextResponse.json({ error: 'studentId gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const row = await tdb().topic.findFirst({ where: { studentId } });
     return NextResponse.json({ topics: row?.data || {} });
   }
@@ -65,7 +65,7 @@ export async function POST(req) {
   const p = Math.max(0, Math.min(100, parseInt(percent) || 0));
   const idx = String(parseInt(topicIndex));
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const existing = await tdb().topic.findFirst({ where: { studentId } });
     const data = existing?.data || {};
     if (!data[subject]) data[subject] = {};

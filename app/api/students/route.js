@@ -7,7 +7,7 @@ import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
 import { parseBody, z, zName, zId } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 function makeId() {
@@ -69,7 +69,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().student.findMany({ include: { class: true } });
     return NextResponse.json(rows.map(studentOut));
   }
@@ -140,7 +140,7 @@ export async function POST(req) {
   // telefon da yoksa sabit "12345678". İlk girişte zorunlu değişim (mustChangePassword).
   const initPassword = initialPassword(password, normPhone);
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const dup = await tdb().student.findFirst({ where: { username } });
     if (dup) return NextResponse.json({ error: 'Bu isimde bir öğrenci zaten kayıtlı' }, { status: 400 });
     const clsRow = await tdb().class.findFirst({ where: { legacyId: cls } });
@@ -201,7 +201,7 @@ export async function PUT(req) {
   const { id, name, password, cls, phone, parentPhone, parentName, birthDate, diplomaNotu,
           parentRelation, parentNote, parent2Name, parent2Phone, parent2Relation } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const s = await tdb().student.findFirst({ where: { legacyId: id }, include: { class: true } });
     if (!s) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
     const group = (await getClass(cls))?.group || s.group;
@@ -304,7 +304,7 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { id, ids } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     if (ids && Array.isArray(ids)) {
       await tdb().student.deleteMany({ where: { legacyId: { in: ids } } }); // cascade: finance/behavior
       await logAudit({ ...actorFrom(session), action: 'student.bulkDelete', detail: `${ids.length} öğrenci toplu silindi` });

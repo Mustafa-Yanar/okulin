@@ -4,7 +4,7 @@ import { getSession, isManager } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
 import { slotStartTime, getProgramTemplate, setProgramTemplate } from '@/lib/slots';
 import { getWeekKey } from '@/lib/constants';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 
 // Etüt şablonları — öğretmenin haftadan bağımsız, serbest saatli etüt blokları.
 // program:<teacherId>.etutSablonlari = [ { id, dayIndex, start, end, aktif } ]
@@ -74,7 +74,7 @@ export async function GET(req) {
   const teacherId = new URL(req.url).searchParams.get('teacherId');
   if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const fullTemplate = await getProgramTemplate(teacherId);
     return NextResponse.json({ sablonlar: fullTemplate.etutSablonlari || [] });
   }
@@ -104,7 +104,7 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Geçmiş bir gün/saate etüt eklenemez' }, { status: 400 });
   }
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const sablonlar = await updateSablonlar(teacherId, (list) => {
       if (sablon.id) {
         const idx = list.findIndex(s => s.id === sablon.id);
@@ -149,7 +149,7 @@ export async function PUT(req) {
     return NextResponse.json({ error: 'weekKey gerekli' }, { status: 400 });
   }
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const sablonlar = await updateSablonlar(teacherId, (list) => {
       const idx = list.findIndex(s => s.id === id);
       if (idx === -1) return list;
@@ -200,7 +200,7 @@ export async function PATCH(req) {
   if (!parsed.ok) return parsed.response;
   const { teacherId, id, student } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const sablonlar = await updateSablonlar(teacherId, (list) => {
       const idx = list.findIndex(s => s.id === id);
       if (idx === -1) return list;
@@ -251,7 +251,7 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { teacherId, id } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const sablonlar = await updateSablonlar(teacherId, (list) => list.filter(s => s.id !== id));
     return NextResponse.json({ ok: true, sablonlar });
   }

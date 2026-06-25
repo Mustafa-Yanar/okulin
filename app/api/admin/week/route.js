@@ -6,7 +6,7 @@ import {
   getAllTeachers, getCurrentWeek, setCurrentWeek,
 } from '@/lib/slots';
 import { parseBody, z } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 const WeekActionSchema = z.object({
@@ -61,7 +61,7 @@ export async function POST(req) {
   // Tüm slotları sil, bu haftayı program şablonundan yeniden init et
   if (action === 'reinit') {
     const week = getWeekKey();
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const teachers = await getAllTeachers();
       const del = await tdb().slotBooking.deleteMany({}); // tenant-scoped
       for (const t of teachers) await initWeekForTeacher(t.id, week);
@@ -89,7 +89,7 @@ export async function POST(req) {
 
   // Tüm öğretmenlerin izin günlerini, ders programlarını ve slot kayıtlarını sil
   if (action === 'reset-all') {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const teachers = await tdb().teacher.findMany();
       let offDays = 0, programs = 0;
       for (const t of teachers) {

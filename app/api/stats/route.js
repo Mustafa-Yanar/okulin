@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 function canAccess(session) {
@@ -13,7 +13,7 @@ export async function GET() {
   if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   try {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const [studentCount, teacherCount] = await Promise.all([tdb().student.count(), tdb().teacher.count()]);
       let thisMonthCollection = 0;
       let pendingAmount = 0;

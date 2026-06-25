@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // GET /api/audit — son denetim kayıtlarını döndürür (sadece müdür).
@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().auditLog.findMany({ orderBy: { at: 'desc' }, take: 500 });
     return NextResponse.json(rows.map(r => r.data));
   }

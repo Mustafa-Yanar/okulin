@@ -6,7 +6,7 @@ import { getSession, initialPassword } from '@/lib/auth';
 import { getClasses } from '@/lib/classes';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { addToIndex } from '@/lib/userIndex';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 function makeId() {
@@ -43,7 +43,7 @@ export async function POST(req) {
   const allClasses = await getClasses();
   const groupById = new Map(allClasses.map((c) => [c.id, c.group]));
 
-  const sqlMode = useSql();
+  const sqlMode = isSqlEnabled();
 
   // Mevcut öğrenci kullanıcı adları + (SQL) sınıf legacyId→id haritası
   const existingUsernames = new Set();

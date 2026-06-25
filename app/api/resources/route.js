@@ -3,7 +3,7 @@ import { del } from '@vercel/blob';
 import { tenantRedis } from '@/lib/tenant';
 import { getSession } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // LMS Lite — ders kaynakları kütüphanesi (PDF föy / video / web linki).
@@ -28,7 +28,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Yetkisiz' }, { status: 401 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().resource.findMany();
     let resources = rows.map(r => r.data);
     if (session.role === 'student') {
@@ -85,7 +85,7 @@ export async function POST(req) {
     uploadedByRole: session.role,
     createdAt: new Date().toISOString(),
   };
-  if (useSql()) {
+  if (isSqlEnabled()) {
     await tdb().resource.create({ data: { legacyId: id, title, url, data: rec } });
   } else {
     await redis.set(`resource:${id}`, rec);
@@ -104,7 +104,7 @@ export async function DELETE(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const existing = await tdb().resource.findFirst({ where: { legacyId: id } });
     if (!existing) return NextResponse.json({ error: 'Kaynak bulunamadı' }, { status: 404 });
     const rec = existing.data;

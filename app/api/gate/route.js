@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { rawRedis } from '@/lib/tenant';
 import { gateRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
 import { normalizeCode, hostForOrg } from '@/lib/orgcode';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Landing kurum kodu kapısı: kod → hedef subdomain çözer.
@@ -27,7 +27,7 @@ export async function POST(req) {
   }
 
   // Kod → kurum (SQL: Org.code; reverse kayda gerek yok). host = hostForOrg(slug,'main').
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const org = await tdb().org.findFirst({ where: { code } });
     if (!org) return NextResponse.json({ error: 'Bu koda ait kurum bulunamadı.' }, { status: 404 });
     if (org.active === false) return NextResponse.json({ error: 'Bu kurum şu anda aktif değil.' }, { status: 403 });

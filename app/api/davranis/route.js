@@ -4,7 +4,7 @@ import { getSession, isManager } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Davranış puanlama — olumlu/olumsuz davranış kaydı (artı/eksi puan).
@@ -65,7 +65,7 @@ export async function GET(req) {
     if (session.role === 'parent' && !(session.children || []).some(c => c.id === studentId)) {
       return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     }
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const beh = await behaviorByLegacySql(studentId);
       const entries = (beh?.entries || []).map(behEntryOut).reverse();
       return NextResponse.json({ studentId, total: beh?.total || 0, entries });
@@ -77,7 +77,7 @@ export async function GET(req) {
 
   // ── Öğrenci: kendi kaydı ──
   if (session.role === 'student') {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const beh = await behaviorByLegacySql(session.id);
       return NextResponse.json({ studentId: session.id, total: beh?.total || 0, entries: (beh?.entries || []).map(behEntryOut).reverse() });
     }
@@ -92,7 +92,7 @@ export async function GET(req) {
 
   // ── Yönetici/öğretmen: roster + toplamlar ──
   if (!canGive(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().student.findMany({
       include: {
         class: { select: { legacyId: true } },
@@ -133,7 +133,7 @@ export async function POST(req) {
   const { studentId, points, reason, note } = parsed.data;
   if (points === 0) return NextResponse.json({ error: 'Puan 0 olamaz' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const student = await tdb().student.findFirst({ where: { legacyId: studentId } });
     if (!student) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
 
@@ -201,7 +201,7 @@ export async function DELETE(req) {
   const entryId = url.searchParams.get('entryId');
   if (!studentId || !entryId) return NextResponse.json({ error: 'studentId ve entryId gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const beh = await tdb().behavior.findFirst({
       where: { student: { legacyId: studentId } },
       include: { entries: true },

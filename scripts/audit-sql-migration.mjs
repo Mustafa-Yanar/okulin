@@ -8,14 +8,14 @@
  *
  * Yöntem: app/api altındaki route.js + lib dosyalarını acorn ile parse eder,
  * her `redis.*` / `tenantRedis().*` / pipeline çağrısını bulur ve içinde
- * bulunduğu fonksiyonun useSql() koruması olup olmadığını sınıflandırır.
+ * bulunduğu fonksiyonun isSqlEnabled() koruması olup olmadığını sınıflandırır.
  *
  * Sınıflar:
- *   🔴 KORUMASIZ      — host fonksiyonda useSql() YOK → SQL modunda da Redis çalışır (kesin risk)
- *   🔴 SQL-DALINDA    — redis çağrısı if(useSql()) consequent'inde → SQL modunda Redis (ciddi)
- *   🟡 FALLBACK       — useSql var + redis çağrısı SQL-dalı DIŞINDA → muhtemelen doğru (else/early-return)
+ *   🔴 KORUMASIZ      — host fonksiyonda isSqlEnabled() YOK → SQL modunda da Redis çalışır (kesin risk)
+ *   🔴 SQL-DALINDA    — redis çağrısı if(isSqlEnabled()) consequent'inde → SQL modunda Redis (ciddi)
+ *   🟡 FALLBACK       — isSqlEnabled var + redis çağrısı SQL-dalı DIŞINDA → muhtemelen doğru (else/early-return)
  *
- * Ayrıca: Redis-only lib helper'larını (useSql içermeyen) ve onları çağıran
+ * Ayrıca: Redis-only lib helper'larını (isSqlEnabled içermeyen) ve onları çağıran
  * route'ları cross-reference eder (finance.js/userIndex.js tipi gizli katman).
  *
  * Çalıştır: node scripts/audit-sql-migration.mjs
@@ -48,12 +48,12 @@ const files = [
 // ── AST yardımcıları ───────────────────────────────────────────────────────
 const FUNC_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
 
-// node'un subtree'sinde useSql() çağrısı var mı (nested fonksiyon dahil — yaklaşım kabul edilebilir)
+// node'un subtree'sinde isSqlEnabled() çağrısı var mı (nested fonksiyon dahil — yaklaşım kabul edilebilir)
 function subtreeHasUseSql(node) {
   let found = false;
   (function rec(n) {
     if (found || !n || typeof n.type !== 'string') return;
-    if (n.type === 'CallExpression' && n.callee?.type === 'Identifier' && n.callee.name === 'useSql') { found = true; return; }
+    if (n.type === 'CallExpression' && n.callee?.type === 'Identifier' && n.callee.name === 'isSqlEnabled') { found = true; return; }
     for (const k in n) {
       if (k === 'loc' || k === 'start' || k === 'end') continue;
       const v = n[k];
@@ -129,16 +129,16 @@ function analyzeFile(file) {
           if (FUNC_TYPES.has(ancestors[i].type)) { host = ancestors[i]; break; }
         }
         // KORUMA: redis çağrısının bulunduğu ZİNCİRDEKİ HERHANGİ bir fonksiyonda
-        // useSql() varsa korumalı say. (callback-içi redis, dış handler'ın early-return
-        // guard'ıyla korunur — örn ids.forEach(id => redis.get(...)) handler useSql'liyse OK.)
+        // isSqlEnabled() varsa korumalı say. (callback-içi redis, dış handler'ın early-return
+        // guard'ıyla korunur — örn ids.forEach(id => redis.get(...)) handler isSqlEnabled'liyse OK.)
         const funcUsesSql = ancestors.some(a => FUNC_TYPES.has(a.type) && subtreeHasUseSql(a));
-        // redis çağrısı bir if(useSql()) consequent'i içinde mi
+        // redis çağrısı bir if(isSqlEnabled()) consequent'i içinde mi
         let inSqlConsequent = false;
         for (let i = 0; i < ancestors.length; i++) {
           const a = ancestors[i];
           if (a.type === 'IfStatement' && a.test) {
             const testSrc = src.slice(a.test.start, a.test.end);
-            const isUseSqlTest = /\buseSql\s*\(\s*\)/.test(testSrc) && !/!\s*useSql/.test(testSrc);
+            const isUseSqlTest = /\bisSqlEnabled\s*\(\s*\)/.test(testSrc) && !/!\s*isSqlEnabled/.test(testSrc);
             if (isUseSqlTest) {
               // node, bu if'in consequent subtree'sinde mi (alternate değil)
               const next = ancestors[i + 1] || node;
@@ -216,7 +216,7 @@ console.log('  SQL GÖÇ DENETİMİ — kapsamlı statik analiz');
 console.log('  Taranan dosya:', files.length, '| toplam redis çağrısı:', results.filter(r => !r.parseError).length);
 console.log('═'.repeat(78));
 
-console.log('\n🔴 KATEGORİ 1 — KORUMASIZ ROUTE (host fonksiyonda useSql YOK → SQL modunda da Redis):');
+console.log('\n🔴 KATEGORİ 1 — KORUMASIZ ROUTE (host fonksiyonda isSqlEnabled YOK → SQL modunda da Redis):');
 console.log('   Bunlar etüt/courses/payment-callback ile AYNI sınıf = en yüksek bug riski.\n');
 const ungByFile = byFile(ung);
 for (const f of Object.keys(ungByFile).sort()) {
@@ -227,17 +227,17 @@ for (const f of Object.keys(ungByFile).sort()) {
 }
 console.log(`   ── toplam: ${ung.length} korumasız çağrı, ${Object.keys(ungByFile).length} route dosyası`);
 
-console.log('\n🔴 KATEGORİ 2 — SQL-DALINDA REDIS (if(useSql()) içinde redis çağrısı):');
+console.log('\n🔴 KATEGORİ 2 — SQL-DALINDA REDIS (if(isSqlEnabled()) içinde redis çağrısı):');
 if (sqlBranch.length === 0) console.log('   (yok)');
 for (const r of sqlBranch) console.log(`   ${r.file.replace('app/api/', '')}:${r.line}  ${r.hostName}() → redis.${r.method}`);
 
-console.log('\n🟠 KATEGORİ 3 — REDIS-ONLY LIB HELPER (useSql içermeyen, route\'lar SQL modunda çağırabilir):');
+console.log('\n🟠 KATEGORİ 3 — REDIS-ONLY LIB HELPER (isSqlEnabled içermeyen, route\'lar SQL modunda çağırabilir):');
 for (const base of Object.keys(libRedisOnly).sort()) {
   console.log(`   lib/${base}.js → ${[...libRedisOnly[base]].join(', ')}`);
 }
 if (Object.keys(libRedisOnly).length === 0) console.log('   (yok)');
 
-console.log('\n🟡 KATEGORİ 4 — FALLBACK (useSql var, redis SQL-dalı dışında → muhtemelen doğru):');
+console.log('\n🟡 KATEGORİ 4 — FALLBACK (isSqlEnabled var, redis SQL-dalı dışında → muhtemelen doğru):');
 const fbFiles = [...new Set(fallback.map(r => r.file))];
 console.log(`   ${fallback.length} çağrı, ${fbFiles.length} dosya. (Çoğu doğru if/else fallback — düşük öncelik, yine de göz atılabilir.)`);
 

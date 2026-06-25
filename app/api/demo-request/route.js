@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { rawRedis } from '@/lib/tenant';
 import { demoRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
 import { sendEmail } from '@/lib/email';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { prisma } from '@/lib/prisma';
 
 function esc(s) {
@@ -84,7 +84,7 @@ export async function POST(req) {
     ip,
   };
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     await prisma.demoRequest.create({ data: { name, org, phone, email: email || null, note: note || null, ip } });
   } else {
     await rawRedis.lpush(LIST_KEY, JSON.stringify(record));

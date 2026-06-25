@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { sendPushToUser } from '@/lib/push';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Günlük ödeme hatırlatması cron'u.
@@ -23,7 +23,7 @@ export async function GET(req) {
 
   // Öğrenci + finans/taksit verisini çek (SQL-aware). rows: [{ name, parentPhone, installments }]
   let rows;
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const studs = await tdb().student.findMany({ include: { finance: { include: { installments: true } } } });
     rows = studs.map(s => ({ name: s.name, parentPhone: s.parentPhone, installments: s.finance?.installments || [] }));
   } else {

@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 import { slotsForDay, ALL_DAYS, MEZUN_ONLY_LESSON_SLOTS, STUDENT_GROUPS } from '@/lib/constants';
 import { getWeekKey, slotKey, isEditableWeek, initWeekForTeacher, slotStartTime, getSlotTimes, getProgramTemplate, setProgramTemplate, deleteProgramTemplate } from '@/lib/slots';
 import { parseBody, z, zId } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Derin iç içe grid — üst seviye şekil doğrulanır, hücre mantığı aşağıda işlenir.
@@ -31,7 +31,7 @@ export async function GET(req) {
   const weekKey = searchParams.get('week') || getWeekKey();
   if (!legacyTeacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     // Şablonu oku (grid kısmı; etutSablonlari hariç)
     const fullTemplate = await getProgramTemplate(legacyTeacherId);
     const { etutSablonlari, ...template } = fullTemplate;
@@ -168,7 +168,7 @@ export async function POST(req) {
     if (Object.keys(program[dayIdx]).length === 0) delete program[dayIdx];
   }
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     // İzin günü kontrolü
     const teacherSql = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
     if (!teacherSql) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });

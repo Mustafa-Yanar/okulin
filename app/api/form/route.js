@@ -4,7 +4,7 @@ import { getSession, isManager } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Form / Anket — müdür/rehber form oluşturur, hedef rollere (öğrenci/veli/öğretmen) dağıtır,
@@ -58,7 +58,7 @@ const BodySchema = z.discriminatedUnion('action', [CreateSchema, SubmitSchema, C
 
 // ── Yardımcılar ──
 async function loadAllForms() {
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().form.findMany();
     return rows.map((r) => r.data).filter(Boolean);
   }
@@ -88,7 +88,7 @@ async function resolveAudience(audience) {
   const out = [];
 
   if (roles.includes('student')) {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
       let recs = rows.map(s => ({ id: s.legacyId, name: s.name, cls: s.class?.legacyId || '' }));
       if (cls.length) recs = recs.filter(s => cls.includes(s.cls));
@@ -105,7 +105,7 @@ async function resolveAudience(audience) {
     }
   }
   if (roles.includes('parent')) {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const rows = await tdb().parent.findMany();
       let recs = rows.map(p => ({ id: p.phone, children: p.children || [] }));
       if (cls.length) recs = recs.filter(p => (p.children || []).some(c => cls.includes(c.cls)));
@@ -122,7 +122,7 @@ async function resolveAudience(audience) {
     }
   }
   if (roles.includes('teacher')) {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const rows = await tdb().teacher.findMany();
       rows.forEach(t => out.push({ role: 'teacher', id: t.legacyId, name: t.name }));
     } else {
@@ -176,7 +176,7 @@ export async function GET(req) {
 
   // ── Yönetici: sonuç detayı ──
   if (detailId && isManager(session)) {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const f = await tdb().form.findFirst({ where: { legacyId: detailId }, include: { responses: true } });
       if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
       const form = f.data;
@@ -247,7 +247,7 @@ export async function GET(req) {
 
   // ── Yönetici: form listesi ──
   if (isManager(session)) {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const rows = await tdb().form.findMany({ include: { _count: { select: { responses: true } } } });
       const list = rows.map(r => ({
         id: r.data.id, title: r.data.title, desc: r.data.desc, audience: r.data.audience,
@@ -275,7 +275,7 @@ export async function GET(req) {
 
   // ── Yanıtlayan: kendi cevabı (doldurma için) ──
   if (detailId) {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const f = await tdb().form.findFirst({ where: { legacyId: detailId } });
       if (!f || !eligible(f.data, session)) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
       const mine = await tdb().formResponse.findFirst({ where: { formId: f.id, respondent: session.id } });
@@ -288,7 +288,7 @@ export async function GET(req) {
   }
 
   // ── Yanıtlayan: uygun formlar + kendi durumu ──
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().form.findMany();
     const eligForms = rows.filter(r => eligible(r.data, session));
     if (eligForms.length === 0) return NextResponse.json({ formlar: [] });
@@ -346,7 +346,7 @@ export async function POST(req) {
       createdBy: session.id, createdByName: session.name || '', createdByRole: session.role,
       createdAt: new Date().toISOString(),
     };
-    if (useSql()) {
+    if (isSqlEnabled()) {
       await tdb().form.create({ data: { legacyId: id, data: rec } });
     } else {
       await redis.set(`form:${id}`, rec);
@@ -369,7 +369,7 @@ export async function POST(req) {
 
   // ── Yanıtla (uygun rol) ──
   if (data.action === 'submit') {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const f = await tdb().form.findFirst({ where: { legacyId: data.id } });
       if (!f || !eligible(f.data, session)) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
       const form = f.data;
@@ -414,7 +414,7 @@ export async function POST(req) {
   // ── Aç/kapat (müdür/rehber) ──
   if (data.action === 'close') {
     if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const f = await tdb().form.findFirst({ where: { legacyId: data.id } });
       if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
       await tdb().form.update({ where: { id: f.id }, data: { data: { ...f.data, closed: data.closed } } });
@@ -437,7 +437,7 @@ export async function DELETE(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const f = await tdb().form.findFirst({ where: { legacyId: id } });
     if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
     await tdb().form.delete({ where: { id: f.id } }); // yanıtlar cascade ile gider

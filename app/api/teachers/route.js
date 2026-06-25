@@ -10,7 +10,7 @@ import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
 import { parseBody, z, zName, zId, zStringArray } from '@/lib/validate';
 import { COL_COURSES, colKeyForClass, classToGroup, ALL_CLASSES } from '@/lib/constants';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // SQL TeacherPreset satırları → {cls, course} sözleşmesi (classId = legacy cls kodu).
@@ -76,7 +76,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().teacher.findMany({ include: { presets: true } });
     return NextResponse.json(rows.map((t) => ({
       id: t.legacyId, name: t.name, username: t.username, branches: t.branches || [],
@@ -113,7 +113,7 @@ export async function POST(req) {
   // İsim soyisim kullanıcı adı olarak kullanılır
   const username = name;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const dup = await tdb().teacher.findFirst({ where: { username } });
     if (dup) return NextResponse.json({ error: 'Bu isimde bir öğretmen zaten kayıtlı' }, { status: 400 });
     const normPhone = phone ? (normalizeTurkishMobile(phone) || '') : '';
@@ -173,7 +173,7 @@ export async function PUT(req) {
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     if (body.action === 'toggle_off_day') {
       const { id, dayIndex, off } = body;
       const t = await tdb().teacher.findFirst({ where: { legacyId: id } });
@@ -298,7 +298,7 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const t = await tdb().teacher.findFirst({ where: { legacyId: id } });
     if (t) await tdb().teacher.delete({ where: { id: t.id } }); // cascade: presets/etut/slot
     await logAudit({ ...actorFrom(session), action: 'teacher.delete', target: { type: 'teacher', id, name: t?.name || id }, detail: `Öğretmen silindi: ${t?.name || id}` });

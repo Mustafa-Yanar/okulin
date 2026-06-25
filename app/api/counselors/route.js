@@ -6,7 +6,7 @@ import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
 import { parseBody, z, zName, zId } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Rehber (guidance counselor) hesapları — müdür oluşturur/yönetir.
@@ -29,7 +29,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().counselor.findMany();
     return NextResponse.json(rows.map(c => ({ id: c.legacyId, name: c.name, username: c.username, phone: c.phone || '' })));
   }
@@ -57,7 +57,7 @@ export async function POST(req) {
   const { name, password, phone } = parsed.data;
   const username = name;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const dup = await tdb().counselor.findFirst({ where: { username } });
     if (dup) return NextResponse.json({ error: 'Bu isimde bir rehber zaten kayıtlı' }, { status: 400 });
     const id = makeId();
@@ -107,7 +107,7 @@ export async function PUT(req) {
   if (!parsed.ok) return parsed.response;
   const { id, name, password, phone } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const c = await tdb().counselor.findFirst({ where: { legacyId: id } });
     if (!c) return NextResponse.json({ error: 'Rehber bulunamadı' }, { status: 404 });
     const data = { name, username: name, phone: phone !== undefined ? (normalizeTurkishMobile(phone) || phone || '') : (c.phone || '') };
@@ -139,7 +139,7 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const c = await tdb().counselor.findFirst({ where: { legacyId: id } });
     if (c) await tdb().counselor.delete({ where: { id: c.id } });
     await logAudit({

@@ -5,7 +5,7 @@ import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
 import { getClass } from '@/lib/classes';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Ödev verme + takip (ver → teslim → kontrol).
@@ -48,7 +48,7 @@ const BodySchema = z.discriminatedUnion('action', [CreateSchema, SubmitSchema, C
 
 // Tüm öğrencileri tek seferde yükle (roster çözümü için).
 async function loadStudents() {
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
     return rows.map(s => ({ id: s.legacyId, name: s.name, cls: s.class?.legacyId || '' }));
   }
@@ -78,7 +78,7 @@ export async function GET(req) {
 
   // Detay (yönetici/öğretmen): ödev + roster'daki her öğrencinin teslim durumu (kontrol ekranı).
   if (detailId && (isManager(session) || session.role === 'teacher')) {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const row = await tdb().odev.findFirst({ where: { legacyId: detailId } });
       if (!row) return NextResponse.json({ error: 'Ödev bulunamadı' }, { status: 404 });
       const rec = row.data;
@@ -104,7 +104,7 @@ export async function GET(req) {
 
   // Liste (yönetici/öğretmen): tüm ödevler + ilerleme sayıları.
   if (isManager(session) || session.role === 'teacher') {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const rows = await tdb().odev.findMany();
       if (rows.length === 0) return NextResponse.json({ odevler: [] });
       const students = await loadStudents();
@@ -133,7 +133,7 @@ export async function GET(req) {
 
   // Öğrenci: kendi sınıfına atanan ödevler + kendi teslim durumu.
   if (session.role === 'student') {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const rows = await tdb().odev.findMany();
       const recs = rows.map(r => r.data).filter(r => Array.isArray(r.classes) && r.classes.includes(session.cls));
       const list = recs.map(r => ({
@@ -167,7 +167,7 @@ export async function GET(req) {
     const children = Array.isArray(session.children) ? session.children : [];
     if (children.length === 0) return NextResponse.json({ odevler: [] });
     const childClasses = new Set(children.map(c => c.cls).filter(Boolean));
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const rows = await tdb().odev.findMany();
       const recs = rows.map(r => r.data).filter(r => Array.isArray(r.classes) && r.classes.some(c => childClasses.has(c)));
       const list = recs.map(r => ({
@@ -239,7 +239,7 @@ export async function POST(req) {
       createdBy: session.id, createdByName: session.name || '', createdByRole: session.role,
       createdAt: new Date().toISOString(),
     };
-    if (useSql()) {
+    if (isSqlEnabled()) {
       await tdb().odev.create({ data: { legacyId: id, data: { ...rec, submissions: {} } } });
     } else {
       await redis.set(`odev:${id}`, rec);
@@ -264,7 +264,7 @@ export async function POST(req) {
   // ── Öğrenci teslim eder / geri alır ──
   if (data.action === 'submit') {
     if (session.role !== 'student') return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const row = await tdb().odev.findFirst({ where: { legacyId: data.id } });
       if (!row) return NextResponse.json({ error: 'Ödev bulunamadı' }, { status: 404 });
       const rec = row.data;
@@ -325,7 +325,7 @@ export async function POST(req) {
     if (!isManager(session) && session.role !== 'teacher') {
       return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     }
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const row = await tdb().odev.findFirst({ where: { legacyId: data.id } });
       if (!row) return NextResponse.json({ error: 'Ödev bulunamadı' }, { status: 404 });
       const rec = row.data;
@@ -392,7 +392,7 @@ export async function DELETE(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const row = await tdb().odev.findFirst({ where: { legacyId: id } });
     if (!row) return NextResponse.json({ error: 'Ödev bulunamadı' }, { status: 404 });
     if (session.role === 'teacher' && row.data?.createdBy !== session.id) {

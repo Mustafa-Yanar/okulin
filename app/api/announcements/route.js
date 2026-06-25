@@ -6,7 +6,7 @@ import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
 import { classToGroup, classLabel, STUDENT_GROUPS } from '@/lib/constants';
 import { getClasses, getClass } from '@/lib/classes';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Tek yön duyuru/bilgilendirme sistemi (hub-spoke). Gönderen: müdür + rehber.
@@ -48,7 +48,7 @@ async function resolveRecipients(audience) {
   const groupMap = async () => new Map((await getClasses()).map(c => [c.id, c.group]));
 
   if (role === 'parent') {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const rows = await tdb().parent.findMany();
       let recs = rows.map(p => ({ id: p.phone, children: p.children || [] }));
       if (scope === 'selected') recs = recs.filter(r => ids?.includes(r.id));
@@ -75,7 +75,7 @@ async function resolveRecipients(audience) {
   }
 
   if (role === 'student') {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
       let recs = rows.map(s => ({ id: s.legacyId, name: s.name, cls: s.class?.legacyId || '', group: s.group }));
       if (scope === 'selected') recs = recs.filter(s => ids?.includes(s.id));
@@ -95,7 +95,7 @@ async function resolveRecipients(audience) {
   }
 
   // teacher — şimdilik yalnız 'all' veya 'selected' (branş/sınıf hedefi sonra)
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().teacher.findMany();
     let recs = rows.map(t => ({ id: t.legacyId, name: t.name }));
     if (scope === 'selected') recs = recs.filter(t => ids?.includes(t.id));
@@ -137,7 +137,7 @@ export async function GET(req) {
 
   // Kim okudu detayı (yönetici)
   if (detailId && isManager(session)) {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const ann = await tdb().announcement.findFirst({ where: { legacyId: detailId }, include: { recipients: true } });
       if (!ann) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
       const recipients = ann.recipients.map(r => ({ id: r.recipientId, name: r.name, read: r.read }));
@@ -151,7 +151,7 @@ export async function GET(req) {
   }
 
   if (isManager(session)) {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const rows = await tdb().announcement.findMany({ include: { _count: { select: { recipients: { where: { read: true } } } } } });
       const list = rows.map(r => ({ ...r.data, readCount: r._count.recipients }));
       list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
@@ -174,7 +174,7 @@ export async function GET(req) {
   }
 
   // Alıcı gelen kutusu
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const myRecs = await tdb().announcementRecipient.findMany({
       where: { role: session.role, recipientId: session.id },
       include: { announcement: true },
@@ -217,7 +217,7 @@ export async function POST(req) {
 
   // Alıcı: duyuruyu okundu işaretler
   if (data.action === 'read') {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const ann = await tdb().announcement.findFirst({ where: { legacyId: data.id } });
       if (!ann) return NextResponse.json({ error: 'Bu duyuru size ait değil' }, { status: 403 });
       const r = await tdb().announcementRecipient.updateMany({
@@ -252,7 +252,7 @@ export async function POST(req) {
     senderId: session.id, senderName: session.name, senderRole: session.role,
     createdAt: new Date().toISOString(),
   };
-  if (useSql()) {
+  if (isSqlEnabled()) {
     // data = içerik (recipients normalize AnnouncementRecipient'a, recipientCount data'da kalır).
     const { recipients: _omit, ...dataNoRecips } = rec;
     const ann = await tdb().announcement.create({ data: { legacyId: id, data: dataNoRecips } });
@@ -293,7 +293,7 @@ export async function DELETE(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const ann = await tdb().announcement.findFirst({ where: { legacyId: id } });
     if (!ann) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
     await tdb().announcement.delete({ where: { id: ann.id } }); // recipients cascade

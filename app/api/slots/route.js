@@ -4,7 +4,7 @@ import { getSession, canReadStudent } from '@/lib/auth';
 import { getWeekKey, getTeacherWeekSlots, slotKey, getAllTeachers, slotStartTime, getSlotTimes, getProgramTemplate } from '@/lib/slots';
 import { ALL_DAYS, slotsForDay, MEZUN_FORBIDDEN_ETUT_SLOT, MATH_FAMILY, allowedBranchesForClass } from '@/lib/constants';
 import { parseBody, z, zId } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 const zDay = z.coerce.number().int().min(0).max(6);
@@ -81,7 +81,7 @@ export async function POST(req) {
   const { teacherId: legacyTeacherId, day, slotId, studentId: reqStudentId, weekKey: wk, forceOpen, branch } = parsed.data;
   const weekKey = wk || getWeekKey();
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     // Öğretmeni SQL'den oku
     const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
     if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
@@ -360,7 +360,7 @@ export async function DELETE(req) {
   const { teacherId: legacyTeacherId, day, slotId, weekKey: wk } = parsed.data;
   const weekKey = wk || getWeekKey();
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
     if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
 

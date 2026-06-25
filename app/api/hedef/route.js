@@ -3,7 +3,7 @@ import redis from '@/lib/db';
 import { getSession, canReadStudent } from '@/lib/auth';
 import { getWeekKey } from '@/lib/slots';
 import { parseBody, z, zId } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 export const runtime = 'nodejs';
@@ -61,7 +61,7 @@ export async function GET(req) {
 
   const weekKey = getWeekKey();
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().guidance.findMany({ where: { studentId } });
     let thisWeekSolved = 0;
     const history = rows.map(r => {
@@ -145,7 +145,7 @@ export async function POST(req) {
 
   const weekly = parsed.data.weekly;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     if (weekly === 0) {
       await tdb().hedef.deleteMany({ where: { studentId } });
       return NextResponse.json({ ok: true, weekly: 0 });

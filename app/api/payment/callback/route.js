@@ -3,7 +3,7 @@ import { logAudit } from '@/lib/audit';
 import { decryptSecret } from '@/lib/payment/crypto';
 import { getProvider } from '@/lib/payment';
 import { applyInstallmentPayment, applyInstallmentPaymentSql } from '@/lib/finance';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 import { prisma } from '@/lib/prisma';
 
@@ -24,7 +24,7 @@ function fail(msg) {
 
 // PayOrder okuma — SQL (PayOrder modeli) veya Redis. Ortak şekle normalize eder.
 async function readOrder(oid) {
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const po = await prisma.payOrder.findUnique({ where: { oid } });
     if (!po) return null;
     return {
@@ -36,7 +36,7 @@ async function readOrder(oid) {
 }
 // PayOrder durum güncelle (idempotency kaydı).
 async function patchOrder(oid, order, patch, days) {
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const { status, ...rest } = patch;
     await prisma.payOrder.update({ where: { oid }, data: { status, data: { ...(order.data || {}), ...rest } } });
   } else {
@@ -62,7 +62,7 @@ export async function POST(req) {
   if (order.status === 'paid') return ok(); // idempotency
 
   // İlgili kurumun config'ini AÇIKÇA order'ın tenant'ından yükle.
-  const cfg = useSql()
+  const cfg = isSqlEnabled()
     ? (await tdb(order.org, order.branch).tenantConfig.findFirst())?.paymentConfig
     : await tenantRedis(order.org, order.branch).get('payment:config');
   if (!cfg || !cfg.keyEnc || !cfg.saltEnc) return fail('config yok');
@@ -102,7 +102,7 @@ export async function POST(req) {
       date: new Date().toISOString().slice(0, 10),
       recordedBy: 'Online ödeme',
     };
-    const result = useSql()
+    const result = isSqlEnabled()
       ? await applyInstallmentPaymentSql({ ...paymentOpts, orgOverride: order.org, branchOverride: order.branch })
       : await applyInstallmentPayment(tenantRedis(order.org, order.branch), paymentOpts);
 

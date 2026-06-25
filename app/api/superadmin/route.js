@@ -6,7 +6,7 @@ import { parseBody, z, zName, zPassword } from '@/lib/validate';
 import { generateOrgCode, formatCode, hostForOrg } from '@/lib/orgcode';
 import { addProjectDomain } from '@/lib/vercel';
 import { normalizeFacets } from '@/lib/institution';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 import { prisma } from '@/lib/prisma';
 
@@ -39,7 +39,7 @@ export async function GET() {
 
   // Org kayıtlarını ham şekilde topla (rec listesi), sonra ortak biçimlendirme
   let recs;
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().org.findMany(); // global (SKIP)
     recs = rows.map((r) => ({ ...r, createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt }));
   } else {
@@ -70,7 +70,7 @@ export async function GET() {
   }).sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
 
   // Her org için müdür kullanıcı adı + (multi ise) branch sayısı
-  if (useSql()) {
+  if (isSqlEnabled()) {
     for (const o of orgs) {
       const dir = await tdb(o.slug, 'main').director.findFirst();
       o.directorUsername = dir?.username || null;
@@ -142,7 +142,7 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Çok şubeli kurum için org_admin bilgileri zorunlu' }, { status: 400 });
   }
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const dup = await tdb().org.findFirst({ where: { slug } });
     if (dup) return NextResponse.json({ error: `"${slug}" zaten kayıtlı` }, { status: 409 });
 
@@ -257,7 +257,7 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { slug } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const org = await tdb().org.findFirst({ where: { slug } });
     if (!org) return NextResponse.json({ error: 'Kurum bulunamadı' }, { status: 404 });
     let deleted = 0;
@@ -307,7 +307,7 @@ export async function PATCH(req) {
 
   if (!slug) return NextResponse.json({ error: 'slug gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     if (action === 'change_own_password') {
       const { currentPassword, newPassword: newPw } = parsed.data;
       if (!currentPassword || !newPw) return NextResponse.json({ error: 'currentPassword ve newPassword gerekli' }, { status: 400 });

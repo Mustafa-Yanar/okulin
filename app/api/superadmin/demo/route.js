@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { rawRedis } from '@/lib/tenant';
 import { getSession } from '@/lib/auth';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { prisma } from '@/lib/prisma';
 
 // Landing'den gelen demo/iletişim taleplerini yönetir. Yalnız superadmin.
@@ -22,7 +22,7 @@ export async function GET() {
   const session = await getSession();
   if (!requireSuperadmin(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await prisma.demoRequest.findMany({ orderBy: { createdAt: 'desc' }, take: 100 });
     const items = rows.map(({ ip, createdAt, ...rest }) => ({ ...rest, ts: createdAt instanceof Date ? createdAt.getTime() : createdAt }));
     return NextResponse.json({ requests: items });
@@ -47,7 +47,7 @@ export async function DELETE(req) {
   const id = String(body.id || '').trim();
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     await prisma.demoRequest.delete({ where: { id } }).catch(() => {});
     return NextResponse.json({ ok: true });
   }

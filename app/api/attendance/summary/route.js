@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 import { ALL_DAYS, slotsForDay } from '@/lib/constants';
 import { getWeekKey, slotKey, getSlotTimes, getAllTeachers, getTeacherWeekSlots } from '@/lib/slots';
 import { tdb } from '@/lib/sqldb';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 
 // GET ?date=YYYY-MM-DD
 // Döndürür: { [cls]: { lessons: [ { lessonNo, teacherId, teacherName, attendanceTaken, absent, late } ] } }
@@ -19,7 +19,7 @@ export async function GET(req) {
   const date = searchParams.get('date');
   if (!date) return NextResponse.json({ error: 'date gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     // Redis koluyla AYNI mantık: o günün slot-grid'inden ders slotlarını türet (lessonNo
     // sıra ile), attendance kayıtlarıyla birleştir. Böylece "yoklama alınmamış" dersler de
     // (attendanceTaken:false) özette görünür. Etüt slotları (ders değil) doğal olarak dışlanır.

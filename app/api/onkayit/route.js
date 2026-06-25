@@ -3,7 +3,7 @@ import redis from '@/lib/db';
 import { getSession, isManager } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Ön kayıt / CRM — aday öğrenci (lead) yönetimi.
@@ -62,7 +62,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
   if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().lead.findMany();
     const leads = rows.map(r => r.data);
     const stats = emptyStats();
@@ -112,7 +112,7 @@ export async function POST(req) {
     };
     pushHistory(rec, session.name, 'Ön kayıt oluşturuldu');
     if (data.note?.trim()) pushHistory(rec, session.name, data.note.trim());
-    if (useSql()) {
+    if (isSqlEnabled()) {
       await tdb().lead.create({ data: { legacyId: id, name: rec.studentName, stage: rec.status, data: rec } });
     } else {
       await redis.set(`lead:${id}`, rec);
@@ -129,8 +129,8 @@ export async function POST(req) {
   }
 
   // ── Güncelle (alan + durum + takip notu) ──
-  const sqlRow = useSql() ? await tdb().lead.findFirst({ where: { legacyId: data.id } }) : null;
-  const rec = useSql() ? sqlRow?.data : await redis.get(`lead:${data.id}`);
+  const sqlRow = isSqlEnabled() ? await tdb().lead.findFirst({ where: { legacyId: data.id } }) : null;
+  const rec = isSqlEnabled() ? sqlRow?.data : await redis.get(`lead:${data.id}`);
   if (!rec) return NextResponse.json({ error: 'Aday bulunamadı' }, { status: 404 });
 
   for (const f of ['studentName', 'parentName', 'phone', 'level', 'source']) {
@@ -144,7 +144,7 @@ export async function POST(req) {
   }
   if (data.followUp?.trim()) pushHistory(rec, session.name, data.followUp.trim());
   rec.updatedAt = now;
-  if (useSql()) {
+  if (isSqlEnabled()) {
     await tdb().lead.update({ where: { id: sqlRow.id }, data: { name: rec.studentName, stage: rec.status, data: rec } });
   } else {
     await redis.set(`lead:${data.id}`, rec);
@@ -169,7 +169,7 @@ export async function DELETE(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const sqlRow = await tdb().lead.findFirst({ where: { legacyId: id } });
     if (!sqlRow) return NextResponse.json({ error: 'Aday bulunamadı' }, { status: 404 });
     await tdb().lead.delete({ where: { id: sqlRow.id } });

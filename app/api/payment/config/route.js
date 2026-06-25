@@ -4,19 +4,19 @@ import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z } from '@/lib/validate';
 import { encryptSecret } from '@/lib/payment/crypto';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // payment:config okuma/yazma — SQL-aware (TenantConfig.paymentConfig).
 async function readPaymentConfig() {
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const tc = await tdb().tenantConfig.findFirst();
     return tc?.paymentConfig || null;
   }
   return redis.get('payment:config');
 }
 async function writePaymentConfig(cfg) {
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const tc = await tdb().tenantConfig.findFirst();
     if (tc) await tdb().tenantConfig.update({ where: { orgSlug_branch: { orgSlug: tc.orgSlug, branch: tc.branch } }, data: { paymentConfig: cfg } });
     else await tdb().tenantConfig.create({ data: { paymentConfig: cfg } });

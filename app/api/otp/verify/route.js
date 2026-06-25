@@ -4,7 +4,7 @@ import { tenantRedis, rawRedis } from '@/lib/tenant';
 import { lookupIndex } from '@/lib/userIndex';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { parseBody, z } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 function makeId() { return Math.random().toString(36).slice(2, 18); }
@@ -20,7 +20,7 @@ const THIRTY_DAYS = 60 * 60 * 24 * 30;
 // Kullanıcı adı + rol kategorisinden gerçek telefon numarasını bul.
 // login action ile aynı arama mantığını kullanır.
 async function getPhoneForUser(username, roleCategory) {
-  if (useSql()) {
+  if (isSqlEnabled()) {
     if (roleCategory === 'management') {
       const dir = await tdb().director.findFirst({ where: { username } });
       if (dir) return dir.phone || null; // NOT: Director modelinde phone yoksa null

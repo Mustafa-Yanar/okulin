@@ -6,7 +6,7 @@ import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
 import { parseBody, z, zName, zId } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 function makeId() {
@@ -25,7 +25,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().accountant.findMany();
     return NextResponse.json(rows.map(a => ({ id: a.legacyId, name: a.name, username: a.username, phone: a.phone || '' })));
   }
@@ -54,7 +54,7 @@ export async function POST(req) {
 
   const username = name;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const dup = await tdb().accountant.findFirst({ where: { username } });
     if (dup) return NextResponse.json({ error: 'Bu isimde bir muhasebeci zaten kayıtlı' }, { status: 400 });
     const id = makeId();
@@ -105,7 +105,7 @@ export async function PUT(req) {
   if (!parsed.ok) return parsed.response;
   const { id, name, password, phone } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const a = await tdb().accountant.findFirst({ where: { legacyId: id } });
     if (!a) return NextResponse.json({ error: 'Muhasebeci bulunamadı' }, { status: 404 });
     const data = { name, username: name, phone: phone !== undefined ? (normalizeTurkishMobile(phone) || phone || '') : (a.phone || '') };
@@ -139,7 +139,7 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const a = await tdb().accountant.findFirst({ where: { legacyId: id } });
     if (a) await tdb().accountant.delete({ where: { id: a.id } });
     await logAudit({

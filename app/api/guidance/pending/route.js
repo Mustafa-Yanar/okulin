@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // GET /api/guidance/pending
@@ -13,7 +13,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().guidance.findMany({ select: { studentId: true, data: true } });
     const counts = {};
     for (const r of rows) {

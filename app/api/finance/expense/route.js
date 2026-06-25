@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId, zMoney } from '@/lib/validate';
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Kurum giderleri — personel ödemeleri (maaş + ek ödemeler) ve kategorili
@@ -83,7 +83,7 @@ export async function GET(req) {
   const from = searchParams.get('from');
   const to = searchParams.get('to');
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     let list = (await tdb().expense.findMany()).map((r) => r.data);
     if (type) list = list.filter(e => e.type === type);
     if (period) list = list.filter(e => (e.period || e.date?.slice(0, 7)) === period);
@@ -133,7 +133,7 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Tutar sıfırdan büyük olmalı' }, { status: 400 });
   }
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     await tdb().expense.create({ data: { legacyId: id, type: record.type, amount: record.amount, date: record.date, data: record } });
     await logAudit({ ...actorFrom(session), action: 'finance.expense.create', target: { type: 'expense', id, name: record.type === 'personnel' ? record.personnelName : record.category }, detail: `Gider eklendi (${record.type === 'personnel' ? 'personel: ' + record.personnelName : record.category}) — ${record.amount} TL` });
     return NextResponse.json({ ok: true, record });
@@ -160,7 +160,7 @@ export async function PUT(req) {
   const data = parsed.data;
   if (!data.id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const ex = await tdb().expense.findFirst({ where: { legacyId: data.id } });
     if (!ex) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
     const old = ex.data || {};
@@ -210,7 +210,7 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const ex = await tdb().expense.findFirst({ where: { legacyId: id } });
     if (!ex) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
     await tdb().expense.delete({ where: { id: ex.id } });

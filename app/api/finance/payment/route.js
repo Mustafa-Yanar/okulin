@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId, zMoney } from '@/lib/validate';
 import { applyInstallmentPayment, applyInstallmentPaymentSql } from '@/lib/finance';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 function canAccess(session) {
@@ -29,7 +29,7 @@ export async function POST(req) {
   if (!parsed.ok) return parsed.response;
   const { studentId, amount, date, method, note, installmentIdx } = parsed.data;
 
-  const result = useSql()
+  const result = isSqlEnabled()
     ? await applyInstallmentPaymentSql({ studentId, amount, installmentIdx, method, note, date, recordedBy: session.name })
     : await applyInstallmentPayment(redis, { studentId, amount, installmentIdx, method, note, date, recordedBy: session.name });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status || 400 });
@@ -53,7 +53,7 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { studentId, paymentId } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const stu = await tdb().student.findFirst({ where: { legacyId: studentId } });
     const record = stu ? await tdb().finance.findFirst({ where: { studentId: stu.id }, include: { installments: true } }) : null;
     if (!record) return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });

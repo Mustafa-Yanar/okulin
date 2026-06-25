@@ -5,7 +5,7 @@ import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
 import { getClass } from '@/lib/classes';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Etkinlik / Okul Takvimi — kurum geneli bilgilendirme takvimi (tatil, sınav, toplantı, gezi…).
@@ -38,7 +38,7 @@ const UpdateSchema = z.object({ action: z.literal('update'), id: zId, ...baseFie
 const BodySchema = z.discriminatedUnion('action', [CreateSchema, UpdateSchema]);
 
 async function loadAll() {
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().etkinlik.findMany({ orderBy: { startDate: 'asc' } });
     return rows.map(r => r.data);
   }
@@ -50,7 +50,7 @@ async function loadAll() {
 }
 
 async function loadStudents() {
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
     return rows.map(s => ({ id: s.legacyId, cls: s.class?.legacyId || '' }));
   }
@@ -62,7 +62,7 @@ async function loadStudents() {
 }
 
 async function loadParents() {
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const rows = await tdb().parent.findMany();
     return rows.map(p => ({ id: p.phone, children: p.children || [] }));
   }
@@ -124,7 +124,7 @@ export async function POST(req) {
 
   // ── Güncelle ──
   if (data.action === 'update') {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const existing = await tdb().etkinlik.findFirst({ where: { legacyId: data.id } });
       if (!existing) return NextResponse.json({ error: 'Etkinlik bulunamadı' }, { status: 404 });
       const updated = {
@@ -165,7 +165,7 @@ export async function POST(req) {
     createdBy: session.id, createdByName: session.name || '', createdByRole: session.role,
     createdAt: new Date().toISOString(),
   };
-  if (useSql()) {
+  if (isSqlEnabled()) {
     await tdb().etkinlik.create({ data: { legacyId: id, title, type, startDate, endDate: end || null, data: rec } });
   } else {
     await redis.set(`etkinlik:${id}`, rec);
@@ -200,7 +200,7 @@ export async function DELETE(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const existing = await tdb().etkinlik.findFirst({ where: { legacyId: id } });
     if (!existing) return NextResponse.json({ error: 'Etkinlik bulunamadı' }, { status: 404 });
     await tdb().etkinlik.delete({ where: { id: existing.id } });

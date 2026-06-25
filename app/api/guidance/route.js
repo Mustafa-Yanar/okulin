@@ -3,7 +3,7 @@ import redis from '@/lib/db';
 import { getSession, canReadStudent } from '@/lib/auth';
 import { getWeekKey } from '@/lib/slots';
 import { parseBody, z, zId } from '@/lib/validate';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 const GuidancePostSchema = z.object({ entries: z.record(z.unknown()) });
@@ -38,7 +38,7 @@ export async function GET(req) {
   if (!studentId) return NextResponse.json({ error: 'studentId gerekli' }, { status: 400 });
 
   if (listAll) {
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const rows = await tdb().guidance.findMany({ where: { studentId } });
       if (rows.length === 0) return NextResponse.json({ weeks: [] });
       const weeks = rows.map(r => ({ weekKey: r.week, ...(r.data || {}) }))
@@ -65,7 +65,7 @@ export async function GET(req) {
   }
 
   const weekKey = searchParams.get('week') || getWeekKey();
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const row = await tdb().guidance.findFirst({ where: { studentId, week: weekKey } });
     return NextResponse.json({ weekKey, ...(row?.data || { entries: {}, reviewed: false }) });
   }
@@ -106,7 +106,7 @@ export async function POST(req) {
     reviewed: false,
     submittedAt: new Date().toISOString(),
   };
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const existing = await tdb().guidance.findFirst({ where: { studentId: session.id, week: weekKey } });
     if (existing) await tdb().guidance.update({ where: { id: existing.id }, data: { data: payload } });
     else await tdb().guidance.create({ data: { studentId: session.id, week: weekKey, data: payload } });
@@ -126,7 +126,7 @@ export async function PUT(req) {
   const parsed = await parseBody(req, GuidanceReviewSchema);
   if (!parsed.ok) return parsed.response;
   const { studentId, weekKey } = parsed.data;
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const existing = await tdb().guidance.findFirst({ where: { studentId, week: weekKey } });
     if (!existing) return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });
     const updated = { ...(existing.data || {}), reviewed: true, reviewedAt: new Date().toISOString() };

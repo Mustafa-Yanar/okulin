@@ -9,7 +9,7 @@ import { lookupIndex } from '@/lib/userIndex';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { parseBody, z, zName, zPassword, zNewPassword, zId } from '@/lib/validate';
 import { sendOtp } from '@/lib/sms';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // SQL rol satırını makeLoginResponse'un beklediği eski (Redis) kayıt şekline çevirir.
@@ -42,9 +42,9 @@ const AuthSchema = z.discriminatedUnion('action', [
 export async function GET() {
   const redis = tenantRedis();
   const session = await getSession();
-  const directorExists = useSql() ? (await tdb().director.count()) > 0 : await redis.exists('director');
+  const directorExists = isSqlEnabled() ? (await tdb().director.count()) > 0 : await redis.exists('director');
   // Marka (org kaydı global) — login ekranı + header bunu kullanır. SQL: Org tablosu.
-  const orgRec = useSql()
+  const orgRec = isSqlEnabled()
     ? await tdb().org.findFirst({ where: { slug: currentOrg() } })
     : await rawRedis.get(`org:${currentOrg()}`);
   return NextResponse.json({ session, directorExists: !!directorExists, branding: normalizeBranding(orgRec) });
@@ -147,7 +147,7 @@ export async function POST(req) {
     // etmez → süper-admin varlığı kurum giriş ekranından sızmaz/denenmez.
     if (selectedRole === 'superadmin') {
       // SQL: SuperAdmin tablosu (username ile). Redis: tek 'superadmin' kaydı + username kontrol.
-      const superadmin = useSql()
+      const superadmin = isSqlEnabled()
         ? await tdb().superAdmin.findFirst({ where: { username } })
         : await rawRedis.get('superadmin');
       if (superadmin && superadmin.username === username) {
@@ -166,7 +166,7 @@ export async function POST(req) {
 
     // Org_admin (kurum-geneli, şube-bağımsız). SQL: OrgAdmin tablosu. Redis: orgadmin:<org>.
     const org = currentOrg();
-    const orgAdmin = useSql()
+    const orgAdmin = isSqlEnabled()
       ? await tdb().orgAdmin.findFirst({ where: { orgSlug: org, username } })
       : await rawRedis.get(`orgadmin:${org}`);
     if (orgAdmin && orgAdmin.username === username) {
@@ -181,7 +181,7 @@ export async function POST(req) {
     }
 
     // Try director (zaten O(1)) — SQL'de Director tablosundan username ile.
-    const director = useSql()
+    const director = isSqlEnabled()
       ? await tdb().director.findFirst({ where: { username } })
       : await redis.get('director');
     if (director && director.username === username) {
@@ -199,7 +199,7 @@ export async function POST(req) {
 
     // SQL YOLU: ters indeks yerine rol tablolarını username ile doğrudan sorgula.
     // Sıra eski tarama sırasıyla hizalı (accountant→counselor→teacher→student), sonra veli.
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const normP = normalizeTurkishMobile(username);
       const tryRole = async (role, sqlRec) => {
         const rec = sqlRecToLegacy(role, sqlRec);
@@ -263,7 +263,7 @@ export async function POST(req) {
   if (action === 'setup_director') {
     const directorName = name || 'Müdür';
     const hash = await bcrypt.hash(password, 10);
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const exists = await tdb().director.findFirst();
       if (exists) return NextResponse.json({ error: 'Müdür zaten kayıtlı' }, { status: 400 });
       await tdb().director.create({ data: { username, passwordHash: hash, name: directorName } });
@@ -282,7 +282,7 @@ export async function POST(req) {
   if (action === 'update_director_name') {
     const session = await getSession();
     if (!session || session.role !== 'director') return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const dir = await tdb().director.findFirst();
       if (!dir) return NextResponse.json({ error: 'Müdür bulunamadı' }, { status: 404 });
       await tdb().director.update({ where: { id: dir.id }, data: { name } });
@@ -323,7 +323,7 @@ export async function POST(req) {
     // Şifre değiştirme yardımcısı — başarılı değişimde mustChangePassword:false setler
     // ve session JWT'sini yeniler (frontend, yeni mustChange durumunu görsün).
     async function updatePasswordFor(roleKey, sessionPayloadFields) {
-      if (useSql()) {
+      if (isSqlEnabled()) {
         const rec = roleKey === 'parent'
           ? await tdb().parent.findFirst({ where: { phone: session.id } })
           : await tdb()[roleKey].findFirst({ where: { legacyId: session.id } });
@@ -377,7 +377,7 @@ export async function POST(req) {
 
     const hash = await bcrypt.hash(newPassword, 10);
 
-    if (useSql()) {
+    if (isSqlEnabled()) {
       const labels = { teacher: 'Öğretmen', student: 'Öğrenci', accountant: 'Muhasebeci', counselor: 'Rehber' };
       const rec = await tdb()[targetRole].findFirst({ where: { legacyId: targetId } });
       if (!rec) return NextResponse.json({ error: `${labels[targetRole]} bulunamadı` }, { status: 404 });

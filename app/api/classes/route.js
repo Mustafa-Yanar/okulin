@@ -6,7 +6,7 @@ import {
   getClasses, getClass, defaultCoursesFor, seedClassesFromConstants,
 } from '@/lib/classes';
 import { getCourses, seedCoursesFromConstants } from '@/lib/courses';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 export const runtime = 'nodejs';
@@ -59,7 +59,7 @@ export async function POST(req) {
   if (!parsed.ok) return parsed.response;
   const { ad, kademe, duzey, dal, dersler } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     await seedClassesFromConstants(); // Class boşsa constants'ı materialize et (yeni kurumda 34 şube kaybolmasın)
     const row = await tdb().class.create({ data: {
       legacyId: newClassId(), ad: ad.trim(), kademe, duzey: duzey || null, dal: dal || null,
@@ -105,7 +105,7 @@ export async function PATCH(req) {
   if (!parsed.ok) return parsed.response;
   const { id, ad, dal, dersler } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const existing = await tdb().class.findFirst({ where: { legacyId: id } });
     if (!existing) return NextResponse.json({ error: 'Şube bulunamadı' }, { status: 404 });
     const patch = {};
@@ -137,7 +137,7 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const existing = await tdb().class.findFirst({ where: { legacyId: id } });
     if (!existing) return NextResponse.json({ error: 'Şube bulunamadı' }, { status: 404 });
     const cnt = await tdb().student.count({ where: { classId: existing.id } });

@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
 import { notifyAbsentParents } from '@/lib/notify';
 import { tdb } from '@/lib/sqldb';
-import { useSql } from '@/lib/usesql';
+import { isSqlEnabled } from '@/lib/usesql';
 
 export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
@@ -36,7 +36,7 @@ export async function GET(req) {
     return NextResponse.json({ error: 'date, teacherId, cls ve lessonNo gerekli' }, { status: 400 });
   }
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const teacher = await tdb().teacher.findFirst({ where: { legacyId: teacherId } });
     if (!teacher) return NextResponse.json({});
     const att = await tdb().attendance.findFirst({
@@ -59,7 +59,7 @@ export async function POST(req) {
   if (!parsed.ok) return parsed.response;
   const { date, cls, lessonNo, attendance } = parsed.data;
 
-  if (useSql()) {
+  if (isSqlEnabled()) {
     const teacher = await tdb().teacher.findFirst({ where: { legacyId: session.id } });
     if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
     const lessonNoStr = String(lessonNo);
