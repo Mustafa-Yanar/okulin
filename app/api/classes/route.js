@@ -60,6 +60,7 @@ export async function POST(req) {
   const { ad, kademe, duzey, dal, dersler } = parsed.data;
 
   if (useSql()) {
+    await seedClassesFromConstants(); // Class boşsa constants'ı materialize et (yeni kurumda 34 şube kaybolmasın)
     const row = await tdb().class.create({ data: {
       legacyId: newClassId(), ad: ad.trim(), kademe, duzey: duzey || null, dal: dal || null,
       group: groupForKademe(kademe),

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { ALL_DAYS, slotsForDay } from '@/lib/constants';
-import { getWeekKey, slotKey, getSlotTimes } from '@/lib/slots';
+import { getWeekKey, slotKey, getSlotTimes, getAllTeachers, getTeacherWeekSlots } from '@/lib/slots';
 import { tdb } from '@/lib/sqldb';
 import { useSql } from '@/lib/usesql';
 
@@ -20,42 +20,50 @@ export async function GET(req) {
   if (!date) return NextResponse.json({ error: 'date gerekli' }, { status: 400 });
 
   if (useSql()) {
-    const records = await tdb().attendance.findMany({
-      where: { date },
-      include: { teacher: true },
-    });
+    // Redis koluyla AYNI mantık: o günün slot-grid'inden ders slotlarını türet (lessonNo
+    // sıra ile), attendance kayıtlarıyla birleştir. Böylece "yoklama alınmamış" dersler de
+    // (attendanceTaken:false) özette görünür. Etüt slotları (ders değil) doğal olarak dışlanır.
+    const d = new Date(date);
+    const jsDay = d.getDay();
+    const dayIndex = jsDay === 0 ? 6 : jsDay - 1;
+    const weekKey = getWeekKey(new Date(date));
 
-    // Öğrenci isim/telefon için student tablosu
+    const teachers = await getAllTeachers(); // legacyId + name
     const students = await tdb().student.findMany();
     const studentMap = {};
     for (const s of students) studentMap[s.legacyId] = s;
 
+    // attendance kayıtları → map (teacherLegacyId|cls|lessonNo → records)
+    const attRecords = await tdb().attendance.findMany({ where: { date }, include: { teacher: true } });
+    const attMap = {};
+    for (const r of attRecords) attMap[`${r.teacher.legacyId}|${r.cls}|${r.lessonNo}`] = r.records || {};
+
     const clsMap = {};
-    for (const rec of records) {
-      // Etüt yoklaması (lessonNo "e<etutId>") ders özetine GİRMEZ — Redis koluyla uyum
-      // (yoksa parseInt("e12")=NaN → ||1 ile yanlışça "1. ders" görünür).
-      if (String(rec.lessonNo).startsWith('e')) continue;
-      const cls = rec.cls;
-      const lessonNo = parseInt(rec.lessonNo) || 1;
-      const recObj = (rec.records) || {};
-      const absent = [], late = [];
-
-      for (const [sid, status] of Object.entries(recObj)) {
-        const s = studentMap[sid];
-        const info = { id: sid, name: s?.name || sid, phone: s?.phone || '', parentPhone: s?.parentPhone || '' };
-        if (status === 'yok') absent.push(info);
-        else if (status === 'gec') late.push(info);
+    for (const t of teachers) {
+      const grid = await getTeacherWeekSlots(t.id, weekKey); // {[day]:[cell]}
+      let lessonNo = 0;
+      for (const sd of (grid[dayIndex] || [])) {
+        if (!sd || sd.lessonType !== 'ders' || !sd.cls) continue;
+        lessonNo++;
+        const cls = sd.cls;
+        const recObj = attMap[`${t.id}|${cls}|${lessonNo}`] || {};
+        const absent = [], late = [];
+        for (const [sid, status] of Object.entries(recObj)) {
+          const s = studentMap[sid];
+          const info = { id: sid, name: s?.name || sid, phone: s?.phone || '', parentPhone: s?.parentPhone || '' };
+          if (status === 'yok') absent.push(info);
+          else if (status === 'gec') late.push(info);
+        }
+        if (!clsMap[cls]) clsMap[cls] = { cls, lessons: [] };
+        clsMap[cls].lessons.push({
+          lessonNo,
+          teacherId: t.id,
+          teacherName: t.name,
+          attendanceTaken: Object.keys(recObj).length > 0,
+          absent,
+          late,
+        });
       }
-
-      if (!clsMap[cls]) clsMap[cls] = { cls, lessons: [] };
-      clsMap[cls].lessons.push({
-        lessonNo,
-        teacherId: rec.teacher.legacyId,
-        teacherName: rec.teacher.name,
-        attendanceTaken: Object.keys(recObj).length > 0,
-        absent,
-        late,
-      });
     }
 
     for (const cls of Object.keys(clsMap)) {
