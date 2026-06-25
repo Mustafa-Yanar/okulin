@@ -32,6 +32,9 @@ export async function GET(req) {
 
     const clsMap = {};
     for (const rec of records) {
+      // Etüt yoklaması (lessonNo "e<etutId>") ders özetine GİRMEZ — Redis koluyla uyum
+      // (yoksa parseInt("e12")=NaN → ||1 ile yanlışça "1. ders" görünür).
+      if (String(rec.lessonNo).startsWith('e')) continue;
       const cls = rec.cls;
       const lessonNo = parseInt(rec.lessonNo) || 1;
       const recObj = (rec.records) || {};

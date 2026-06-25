@@ -123,7 +123,8 @@ export async function POST(req) {
       legacyId, name, username, passwordHash: hash, branches,
       allowedGroups: allowedGroups || [], photoUrl: photoUrl || '', phone: normPhone, mustChangePassword: true,
     } });
-    // NOT: userIndex (SQL'de doğrudan sorgu) + initWeekForTeacher (slot göçü) bayrak-açıkta atlandı.
+    // userIndex SQL'de gereksiz (login doğrudan sorgular). Slot grid'ini kur (Redis ile uyum).
+    await initWeekForTeacher(legacyId, getWeekKey());
     return NextResponse.json({ id: legacyId, name, username, branches, allowedGroups: allowedGroups || [], photoUrl: photoUrl || '' });
   }
 
@@ -181,7 +182,9 @@ export async function PUT(req) {
       off ? set.add(dayIndex) : set.delete(dayIndex);
       const offDays = Array.from(set).sort((a, b) => a - b);
       await tdb().teacher.update({ where: { id: t.id }, data: { offDays } });
-      // NOT: program-gün-sil + initWeekForTeacher → program/slot SQL göçünde ele alınır.
+      // İzin günü değişti → o haftanın slot grid'ini şablondan yeniden kur (Redis ile uyum;
+      // initWeekForTeacher offDays'i dikkate alıp izinli günü kapatır).
+      await initWeekForTeacher(id, getWeekKey());
       return NextResponse.json({ ok: true, offDays });
     }
     if (body.action === 'set_presets') {
