@@ -279,7 +279,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
 
   const classes = useMemo(() => {
     const base = (activeClasses?.length) ? activeClasses : ALL_CLASSES;
-    return base.filter(c => ALL_CLASSES.includes(c)).sort();
+    return [...new Set(base)].sort();
   }, [activeClasses]);
 
   useEffect(() => {

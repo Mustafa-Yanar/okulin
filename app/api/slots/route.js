@@ -6,6 +6,7 @@ import { ALL_DAYS, slotsForDay, MEZUN_FORBIDDEN_ETUT_SLOT, MATH_FAMILY, allowedB
 import { parseBody, z, zId } from '@/lib/validate';
 import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
+import { currentOrg, currentBranch } from '@/lib/tenant';
 
 const zDay = z.coerce.number().int().min(0).max(6);
 const zSlotId = z.string().min(1).max(20);
@@ -192,28 +193,28 @@ export async function POST(req) {
       bookedAt: new Date().toISOString(),
     };
 
-    // Varsa güncelle, yoksa oluştur
-    if (existingRow) {
-      await tdb().slotBooking.update({
-        where: { id: existingRow.id },
-        data: {
-          booked: true, disabled: false, fixed: false,
-          studentId: targetLegacyStudentId, studentName: targetStudent.name,
-          studentCls: studentCls, dersBranch: bookingBranch, bookedBy: session.role,
-          data: bookedData,
-        },
-      });
-    } else {
-      await tdb().slotBooking.create({
-        data: {
+    // Atomik upsert — race condition önler (UNIQUE kısıt: orgSlug+branch+weekKey+teacherId+dayIndex+slotId)
+    await tdb().slotBooking.upsert({
+      where: {
+        orgSlug_branch_weekKey_teacherId_dayIndex_slotId: {
+          orgSlug: currentOrg(), branch: currentBranch(),
           weekKey, teacherId: teacher.id, dayIndex: day, slotId,
-          booked: true, disabled: false, fixed: false,
-          studentId: targetLegacyStudentId, studentName: targetStudent.name,
-          studentCls: studentCls, dersBranch: bookingBranch, bookedBy: session.role,
-          data: bookedData,
         },
-      });
-    }
+      },
+      update: {
+        booked: true, disabled: false, fixed: false,
+        studentId: targetLegacyStudentId, studentName: targetStudent.name,
+        studentCls: studentCls, dersBranch: bookingBranch, bookedBy: session.role,
+        data: bookedData,
+      },
+      create: {
+        weekKey, teacherId: teacher.id, dayIndex: day, slotId,
+        booked: true, disabled: false, fixed: false,
+        studentId: targetLegacyStudentId, studentName: targetStudent.name,
+        studentCls: studentCls, dersBranch: bookingBranch, bookedBy: session.role,
+        data: bookedData,
+      },
+    });
 
     return NextResponse.json({ ok: true, slot: bookedData });
   }
