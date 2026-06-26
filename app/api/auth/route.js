@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { tenantRedis, rawRedis, currentOrg } from '@/lib/tenant';
 import { normalizeBranding } from '@/lib/branding';
 import { getSession, setSession, clearSession } from '@/lib/auth';
-import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
+import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait, safeLimit } from '@/lib/ratelimit';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { lookupIndex } from '@/lib/userIndex';
 import { normalizeTurkishMobile } from '@/lib/phone';
@@ -60,7 +60,7 @@ export async function POST(req) {
     // Rate limit kontrolü — IP + username birleşik key
     const ip = getClientIp(req);
     const rlKey = `${ip}:${(username || 'anon').toLowerCase()}`;
-    const { success, reset } = await loginRatelimit.limit(rlKey);
+    const { success, reset } = await safeLimit(loginRatelimit, rlKey);
     if (!success) {
       return NextResponse.json(
         { error: `Çok fazla başarısız deneme. Lütfen ${formatResetWait(reset)} tekrar deneyin.` },
@@ -312,7 +312,7 @@ export async function POST(req) {
     // Rate limit — oturumu kapılmış birinin mevcut şifre tahminini yavaşlat
     const ip = getClientIp(req);
     const pwRlKey = `${ip}:${session.id}`;
-    const pwRl = await passwordChangeRatelimit.limit(pwRlKey);
+    const pwRl = await safeLimit(passwordChangeRatelimit, pwRlKey);
     if (!pwRl.success) {
       return NextResponse.json(
         { error: `Çok fazla deneme. Lütfen ${formatResetWait(pwRl.reset)} tekrar deneyin.` },

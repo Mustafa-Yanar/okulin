@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { logError, getErrors } from '@/lib/errlog';
-import { errorLogRatelimit, getClientIp } from '@/lib/ratelimit';
+import { errorLogRatelimit, getClientIp, safeLimit } from '@/lib/ratelimit';
 import { parseBody, z } from '@/lib/validate';
 
 // İstemci hata raporu gövdesi (hepsi opsiyonel, message zorunlu).
@@ -17,7 +17,7 @@ const ErrorReportSchema = z.object({
 // Auth ZORUNLU DEĞİL: hata giriş öncesi de olabilir. IP başına rate limit + boyut sınırı korur.
 export async function POST(req) {
   const ip = getClientIp(req);
-  const { success } = await errorLogRatelimit.limit(ip);
+  const { success } = await safeLimit(errorLogRatelimit, ip);
   if (!success) return NextResponse.json({ ok: false }, { status: 429 });
 
   const parsed = await parseBody(req, ErrorReportSchema);

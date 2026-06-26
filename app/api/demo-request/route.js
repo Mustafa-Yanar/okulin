@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { rawRedis } from '@/lib/tenant';
-import { demoRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
+import { demoRatelimit, getClientIp, formatResetWait, safeLimit } from '@/lib/ratelimit';
 import { sendEmail } from '@/lib/email';
 import { isSqlEnabled } from '@/lib/usesql';
 import { prisma } from '@/lib/prisma';
@@ -53,7 +53,7 @@ function clean(v, max) {
 export async function POST(req) {
   // Spam koruması (IP başına)
   const ip = getClientIp(req);
-  const { success, reset } = await demoRatelimit.limit(ip);
+  const { success, reset } = await safeLimit(demoRatelimit, ip);
   if (!success) {
     return NextResponse.json(
       { error: `Çok fazla talep gönderildi. Lütfen ${formatResetWait(reset)} tekrar deneyin.` },

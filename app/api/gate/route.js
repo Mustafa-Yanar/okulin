@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { rawRedis } from '@/lib/tenant';
-import { gateRatelimit, getClientIp, formatResetWait } from '@/lib/ratelimit';
+import { gateRatelimit, getClientIp, formatResetWait, safeLimit } from '@/lib/ratelimit';
 import { normalizeCode, hostForOrg } from '@/lib/orgcode';
 import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
@@ -11,7 +11,7 @@ import { tdb } from '@/lib/sqldb';
 export async function POST(req) {
   // Brute-force koruması (IP başına)
   const ip = getClientIp(req);
-  const { success, reset } = await gateRatelimit.limit(ip);
+  const { success, reset } = await safeLimit(gateRatelimit, ip);
   if (!success) {
     return NextResponse.json(
       { error: `Çok fazla deneme. Lütfen ${formatResetWait(reset)} tekrar deneyin.` },
