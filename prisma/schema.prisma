@@ -79,6 +79,7 @@ model PayOrder {
   status    String   @default("pending")
   data      Json?
   createdAt DateTime @default(now())
+  student   Student? @relation(fields: [orgSlug, branch, studentId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
   @@index([orgSlug, branch])
 }
 
@@ -189,6 +190,10 @@ model Student {
   parent2Relation    String?
   finance            Finance?
   behavior           Behavior?
+  payOrders          PayOrder[]
+  hedefler           Hedef[]
+  topics             Topic[]
+  guidances          Guidance[]
   @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch])
   @@index([classId])
@@ -390,6 +395,7 @@ model Hedef {
   setBy     String?
   setByName String?
   updatedAt DateTime @default(now())
+  student   Student? @relation(fields: [orgSlug, branch, studentId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
   @@unique([orgSlug, branch, studentId])
   @@index([orgSlug, branch])
 }
@@ -489,6 +495,7 @@ model Topic {
   branch    String @default("main")
   studentId String   // legacy öğrenci id (route legacy id ile çalışır, join yok)
   data      Json
+  student   Student? @relation(fields: [orgSlug, branch, studentId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
   @@unique([orgSlug, branch, studentId])
   @@index([orgSlug, branch])
 }
@@ -502,6 +509,7 @@ model Guidance {
   studentId String   // legacy öğrenci id (route legacy id ile çalışır, join yok)
   week      String
   data      Json
+  student   Student? @relation(fields: [orgSlug, branch, studentId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
   @@unique([orgSlug, branch, studentId, week])
   @@index([orgSlug, branch])
   @@index([studentId])

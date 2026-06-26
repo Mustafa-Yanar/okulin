@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
+import { isSqlEnabled } from '@/lib/usesql';
 import {
   getWeekKey, getMondayOfWeek, initWeekForTeacher,
   getAllTeachers, getCurrentWeek, setCurrentWeek, getTeacherWeekSlots,
@@ -68,17 +69,20 @@ export async function GET(req) {
   }
 
   // 2. Arşivleri Redis'e yaz (arşiv alt-sistemi Redis — yukarıdaki NOT)
-  const writePipeline = redis.pipeline();
-  let hasWriteOps = false;
-  for (const [tid, entries] of Object.entries(teacherArchiveMap)) {
-    writePipeline.set(`archive:teacher:${tid}:${currentWeek}`, entries);
-    hasWriteOps = true;
+  // SQL modunda SlotBooking kalıcı olduğu için Redis'e yazmaya gerek yoktur.
+  if (!isSqlEnabled()) {
+    const writePipeline = redis.pipeline();
+    let hasWriteOps = false;
+    for (const [tid, entries] of Object.entries(teacherArchiveMap)) {
+      writePipeline.set(`archive:teacher:${tid}:${currentWeek}`, entries);
+      hasWriteOps = true;
+    }
+    for (const [sid, entries] of Object.entries(studentArchiveMap)) {
+      writePipeline.set(`archive:student:${sid}:${currentWeek}`, entries);
+      hasWriteOps = true;
+    }
+    if (hasWriteOps) await writePipeline.exec();
   }
-  for (const [sid, entries] of Object.entries(studentArchiveMap)) {
-    writePipeline.set(`archive:student:${sid}:${currentWeek}`, entries);
-    hasWriteOps = true;
-  }
-  if (hasWriteOps) await writePipeline.exec();
 
   // 3. Tüm öğretmenlerin yeni haftasını init et (SQL-aware)
   await Promise.all(teachers.map(t => initWeekForTeacher(t.id, nextWeek)));
