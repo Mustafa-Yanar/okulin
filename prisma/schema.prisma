@@ -536,6 +536,21 @@ model ErrLog {
   @@index([orgSlug, branch])
 }
 
+// "Bir kez bildir" idempotency kaydı (Redis NX kilidinin SQL eşdeğeri).
+// kind: 'att' (devamsızlık) | 'deneme' (deneme sonucu).
+// dedupeKey: att → "<date>:<studentId>", deneme → "<examId>:<phone>".
+// @@unique → aynı bildirim ikinci kez create edilince P2002 fırlatır = zaten bildirilmiş.
+model NotifLog {
+  id        String   @id @default(cuid())
+  orgSlug   String
+  branch    String   @default("main")
+  kind      String
+  dedupeKey String
+  at        DateTime @default(now())
+  @@unique([orgSlug, branch, kind, dedupeKey])
+  @@index([orgSlug, branch])
+}
+
 model PushSub {
   id       String @id @default(cuid())
   orgSlug  String

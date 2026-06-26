@@ -85,10 +85,23 @@ export async function POST(req) {
     return ok();
   }
 
-  // Çift işlemeye karşı kısa NX kilit (transient — Redis).
-  const lockKey = `paylock:${merchantOid}`;
-  const lock = await rawRedis.set(lockKey, '1', { nx: true, ex: 30 });
-  if (!lock) return ok(); // başka bir çağrı işliyor → idempotent çık
+  // Çift işlemeye karşı kilit. SQL'de: PayOrder.status'ta ATOMİK claim
+  // (updateMany WHERE status≠paid/processing → count:1 ise bu çağrı sahiplendi,
+  // count:0 ise başka callback zaten işliyor/işledi). PostgreSQL UPDATE atomik →
+  // Redis NX lock'un birebir eşdeğeri, ödeme verisiyle AYNI sistemde (tutarlı).
+  // Redis yolunda: eski NX kilit (göç sonrası ölecek).
+  let lockKey = null;
+  if (isSqlEnabled()) {
+    const claim = await prisma.payOrder.updateMany({
+      where: { oid: merchantOid, status: { notIn: ['paid', 'processing'] } },
+      data: { status: 'processing' },
+    });
+    if (claim.count === 0) return ok(); // başka çağrı sahiplendi/işledi → idempotent çık
+  } else {
+    lockKey = `paylock:${merchantOid}`;
+    const lock = await rawRedis.set(lockKey, '1', { nx: true, ex: 30 });
+    if (!lock) return ok();
+  }
 
   try {
     // Son kontrol: kilidi aldıktan sonra order durumunu yeniden oku.
@@ -122,7 +135,18 @@ export async function POST(req) {
 
     return ok();
   } catch (e) {
-    await rawRedis.del(lockKey);
+    // Kilidi serbest bırak ki tekrar deneme işleyebilsin.
+    // SQL: 'processing' claim'ini geri al (yoksa sipariş kalıcı kilitlenir).
+    if (isSqlEnabled()) {
+      try {
+        await prisma.payOrder.updateMany({
+          where: { oid: merchantOid, status: 'processing' },
+          data: { status: 'pending' },
+        });
+      } catch { /* en iyi çaba */ }
+    } else if (lockKey) {
+      await rawRedis.del(lockKey);
+    }
     return fail('işleme hatası');
   }
 }
