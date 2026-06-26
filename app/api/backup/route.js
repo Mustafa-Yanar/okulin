@@ -1,22 +1,45 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
+import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
+import { isSqlEnabled } from '@/lib/usesql';
 
 // GET /api/backup
-// Tüm Redis verisini snapshot olarak GitHub backup repo'ya yükler.
-// Son 30 günden eskileri siler.
+// Redis verisini VE (SQL açıksa) tüm PostgreSQL tablolarını snapshot olarak
+// GitHub backup repo'ya yükler. Son 30 günden eskileri siler.
 //
 // Cron tarafından Authorization: Bearer $CRON_SECRET ile çağrılır.
 // Manuel test için aynı header gerekli.
 //
-// ⚠️ Snapshot TYPE-AWARE olmalı: eski sürüm yalnız redis.get kullanıyordu, set/list/
+// ⚠️ Neon Free plan sadece 6 saat PITR sunar → kalıcı SQL verisi soğuk yedek olmadan
+// 6 saatten eski hiçbir noktaya geri alınamaz. SQL dump bu boşluğu kapatır.
+//
+// ⚠️ Redis snapshot TYPE-AWARE olmalı: eski sürüm yalnız redis.get kullanıyordu, set/list/
 // hash anahtarlarında WRONGTYPE fırlatıp pipeline.exec()'i çökertiyordu → yedek HİÇ
 // alınamıyordu (sessiz veri-kaybı riski). Format: data[key] = { type, val }
 // (scripts/restore-redis.mjs bu formatı okur).
 
-const BACKUP_DIR = 'backups';
+const BACKUP_DIR = 'backups';        // Redis snapshot'ları (typed-v1)
+const SQL_BACKUP_DIR = 'backups-sql'; // PostgreSQL tablo dökümleri (sql-v1)
 
-// Type sorguları nedeniyle daha çok REST çağrısı olur; süre güvenliği için.
-export const maxDuration = 60;
+// Tüm tabloları ham (tenant-scope'suz) Prisma ile dök. dmmf'ten model listesi alınır
+// → yeni model eklenince backup otomatik kapsar. Tüm kurumların verisi dahildir.
+async function snapshotSql() {
+  const models = Prisma.dmmf.datamodel.models.map((m) => m.name);
+  const tables = {};
+  let total = 0;
+  for (const name of models) {
+    const prop = name.charAt(0).toLowerCase() + name.slice(1);
+    if (typeof prisma[prop]?.findMany !== 'function') continue;
+    const rows = await prisma[prop].findMany();
+    tables[name] = rows;
+    total += rows.length;
+  }
+  return { tables, total };
+}
+
+// Redis type sorguları + SQL 39 tablo dökümü + GitHub upload'lar için süre güvenliği.
+export const maxDuration = 120;
 
 // Tek anahtarı tipine uygun komutla pipeline'a ekle (set/list'e get çağırmayız → WRONGTYPE yok).
 function readByType(p, key, type) {
@@ -120,8 +143,8 @@ async function ghFetch(token, repo, path, opts = {}) {
   return res;
 }
 
-async function listBackupFiles(token, repo) {
-  const res = await ghFetch(token, repo, `contents/${BACKUP_DIR}`);
+async function listBackupFiles(token, repo, dir = BACKUP_DIR) {
+  const res = await ghFetch(token, repo, `contents/${dir}`);
   if (res.status === 404) return [];
   if (!res.ok) throw new Error(`GitHub listele başarısız: ${res.status}`);
   const data = await res.json();
@@ -250,12 +273,56 @@ export async function GET(req) {
     warning = (warning ? warning + ' | ' : '') + `Rotation hatası: ${e.message}`;
   }
 
+  // 5. SQL dump (SQL açıksa) — Neon Free 6 saat PITR boşluğunu kapatan soğuk yedek.
+  //    Ayrı klasör (backups-sql), ayrı format (sql-v1), aynı 30 gün rotasyon.
+  let sqlResult = null;
+  if (isSqlEnabled()) {
+    try {
+      const { tables, total: sqlTotal } = await snapshotSql();
+      const sqlPayload = { snapshotAt: nowStamp(), rowCount: sqlTotal, format: 'sql-v1', tables };
+      const sqlStr = JSON.stringify(sqlPayload);
+      const sqlSizeKB = (Buffer.byteLength(sqlStr, 'utf-8') / 1024).toFixed(1);
+      const sqlB64 = Buffer.from(sqlStr, 'utf-8').toString('base64');
+
+      let sqlSha = null;
+      const sqlCheck = await ghFetch(token, repo, `contents/${SQL_BACKUP_DIR}/${filename}`);
+      if (sqlCheck.ok) sqlSha = (await sqlCheck.json()).sha;
+
+      const sqlUpload = await ghFetch(token, repo, `contents/${SQL_BACKUP_DIR}/${filename}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          message: `backup(sql): ${filename} (${sqlTotal} rows, ${sqlSizeKB}KB)`,
+          content: sqlB64,
+          ...(sqlSha ? { sha: sqlSha } : {}),
+        }),
+      });
+      if (!sqlUpload.ok) {
+        warning = (warning ? warning + ' | ' : '') + `SQL yedek yüklenemedi: ${sqlUpload.status}`;
+      } else {
+        sqlResult = { rowCount: sqlTotal, sizeKB: parseFloat(sqlSizeKB) };
+      }
+
+      // SQL rotation (30 gün)
+      const sqlFiles = await listBackupFiles(token, repo, SQL_BACKUP_DIR);
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 30);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+      for (const f of sqlFiles) {
+        const m = f.name.match(/^(\d{4}-\d{2}-\d{2})\.json$/);
+        if (m && m[1] < cutoffStr) await deleteBackupFile(token, repo, f);
+      }
+    } catch (e) {
+      warning = (warning ? warning + ' | ' : '') + `SQL yedek hatası: ${e.message}`;
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     filename,
     keyCount: total,
     sizeKB: parseFloat(sizeKB),
     deleted,
+    sql: sqlResult,
     warning,
   });
 }
