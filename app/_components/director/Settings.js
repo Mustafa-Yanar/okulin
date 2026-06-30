@@ -2,7 +2,7 @@
 
 // Müdür ayarlar modalı (isim + özelleştirme + ödeme) ve içindeki bölümler.
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon } from 'lucide-react';
+import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon, SlidersHorizontal, DoorOpen } from 'lucide-react';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
 import { useConfirm } from '../ConfirmProvider';
@@ -41,6 +41,10 @@ function SettingsBody({ current, onSave, onBranding, showToast }) {
 
       <div className="mb-5 pb-5 border-b border-gray-100">
         <BrandingSection showToast={showToast} onBranding={onBranding} />
+      </div>
+
+      <div className="mb-5 pb-5 border-b border-gray-100">
+        <ConfigurationSection showToast={showToast} />
       </div>
 
       <PaymentSection showToast={showToast} />
@@ -255,6 +259,156 @@ function PaymentSection({ showToast }) {
             </button>
           </div>
         </form>
+      )}
+    </div>
+  );
+}
+
+// ─── KONFİGÜRASYON (oyun ayarları) ───────────────────────────────────────────────
+// Modül aç/kapa + derslik (K2) yönetimi. Eksik config = varsayılan davranış (lib/config.js).
+// Bir bölüm kapatılınca ilgili modül UI'dan gizlenir / API reddeder (entegrasyon ayrı iş).
+
+const MODULE_META = {
+  etut:     { label: 'Etüt Sistemi',      desc: 'Etüt rezervasyon ve takvim' },
+  finance:  { label: 'Muhasebe / Finans',  desc: 'Ücret, taksit, gider takibi' },
+  crm:      { label: 'Aday Öğrenci (CRM)',  desc: 'Ön kayıt hunisi' },
+  lms:      { label: 'Kütüphane (LMS)',     desc: 'Kaynak/doküman paylaşımı' },
+  duyuru:   { label: 'Duyurular',           desc: 'Rol/sınıf hedefli duyuru' },
+  veli:     { label: 'Veli Paneli',         desc: 'Veli giriş ve takip' },
+  deneme:   { label: 'Deneme / Optik',      desc: 'Sınav analizi ve puanlama' },
+  davranis: { label: 'Davranış Puanlama',   desc: 'Öğrenci davranış kaydı' },
+  odev:     { label: 'Ödev Takip',          desc: 'Ödev ver / teslim / kontrol' },
+};
+
+function ConfigurationSection({ showToast }) {
+  const confirm = useConfirm();
+  const [config, setConfig] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [savingKey, setSavingKey] = useState(null);
+  const [room, setRoom] = useState({ name: '', capacity: '' });
+
+  useEffect(() => {
+    (async () => {
+      try { setConfig(await api('/api/config')); }
+      catch (e) { showToast(e.message, 'error'); }
+      setLoaded(true);
+    })();
+  }, []);
+
+  // Tek key'i kaydet (optimistik: önce state, sonra sunucu; hata olursa geri al).
+  async function saveKey(key, value, prev) {
+    setSavingKey(key);
+    try {
+      const r = await api('/api/config', { method: 'PATCH', body: JSON.stringify({ patch: { [key]: value } }) });
+      setConfig(r);
+    } catch (e) {
+      showToast(e.message, 'error');
+      if (prev !== undefined) setConfig(c => ({ ...c, [key]: prev })); // geri al
+    } finally { setSavingKey(null); }
+  }
+
+  function toggleModule(mod) {
+    const prevModules = config.modules;
+    const nextModules = { ...prevModules, [mod]: !prevModules[mod] };
+    setConfig(c => ({ ...c, modules: nextModules })); // optimistik
+    saveKey('modules', nextModules, prevModules);
+  }
+
+  function addRoom(e) {
+    e.preventDefault();
+    const name = room.name.trim();
+    if (!name) { showToast('Derslik adı gerekli', 'error'); return; }
+    const cap = parseInt(room.capacity);
+    const entry = { id: crypto.randomUUID(), name, capacity: Number.isFinite(cap) && cap > 0 ? cap : null };
+    const prev = config.classrooms;
+    const next = [...prev, entry];
+    setConfig(c => ({ ...c, classrooms: next }));
+    setRoom({ name: '', capacity: '' });
+    saveKey('classrooms', next, prev);
+  }
+
+  async function removeRoom(r) {
+    if (!(await confirm(`"${r.name}" dersliği silinsin mi?`))) return;
+    const prev = config.classrooms;
+    const next = prev.filter(x => x.id !== r.id);
+    setConfig(c => ({ ...c, classrooms: next }));
+    saveKey('classrooms', next, prev);
+  }
+
+  return (
+    <div>
+      <h4 className="text-label mb-2 flex items-center gap-1.5">
+        <SlidersHorizontal size={13} className="text-indigo-500" /> Konfigürasyon
+      </h4>
+      <p className="text-caption mb-3">Kuruma özel ayarlar — modülleri aç/kapat, derslikleri tanımla. Değişiklikler anında kaydedilir.</p>
+
+      {!loaded || !config ? (
+        <div className="text-center py-6 text-caption">Yükleniyor...</div>
+      ) : (
+        <div className="space-y-5">
+          {/* ── Modül aç/kapa ── */}
+          <div>
+            <h5 className="text-label mb-2" style={{ fontSize: 11 }}>Aktif Modüller</h5>
+            <div className="grid sm:grid-cols-2 gap-1.5">
+              {Object.keys(MODULE_META).map(mod => {
+                const m = MODULE_META[mod];
+                const on = !!config.modules?.[mod];
+                return (
+                  <label key={mod}
+                    className="flex items-center gap-2.5 rounded-lg px-3 py-2 cursor-pointer border transition-colors"
+                    style={{
+                      background: on ? 'color-mix(in srgb, var(--brand,#6366f1) 8%, transparent)' : 'var(--surface-2, #f9fafb)',
+                      borderColor: on ? 'color-mix(in srgb, var(--brand,#6366f1) 30%, transparent)' : 'transparent',
+                      opacity: savingKey === 'modules' ? 0.6 : 1,
+                    }}>
+                    <input type="checkbox" checked={on} disabled={savingKey === 'modules'}
+                      onChange={() => toggleModule(mod)} className="accent-indigo-600 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{m.label}</span>
+                      <span className="block text-caption truncate">{m.desc}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Derslikler (K2) ── */}
+          <div>
+            <h5 className="text-label mb-1 flex items-center gap-1.5" style={{ fontSize: 11 }}>
+              <DoorOpen size={12} /> Derslikler
+            </h5>
+            <p className="text-caption mb-2">Fiziksel oda/derslik tanımları. Boş bırakılırsa oda kısıtı uygulanmaz.</p>
+            <form onSubmit={addRoom} className="flex gap-2 items-end mb-2 flex-wrap">
+              <div className="flex-1 min-w-[140px]">
+                <label className="text-label block mb-1">Derslik Adı</label>
+                <input className="input" value={room.name} onChange={e => setRoom(r => ({ ...r, name: e.target.value }))} placeholder="Örn: A-101, Fizik Lab" />
+              </div>
+              <div className="w-28">
+                <label className="text-label block mb-1">Kapasite</label>
+                <input className="input" type="number" min="1" inputMode="numeric" value={room.capacity}
+                  onChange={e => setRoom(r => ({ ...r, capacity: e.target.value }))} placeholder="ops." />
+              </div>
+              <button type="submit" className="btn-primary !px-4 !py-2 text-sm flex items-center gap-1.5" disabled={savingKey === 'classrooms'}>
+                <Plus size={13} /> Ekle
+              </button>
+            </form>
+            {(!config.classrooms || config.classrooms.length === 0) ? (
+              <p className="text-caption">Henüz derslik eklenmemiş.</p>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {config.classrooms.map(r => (
+                  <div key={r.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                    <DoorOpen size={15} className="text-gray-400 shrink-0" />
+                    <span className="flex-1 text-sm font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.name}</span>
+                    {r.capacity ? <span className="text-caption shrink-0">{r.capacity} kişi</span> : null}
+                    <button onClick={() => removeRoom(r)} title="Sil" className="btn-icon btn-icon-danger"><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

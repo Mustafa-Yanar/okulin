@@ -263,6 +263,20 @@ model TenantConfig {
   @@id([orgSlug, branch])
 }
 
+// Kurum konfigürasyonu — "oyun ayarları" key-value store. TenantConfig'ten AYRI:
+// TenantConfig operasyonel state tutar (slot saatleri, program şablonu, ödeme).
+// OrgConfig kurumun TERCİH ayarlarını tutar (modül aç/kapa, derslikler, etüt kuralları,
+// rol yetkileri). Müdür Ayarlar > Konfigürasyon'dan yönetir. Eksik key = default davranış.
+model OrgConfig {
+  id      String @id @default(cuid())
+  orgSlug String
+  branch  String @default("main")
+  key     String
+  value   Json
+  @@unique([orgSlug, branch, key])
+  @@index([orgSlug, branch])
+}
+
 model Finance {
   id               String        @id @default(cuid())
   orgSlug          String
