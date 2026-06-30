@@ -1,44 +1,88 @@
 # okulin — Claude Talimatları
 
-> Detaylı proje bağlamı (mimari, branş sistemi, CP-SAT çözücü, Redis şeması) için: @AGENTS.md
 > Hassas bilgiler (credential): CLAUDE.local.md (gitignore'da).
+> Detaylı mimari bağlam gerekirse: AGENTS.md (otomatik yüklenmiyor, ihtiyaçta oku)
 
 ## Proje
-Eğitim/etüt takip uygulaması. Öğrenci-öğretmen-ders takibi, yoklama, program yönetimi.
+Eğitim/etüt takip uygulaması — Next.js 14 (App Router) + Upstash Redis + Prisma/PostgreSQL + Tailwind + Vercel.
+Canlı: okulin.com | Test kurumu: testkurs.okulin.com
 
-## Stack
-- **Framework:** Next.js 14.2 (App Router)
-- **Storage:** Upstash Redis (KV)
-- **Auth:** bcryptjs + jose (JWT)
-- **UI:** Tailwind CSS + lucide-react
-- **Data:** xlsx (Excel import/export)
-- **Deploy:** Vercel (otomatik, her push)
-
-## Klasör Yapısı (önemli olanlar)
-- `app/` — Next.js App Router sayfaları + API routes
-- `app/api/` — server endpoint'leri
-- `lib/` — Redis client, auth helpers, util
+## Klasör Yapısı
+- `app/page.js` — ana SPA (müdür/öğretmen/öğrenci panelleri)
+- `app/api/` — 60+ API route
+- `app/_components/` — UI bileşenleri (director/finance/program/rehberlik/odev/davranis/crm/form/library/etkinlik)
+- `lib/` — auth.js, db.js, redis.js, prisma.js, tenant.js, constants.js, slots.js, finance.js, push.js, org.js
+- `api/solve.py` + `api/solver/` — Python CP-SAT çözücü (Next'in app/api'sinden AYRI)
+- `prisma/schema.prisma` — veritabanı şeması
+- `e2e/` — Playwright testleri | `scripts/` — tek seferlik araçlar
 
 ## Çalışma Kuralı: Otomatik Commit & Deploy
 
 Her özellik veya düzeltme tamamlandığında **onay beklemeden:**
 1. İlgili dosyaları stage'e al (`git add <dosya>` — `-A` kullanma)
 2. Açıklayıcı Türkçe commit mesajı yaz
-3. Push et
-4. Vercel otomatik deploy alır
+3. Push et → Vercel otomatik deploy
 
-**Why:** Mustafa her seferinde ayrıca "deploy et" demek istemiyor.
-**Koşul:** Build başarılı geçtikten sonra. Build kırılırsa commit atma, önce düzelt.
-
-## AI Köprüsü (Gemini ile haberleşme)
-Gemini ortak, rakip değil — çıktısını tamamla, hata avlama. Dosya üzerinden haberleşme deseni:
-**Sen yazarsın** `ai-bridge/claude-to-gemini.md` (yeni mesaj en alta: `## [tarih saat] #N` + `---`), **okursun** `ai-bridge/gemini-to-claude.md` (Mustafa "Gemini yazdı, oku" deyince). Gemini'nin dosyasına ASLA yazma.
-
-> NOT (2026-05-23): Bu köprünün geçmiş içeriği (üçlü AI konsol = **ai-bridge projesi** geliştirme sohbeti) artık ayrı projeye taşındı: `~/Workspace/active/ai-bridge/bridge/`. Buradaki `ai-bridge/` klasörü artık YOK; okulin'e özel Gemini koordinasyonu gerekirse yeniden oluşur (gitignore'da). ai-bridge'i geliştirmek için o projenin dizininden çalış (`cd ~/Workspace/active/ai-bridge && claude`).
+**Koşul:** `npm run build` başarılı geçmeli. Kırıksa commit atma.
 
 ## Yapma
 - Mock/test endpoint'leri prod kodda bırakma
 - Auth token'ları client'a expose etme
-- `git add -A` ile her şeyi staging'e atma — değişen dosyaları seç
+- `git add -A` kullanma — değişen dosyaları seç
 - Build hatalıyken commit
 - `.env.local` veya credentials commit etme
+
+---
+
+## Bağımsız Kod Denetimi (Qwen Code — 2026-06-26)
+
+> ~20.000 satır okundu, tüm lib/ + API route'lar + Python solver + ana paneller + e2e + config.
+> Yorumlara/md dosyalarına değil sadece koda dayalı bağımsız değerlendirme.
+
+### Güçlü Yönler
+
+1. **Güvenlik katmanları eksiksiz:** CSP + CSRF (middleware) + bcrypt + rate limiting (5 limiter) + AES-256-GCM (payment key) + timingSafeEqual + JWT httpOnly cookie + org/branch tenant izolasyonu + OTP/cihaz tanıma.
+
+2. **İş mantığı doğru:** Etüt kuralları (aynı ders 2. etüt yok, matematik ailesi tek, mezun w9 yasağı, hafta içi w1-w6 sadece mezun), izin günü, geçmiş slot koruması, sınıf çakışma kontrolü, müdür bypass — hepsi kodda mevcut.
+
+3. **Audit log disiplini:** Tüm kritik mutasyonlar loglanıyor (öğrenci/öğretmen silme, finans, ödeme, duyuru, şifre sıfırlama). `actorFrom(session)` ile aktör bilgisi.
+
+4. **İdempotency:** Ödeme callback NX lock + PayOrder durum kontrolü. Devamsızlık bildirimi `att_notif` NX kilidi. Deneme sonuç `deneme_notif` NX kilidi. Hepsi best-effort.
+
+5. **Validasyon:** Tüm route'larda Zod `parseBody`, telefon `normalizeTurkishMobile`, diploma notu 50-100 kontrolü.
+
+6. **Test altyapısı:** 112 birim test (8 dosya, hepsi geçiyor), 8 Playwright e2e spec, build başarılı.
+
+7. **Operasyonel:** Haftalık slot döngüsü (cron), günlük ödeme hatırlatma push'u, GitHub backup (type-aware, 30 gün rotasyon), PWA dinamik manifest.
+
+8. **Tenant izolasyonu:** Redis prefix scoping + Prisma `$extends` otomatik orgSlug/branch enjeksiyonu. Çapraz-tenant cookie koruması.
+
+### Zayıf Yönler
+
+1. **TypeScript yok:** ~194 JS dosyası. Tip güvenliği eksik, Prisma tipleri kullanılmıyor. SQL göçü sonrası regresyon riski.
+
+2. **`makeId()` Math.random kullanıyor:** `Math.random().toString(36).slice(2, 10)` kalıbı 6 farklı route dosyasında tekrar ediyor. Kriptografik değil. `crypto.randomUUID()` kullanılmalı.
+
+3. **İstemci tarafı kod tekrarı:** `getAdjacentWeek`, `isSlotPast`, `WeekNav`, `api()` helper 3 panelde kopya. ChevronLeft/ChevronRight SVG'leri `lucide-react` import edilmiş olmasına rağmen inline tanımlanmış.
+
+4. **Yetkilendirme kontrolleri dağınık:** Her route'ta inline `session.role === 'director'` vb. Merkezi `withAuth(roles)` wrapper yok. Yeni route'ta unutulma riski.
+
+5. **API route testleri yok:** 70 route handler'ının hiçbiri için birim/entegrasyon testi yok. Auth flow, payment callback, program solver manuel test dışında kapsanmıyor.
+
+6. **Hata formatı tutarsız:** Bazı route'larda `{ error: 'msg' }`, bazı lib fonksiyonlarında `{ ok: false, error: 'msg', status: 404 }`. Global hata handler yok.
+
+7. **Küçük çaplı race condition riski:** `slots/route.js` POST Redis yolunda `get`+`set` (non-atomic). SQL yolunda `upsert` (atomic). Çift-yolun yarattığı davranış farkı.
+
+### Güncel Durum ve Öncelikli Aksiyonlar
+
+| # | Aksiyon | Durum |
+|---|---------|-------|
+| 1 | SQL göçünü tamamla, Redis kod yolunu temizle | 🔄 Test sürecinde — en büyük teknik borç kapanmak üzere |
+| 2 | TypeScript'e geçiş | ⏳ Henüz başlanmadı |
+| 3 | `makeId` → `crypto.randomUUID()` | ✅ `lib/id.js` tek kaynak (newId + sortable), 19 dosya geçti. courses slug / audit-errlog key / payment oid bilinçli hariç. |
+| 4 | Merkezi yetkilendirme wrapper'ı | ⏳ |
+| 5 | Kritik route'lara entegrasyon testi | ⏳ |
+| 6 | İstemci ortak yardımcıları: `shared.js` | ⏳ |
+| 7 | Global hata handler | ⏳ |
+
+**NOT:** SQL göçü tamamlandığında çift-yol kod tekrarı biteceği için #1 sonrası en büyük öncelik #2 TypeScript. Redis'in kalıcı anahtarları (ratelimit, backup, payment lock) için ayrı bir client kullanılacak.
