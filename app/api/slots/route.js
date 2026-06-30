@@ -83,12 +83,21 @@ export async function POST(req) {
   const { teacherId: legacyTeacherId, day, slotId, studentId: reqStudentId, weekKey: wk, forceOpen, branch } = parsed.data;
   const weekKey = wk || getWeekKey();
 
-  // Kurum self-rezervasyonu kapatmışsa öğrenci kendi adına rezervasyon yapamaz
-  // (müdür/rehber/öğretmen dağıtır). UI butonu da gizlenir ama bu sunucu sınırı.
+  // Öğrenci self-rezervasyon kuralları (kurum konfigürasyonu). Yalnız öğrencinin
+  // KENDİ rezervasyonuna uygulanır; müdür/rehber/öğretmen dağıtımı muaf.
   if (session.role === 'student') {
     const etut = await getOrgConfig('etut');
+    // 1) Self-rezervasyon kapalı mı
     if (etut?.studentSelfBooking === false) {
       return NextResponse.json({ error: 'Etüt rezervasyonu kurum tarafından kapatılmış. Lütfen öğretmeninize başvurun.' }, { status: 403 });
+    }
+    // 2) Haftalık max etüt sınırı (0 = sınırsız). SQL yolunda sayılır (prod).
+    const maxWeekly = parseInt(etut?.maxWeeklyPerStudent) || 0;
+    if (maxWeekly > 0 && isSqlEnabled()) {
+      const used = await tdb().slotBooking.count({ where: { weekKey, booked: true, studentId: session.id } });
+      if (used >= maxWeekly) {
+        return NextResponse.json({ error: `Bu hafta en fazla ${maxWeekly} etüt alabilirsiniz (${used} dolu).` }, { status: 403 });
+      }
     }
   }
 
@@ -370,6 +379,23 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { teacherId: legacyTeacherId, day, slotId, weekKey: wk } = parsed.data;
   const weekKey = wk || getWeekKey();
+
+  // Öğrenci iptal kilidi (kurum konfigürasyonu): etüt başlamasına cancelLockHours
+  // saatten az kala öğrenci kendi rezervasyonunu iptal edemez. Müdür/rehber/öğretmen MUAF.
+  if (session.role === 'student') {
+    const etut = await getOrgConfig('etut');
+    const lockH = parseInt(etut?.cancelLockHours) || 0;
+    if (lockH > 0) {
+      const slotTimes = await getSlotTimes();
+      const slotDef = slotsForDay(day, day >= 5 ? slotTimes.weekend : slotTimes.weekday).find(s => s.id === slotId);
+      if (slotDef) {
+        const slotStart = slotStartTime(weekKey, day, slotDef.label);
+        if (slotStart.getTime() - Date.now() < lockH * 3600 * 1000) {
+          return NextResponse.json({ error: `Etüt başlamasına ${lockH} saatten az kala iptal edemezsiniz. Öğretmeninize başvurun.` }, { status: 403 });
+        }
+      }
+    }
+  }
 
   if (isSqlEnabled()) {
     const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });

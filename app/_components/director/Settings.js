@@ -323,6 +323,16 @@ function ConfigurationSection({ showToast }) {
     saveKey('etut', next, prev);
   }
 
+  // Etüt sayısal kuralı kaydet (cancelLockHours, maxWeeklyPerStudent). Negatif→0.
+  function setEtutNum(flag, raw) {
+    const val = Math.max(0, parseInt(raw) || 0);
+    const prev = config.etut;
+    if ((prev?.[flag] || 0) === val) return; // değişmediyse PATCH atma
+    const next = { ...prev, [flag]: val };
+    setConfig(c => ({ ...c, etut: next }));
+    saveKey('etut', next, prev);
+  }
+
   function addRoom(e) {
     e.preventDefault();
     const name = room.name.trim();
@@ -492,6 +502,26 @@ function ConfigurationSection({ showToast }) {
                 <span className="block text-caption">Kapalıyken etütleri yalnız müdür/rehber/öğretmen dağıtır</span>
               </span>
             </label>
+
+            {/* Sayısal kurallar — yalnız öğrenci self-rezervasyonuna uygulanır */}
+            <div className="grid sm:grid-cols-2 gap-3 mt-3">
+              <div>
+                <label className="text-label block mb-1">İptal kilidi (saat)</label>
+                <input className="input" type="number" min="0" inputMode="numeric"
+                  defaultValue={config.etut?.cancelLockHours || 0}
+                  key={`clh-${config.etut?.cancelLockHours || 0}`}
+                  onBlur={e => setEtutNum('cancelLockHours', e.target.value)} />
+                <p className="text-caption mt-1">Etüde bu kadar saat kala öğrenci iptal edemez. 0 = serbest.</p>
+              </div>
+              <div>
+                <label className="text-label block mb-1">Haftalık max etüt</label>
+                <input className="input" type="number" min="0" inputMode="numeric"
+                  defaultValue={config.etut?.maxWeeklyPerStudent || 0}
+                  key={`mw-${config.etut?.maxWeeklyPerStudent || 0}`}
+                  onBlur={e => setEtutNum('maxWeeklyPerStudent', e.target.value)} />
+                <p className="text-caption mt-1">Öğrenci haftada en fazla bu kadar etüt alır. 0 = sınırsız.</p>
+              </div>
+            </div>
           </div>
         </div>
       )}
