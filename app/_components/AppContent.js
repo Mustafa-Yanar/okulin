@@ -36,6 +36,7 @@ export default function AppContent() {
   const [directorExists, setDirectorExists] = useState(false);
   const [branding, setBranding] = useState(BRANDING_DEFAULTS);
   const [modules, setModules] = useState(null); // kurum modül aç/kapa; null=henüz yüklenmedi (hepsi açık varsay)
+  const [etutCfg, setEtutCfg] = useState(null);  // etüt kuralları (self-rezervasyon vb.)
   const [toast, setToast] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   // Sidebar state
@@ -63,6 +64,7 @@ export default function AppContent() {
         const status = await api('/api/auth');
         setDirectorExists(status.directorExists);
         if (status.modules) setModules(status.modules);
+        if (status.etut) setEtutCfg(status.etut);
         if (status.branding) {
           setBranding(status.branding);
           if (status.branding.themeColor) {
@@ -257,7 +259,7 @@ export default function AppContent() {
             <TeacherPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />
           )}
           {session.role === 'student' && (
-            <StudentPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />
+            <StudentPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} selfBookingAllowed={etutCfg?.studentSelfBooking !== false} />
           )}
           {session.role === 'parent' && (
             <ParentPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />

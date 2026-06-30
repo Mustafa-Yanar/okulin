@@ -467,7 +467,7 @@ export function StudentGuidancePanelWrapper({ session, showToast }) {
 }
 
 // ─── MAIN STUDENT PANEL ────────────────────────────────────────────────────────
-export default function StudentPanel({ session, showToast, externalTab, onExternalTabChange }) {
+export default function StudentPanel({ session, showToast, externalTab, onExternalTabChange, selfBookingAllowed = true }) {
   const { classes } = useClasses();
   const [weekKey, setWeekKey] = useState(getWeekKey());
   const [allSlots, setAllSlots] = useState([]);
@@ -608,6 +608,13 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
         <FormRespond showToast={showToast} />
       ) : tab === 'davranis' ? (
         <DavranisView />
+      ) : !selfBookingAllowed ? (
+        <div className="card p-8 text-center">
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+            Etüt rezervasyonu kurumunuz tarafından kapatılmıştır. Etütleriniz öğretmen veya rehberiniz tarafından planlanır.
+          </p>
+          <p className="text-caption mt-2">Planlanan etütlerinizi <b>"Etütlerim"</b> sekmesinden görebilirsiniz.</p>
+        </div>
       ) : (
         <div>
           {/* Filters Bar */}

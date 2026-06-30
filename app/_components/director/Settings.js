@@ -2,7 +2,7 @@
 
 // Müdür ayarlar modalı (isim + özelleştirme + ödeme) ve içindeki bölümler.
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon, SlidersHorizontal, DoorOpen, Tag } from 'lucide-react';
+import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon, SlidersHorizontal, DoorOpen, Tag, CalendarClock } from 'lucide-react';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
 import { useConfirm } from '../ConfirmProvider';
@@ -315,6 +315,14 @@ function ConfigurationSection({ showToast }) {
     saveKey('modules', nextModules, prevModules);
   }
 
+  // Etüt kuralı bayrağını aç/kapa (örn. studentSelfBooking).
+  function toggleEtut(flag) {
+    const prev = config.etut;
+    const next = { ...prev, [flag]: !prev[flag] };
+    setConfig(c => ({ ...c, etut: next }));
+    saveKey('etut', next, prev);
+  }
+
   function addRoom(e) {
     e.preventDefault();
     const name = room.name.trim();
@@ -464,6 +472,26 @@ function ConfigurationSection({ showToast }) {
                 </span>
               ))}
             </div>
+          </div>
+
+          {/* ── Etüt Kuralları ── */}
+          <div>
+            <h5 className="text-label mb-2 flex items-center gap-1.5" style={{ fontSize: 11 }}>
+              <CalendarClock size={12} /> Etüt Kuralları
+            </h5>
+            <label className="flex items-center gap-2.5 rounded-lg px-3 py-2 cursor-pointer border transition-colors"
+              style={{
+                background: config.etut?.studentSelfBooking !== false ? 'color-mix(in srgb, var(--brand,#6366f1) 8%, transparent)' : 'var(--surface-2, #f9fafb)',
+                borderColor: config.etut?.studentSelfBooking !== false ? 'color-mix(in srgb, var(--brand,#6366f1) 30%, transparent)' : 'transparent',
+                opacity: savingKey === 'etut' ? 0.6 : 1,
+              }}>
+              <input type="checkbox" checked={config.etut?.studentSelfBooking !== false} disabled={savingKey === 'etut'}
+                onChange={() => toggleEtut('studentSelfBooking')} className="accent-indigo-600 shrink-0" />
+              <span className="min-w-0">
+                <span className="block text-sm font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Öğrenci kendi etüdünü seçebilir</span>
+                <span className="block text-caption">Kapalıyken etütleri yalnız müdür/rehber/öğretmen dağıtır</span>
+              </span>
+            </label>
           </div>
         </div>
       )}

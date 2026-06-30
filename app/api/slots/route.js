@@ -7,6 +7,7 @@ import { parseBody, z, zId } from '@/lib/validate';
 import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 import { currentOrg, currentBranch } from '@/lib/tenant';
+import { getOrgConfig } from '@/lib/config';
 
 const zDay = z.coerce.number().int().min(0).max(6);
 const zSlotId = z.string().min(1).max(20);
@@ -81,6 +82,15 @@ export async function POST(req) {
   if (!parsed.ok) return parsed.response;
   const { teacherId: legacyTeacherId, day, slotId, studentId: reqStudentId, weekKey: wk, forceOpen, branch } = parsed.data;
   const weekKey = wk || getWeekKey();
+
+  // Kurum self-rezervasyonu kapatmışsa öğrenci kendi adına rezervasyon yapamaz
+  // (müdür/rehber/öğretmen dağıtır). UI butonu da gizlenir ama bu sunucu sınırı.
+  if (session.role === 'student') {
+    const etut = await getOrgConfig('etut');
+    if (etut?.studentSelfBooking === false) {
+      return NextResponse.json({ error: 'Etüt rezervasyonu kurum tarafından kapatılmış. Lütfen öğretmeninize başvurun.' }, { status: 403 });
+    }
+  }
 
   if (isSqlEnabled()) {
     // Öğretmeni SQL'den oku

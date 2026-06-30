@@ -48,10 +48,10 @@ export async function GET() {
   const orgRec = isSqlEnabled()
     ? await tdb().org.findFirst({ where: { slug: currentOrg() } })
     : await rawRedis.get(`org:${currentOrg()}`);
-  // Modül aç/kapa (kurum konfigürasyonu) — Sidebar kapalı modülleri gizler.
-  // Eksik config = hepsi açık (varsayılan). Hassas değil; tüm roller için döner.
-  const modules = await getOrgConfig('modules');
-  return NextResponse.json({ session, directorExists: !!directorExists, branding: normalizeBranding(orgRec), modules });
+  // Kurum konfigürasyonu — istemcinin davranışını etkileyen alanlar (hassas değil,
+  // tüm roller için döner). modules: Sidebar sekme gizleme. etut: self-rezervasyon butonu.
+  const [modules, etut] = await Promise.all([getOrgConfig('modules'), getOrgConfig('etut')]);
+  return NextResponse.json({ session, directorExists: !!directorExists, branding: normalizeBranding(orgRec), modules, etut });
 }
 
 export async function POST(req) {
