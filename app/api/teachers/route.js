@@ -21,9 +21,7 @@ async function replacePresetsSql(teacherCuid, clean) {
   for (const p of clean) await tdb().teacherPreset.create({ data: { teacherId: teacherCuid, classId: p.cls, course: p.course } });
 }
 
-function makeId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+import { newId as makeId } from '@/lib/id';
 
 // Ön eşleştirme listesini öğretmenin branşlarına + grup izinlerine göre süz.
 // Geçersiz (branş dışı ders / izin dışı grup / bilinmeyen sınıf) satırlar sessizce atılır.

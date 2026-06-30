@@ -15,9 +15,7 @@ function programKey(teacherId) {
   return `program:${teacherId}`;
 }
 
-function makeId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+import { newId as makeId } from '@/lib/id';
 
 const zTime = z.string().regex(/^\d{2}:\d{2}$/, 'Saat HH:MM olmalı');
 const zDay = z.number().int().min(0).max(6);

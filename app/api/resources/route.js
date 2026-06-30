@@ -10,9 +10,7 @@ import { tdb } from '@/lib/sqldb';
 // Kapsam: kuruma scope'lu (tenantRedis). Sınıf bazlı hedefleme.
 // Ekleyebilen: director + teacher. Görebilen: director/teacher (tümü), student (kendi sınıfı).
 
-function genId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+import { newId as genId } from '@/lib/id';
 
 const CreateSchema = z.object({
   title: z.string().min(1).max(160),

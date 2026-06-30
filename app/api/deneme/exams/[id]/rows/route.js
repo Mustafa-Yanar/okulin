@@ -8,9 +8,7 @@ function isManager(s) {
   return s && (s.role === 'director' || s.role === 'counselor');
 }
 
-function rowId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-}
+import { newSortableId as rowId } from '@/lib/id';
 
 const AddSchema = z.object({
   source: z.enum(['optik', 'dat', 'manual']).optional(),

@@ -15,9 +15,7 @@ function canAccess(session) {
   return session && (session.role === 'director' || session.role === 'accountant');
 }
 
-function genId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+import { newId as genId } from '@/lib/id';
 
 const ExtraSchema = z.object({ label: z.string().max(120).optional(), amount: zMoney.optional() });
 

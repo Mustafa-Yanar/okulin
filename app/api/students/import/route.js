@@ -9,9 +9,7 @@ import { addToIndex } from '@/lib/userIndex';
 import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
-function makeId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+import { newId as makeId } from '@/lib/id';
 
 // "ahmet mehmet yılmaz" → "Ahmet Mehmet YILMAZ"
 function formatName(raw) {

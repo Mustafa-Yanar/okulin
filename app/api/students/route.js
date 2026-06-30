@@ -10,9 +10,7 @@ import { parseBody, z, zName, zId } from '@/lib/validate';
 import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
-function makeId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+import { newId as makeId } from '@/lib/id';
 
 // SQL satırı (class include) → mevcut sözleşme şekli (id/cls = legacyId).
 const studentOut = (s) => ({

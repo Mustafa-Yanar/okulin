@@ -8,10 +8,7 @@ import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userInde
 import { parseBody, z, zName, zId } from '@/lib/validate';
 import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
-
-function makeId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+import { newId as makeId } from '@/lib/id';
 
 const zPhone = z.string().max(40).optional();
 // Şifre opsiyonel: boşsa telefon, o da yoksa "12345678" (lib/auth.initialPassword).

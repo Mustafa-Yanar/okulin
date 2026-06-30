@@ -9,6 +9,7 @@ import { useClasses } from '../ClassesContext';
 import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
+import { newId } from '@/lib/id';
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -28,7 +29,7 @@ const QTYPE = {
   multi: { label: 'Çoklu Seçim', icon: CheckSquare },
   rating: { label: 'Puan (1-5)', icon: Star },
 };
-function qid() { return 'q' + Math.random().toString(36).slice(2, 8); }
+function qid() { return newId('q'); }
 function fmtDate(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' });

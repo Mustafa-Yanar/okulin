@@ -13,9 +13,7 @@ import { tdb } from '@/lib/sqldb';
 // Rehber = müdür yetkileri eksi muhasebe (bkz lib/auth.js isManager).
 // Muhasebeci deseninin birebir eşi (api/accountants).
 
-function makeId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+import { newId as makeId } from '@/lib/id';
 
 const zPhone = z.string().max(40).optional();
 // Şifre opsiyonel: boşsa telefon, o da yoksa "12345678" (lib/auth.initialPassword).

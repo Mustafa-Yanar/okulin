@@ -8,9 +8,7 @@ function isManager(s) {
   return s && (s.role === 'director' || s.role === 'counselor');
 }
 
-function uuid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-}
+import { newSortableId as uuid } from '@/lib/id';
 
 // Deneme listesi (meta) — giriş yapan herkes görür.
 export async function GET() {

@@ -7,7 +7,7 @@ import { parseBody, z } from '@/lib/validate';
 import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
-function makeId() { return Math.random().toString(36).slice(2, 18); }
+import { newId as makeId } from '@/lib/id';
 
 const Schema = z.object({
   code: z.string().min(4).max(10),

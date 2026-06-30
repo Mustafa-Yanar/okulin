@@ -18,7 +18,7 @@ import { tdb } from '@/lib/sqldb';
 
 export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
-function genId() { return Math.random().toString(36).slice(2, 10); }
+import { newId as genId } from '@/lib/id';
 
 const TYPES = ['tatil', 'sinav', 'toplanti', 'gezi', 'etkinlik', 'diger'];
 const TYPE_LABEL = {

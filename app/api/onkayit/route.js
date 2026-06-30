@@ -16,7 +16,7 @@ import { tdb } from '@/lib/sqldb';
 //   leadler (set)   → aday id'leri
 //   lead:<id>       → {id, studentName, parentName, phone, level, source, status, history[], createdBy, ...}
 
-function genId() { return Math.random().toString(36).slice(2, 10); }
+import { newId as genId } from '@/lib/id';
 
 const SOURCES = ['tavsiye', 'sosyal', 'web', 'afis', 'telefon', 'ziyaret', 'diger'];
 const STATUSES = ['yeni', 'arandi', 'gorusme', 'kayit', 'kayip'];

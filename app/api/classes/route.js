@@ -16,7 +16,8 @@ const classOut = (c) => ({ id: c.legacyId, ad: c.ad, kademe: c.kademe, duzey: c.
 
 const CLASSES_SET = 'classes';
 const classKey = (id) => `sinif:${id}`;
-const newClassId = () => 's_' + Math.random().toString(36).slice(2, 10);
+import { newId } from '@/lib/id';
+const newClassId = () => newId('s_');
 
 // Kademe → köprü grubu (mevcut çözücü/etüt 'ortaokul|lise|mezun' bekler).
 function groupForKademe(kademe) {

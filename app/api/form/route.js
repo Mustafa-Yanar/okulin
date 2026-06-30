@@ -19,7 +19,7 @@ import { tdb } from '@/lib/sqldb';
 
 export const runtime = 'nodejs'; // push web-push (Node crypto)
 
-function genId() { return Math.random().toString(36).slice(2, 10); }
+import { newId as genId } from '@/lib/id';
 
 const QTYPES = ['text', 'single', 'multi', 'rating'];
 

@@ -20,7 +20,7 @@ import { tdb } from '@/lib/sqldb';
 const TTL = 60 * 60 * 24 * 365; // 1 yıl
 export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
-function genId() { return Math.random().toString(36).slice(2, 10); }
+import { newId as genId } from '@/lib/id';
 
 const AudienceSchema = z.object({
   role: z.enum(['parent', 'student', 'teacher']),
