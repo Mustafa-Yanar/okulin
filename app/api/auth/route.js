@@ -10,6 +10,7 @@ import { normalizeTurkishMobile } from '@/lib/phone';
 import { parseBody, z, zName, zPassword, zNewPassword, zId } from '@/lib/validate';
 import { sendOtp } from '@/lib/sms';
 import { isSqlEnabled } from '@/lib/usesql';
+import { getOrgConfig } from '@/lib/config';
 import { tdb } from '@/lib/sqldb';
 
 // SQL rol satırını makeLoginResponse'un beklediği eski (Redis) kayıt şekline çevirir.
@@ -47,7 +48,10 @@ export async function GET() {
   const orgRec = isSqlEnabled()
     ? await tdb().org.findFirst({ where: { slug: currentOrg() } })
     : await rawRedis.get(`org:${currentOrg()}`);
-  return NextResponse.json({ session, directorExists: !!directorExists, branding: normalizeBranding(orgRec) });
+  // Modül aç/kapa (kurum konfigürasyonu) — Sidebar kapalı modülleri gizler.
+  // Eksik config = hepsi açık (varsayılan). Hassas değil; tüm roller için döner.
+  const modules = await getOrgConfig('modules');
+  return NextResponse.json({ session, directorExists: !!directorExists, branding: normalizeBranding(orgRec), modules });
 }
 
 export async function POST(req) {

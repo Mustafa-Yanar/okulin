@@ -76,8 +76,29 @@ const ITEMS_BY_ROLE = {
   ],
 };
 
-function buildItems(role) {
-  return ITEMS_BY_ROLE[role] || [];
+// Sidebar sekme key'i → kurum modül key'i (lib/config CONFIG_DEFAULTS.modules).
+// Burada OLMAYAN sekmeler her zaman görünür (program, yoklama, ayarlar vb. — temel).
+const TAB_TO_MODULE = {
+  muhasebe: 'finance', finance: 'finance', expenses: 'finance', odeme: 'finance',
+  kutuphane: 'lms',
+  onkayit: 'crm',
+  veliler: 'veli',
+  duyurular: 'duyuru',
+  odev: 'odev',
+  davranis: 'davranis',
+  // etüt: öğrenci/veli rezervasyon sekmeleri
+  available: 'etut', myBookings: 'etut', rezervasyon: 'etut',
+};
+
+// modules: { finance:true, ... } | null (henüz yüklenmedi → hepsi açık varsay).
+// Kapalı modüle ait sekmeler gizlenir.
+function buildItems(role, modules) {
+  const items = ITEMS_BY_ROLE[role] || [];
+  if (!modules) return items; // yüklenmeden hepsini göster (titreme önler)
+  return items.filter((it) => {
+    const mod = TAB_TO_MODULE[it.key];
+    return !mod || modules[mod] !== false;
+  });
 }
 
 // ─── Nav öğesi ─────────────────────────────────────────────────────────────────
@@ -107,6 +128,7 @@ function NavItem({ item, active, collapsed, onClick }) {
 export default function Sidebar({
   session,
   branding,
+  modules,
   activeTab,
   onTabChange,
   collapsed,
@@ -116,7 +138,7 @@ export default function Sidebar({
   showToast,
   onSettings,
 }) {
-  const items = buildItems(session?.role);
+  const items = buildItems(session?.role, modules);
 
   // Grup akordeon durumu (yalnız gruplu roller: müdür/rehber). Varsayılan: hepsi açık.
   // false = kapalı; absent/true = açık. localStorage'da kalıcı, oturumlar arası korunur.

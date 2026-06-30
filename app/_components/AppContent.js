@@ -35,6 +35,7 @@ export default function AppContent() {
   const [session, setSession] = useState(null);
   const [directorExists, setDirectorExists] = useState(false);
   const [branding, setBranding] = useState(BRANDING_DEFAULTS);
+  const [modules, setModules] = useState(null); // kurum modül aç/kapa; null=henüz yüklenmedi (hepsi açık varsay)
   const [toast, setToast] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   // Sidebar state
@@ -61,6 +62,7 @@ export default function AppContent() {
       try {
         const status = await api('/api/auth');
         setDirectorExists(status.directorExists);
+        if (status.modules) setModules(status.modules);
         if (status.branding) {
           setBranding(status.branding);
           if (status.branding.themeColor) {
@@ -174,6 +176,7 @@ export default function AppContent() {
       <Sidebar
         session={session}
         branding={branding}
+        modules={modules}
         activeTab={activeTab}
         onTabChange={handleTabChange}
         collapsed={sidebarCollapsed}
