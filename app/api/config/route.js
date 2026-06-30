@@ -21,9 +21,10 @@ const PatchSchema = z.object({
   ),
 });
 
+// Okuma: müdür + muhasebeci (muhasebeci gider kategorilerini okur). Değiştirme yalnız müdür.
 export async function GET() {
   const session = await getSession();
-  if (!session || session.role !== 'director') {
+  if (!session || (session.role !== 'director' && session.role !== 'accountant')) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
   const config = await getAllConfigs();

@@ -6,6 +6,7 @@ import { parseBody, z, zId, zMoney } from '@/lib/validate';
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
 import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
+import { getOrgConfig } from '@/lib/config';
 
 // Kurum giderleri — personel ödemeleri (maaş + ek ödemeler) ve kategorili
 // harcama kalemleri. Tenant-scoped (@/lib/db). Yetki: director + accountant.
@@ -38,7 +39,7 @@ const ExpenseSchema = z.object({
 const ExpenseDeleteSchema = z.object({ id: zId });
 
 // Gelen veriyi normalize edip kalıcı kayıt nesnesi üret (POST + PUT ortak).
-function buildRecord(data, base, session) {
+function buildRecord(data, base, session, validCategories) {
   const date = data.date || new Date().toISOString().slice(0, 10);
   if (data.type === 'personnel') {
     const salary = parseFloat(data.salary) || 0;
@@ -59,8 +60,10 @@ function buildRecord(data, base, session) {
       description: (data.description || '').trim(),
     };
   }
-  // general
-  const category = EXPENSE_CATEGORIES.includes(data.category) ? data.category : 'Diğer';
+  // general — kurum kategorisi geçerliyse onu, değilse "Diğer". validCategories
+  // verilmezse sabit listeye düş (geriye uyumluluk).
+  const cats = validCategories || EXPENSE_CATEGORIES;
+  const category = cats.includes(data.category) ? data.category : 'Diğer';
   return {
     ...base,
     type: 'general',
@@ -122,7 +125,8 @@ export async function POST(req) {
     createdByRole: session.role,
     createdAt: new Date().toISOString(),
   };
-  const record = buildRecord(data, base, session);
+  const validCategories = await getOrgConfig('expenseCategories');
+  const record = buildRecord(data, base, session, validCategories);
 
   if (record.type === 'personnel' && !record.personnelName) {
     return NextResponse.json({ error: 'Personel adı gerekli' }, { status: 400 });
@@ -157,12 +161,13 @@ export async function PUT(req) {
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
   if (!data.id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
+  const validCategories = await getOrgConfig('expenseCategories');
 
   if (isSqlEnabled()) {
     const ex = await tdb().expense.findFirst({ where: { legacyId: data.id } });
     if (!ex) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
     const old = ex.data || {};
-    const record = buildRecord(data, { id: old.id || data.id, createdBy: old.createdBy, createdByRole: old.createdByRole, createdAt: old.createdAt, updatedBy: session.name, updatedAt: new Date().toISOString() }, session);
+    const record = buildRecord(data, { id: old.id || data.id, createdBy: old.createdBy, createdByRole: old.createdByRole, createdAt: old.createdAt, updatedBy: session.name, updatedAt: new Date().toISOString() }, session, validCategories);
     if (record.type === 'personnel' && !record.personnelName) return NextResponse.json({ error: 'Personel adı gerekli' }, { status: 400 });
     if (record.amount <= 0) return NextResponse.json({ error: 'Tutar sıfırdan büyük olmalı' }, { status: 400 });
     await tdb().expense.update({ where: { id: ex.id }, data: { type: record.type, amount: record.amount, date: record.date, data: record } });
@@ -181,7 +186,7 @@ export async function PUT(req) {
     updatedBy: session.name,
     updatedAt: new Date().toISOString(),
   };
-  const record = buildRecord(data, base, session);
+  const record = buildRecord(data, base, session, validCategories);
 
   if (record.type === 'personnel' && !record.personnelName) {
     return NextResponse.json({ error: 'Personel adı gerekli' }, { status: 400 });

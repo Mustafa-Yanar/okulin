@@ -2,7 +2,7 @@
 
 // Müdür ayarlar modalı (isim + özelleştirme + ödeme) ve içindeki bölümler.
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon, SlidersHorizontal, DoorOpen } from 'lucide-react';
+import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon, SlidersHorizontal, DoorOpen, Tag } from 'lucide-react';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
 import { useConfirm } from '../ConfirmProvider';
@@ -286,6 +286,7 @@ function ConfigurationSection({ showToast }) {
   const [loaded, setLoaded] = useState(false);
   const [savingKey, setSavingKey] = useState(null);
   const [room, setRoom] = useState({ name: '', capacity: '' });
+  const [newCat, setNewCat] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -333,6 +334,31 @@ function ConfigurationSection({ showToast }) {
     const next = prev.filter(x => x.id !== r.id);
     setConfig(c => ({ ...c, classrooms: next }));
     saveKey('classrooms', next, prev);
+  }
+
+  // Gider kategorileri — "Diğer" daima sonda, silinemez (sistem kategorisi).
+  function withOtherLast(list) {
+    const rest = list.filter(c => c !== 'Diğer');
+    return [...rest, 'Diğer'];
+  }
+  function addCategory(e) {
+    e.preventDefault();
+    const name = newCat.trim();
+    if (!name) return;
+    const prev = config.expenseCategories;
+    if (prev.some(c => c.toLowerCase() === name.toLowerCase())) { showToast('Bu kategori zaten var', 'error'); return; }
+    const next = withOtherLast([...prev.filter(c => c !== 'Diğer'), name]);
+    setConfig(c => ({ ...c, expenseCategories: next }));
+    setNewCat('');
+    saveKey('expenseCategories', next, prev);
+  }
+  async function removeCategory(cat) {
+    if (cat === 'Diğer') return; // sistem kategorisi
+    if (!(await confirm(`"${cat}" kategorisi silinsin mi? (Mevcut kayıtlar etkilenmez)`))) return;
+    const prev = config.expenseCategories;
+    const next = withOtherLast(prev.filter(c => c !== cat));
+    setConfig(c => ({ ...c, expenseCategories: next }));
+    saveKey('expenseCategories', next, prev);
   }
 
   return (
@@ -407,6 +433,37 @@ function ConfigurationSection({ showToast }) {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* ── Gider Kategorileri ── */}
+          <div>
+            <h5 className="text-label mb-1 flex items-center gap-1.5" style={{ fontSize: 11 }}>
+              <Tag size={12} /> Gider Kategorileri
+            </h5>
+            <p className="text-caption mb-2">Muhasebe gider formundaki kategoriler. "Diğer" sabittir.</p>
+            <form onSubmit={addCategory} className="flex gap-2 items-end mb-2">
+              <div className="flex-1">
+                <label className="text-label block mb-1">Yeni Kategori</label>
+                <input className="input" value={newCat} onChange={e => setNewCat(e.target.value)} placeholder="Örn: Servis, Yurt/Konaklama" />
+              </div>
+              <button type="submit" className="btn-primary !px-4 !py-2 text-sm flex items-center gap-1.5" disabled={savingKey === 'expenseCategories'}>
+                <Plus size={13} /> Ekle
+              </button>
+            </form>
+            <div className="flex flex-wrap gap-1.5">
+              {(config.expenseCategories || []).map(cat => (
+                <span key={cat} className="inline-flex items-center gap-1.5 bg-gray-50 rounded-lg pl-3 pr-2 py-1.5 text-sm"
+                  style={{ color: 'var(--text-primary)' }}>
+                  {cat}
+                  {cat !== 'Diğer' && (
+                    <button onClick={() => removeCategory(cat)} title="Sil"
+                      className="text-gray-400 hover:text-red-500 transition-colors" disabled={savingKey === 'expenseCategories'}>
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       )}

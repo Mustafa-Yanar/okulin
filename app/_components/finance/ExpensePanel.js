@@ -30,6 +30,15 @@ export default function ExpensePanel({ session, showToast }) {
   const { data: expData, isLoading: loading, mutate: mutateExpenses } = useSWR('/api/finance/expense');
   const expenses = Array.isArray(expData) ? expData : [];
 
+  // Gider kategorileri kurum konfigürasyonundan (yoksa sabit liste). "Diğer" daima sonda.
+  const { data: cfgData } = useSWR('/api/config');
+  const categories = useMemo(() => {
+    const list = Array.isArray(cfgData?.expenseCategories) && cfgData.expenseCategories.length
+      ? cfgData.expenseCategories : EXPENSE_CATEGORIES;
+    const rest = list.filter(c => c !== 'Diğer');
+    return list.includes('Diğer') ? [...rest, 'Diğer'] : rest;
+  }, [cfgData]);
+
   // Gelir (öğrenci ödemeleri) — özet için. FinancePanel ile aynı anahtar → SWR paylaşır.
   const { data: incomeData } = useSWR('/api/finance');
   const payments = useMemo(() => {
@@ -166,7 +175,7 @@ export default function ExpensePanel({ session, showToast }) {
           <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
             className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
             <option value="">Tüm kategoriler</option>
-            {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            {categories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
       )}
@@ -187,7 +196,7 @@ export default function ExpensePanel({ session, showToast }) {
 
       {form && (
         <ExpenseForm
-          mode={form.mode} type={form.type} initial={form.data} staff={staff}
+          mode={form.mode} type={form.type} initial={form.data} staff={staff} categories={categories}
           onClose={() => setForm(null)}
           onSaved={(rec, isEdit) => {
             mutateExpenses(isEdit ? expenses.map(e => e.id === rec.id ? rec : e) : [rec, ...expenses], { revalidate: false });
@@ -270,7 +279,8 @@ function GeneralList({ items, onEdit, onDelete }) {
 }
 
 // ── Ekleme/düzenleme formu ───────────────────────────────────────────────────
-function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }) {
+function ExpenseForm({ mode, type, initial, staff, categories, onClose, onSaved, showToast }) {
+  const cats = (Array.isArray(categories) && categories.length) ? categories : EXPENSE_CATEGORIES;
   const isEdit = mode === 'edit';
   // ortak
   const [date, setDate] = useState(initial?.date || todayISO());
@@ -281,7 +291,7 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
   const [salary, setSalary] = useState(initial?.salary != null ? String(initial.salary) : '');
   const [extras, setExtras] = useState(initial?.extras?.length ? initial.extras.map(x => ({ ...x })) : []);
   // general
-  const [category, setCategory] = useState(initial?.category || EXPENSE_CATEGORIES[0]);
+  const [category, setCategory] = useState(initial?.category || cats[0]);
   const [amount, setAmount] = useState(initial?.amount != null && type === 'general' ? String(initial.amount) : '');
   const [busy, setBusy] = useState(false);
 
@@ -408,7 +418,7 @@ function ExpenseForm({ mode, type, initial, staff, onClose, onSaved, showToast }
                 <label className={labelCls}>Kategori</label>
                 <select value={category} onChange={e => setCategory(e.target.value)}
                   className="input">
-                  {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {cats.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
