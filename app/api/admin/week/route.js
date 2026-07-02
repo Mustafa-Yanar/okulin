@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, canManage } from '@/lib/auth';
 import {
   getWeekKey, getMondayOfWeek, initWeekForTeacher,
   getAllTeachers, getCurrentWeek, setCurrentWeek,
@@ -38,7 +38,7 @@ export async function GET() {
 
 export async function POST(req) {
   const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
+  if (!session || !(await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

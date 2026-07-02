@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, canManage } from '@/lib/auth';
 import { DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES, DEFAULT_ETUT_SURESI, DEFAULT_MOLA_SURESI } from '@/lib/constants';
 import { parseBody, z } from '@/lib/validate';
 import { isSqlEnabled } from '@/lib/usesql';
@@ -58,7 +58,7 @@ export async function GET() {
 
 export async function POST(req) {
   const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
+  if (!session || !(await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

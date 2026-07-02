@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
-import { getSession } from '@/lib/auth';
+import { getSession, canManage } from '@/lib/auth';
 import { slotsForDay, ALL_DAYS, MEZUN_ONLY_LESSON_SLOTS, STUDENT_GROUPS } from '@/lib/constants';
 import { getWeekKey, slotKey, isEditableWeek, initWeekForTeacher, slotStartTime, getSlotTimes, getProgramTemplate, setProgramTemplate, deleteProgramTemplate } from '@/lib/slots';
 import { parseBody, z, zId } from '@/lib/validate';
@@ -134,7 +134,7 @@ export async function GET(req) {
 // POST /api/program
 export async function POST(req) {
   const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
+  if (!session || !(await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
@@ -412,7 +412,7 @@ export async function POST(req) {
 // DELETE /api/program — bir öğretmenin şablon programını tamamen siler
 export async function DELETE(req) {
   const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
+  if (!session || !(await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

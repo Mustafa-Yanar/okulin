@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
-import { getSession, isManager } from '@/lib/auth';
+import { getSession, isManager, canManage } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
@@ -330,7 +330,7 @@ export async function POST(req) {
 
   // ── Oluştur (müdür/rehber) ──
   if (data.action === 'create') {
-    if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+    if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     // Seçimli sorularda en az 2 seçenek şartı
     for (const q of data.questions) {
       if ((q.type === 'single' || q.type === 'multi') && (!q.options || q.options.length < 2)) {
@@ -413,7 +413,7 @@ export async function POST(req) {
 
   // ── Aç/kapat (müdür/rehber) ──
   if (data.action === 'close') {
-    if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+    if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     if (isSqlEnabled()) {
       const f = await tdb().form.findFirst({ where: { legacyId: data.id } });
       if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
@@ -432,7 +432,7 @@ export async function POST(req) {
 // ───────────────────────────────────────── DELETE ─────────────────────────────────────────
 export async function DELETE(req) {
   const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });

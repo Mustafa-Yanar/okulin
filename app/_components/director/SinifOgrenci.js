@@ -23,7 +23,7 @@ export default function SinifOgrenci({
   students = [], allSlots, weekKey,
   onCancelBooking, onEditStudent, onDeleteStudent, onHistory,
   pendingGuidance = {}, onGuidanceReviewed, onSelectChange,
-  onAddStudent, onAddCounselor, isCounselor = false,
+  onAddStudent, onAddCounselor, isCounselor = false, readOnly = false,
   onClassesChanged, showToast, sektor = 'dershane', classes: classesProp = [],
 }) {
   const confirm = useConfirm();
@@ -113,6 +113,7 @@ export default function SinifOgrenci({
             className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5">
             <ChevronLeft size={16} /> Geri
           </button>
+          {!readOnly && (
           <div className="flex gap-2 shrink-0">
             <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5" onClick={() => onEditStudent?.(selected)}>
               <Edit3 size={14} /> Düzenle
@@ -122,6 +123,7 @@ export default function SinifOgrenci({
               <Trash2 size={14} /> Sil
             </button>
           </div>
+          )}
         </div>
         <div className="card overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
@@ -155,14 +157,18 @@ export default function SinifOgrenci({
             onClick={() => setView(view === 'catalog' ? 'list' : 'catalog')}>
             <BookOpen size={14} /> Ders Kataloğu
           </button>
+          {!readOnly && (
           <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm" onClick={() => onAddStudent?.()}>
             <Plus size={14} /> Öğrenci Ekle
           </button>
+          )}
+          {!readOnly && (
           <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5 border" style={{ borderColor: 'var(--border-subtle)' }}
             onClick={() => setEditClass({})}>
             <Plus size={14} /> Yeni Şube
           </button>
-          {!isCounselor && (
+          )}
+          {!isCounselor && !readOnly && (
             <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5 border" style={{ borderColor: 'var(--border-subtle)' }}
               onClick={() => onAddCounselor?.()}>
               <Plus size={14} /> Rehberlik Öğretmeni
@@ -221,6 +227,7 @@ export default function SinifOgrenci({
                         onDelete={() => handleDeleteClass(c)}
                         onSelectStudent={setExpandedId}
                         pendingGuidance={pendingGuidance}
+                        readOnly={readOnly}
                         busy={busy} />
                     ))}
                   </div>
@@ -249,7 +256,7 @@ export default function SinifOgrenci({
 }
 
 // ─── Şube satırı (akordeon: başlık + 3 buton + açılınca öğrenciler) ───────────────────
-function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, onDelete, onSelectStudent, pendingGuidance, busy }) {
+function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, onDelete, onSelectStudent, pendingGuidance, readOnly = false, busy }) {
   const courseLabel = (key) => courses.find((x) => x.key === key)?.ad || key;
   const dersler = c.dersler || [];
   const meta = [c.duzey && `${c.duzey}. sınıf`, c.dal && DAL_LABEL[c.dal]].filter(Boolean).join(' · ');
@@ -265,11 +272,13 @@ function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, 
             {meta && <p className="text-caption">{meta}</p>}
           </div>
         </button>
+        {!readOnly && (
         <div className="flex gap-1 shrink-0">
           <button className="btn-icon" onClick={onEdit} aria-label="Şubeyi düzenle" title="Düzenle" disabled={busy}><Edit3 size={14} /></button>
           <button className="btn-icon" onClick={onSchedule} aria-label="Ders programı" title="Ders Programı"><Calendar size={14} /></button>
           <button className="btn-icon btn-icon-danger" onClick={onDelete} aria-label="Şubeyi sil" title="Sil" disabled={busy}><Trash2 size={14} /></button>
         </div>
+        )}
       </div>
       <div className="px-3.5 pb-2.5 flex flex-wrap gap-1">
         {dersler.length === 0 ? (

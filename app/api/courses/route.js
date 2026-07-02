@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, isManager } from '@/lib/auth';
+import { getSession, canManage } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
 import { getCourses, createCourse, updateCourse } from '@/lib/courses';
 
@@ -20,7 +20,7 @@ const CreateCourseSchema = z.object({
 // POST /api/courses — kuruma yeni ders ekle (müdür/rehber). core:false → özel kural taşımaz.
 export async function POST(req) {
   const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   const parsed = await parseBody(req, CreateCourseSchema);
   if (!parsed.ok) return parsed.response;
@@ -38,7 +38,7 @@ const UpdateCourseSchema = z.object({
 // PATCH /api/courses — ders adını değiştir / pasifleştir-aktifleştir. key SABİT kalır.
 export async function PATCH(req) {
   const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   const parsed = await parseBody(req, UpdateCourseSchema);
   if (!parsed.ok) return parsed.response;
@@ -52,7 +52,7 @@ export async function PATCH(req) {
 // DELETE /api/courses — dersi pasifleştir (soft delete; geçmiş/program bozulmaz).
 export async function DELETE(req) {
   const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   const parsed = await parseBody(req, z.object({ key: z.string().min(1).max(80) }));
   if (!parsed.ok) return parsed.response;

@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getSession, canManage } from '@/lib/auth';
 
 export async function POST(req) {
   const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
+  if (!session || !(await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

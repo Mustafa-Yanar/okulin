@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, isManager } from '@/lib/auth';
+import { getSession, canManage } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
 import { getAllTeachers, getAllStudents, slotStartTime, getProgramTemplate, setProgramTemplate } from '@/lib/slots';
 import {
@@ -61,7 +61,8 @@ export async function POST(req) {
   if (!parsed.ok) return parsed.response;
   const { teacherId, etutId, branch, weekKey: wk, studentId } = parsed.data;
   const weekKey = wk || getWeekKey();
-  const manager = isManager(session);
+  // Salt-okunur rehber yönetici sayılmaz → başkası adına etüt yazamaz (student/teacher muaf).
+  const manager = await canManage(session);
 
   // Hedef öğrenci: öğrenci kendini, müdür/öğretmen başkasını yazabilir
   let targetStudentId;
@@ -195,7 +196,8 @@ export async function DELETE(req) {
   if (session.role === 'teacher' && teacherId !== session.id) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
-  if (!isManager(session) && session.role !== 'student' && session.role !== 'teacher') {
+  // Salt-okunur rehber iptal edemez (canManage false döner); müdür + öğrenci/öğretmen muaf.
+  if (!(await canManage(session)) && session.role !== 'student' && session.role !== 'teacher') {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

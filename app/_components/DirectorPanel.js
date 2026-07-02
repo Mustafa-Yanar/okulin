@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, CalendarRange, CalendarDays, LayoutGrid, List
+  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, CalendarRange, CalendarDays, LayoutGrid, List, Eye
 } from 'lucide-react';
 import { useSlotTimes } from './SlotTimesContext';
 import ProgramOlusturucu from './program/ProgramOlusturucu';
@@ -34,8 +34,11 @@ export { DirectorSettingsModal, DirectorSettingsInline } from './director/Settin
 import { CounselorSection } from './director/Settings';
 
 // ─── MAIN DIRECTOR PANEL ────────────────────────────────────────────────────────
-export default function DirectorPanel({ session, showToast, externalTab, onExternalTabChange, branding }) {
+export default function DirectorPanel({ session, showToast, externalTab, onExternalTabChange, branding, readOnly = false }) {
   // Rehber (counselor) = müdür paneli EKSİ muhasebe. Sekme listesi role göre.
+  // readOnly: salt-okunur rehber (kurum config.permissions.counselor.readOnly). true ise
+  // yönetimsel write butonları gizlenir. İSTİSNA açık kalır: rehberlik notu, deneme, davranış,
+  // ödev, duyuru, takvim, hedef, konu — bunların butonları readOnly'de DE görünür.
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
     ? ['teachers', 'students', 'rehberlik', 'veliler', 'onkayit', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'ders-programi']
@@ -186,6 +189,13 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
   return (
     <div>
+      {readOnly && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm"
+          style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
+          <Eye size={16} className="shrink-0" />
+          <span>Salt-okunur mod — yönetici size yalnız görüntüleme yetkisi verdi. Kayıtları görebilir, değiştiremezsiniz.</span>
+        </div>
+      )}
       {/* DERS PROGRAMI TAB — otomatik program oluşturucu (sidebar > Sistem) */}
       {tab === 'ders-programi' && (
         <ProgramOlusturucu api={api} showToast={showToast}
@@ -207,6 +217,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                   className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5">
                   <ChevronLeft size={16} /> Geri
                 </button>
+                {!readOnly && (
                 <div className="flex gap-2 shrink-0">
                   <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5" onClick={() => { setEditTeacher(t); setShowTeacherForm(true); }}>
                     <Edit3 size={14} /> Düzenle
@@ -218,6 +229,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                     <Trash2 size={14} /> Sil
                   </button>
                 </div>
+                )}
               </div>
               <div className="card overflow-hidden">
                 {/* Başlık kartı */}
@@ -355,9 +367,11 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                   <LayoutGrid size={15} />
                 </button>
               </div>
+              {!readOnly && (
               <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm shrink-0" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
                 <Plus size={14} /> Öğretmen Ekle
               </button>
+              )}
             </SectionHeader>
             {teachers.length === 0 ? (
               <EmptyState card icon={Users} title="Henüz öğretmen eklenmemiş" description="Yeni öğretmen ekleyerek başlayın." />
@@ -421,6 +435,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           weekKey={weekKey}
           allSlots={allSlots}
           isCounselor={isCounselor}
+          readOnly={readOnly}
           onAddStudent={() => { setEditStudent(null); setShowStudentForm(true); }}
           onAddCounselor={() => setShowCounselorForm(true)}
           onEditStudent={s => { setEditStudent(s); setShowStudentForm(true); }}
@@ -472,7 +487,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
         <DirectorMuhasebeTab session={session} showToast={showToast} />
       )}
       {tab === 'kutuphane' && (
-        <ResourceLibrary canManage userRole="director" userId="director"
+        <ResourceLibrary canManage={!readOnly} userRole="director" userId="director"
           branches={allBranches()} showToast={showToast} />
       )}
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
-import { getSession, isManager } from '@/lib/auth';
+import { getSession, isManager, canManage } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
 import {
   getClasses, getClass, defaultCoursesFor, seedClassesFromConstants,
@@ -54,7 +54,7 @@ const CreateClassSchema = z.object({
 // POST /api/classes — yeni şube oluştur (müdür/rehber).
 export async function POST(req) {
   const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   const parsed = await parseBody(req, CreateClassSchema);
   if (!parsed.ok) return parsed.response;
@@ -100,7 +100,7 @@ const UpdateClassSchema = z.object({
 // PATCH /api/classes — şube düzenle (ad / dal / ders ataması). id SABİT, asla değişmez.
 export async function PATCH(req) {
   const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   const parsed = await parseBody(req, UpdateClassSchema);
   if (!parsed.ok) return parsed.response;
@@ -132,7 +132,7 @@ export async function PATCH(req) {
 // DELETE /api/classes — şube sil. Öğrenci atanmışsa engelle (önce taşınmalı).
 export async function DELETE(req) {
   const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   const parsed = await parseBody(req, z.object({ id: z.string().min(1).max(60) }));
   if (!parsed.ok) return parsed.response;

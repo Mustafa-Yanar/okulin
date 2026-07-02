@@ -90,12 +90,20 @@ const TAB_TO_MODULE = {
   available: 'etut', myBookings: 'etut', rezervasyon: 'etut',
 };
 
+// Salt-okunur rehberde gizlenen ÜRETİM sekmeleri (bunların salt-okunur hali anlamsız).
+// Öğrenci/öğretmen listeleri gizlenmez — orada yalnız butonlar kapanır (DirectorPanel readOnly).
+const READONLY_HIDDEN_TABS = ['ders-programi', 'onkayit'];
+
 // modules: { finance:true, ... } | null (henüz yüklenmedi → hepsi açık varsay).
-// Kapalı modüle ait sekmeler gizlenir.
-function buildItems(role, modules) {
+// Kapalı modüle ait sekmeler gizlenir. counselorReadOnly: salt-okunur rehberde üretim
+// sekmelerini (program oluştur, ön kayıt) ayrıca gizle.
+function buildItems(role, modules, counselorReadOnly) {
   const items = ITEMS_BY_ROLE[role] || [];
-  if (!modules) return items; // yüklenmeden hepsini göster (titreme önler)
-  return items.filter((it) => {
+  const afterReadOnly = counselorReadOnly
+    ? items.filter((it) => !READONLY_HIDDEN_TABS.includes(it.key))
+    : items;
+  if (!modules) return afterReadOnly; // yüklenmeden hepsini göster (titreme önler)
+  return afterReadOnly.filter((it) => {
     const mod = TAB_TO_MODULE[it.key];
     return !mod || modules[mod] !== false;
   });
@@ -129,6 +137,7 @@ export default function Sidebar({
   session,
   branding,
   modules,
+  counselorReadOnly,
   activeTab,
   onTabChange,
   collapsed,
@@ -138,7 +147,7 @@ export default function Sidebar({
   showToast,
   onSettings,
 }) {
-  const items = buildItems(session?.role, modules);
+  const items = buildItems(session?.role, modules, counselorReadOnly);
 
   // Grup akordeon durumu (yalnız gruplu roller: müdür/rehber). Varsayılan: hepsi açık.
   // false = kapalı; absent/true = açık. localStorage'da kalıcı, oturumlar arası korunur.

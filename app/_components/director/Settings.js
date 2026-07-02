@@ -333,6 +333,14 @@ function ConfigurationSection({ showToast }) {
     saveKey('etut', next, prev);
   }
 
+  // Rol yetki bayrağını aç/kapa (permissions.<role>.<flag>). Şimdilik counselor.readOnly.
+  function togglePermission(role, flag) {
+    const prev = config.permissions;
+    const next = { ...prev, [role]: { ...(prev?.[role] || {}), [flag]: !prev?.[role]?.[flag] } };
+    setConfig(c => ({ ...c, permissions: next }));
+    saveKey('permissions', next, prev);
+  }
+
   function addRoom(e) {
     e.preventDefault();
     const name = room.name.trim();
@@ -522,6 +530,26 @@ function ConfigurationSection({ showToast }) {
                 <p className="text-caption mt-1">Öğrenci haftada en fazla bu kadar etüt alır. 0 = sınırsız.</p>
               </div>
             </div>
+          </div>
+
+          {/* ── Rol / Yetki ── */}
+          <div>
+            <h5 className="text-label mb-2 flex items-center gap-1.5" style={{ fontSize: 11 }}>
+              <Compass size={12} /> Rol / Yetki
+            </h5>
+            <label className="flex items-center gap-2.5 rounded-lg px-3 py-2 cursor-pointer border transition-colors"
+              style={{
+                background: config.permissions?.counselor?.readOnly ? 'color-mix(in srgb, var(--brand,#6366f1) 8%, transparent)' : 'var(--surface-2, #f9fafb)',
+                borderColor: config.permissions?.counselor?.readOnly ? 'color-mix(in srgb, var(--brand,#6366f1) 30%, transparent)' : 'transparent',
+                opacity: savingKey === 'permissions' ? 0.6 : 1,
+              }}>
+              <input type="checkbox" checked={!!config.permissions?.counselor?.readOnly} disabled={savingKey === 'permissions'}
+                onChange={() => togglePermission('counselor', 'readOnly')} className="accent-indigo-600 shrink-0" />
+              <span className="min-w-0">
+                <span className="block text-sm font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Rehber salt-okunur</span>
+                <span className="block text-caption">Açıkken rehber öğrenci/öğretmen/program/sınıf yönetimi yapamaz — yalnız görüntüler. Rehberlik notu, deneme, davranış, ödev, duyuru, takvim açık kalır.</span>
+              </span>
+            </label>
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
-import { getSession, isManager } from '@/lib/auth';
+import { getSession, canManage } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
 import { slotStartTime, getProgramTemplate, setProgramTemplate } from '@/lib/slots';
 import { getWeekKey } from '@/lib/constants';
@@ -84,7 +84,7 @@ export async function GET(req) {
 // POST /api/etut-sablon → şablon ekle (id yoksa) veya güncelle (id varsa)
 export async function POST(req) {
   const session = await getSession();
-  if (!session || !isManager(session)) {
+  if (!session || !(await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
@@ -136,7 +136,7 @@ export async function POST(req) {
 // PUT /api/etut-sablon → aktif/pasif değiştir
 export async function PUT(req) {
   const session = await getSession();
-  if (!session || !isManager(session)) {
+  if (!session || !(await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
@@ -190,7 +190,7 @@ export async function PUT(req) {
 // PATCH /api/etut-sablon → şablona öğrenci ata / kaldır
 export async function PATCH(req) {
   const session = await getSession();
-  if (!session || !isManager(session)) {
+  if (!session || !(await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
@@ -241,7 +241,7 @@ export async function PATCH(req) {
 // DELETE /api/etut-sablon → şablon sil
 export async function DELETE(req) {
   const session = await getSession();
-  if (!session || !isManager(session)) {
+  if (!session || !(await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

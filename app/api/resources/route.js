@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { del } from '@vercel/blob';
 import { tenantRedis } from '@/lib/tenant';
-import { getSession } from '@/lib/auth';
+import { getSession, canManage } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
 import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
@@ -57,10 +57,11 @@ export async function GET() {
   return NextResponse.json({ resources });
 }
 
-// POST /api/resources — kaynak ekle (director veya teacher)
+// POST /api/resources — kaynak ekle (director/teacher; rehber yalnız salt-okunur DEĞİLse)
 export async function POST(req) {
   const session = await getSession();
-  if (!session || ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'teacher')) {
+  // teacher her zaman ekler; director/rehber canManage'e tabi (salt-okunur rehber giremez).
+  if (!session || !(session.role === 'teacher' || await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
@@ -95,7 +96,8 @@ export async function POST(req) {
 // DELETE /api/resources?id=xxx — kaynak sil (director hepsini, teacher kendininkini)
 export async function DELETE(req) {
   const session = await getSession();
-  if (!session || ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'teacher')) {
+  // teacher her zaman (kendininkini) siler; director/rehber canManage'e tabi.
+  if (!session || !(session.role === 'teacher' || await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 

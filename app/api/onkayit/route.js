@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
-import { getSession, isManager } from '@/lib/auth';
+import { getSession, isManager, canManage } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
 import { isSqlEnabled } from '@/lib/usesql';
@@ -89,7 +89,7 @@ export async function GET() {
 export async function POST(req) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
@@ -164,7 +164,7 @@ export async function POST(req) {
 // ───────────────────────────────────────── DELETE ─────────────────────────────────────────
 export async function DELETE(req) {
   const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });

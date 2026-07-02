@@ -83,6 +83,15 @@ export async function POST(req) {
   const { teacherId: legacyTeacherId, day, slotId, studentId: reqStudentId, weekKey: wk, forceOpen, branch } = parsed.data;
   const weekKey = wk || getWeekKey();
 
+  // Salt-okunur rehber (kurum konfigürasyonu) etüt dağıtımı yapamaz. Öğrenci/öğretmen/
+  // müdür akışı etkilenmez — yalnız config.permissions.counselor.readOnly açıkken rehber.
+  if (session.role === 'counselor') {
+    const perms = await getOrgConfig('permissions');
+    if (perms?.counselor?.readOnly) {
+      return NextResponse.json({ error: 'Salt-okunur rehber etüt rezervasyonu yapamaz' }, { status: 403 });
+    }
+  }
+
   // Öğrenci self-rezervasyon kuralları (kurum konfigürasyonu). Yalnız öğrencinin
   // KENDİ rezervasyonuna uygulanır; müdür/rehber/öğretmen dağıtımı muaf.
   if (session.role === 'student') {
@@ -379,6 +388,14 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { teacherId: legacyTeacherId, day, slotId, weekKey: wk } = parsed.data;
   const weekKey = wk || getWeekKey();
+
+  // Salt-okunur rehber etüt iptal edemez (POST ile simetrik).
+  if (session.role === 'counselor') {
+    const perms = await getOrgConfig('permissions');
+    if (perms?.counselor?.readOnly) {
+      return NextResponse.json({ error: 'Salt-okunur rehber etüt iptali yapamaz' }, { status: 403 });
+    }
+  }
 
   // Öğrenci iptal kilidi (kurum konfigürasyonu): etüt başlamasına cancelLockHours
   // saatten az kala öğrenci kendi rezervasyonunu iptal edemez. Müdür/rehber/öğretmen MUAF.

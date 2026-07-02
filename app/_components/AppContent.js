@@ -37,6 +37,7 @@ export default function AppContent() {
   const [branding, setBranding] = useState(BRANDING_DEFAULTS);
   const [modules, setModules] = useState(null); // kurum modül aç/kapa; null=henüz yüklenmedi (hepsi açık varsay)
   const [etutCfg, setEtutCfg] = useState(null);  // etüt kuralları (self-rezervasyon vb.)
+  const [permissions, setPermissions] = useState(null); // rol yetki kısıtları (rehber salt-okunur vb.)
   const [toast, setToast] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   // Sidebar state
@@ -65,6 +66,7 @@ export default function AppContent() {
         setDirectorExists(status.directorExists);
         if (status.modules) setModules(status.modules);
         if (status.etut) setEtutCfg(status.etut);
+        if (status.permissions) setPermissions(status.permissions);
         if (status.branding) {
           setBranding(status.branding);
           if (status.branding.themeColor) {
@@ -170,6 +172,8 @@ export default function AppContent() {
   const RoleIcon = { director: Shield, counselor: Compass, accountant: Wallet, teacher: BookMarked, student: GraduationCap, parent: Users };
   const RIcon = RoleIcon[session.role] || User;
   const isDirectorRole = session.role === 'director' || session.role === 'counselor';
+  // Salt-okunur rehber: yönetim butonlarını gizle (API ayrıca 403 döner — bu yalnız UI temizliği).
+  const counselorReadOnly = session.role === 'counselor' && permissions?.counselor?.readOnly === true;
   const canChangePassword = ['teacher', 'student', 'parent', 'counselor', 'accountant'].includes(session.role);
 
   return (
@@ -179,6 +183,7 @@ export default function AppContent() {
         session={session}
         branding={branding}
         modules={modules}
+        counselorReadOnly={counselorReadOnly}
         activeTab={activeTab}
         onTabChange={handleTabChange}
         collapsed={sidebarCollapsed}
@@ -248,7 +253,7 @@ export default function AppContent() {
                   }}
                 />
               ) : (
-                <DirectorPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} branding={branding} />
+                <DirectorPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} branding={branding} readOnly={counselorReadOnly} />
               )}
             </>
           )}

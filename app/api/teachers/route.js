@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { v4 as uuid } from 'crypto';
 import redis from '@/lib/db';
-import { getSession, initialPassword } from '@/lib/auth';
+import { getSession, initialPassword, canManage } from '@/lib/auth';
 import { getWeekKey, initWeekForTeacher } from '@/lib/slots';
 import { normalizeTeacher } from '@/lib/teacherMigrate';
 import { normalizeTurkishMobile } from '@/lib/phone';
@@ -100,7 +100,7 @@ export async function GET() {
 
 export async function POST(req) {
   const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
+  if (!session || !(await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
@@ -163,7 +163,7 @@ export async function POST(req) {
 
 export async function PUT(req) {
   const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
+  if (!session || !(await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
@@ -288,7 +288,7 @@ export async function PUT(req) {
 
 export async function DELETE(req) {
   const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
+  if (!session || !(await canManage(session))) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
