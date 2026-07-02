@@ -31,7 +31,7 @@ import SlotTimeEditor from './director/SlotTimeEditor';
 import { useSlotTimes as useSlotTimesCtx } from './SlotTimesContext';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
 export { DirectorSettingsModal, DirectorSettingsInline } from './director/Settings';
-import { CounselorSection } from './director/Settings';
+import { CounselorSection, AssistantDirectorSection } from './director/Settings';
 
 // ─── MAIN DIRECTOR PANEL ────────────────────────────────────────────────────────
 export default function DirectorPanel({ session, showToast, externalTab, onExternalTabChange, branding, readOnly = false }) {
@@ -74,6 +74,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [showTeacherForm, setShowTeacherForm] = useState(false);
   const [showStudentForm, setShowStudentForm] = useState(false);
   const [showCounselorForm, setShowCounselorForm] = useState(false);
+  const [showAssistantForm, setShowAssistantForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editTeacher, setEditTeacher] = useState(null);
   const [editStudent, setEditStudent] = useState(null);
@@ -438,6 +439,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           readOnly={readOnly}
           onAddStudent={() => { setEditStudent(null); setShowStudentForm(true); }}
           onAddCounselor={() => setShowCounselorForm(true)}
+          onAddAssistant={() => setShowAssistantForm(true)}
           onEditStudent={s => { setEditStudent(s); setShowStudentForm(true); }}
           onDeleteStudent={async s => {
             if (!(await confirm(`${s.name} silinsin mi?`))) return;
@@ -560,6 +562,11 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       {showCounselorForm && !isCounselor && (
         <Modal title="Rehberlik Öğretmeni Ekle" onClose={() => setShowCounselorForm(false)}>
           <CounselorSection showToast={showToast} />
+        </Modal>
+      )}
+      {showAssistantForm && !isCounselor && (
+        <Modal title="Müdür Yardımcısı Ekle" onClose={() => setShowAssistantForm(false)}>
+          <AssistantDirectorSection showToast={showToast} />
         </Modal>
       )}
       {showStudentForm && (

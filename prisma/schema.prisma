@@ -108,6 +108,22 @@ model Counselor {
   @@unique([orgSlug, branch, legacyId])
 }
 
+// Müdür yardımcısı — müdürle BİREBİR aynı yetkiye sahip (login sonrası oturum
+// role='director' + asst:true bayrağı taşır). Müdür oluşturur/siler. Çoklu olabilir.
+// (Counselor/Accountant deseninin birebir eşi.)
+model AssistantDirector {
+  id                 String  @id @default(cuid())
+  orgSlug            String
+  branch             String  @default("main")
+  legacyId           String
+  name               String
+  username           String?
+  passwordHash       String
+  phone              String?
+  mustChangePassword Boolean @default(true)
+  @@unique([orgSlug, branch, legacyId])
+}
+
 model Accountant {
   id                 String  @id @default(cuid())
   orgSlug            String

@@ -2,7 +2,7 @@
 
 // Müdür ayarlar modalı (isim + özelleştirme + ödeme) ve içindeki bölümler.
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon, SlidersHorizontal, DoorOpen, Tag, CalendarClock } from 'lucide-react';
+import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon, SlidersHorizontal, DoorOpen, Tag, CalendarClock, ShieldCheck } from 'lucide-react';
 import { api, Modal } from './shared';
 import { brandGradient } from '@/lib/branding';
 import { useConfirm } from '../ConfirmProvider';
@@ -159,6 +159,94 @@ export function CounselorSection({ showToast }) {
               <span className="flex-1 text-sm font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</span>
               <button onClick={() => resetPw(c)} title="Şifre sıfırla" className="btn-icon btn-icon-warning"><KeyRound size={14} /></button>
               <button onClick={() => remove(c)} title="Sil" className="btn-icon btn-icon-danger"><Trash2 size={14} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MÜDÜR YARDIMCISI ─────────────────────────────────────────────────────────
+// Müdür, müdür yardımcısı hesapları oluşturur/siler. Müdür yardımcısı = müdürle
+// BİREBİR aynı yetki (oturumda role='director'). CounselorSection deseninin eşi.
+export function AssistantDirectorSection({ showToast }) {
+  const confirm = useConfirm();
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ name: '', password: '', phone: '' });
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try { const d = await api('/api/assistant-directors'); setList(Array.isArray(d) ? d : []); }
+    catch { /* sessiz */ } finally { setLoading(false); }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function add(e) {
+    e.preventDefault();
+    if (!form.name.trim()) { showToast('İsim gerekli', 'error'); return; }
+    setSaving(true);
+    try {
+      await api('/api/assistant-directors', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), password: form.password, phone: form.phone }) });
+      showToast('Müdür yardımcısı eklendi'); setForm({ name: '', password: '', phone: '' }); load();
+    } catch (e) { showToast(e.message, 'error'); } finally { setSaving(false); }
+  }
+  async function remove(a) {
+    if (!(await confirm(`"${a.name}" müdür yardımcısı silinsin mi?`))) return;
+    try { await api('/api/assistant-directors', { method: 'DELETE', body: JSON.stringify({ id: a.id }) }); showToast('Müdür yardımcısı silindi'); load(); }
+    catch (e) { showToast(e.message, 'error'); }
+  }
+  async function resetPw(a) {
+    const pw = prompt(`${a.name} için yeni şifre (en az 6 karakter):`);
+    if (!pw) return;
+    try {
+      await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'reset_password', targetRole: 'assistant_director', targetId: a.id, newPassword: pw }) });
+      showToast('Şifre sıfırlandı — müdür yardımcısı ilk girişte değiştirecek');
+    } catch (e) { showToast(e.message, 'error'); }
+  }
+
+  return (
+    <div>
+      <h4 className="text-label mb-1 flex items-center gap-1.5">
+        <ShieldCheck size={13} /> Müdür Yardımcısı Ekle
+      </h4>
+      <p className="text-caption mb-3">Müdür yardımcısı, <b>müdürle birebir aynı</b> yetkilere sahiptir (tüm yönetim, finans dahil).</p>
+
+      <form onSubmit={add} className="flex gap-2 items-end mb-3 flex-wrap">
+        <div className="flex-1 min-w-[120px]">
+          <label className="text-label block mb-1">Ad Soyad</label>
+          <input className="input" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Örn: Mehmet Demir" />
+        </div>
+        <div className="flex-1 min-w-[120px]">
+          <label className="text-label block mb-1">Şifre <span className="font-400" style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(opsiyonel)</span></label>
+          <input className="input" type="text" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Boş = telefon (yoksa 12345678)" autoComplete="new-password" />
+        </div>
+        <div className="flex-1 min-w-[120px]">
+          <label className="text-label block mb-1">Telefon</label>
+          <input className="input" type="tel" inputMode="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="05XX XXX XX XX" />
+        </div>
+        <button type="submit" className="btn-primary !px-4 !py-2 text-sm flex items-center gap-1.5" disabled={saving}>
+          <Plus size={13} /> {saving ? 'Ekleniyor…' : 'Ekle'}
+        </button>
+      </form>
+
+      {loading ? (
+        <p className="text-caption">Yükleniyor…</p>
+      ) : list.length === 0 ? (
+        <p className="text-caption">Henüz müdür yardımcısı eklenmemiş.</p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {list.map(a => (
+            <div key={a.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+              <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-700 shrink-0"
+                style={{ background: 'linear-gradient(135deg,#0ea5e9,#0369a1)', fontWeight: 700 }}>
+                {a.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+              </span>
+              <span className="flex-1 text-sm font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{a.name}</span>
+              <button onClick={() => resetPw(a)} title="Şifre sıfırla" className="btn-icon btn-icon-warning"><KeyRound size={14} /></button>
+              <button onClick={() => remove(a)} title="Sil" className="btn-icon btn-icon-danger"><Trash2 size={14} /></button>
             </div>
           ))}
         </div>

@@ -171,10 +171,14 @@ export default function AppContent() {
   const roleColor = { director: '#6366f1', counselor: '#8b5cf6', accountant: '#0891b2', teacher: '#22c55e', student: '#f59e0b', parent: '#db2777' };
   const RoleIcon = { director: Shield, counselor: Compass, accountant: Wallet, teacher: BookMarked, student: GraduationCap, parent: Users };
   const RIcon = RoleIcon[session.role] || User;
+  // Müdür yardımcısı: oturumda role='director' + asst:true → yetki müdürle aynı, yalnız etiket farklı.
+  const isAssistant = session.role === 'director' && session.asst === true;
+  const displayRoleLabel = isAssistant ? 'Müdür Yardımcısı' : roleLabel[session.role];
   const isDirectorRole = session.role === 'director' || session.role === 'counselor';
   // Salt-okunur rehber: yönetim butonlarını gizle (API ayrıca 403 döner — bu yalnız UI temizliği).
   const counselorReadOnly = session.role === 'counselor' && permissions?.counselor?.readOnly === true;
-  const canChangePassword = ['teacher', 'student', 'parent', 'counselor', 'accountant'].includes(session.role);
+  // Müdür yardımcısı da kendi şifresini değiştirebilmeli (ilk girişte zorunlu değişim).
+  const canChangePassword = ['teacher', 'student', 'parent', 'counselor', 'accountant'].includes(session.role) || isAssistant;
 
   return (
     <ClassesProvider>
@@ -224,7 +228,7 @@ export default function AppContent() {
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-muted)' }}>
               <RIcon size={13} style={{ color: roleColor[session.role] }} />
               <span className="text-sm hidden sm:inline" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{session.name}</span>
-              <span className="text-xs" style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{roleLabel[session.role]}</span>
+              <span className="text-xs" style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{displayRoleLabel}</span>
             </div>
             {canChangePassword && (
               <button onClick={() => setShowChangePassword(true)} title="Şifremi Değiştir" className="btn-ghost !px-2.5 !py-2">

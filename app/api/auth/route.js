@@ -21,7 +21,7 @@ function sqlRecToLegacy(role, r) {
   if (role === 'teacher') return { ...base, id: r.legacyId, branches: r.branches || [], allowedGroups: r.allowedGroups || [] };
   if (role === 'student') return { ...base, id: r.legacyId, cls: r.class?.legacyId || '', group: r.group };
   if (role === 'parent') return { ...base, id: r.phone, name: r.name || '', children: r.children || [] };
-  return { ...base, id: r.legacyId }; // accountant | counselor
+  return { ...base, id: r.legacyId }; // accountant | counselor | assistant_director
 }
 
 // Telefon numarasının ortasını maskele: "0532***67"
@@ -37,7 +37,7 @@ const AuthSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('update_director_name'), name: zName }),
   z.object({ action: z.literal('logout') }),
   z.object({ action: z.literal('change_password'), password: zPassword, newPassword: zNewPassword }),
-  z.object({ action: z.literal('reset_password'), targetRole: z.enum(['teacher', 'student', 'accountant', 'counselor']), targetId: zId, newPassword: zNewPassword }),
+  z.object({ action: z.literal('reset_password'), targetRole: z.enum(['teacher', 'student', 'accountant', 'counselor', 'assistant_director']), targetId: zId, newPassword: zNewPassword }),
 ]);
 
 export async function GET() {
@@ -140,6 +140,11 @@ export async function POST(req) {
         const realName = rec.name || '';
         const headerName = realName || (children.length === 1 ? `${children[0].name} (Veli)` : 'Veli');
         payload = { role: 'parent', id: rec.id, name: headerName, parentName: realName, children, mustChangePassword: !!rec.mustChangePassword };
+      } else if (role === 'assistant_director') {
+        // Müdür yardımcısı: oturumda MÜDÜRLE BİREBİR aynı → role='director'. asst:true
+        // yalnız UI etiketi ("Müdür Yardımcısı") + audit ayrımı için. id = kendi legacyId'si
+        // (müdür 'director' sabitinden ayrışır, şifre değişimi kendi kaydını hedefler).
+        payload = { role: 'director', asst: true, id: rec.id, name: rec.name, mustChangePassword: !!rec.mustChangePassword };
       } else { // accountant veya counselor (rehber) — aynı şekil
         payload = { role, id: rec.id, name: rec.name, mustChangePassword: !!rec.mustChangePassword };
       }
@@ -216,6 +221,7 @@ export async function POST(req) {
         return makeLoginResponse(role, rec);
       };
       let r;
+      r = await tryRole('assistant_director', await tdb().assistantDirector.findFirst({ where: { username } })); if (r) return r;
       r = await tryRole('accountant', await tdb().accountant.findFirst({ where: { username } })); if (r) return r;
       r = await tryRole('counselor', await tdb().counselor.findFirst({ where: { username } })); if (r) return r;
       r = await tryRole('teacher', await tdb().teacher.findFirst({ where: { username } })); if (r) return r;
@@ -259,7 +265,7 @@ export async function POST(req) {
       }
       return null;
     }
-    for (const role of ['accountant', 'counselor', 'teacher', 'student']) {
+    for (const role of ['assistant_director', 'accountant', 'counselor', 'teacher', 'student']) {
       const res = await scanRole(role);
       if (res) return res;
     }
@@ -356,6 +362,11 @@ export async function POST(req) {
       return res;
     }
 
+    // Müdür yardımcısı: oturumda role='director' ama asst:true → kendi
+    // assistant_director kaydını hedefle (müdürün 'director' kaydını DEĞİL).
+    if (session.role === 'director' && session.asst) {
+      return updatePasswordFor('assistant_director', { asst: true });
+    }
     if (session.role === 'teacher') {
       return updatePasswordFor('teacher', { branches: session.branches, allowedGroups: session.allowedGroups });
     }
@@ -385,10 +396,13 @@ export async function POST(req) {
     const hash = await bcrypt.hash(newPassword, 10);
 
     if (isSqlEnabled()) {
-      const labels = { teacher: 'Öğretmen', student: 'Öğrenci', accountant: 'Muhasebeci', counselor: 'Rehber' };
-      const rec = await tdb()[targetRole].findFirst({ where: { legacyId: targetId } });
+      const labels = { teacher: 'Öğretmen', student: 'Öğrenci', accountant: 'Muhasebeci', counselor: 'Rehber', assistant_director: 'Müdür yardımcısı' };
+      // targetRole snake_case olabilir; Prisma model adı camelCase.
+      const MODEL = { assistant_director: 'assistantDirector' };
+      const model = MODEL[targetRole] || targetRole;
+      const rec = await tdb()[model].findFirst({ where: { legacyId: targetId } });
       if (!rec) return NextResponse.json({ error: `${labels[targetRole]} bulunamadı` }, { status: 404 });
-      await tdb()[targetRole].update({ where: { id: rec.id }, data: { passwordHash: hash, mustChangePassword: true } });
+      await tdb()[model].update({ where: { id: rec.id }, data: { passwordHash: hash, mustChangePassword: true } });
       await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: targetRole, id: targetId, name: rec.name || targetId }, detail: `${labels[targetRole]} şifresi sıfırlandı: ${rec.name || targetId}` });
       return NextResponse.json({ ok: true });
     }
@@ -423,6 +437,14 @@ export async function POST(req) {
       if (!c) return NextResponse.json({ error: 'Rehber bulunamadı' }, { status: 404 });
       await redis.set(`counselor:${targetId}`, { ...c, passwordHash: hash, mustChangePassword: true });
       await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: 'counselor', id: targetId, name: c.name || targetId }, detail: `Rehber şifresi sıfırlandı: ${c.name || targetId}` });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (targetRole === 'assistant_director') {
+      const a = await redis.get(`assistant_director:${targetId}`);
+      if (!a) return NextResponse.json({ error: 'Müdür yardımcısı bulunamadı' }, { status: 404 });
+      await redis.set(`assistant_director:${targetId}`, { ...a, passwordHash: hash, mustChangePassword: true });
+      await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: 'assistant_director', id: targetId, name: a.name || targetId }, detail: `Müdür yardımcısı şifresi sıfırlandı: ${a.name || targetId}` });
       return NextResponse.json({ ok: true });
     }
 

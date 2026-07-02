@@ -23,7 +23,7 @@ export default function SinifOgrenci({
   students = [], allSlots, weekKey,
   onCancelBooking, onEditStudent, onDeleteStudent, onHistory,
   pendingGuidance = {}, onGuidanceReviewed, onSelectChange,
-  onAddStudent, onAddCounselor, isCounselor = false, readOnly = false,
+  onAddStudent, onAddCounselor, onAddAssistant, isCounselor = false, readOnly = false,
   onClassesChanged, showToast, sektor = 'dershane', classes: classesProp = [],
 }) {
   const confirm = useConfirm();
@@ -172,6 +172,12 @@ export default function SinifOgrenci({
             <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5 border" style={{ borderColor: 'var(--border-subtle)' }}
               onClick={() => onAddCounselor?.()}>
               <Plus size={14} /> Rehberlik Öğretmeni
+            </button>
+          )}
+          {!isCounselor && !readOnly && (
+            <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5 border" style={{ borderColor: 'var(--border-subtle)' }}
+              onClick={() => onAddAssistant?.()}>
+              <Plus size={14} /> Müdür Yardımcısı
             </button>
           )}
         </div>
