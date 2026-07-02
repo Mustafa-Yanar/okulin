@@ -19,26 +19,39 @@ const getBranding = cache(async () => {
   }
 });
 
+// Apex (okulin.com) mı? Apex TANITIM sitesidir, kurulabilir PWA DEĞİL — böylece
+// apex PWA'sından kurum subdomain'ine geçişte Chrome'un zorunlu Custom Tab barı DOĞMAZ.
+// Kullanıcı yalnız kendi subdomain'ini (testkurs.okulin.com) PWA ekler → tek origin, bar yok.
+const getIsApex = cache(() => {
+  try { return isApexHost(headers().get('host')); } catch { return false; }
+});
+
 export async function generateMetadata() {
   const b = await getBranding();
+  const apex = getIsApex();
   // Kuruma özel ikon: logo varsa onu kullan (iOS apple-touch + genel), yoksa varsayılan.
   const icon = b.logoUrl || '';
   return {
     title: b.name,
-    description: 'Etüt takip ve rezervasyon sistemi',
-    manifest: '/api/manifest',
+    description: apex ? 'Eğitim kurumu yönetim platformu' : 'Etüt takip ve rezervasyon sistemi',
+    // Apex'te manifest YOK → "ana ekrana ekle" tam PWA yaratmaz (bkz getIsApex).
+    // Subdomain'lerde kuruma özel manifest verilir (tam PWA deneyimi korunur).
+    ...(apex ? {} : { manifest: '/api/manifest' }),
     icons: {
       icon: icon || '/icon-192.png',
       apple: icon || '/apple-touch-icon.png',
     },
-    appleWebApp: {
-      capable: true,
-      statusBarStyle: 'default',
-      title: b.shortName,
-    },
-    other: {
-      'mobile-web-app-capable': 'yes',
-    },
+    // iOS "web app capable" bayrakları da yalnız subdomain'de — apex tanıtım sitesi kalır.
+    ...(apex ? {} : {
+      appleWebApp: {
+        capable: true,
+        statusBarStyle: 'default',
+        title: b.shortName,
+      },
+      other: {
+        'mobile-web-app-capable': 'yes',
+      },
+    }),
   };
 }
 
@@ -53,6 +66,7 @@ export async function generateViewport() {
 }
 
 export default function RootLayout({ children }) {
+  const apex = getIsApex();
   return (
     <html lang="tr">
       <head>
@@ -60,9 +74,13 @@ export default function RootLayout({ children }) {
         <script dangerouslySetInnerHTML={{
           __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}}catch(e){}})();`
         }} />
-        <script dangerouslySetInnerHTML={{
-          __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js')); }`
-        }} />
+        {/* Service worker YALNIZ subdomain'de — apex tanıtım sitesi PWA olmasın (Custom Tab
+            barını önlemek için). Apex'te SW + manifest olmayınca Chrome "yükle" önermez. */}
+        {!apex && (
+          <script dangerouslySetInnerHTML={{
+            __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js')); }`
+          }} />
+        )}
       </head>
       <body><Providers>{children}</Providers></body>
     </html>
