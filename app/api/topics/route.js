@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession, canReadStudent } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
-// topics:{studentId} -> { [subject]: { [topicIndex]: percent 0-100 } }
-const key = (studentId) => `topics:${studentId}`;
+// topics:{studentId} -> { [subject]: { [topicIndex]: percent 0-100 } } (SQL: Topic.data)
 
 const TopicsPostSchema = z.object({
   studentId: zId.optional(),
@@ -33,13 +30,8 @@ export async function GET(req) {
   }
   if (!studentId) return NextResponse.json({ error: 'studentId gerekli' }, { status: 400 });
 
-  if (isSqlEnabled()) {
-    const row = await tdb().topic.findFirst({ where: { studentId } });
-    return NextResponse.json({ topics: row?.data || {} });
-  }
-
-  const data = (await redis.get(key(studentId))) || {};
-  return NextResponse.json({ topics: data });
+  const row = await tdb().topic.findFirst({ where: { studentId } });
+  return NextResponse.json({ topics: row?.data || {} });
 }
 
 // POST /api/topics
@@ -65,20 +57,11 @@ export async function POST(req) {
   const p = Math.max(0, Math.min(100, parseInt(percent) || 0));
   const idx = String(parseInt(topicIndex));
 
-  if (isSqlEnabled()) {
-    const existing = await tdb().topic.findFirst({ where: { studentId } });
-    const data = existing?.data || {};
-    if (!data[subject]) data[subject] = {};
-    data[subject][idx] = p;
-    if (existing) await tdb().topic.update({ where: { id: existing.id }, data: { data } });
-    else await tdb().topic.create({ data: { studentId, data } });
-    return NextResponse.json({ ok: true });
-  }
-
-  const data = (await redis.get(key(studentId))) || {};
+  const existing = await tdb().topic.findFirst({ where: { studentId } });
+  const data = existing?.data || {};
   if (!data[subject]) data[subject] = {};
   data[subject][idx] = p;
-  await redis.set(key(studentId), data);
-
+  if (existing) await tdb().topic.update({ where: { id: existing.id }, data: { data } });
+  else await tdb().topic.create({ data: { studentId, data } });
   return NextResponse.json({ ok: true });
 }
