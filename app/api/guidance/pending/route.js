@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // GET /api/guidance/pending
@@ -13,40 +11,11 @@ export async function GET() {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  if (isSqlEnabled()) {
-    const rows = await tdb().guidance.findMany({ select: { studentId: true, data: true } });
-    const counts = {};
-    for (const r of rows) {
-      if (r.data?.reviewed) continue;
-      counts[r.studentId] = (counts[r.studentId] || 0) + 1;
-    }
-    return NextResponse.json(counts);
-  }
-
-  let cursor = '0';
-  const keys = [];
-  do {
-    const [next, found] = await redis.scan(cursor, { match: 'guidance:*', count: 200 });
-    cursor = String(next);
-    keys.push(...found);
-  } while (cursor !== '0');
-
-  if (keys.length === 0) return NextResponse.json({});
-
-  const pipeline = redis.pipeline();
-  keys.forEach(k => pipeline.get(k));
-  const results = await pipeline.exec();
-
+  const rows = await tdb().guidance.findMany({ select: { studentId: true, data: true } });
   const counts = {};
-  keys.forEach((k, i) => {
-    const data = results[i];
-    if (!data || data.reviewed) return;
-    const parts = k.split(':');
-    // guidance:{studentId}:{weekKey} — weekKey içinde ":" yok ama yine de
-    if (parts.length < 3) return;
-    const studentId = parts[1];
-    counts[studentId] = (counts[studentId] || 0) + 1;
-  });
-
+  for (const r of rows) {
+    if (r.data?.reviewed) continue;
+    counts[r.studentId] = (counts[r.studentId] || 0) + 1;
+  }
   return NextResponse.json(counts);
 }
