@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { tenantRedis, rawRedis, currentOrg } from '@/lib/tenant';
+import { tenantRedis, currentOrg } from '@/lib/tenant';
 import { normalizeBranding } from '@/lib/branding';
 import { getSession, setSession, clearSession } from '@/lib/auth';
 import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait, safeLimit } from '@/lib/ratelimit';
 import { logAudit, actorFrom } from '@/lib/audit';
-import { lookupIndex } from '@/lib/userIndex';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { parseBody, z, zName, zPassword, zNewPassword, zId } from '@/lib/validate';
 import { sendOtp } from '@/lib/sms';
-import { isSqlEnabled } from '@/lib/usesql';
 import { getOrgConfig } from '@/lib/config';
 import { tdb } from '@/lib/sqldb';
 
@@ -41,13 +39,10 @@ const AuthSchema = z.discriminatedUnion('action', [
 ]);
 
 export async function GET() {
-  const redis = tenantRedis();
   const session = await getSession();
-  const directorExists = isSqlEnabled() ? (await tdb().director.count()) > 0 : await redis.exists('director');
-  // Marka (org kaydı global) — login ekranı + header bunu kullanır. SQL: Org tablosu.
-  const orgRec = isSqlEnabled()
-    ? await tdb().org.findFirst({ where: { slug: currentOrg() } })
-    : await rawRedis.get(`org:${currentOrg()}`);
+  const directorExists = (await tdb().director.count()) > 0;
+  // Marka (org kaydı global) — login ekranı + header bunu kullanır.
+  const orgRec = await tdb().org.findFirst({ where: { slug: currentOrg() } });
   // Kurum konfigürasyonu — istemcinin davranışını etkileyen alanlar (hassas değil,
   // tüm roller için döner). modules: Sidebar sekme gizleme. etut: self-rezervasyon butonu.
   // permissions: rehber salt-okunur ise yönetim butonlarını gizlemek için (UI; API ayrıca 403).
@@ -58,7 +53,7 @@ export async function GET() {
 }
 
 export async function POST(req) {
-  const redis = tenantRedis();
+  const redis = tenantRedis(); // OTP cihaz tanıma alt-sistemi — hâlâ Redis (bkz aşağı NOT)
   const parsed = await parseBody(req, AuthSchema);
   if (!parsed.ok) return parsed.response;
   const { action, username, password, newPassword, targetId, targetRole, name } = parsed.data;
@@ -97,6 +92,8 @@ export async function POST(req) {
     }
 
     // Cihaz tanıma: güvenilir cihaz cookie'si var ve Redis'te geçerliyse OTP atlanır.
+    // NOT: cihaz tanıma alt-sistemi (device:*) SQL'e taşınmadı — kısa ömürlü/geçici veri,
+    // Redis TTL doğası ile uyumlu. Ayrı bir göç işi.
     const deviceToken = req.cookies.get('device_token')?.value;
     async function isKnownDevice(roleCategory) {
       if (!deviceToken) return false;
@@ -153,15 +150,12 @@ export async function POST(req) {
       return res;
     }
 
-    // Superadmin (global, kurum-bağımsız) — tenantRedis yerine rawRedis.
+    // Superadmin (global, kurum-bağımsız).
     // GÜVENLİK: yalnız gizli süper-admin sayfasından (role:'superadmin') denenebilir.
     // Normal "Yönetim" girişi (role:'management' veya role yok) superadmin'i HİÇ kontrol
     // etmez → süper-admin varlığı kurum giriş ekranından sızmaz/denenmez.
     if (selectedRole === 'superadmin') {
-      // SQL: SuperAdmin tablosu (username ile). Redis: tek 'superadmin' kaydı + username kontrol.
-      const superadmin = isSqlEnabled()
-        ? await tdb().superAdmin.findFirst({ where: { username } })
-        : await rawRedis.get('superadmin');
+      const superadmin = await tdb().superAdmin.findFirst({ where: { username } });
       if (superadmin && superadmin.username === username) {
         const ok = await bcrypt.compare(password, superadmin.passwordHash);
         if (ok) {
@@ -176,11 +170,9 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Kullanıcı adı veya şifre hatalı.' }, { status: 401 });
     }
 
-    // Org_admin (kurum-geneli, şube-bağımsız). SQL: OrgAdmin tablosu. Redis: orgadmin:<org>.
+    // Org_admin (kurum-geneli, şube-bağımsız).
     const org = currentOrg();
-    const orgAdmin = isSqlEnabled()
-      ? await tdb().orgAdmin.findFirst({ where: { orgSlug: org, username } })
-      : await rawRedis.get(`orgadmin:${org}`);
+    const orgAdmin = await tdb().orgAdmin.findFirst({ where: { orgSlug: org, username } });
     if (orgAdmin && orgAdmin.username === username) {
       const ok = await bcrypt.compare(password, orgAdmin.passwordHash);
       if (ok) {
@@ -192,10 +184,8 @@ export async function POST(req) {
       }
     }
 
-    // Try director (zaten O(1)) — SQL'de Director tablosundan username ile.
-    const director = isSqlEnabled()
-      ? await tdb().director.findFirst({ where: { username } })
-      : await redis.get('director');
+    // Director (zaten O(1)) — Director tablosundan username ile.
+    const director = await tdb().director.findFirst({ where: { username } });
     if (director && director.username === username) {
       const ok = await bcrypt.compare(password, director.passwordHash);
       if (ok) {
@@ -209,84 +199,35 @@ export async function POST(req) {
       }
     }
 
-    // SQL YOLU: ters indeks yerine rol tablolarını username ile doğrudan sorgula.
-    // Sıra eski tarama sırasıyla hizalı (accountant→counselor→teacher→student), sonra veli.
-    if (isSqlEnabled()) {
-      const normP = normalizeTurkishMobile(username);
-      const tryRole = async (role, sqlRec) => {
-        const rec = sqlRecToLegacy(role, sqlRec);
-        if (!rec) return null;
-        const ok = await bcrypt.compare(password, rec.passwordHash);
-        if (!ok) return null;
-        return makeLoginResponse(role, rec);
-      };
-      let r;
-      r = await tryRole('assistant_director', await tdb().assistantDirector.findFirst({ where: { username } })); if (r) return r;
-      r = await tryRole('accountant', await tdb().accountant.findFirst({ where: { username } })); if (r) return r;
-      r = await tryRole('counselor', await tdb().counselor.findFirst({ where: { username } })); if (r) return r;
-      r = await tryRole('teacher', await tdb().teacher.findFirst({ where: { username } })); if (r) return r;
-      r = await tryRole('student', await tdb().student.findFirst({ where: { username }, include: { class: { select: { legacyId: true } } } })); if (r) return r;
-      // Veli: kullanıcı adı = telefon (ham veya kanonik); kayıtlı phone kanonik.
-      const phones = [username, normP].filter(Boolean);
-      const parent = phones.length ? await tdb().parent.findFirst({ where: { phone: { in: phones } } }) : null;
-      r = await tryRole('parent', parent); if (r) return r;
-      return NextResponse.json({ error: 'Kullanıcı adı veya şifre hatalı' }, { status: 401 });
-    }
-
-    // HIZLI YOL: ters indeks (O(1)). Başarılı login burada döner, tarama yok.
-    // Veli kullanıcı adı = telefon → "0532..." girilse de kanonik forma normalize edip
-    // hem ham hem normalize adayları dener (veli telefonu kanonik kayıtlı).
-    const normPhone = normalizeTurkishMobile(username);
-    const candidates = await lookupIndex(username);
-    if (normPhone && normPhone !== username) {
-      candidates.push(...await lookupIndex(normPhone));
-    }
-    for (const c of candidates) {
-      const rec = await redis.get(`${c.role}:${c.id}`);
-      if (rec && (rec.username === username || (normPhone && rec.username === normPhone))) {
-        const ok = await bcrypt.compare(password, rec.passwordHash);
-        if (ok) return makeLoginResponse(c.role, rec);
-      }
-    }
-
-    // GÜVENLİK AĞI: indeks eksik/stale ise eski lineer tarama (yalnız başarısız
-    // login'lerde çalışır — başarılılar yukarıda döndü; başarısızlar rate-limitli).
-    async function scanRole(role) {
-      const ids = await redis.smembers(`${role}s`);
-      if (!ids || ids.length === 0) return null;
-      const pipeline = redis.pipeline();
-      ids.forEach(id => pipeline.get(`${role}:${id}`));
-      const recs = await pipeline.exec();
-      for (const rec of recs) {
-        if (rec && rec.username === username) {
-          const ok = await bcrypt.compare(password, rec.passwordHash);
-          if (ok) return makeLoginResponse(role, rec);
-        }
-      }
-      return null;
-    }
-    for (const role of ['assistant_director', 'accountant', 'counselor', 'teacher', 'student']) {
-      const res = await scanRole(role);
-      if (res) return res;
-    }
-
+    // Rol tablolarını username ile doğrudan sorgula.
+    // Sıra: assistant_director→accountant→counselor→teacher→student, sonra veli.
+    const normP = normalizeTurkishMobile(username);
+    const tryRole = async (role, sqlRec) => {
+      const rec = sqlRecToLegacy(role, sqlRec);
+      if (!rec) return null;
+      const ok = await bcrypt.compare(password, rec.passwordHash);
+      if (!ok) return null;
+      return makeLoginResponse(role, rec);
+    };
+    let r;
+    r = await tryRole('assistant_director', await tdb().assistantDirector.findFirst({ where: { username } })); if (r) return r;
+    r = await tryRole('accountant', await tdb().accountant.findFirst({ where: { username } })); if (r) return r;
+    r = await tryRole('counselor', await tdb().counselor.findFirst({ where: { username } })); if (r) return r;
+    r = await tryRole('teacher', await tdb().teacher.findFirst({ where: { username } })); if (r) return r;
+    r = await tryRole('student', await tdb().student.findFirst({ where: { username }, include: { class: { select: { legacyId: true } } } })); if (r) return r;
+    // Veli: kullanıcı adı = telefon (ham veya kanonik); kayıtlı phone kanonik.
+    const phones = [username, normP].filter(Boolean);
+    const parent = phones.length ? await tdb().parent.findFirst({ where: { phone: { in: phones } } }) : null;
+    r = await tryRole('parent', parent); if (r) return r;
     return NextResponse.json({ error: 'Kullanıcı adı veya şifre hatalı' }, { status: 401 });
   }
 
   if (action === 'setup_director') {
     const directorName = name || 'Müdür';
     const hash = await bcrypt.hash(password, 10);
-    if (isSqlEnabled()) {
-      const exists = await tdb().director.findFirst();
-      if (exists) return NextResponse.json({ error: 'Müdür zaten kayıtlı' }, { status: 400 });
-      await tdb().director.create({ data: { username, passwordHash: hash, name: directorName } });
-      const res = NextResponse.json({ ok: true });
-      await setSession(res, { role: 'director', id: 'director', name: directorName });
-      return res;
-    }
-    const exists = await redis.exists('director');
+    const exists = await tdb().director.findFirst();
     if (exists) return NextResponse.json({ error: 'Müdür zaten kayıtlı' }, { status: 400 });
-    await redis.set('director', { username, passwordHash: hash, name: directorName });
+    await tdb().director.create({ data: { username, passwordHash: hash, name: directorName } });
     const res = NextResponse.json({ ok: true });
     await setSession(res, { role: 'director', id: 'director', name: directorName });
     return res;
@@ -295,17 +236,9 @@ export async function POST(req) {
   if (action === 'update_director_name') {
     const session = await getSession();
     if (!session || session.role !== 'director') return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-    if (isSqlEnabled()) {
-      const dir = await tdb().director.findFirst();
-      if (!dir) return NextResponse.json({ error: 'Müdür bulunamadı' }, { status: 404 });
-      await tdb().director.update({ where: { id: dir.id }, data: { name } });
-      const res = NextResponse.json({ ok: true });
-      await setSession(res, { role: 'director', id: 'director', name });
-      return res;
-    }
-    const director = await redis.get('director');
-    if (!director) return NextResponse.json({ error: 'Müdür bulunamadı' }, { status: 404 });
-    await redis.set('director', { ...director, name });
+    const dir = await tdb().director.findFirst();
+    if (!dir) return NextResponse.json({ error: 'Müdür bulunamadı' }, { status: 404 });
+    await tdb().director.update({ where: { id: dir.id }, data: { name } });
     const res = NextResponse.json({ ok: true });
     await setSession(res, { role: 'director', id: 'director', name });
     return res;
@@ -336,27 +269,14 @@ export async function POST(req) {
     // Şifre değiştirme yardımcısı — başarılı değişimde mustChangePassword:false setler
     // ve session JWT'sini yeniler (frontend, yeni mustChange durumunu görsün).
     async function updatePasswordFor(roleKey, sessionPayloadFields) {
-      if (isSqlEnabled()) {
-        const rec = roleKey === 'parent'
-          ? await tdb().parent.findFirst({ where: { phone: session.id } })
-          : await tdb()[roleKey].findFirst({ where: { legacyId: session.id } });
-        if (!rec) return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
-        const ok = await bcrypt.compare(password, rec.passwordHash);
-        if (!ok) return NextResponse.json({ error: 'Mevcut şifre hatalı' }, { status: 400 });
-        const newHash = await bcrypt.hash(newPassword, 10);
-        await tdb()[roleKey].update({ where: { id: rec.id }, data: { passwordHash: newHash, mustChangePassword: false } });
-        const res = NextResponse.json({ ok: true });
-        await setSession(res, { ...session, mustChangePassword: false, ...sessionPayloadFields });
-        return res;
-      }
-      const key = `${roleKey}:${session.id}`;
-      const user = await redis.get(key);
-      if (!user) return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
-      const ok = await bcrypt.compare(password, user.passwordHash);
+      const rec = roleKey === 'parent'
+        ? await tdb().parent.findFirst({ where: { phone: session.id } })
+        : await tdb()[roleKey].findFirst({ where: { legacyId: session.id } });
+      if (!rec) return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
+      const ok = await bcrypt.compare(password, rec.passwordHash);
       if (!ok) return NextResponse.json({ error: 'Mevcut şifre hatalı' }, { status: 400 });
       const newHash = await bcrypt.hash(newPassword, 10);
-      await redis.set(key, { ...user, passwordHash: newHash, mustChangePassword: false });
-      // Session JWT yenile: mustChangePassword:false olarak
+      await tdb()[roleKey].update({ where: { id: rec.id }, data: { passwordHash: newHash, mustChangePassword: false } });
       const res = NextResponse.json({ ok: true });
       await setSession(res, { ...session, mustChangePassword: false, ...sessionPayloadFields });
       return res;
@@ -365,7 +285,7 @@ export async function POST(req) {
     // Müdür yardımcısı: oturumda role='director' ama asst:true → kendi
     // assistant_director kaydını hedefle (müdürün 'director' kaydını DEĞİL).
     if (session.role === 'director' && session.asst) {
-      return updatePasswordFor('assistant_director', { asst: true });
+      return updatePasswordFor('assistantDirector', { asst: true });
     }
     if (session.role === 'teacher') {
       return updatePasswordFor('teacher', { branches: session.branches, allowedGroups: session.allowedGroups });
@@ -395,60 +315,15 @@ export async function POST(req) {
 
     const hash = await bcrypt.hash(newPassword, 10);
 
-    if (isSqlEnabled()) {
-      const labels = { teacher: 'Öğretmen', student: 'Öğrenci', accountant: 'Muhasebeci', counselor: 'Rehber', assistant_director: 'Müdür yardımcısı' };
-      // targetRole snake_case olabilir; Prisma model adı camelCase.
-      const MODEL = { assistant_director: 'assistantDirector' };
-      const model = MODEL[targetRole] || targetRole;
-      const rec = await tdb()[model].findFirst({ where: { legacyId: targetId } });
-      if (!rec) return NextResponse.json({ error: `${labels[targetRole]} bulunamadı` }, { status: 404 });
-      await tdb()[model].update({ where: { id: rec.id }, data: { passwordHash: hash, mustChangePassword: true } });
-      await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: targetRole, id: targetId, name: rec.name || targetId }, detail: `${labels[targetRole]} şifresi sıfırlandı: ${rec.name || targetId}` });
-      return NextResponse.json({ ok: true });
-    }
-
-    if (targetRole === 'teacher') {
-      const t = await redis.get(`teacher:${targetId}`);
-      if (!t) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
-      // Müdür sıfırladığında: hedef ilk girişte yine kendi şifresini belirleyecek
-      await redis.set(`teacher:${targetId}`, { ...t, passwordHash: hash, mustChangePassword: true });
-      await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: 'teacher', id: targetId, name: t.name || targetId }, detail: `Öğretmen şifresi sıfırlandı: ${t.name || targetId}` });
-      return NextResponse.json({ ok: true });
-    }
-
-    if (targetRole === 'student') {
-      const s = await redis.get(`student:${targetId}`);
-      if (!s) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
-      await redis.set(`student:${targetId}`, { ...s, passwordHash: hash, mustChangePassword: true });
-      await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: 'student', id: targetId, name: s.name || targetId }, detail: `Öğrenci şifresi sıfırlandı: ${s.name || targetId}` });
-      return NextResponse.json({ ok: true });
-    }
-
-    if (targetRole === 'accountant') {
-      const a = await redis.get(`accountant:${targetId}`);
-      if (!a) return NextResponse.json({ error: 'Muhasebeci bulunamadı' }, { status: 404 });
-      await redis.set(`accountant:${targetId}`, { ...a, passwordHash: hash, mustChangePassword: true });
-      await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: 'accountant', id: targetId, name: a.name || targetId }, detail: `Muhasebeci şifresi sıfırlandı: ${a.name || targetId}` });
-      return NextResponse.json({ ok: true });
-    }
-
-    if (targetRole === 'counselor') {
-      const c = await redis.get(`counselor:${targetId}`);
-      if (!c) return NextResponse.json({ error: 'Rehber bulunamadı' }, { status: 404 });
-      await redis.set(`counselor:${targetId}`, { ...c, passwordHash: hash, mustChangePassword: true });
-      await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: 'counselor', id: targetId, name: c.name || targetId }, detail: `Rehber şifresi sıfırlandı: ${c.name || targetId}` });
-      return NextResponse.json({ ok: true });
-    }
-
-    if (targetRole === 'assistant_director') {
-      const a = await redis.get(`assistant_director:${targetId}`);
-      if (!a) return NextResponse.json({ error: 'Müdür yardımcısı bulunamadı' }, { status: 404 });
-      await redis.set(`assistant_director:${targetId}`, { ...a, passwordHash: hash, mustChangePassword: true });
-      await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: 'assistant_director', id: targetId, name: a.name || targetId }, detail: `Müdür yardımcısı şifresi sıfırlandı: ${a.name || targetId}` });
-      return NextResponse.json({ ok: true });
-    }
-
-    return NextResponse.json({ error: 'Geçersiz hedef' }, { status: 400 });
+    const labels = { teacher: 'Öğretmen', student: 'Öğrenci', accountant: 'Muhasebeci', counselor: 'Rehber', assistant_director: 'Müdür yardımcısı' };
+    // targetRole snake_case olabilir; Prisma model adı camelCase.
+    const MODEL = { assistant_director: 'assistantDirector' };
+    const model = MODEL[targetRole] || targetRole;
+    const rec = await tdb()[model].findFirst({ where: { legacyId: targetId } });
+    if (!rec) return NextResponse.json({ error: `${labels[targetRole]} bulunamadı` }, { status: 404 });
+    await tdb()[model].update({ where: { id: rec.id }, data: { passwordHash: hash, mustChangePassword: true } });
+    await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: targetRole, id: targetId, name: rec.name || targetId }, detail: `${labels[targetRole]} şifresi sıfırlandı: ${rec.name || targetId}` });
+    return NextResponse.json({ ok: true });
   }
 
   return NextResponse.json({ error: 'Geçersiz işlem' }, { status: 400 });
