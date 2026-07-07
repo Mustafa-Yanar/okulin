@@ -1,20 +1,14 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession, isManager } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
 import { getClass } from '@/lib/classes';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Etkinlik / Okul Takvimi — kurum geneli bilgilendirme takvimi (tatil, sınav, toplantı, gezi…).
 // Müdür/rehber oluşturur/düzenler/siler. Öğrenci/veli/öğretmen görür (rol+sınıf filtreli).
 // classes[] boş → herkes; dolu → yalnız o sınıfların öğrencileri + velileri görür (personel hepsini görür).
-//
-// "Öğrenci aktivite omurgası" deseniyle tutarlı (set + tekil anahtar, hash yok):
-//   etkinlikler (set)  → id'ler
-//   etkinlik:<id>      → {id, title, desc, type, startDate, endDate, classes[], createdBy, createdByName, createdByRole, createdAt, updatedAt}
 
 export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
@@ -38,39 +32,18 @@ const UpdateSchema = z.object({ action: z.literal('update'), id: zId, ...baseFie
 const BodySchema = z.discriminatedUnion('action', [CreateSchema, UpdateSchema]);
 
 async function loadAll() {
-  if (isSqlEnabled()) {
-    const rows = await tdb().etkinlik.findMany({ orderBy: { startDate: 'asc' } });
-    return rows.map(r => r.data);
-  }
-  const ids = await redis.smembers('etkinlikler');
-  if (!ids || ids.length === 0) return [];
-  const pipe = redis.pipeline();
-  ids.forEach(id => pipe.get(`etkinlik:${id}`));
-  return (await pipe.exec()).filter(Boolean);
+  const rows = await tdb().etkinlik.findMany({ orderBy: { startDate: 'asc' } });
+  return rows.map(r => r.data);
 }
 
 async function loadStudents() {
-  if (isSqlEnabled()) {
-    const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
-    return rows.map(s => ({ id: s.legacyId, cls: s.class?.legacyId || '' }));
-  }
-  const ids = await redis.smembers('students');
-  if (!ids || ids.length === 0) return [];
-  const pipe = redis.pipeline();
-  ids.forEach(id => pipe.get(`student:${id}`));
-  return (await pipe.exec()).filter(Boolean);
+  const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
+  return rows.map(s => ({ id: s.legacyId, cls: s.class?.legacyId || '' }));
 }
 
 async function loadParents() {
-  if (isSqlEnabled()) {
-    const rows = await tdb().parent.findMany();
-    return rows.map(p => ({ id: p.phone, children: p.children || [] }));
-  }
-  const phones = await redis.smembers('parents');
-  if (!phones || phones.length === 0) return [];
-  const pipe = redis.pipeline();
-  phones.forEach(p => pipe.get(`parent:${p}`));
-  return (await pipe.exec()).filter(Boolean);
+  const rows = await tdb().parent.findMany();
+  return rows.map(p => ({ id: p.phone, children: p.children || [] }));
 }
 
 // Bir etkinlik bu kullanıcıya görünür mü? (sınıf hedefi boşsa herkese)
@@ -124,31 +97,14 @@ export async function POST(req) {
 
   // ── Güncelle ──
   if (data.action === 'update') {
-    if (isSqlEnabled()) {
-      const existing = await tdb().etkinlik.findFirst({ where: { legacyId: data.id } });
-      if (!existing) return NextResponse.json({ error: 'Etkinlik bulunamadı' }, { status: 404 });
-      const updated = {
-        ...existing.data,
-        title, desc: desc || '', type, startDate, endDate: end, classes: valid,
-        updatedAt: new Date().toISOString(),
-      };
-      await tdb().etkinlik.update({ where: { id: existing.id }, data: { title, type, startDate, endDate: end || null, data: updated } });
-      await logAudit({
-        ...actorFrom(session),
-        action: 'etkinlik.update',
-        target: { type: 'etkinlik', id: data.id, name: title },
-        detail: `Takvim etkinliği güncellendi: "${title}"`,
-      });
-      return NextResponse.json({ ok: true, id: data.id });
-    }
-    const rec = await redis.get(`etkinlik:${data.id}`);
-    if (!rec) return NextResponse.json({ error: 'Etkinlik bulunamadı' }, { status: 404 });
+    const existing = await tdb().etkinlik.findFirst({ where: { legacyId: data.id } });
+    if (!existing) return NextResponse.json({ error: 'Etkinlik bulunamadı' }, { status: 404 });
     const updated = {
-      ...rec,
+      ...existing.data,
       title, desc: desc || '', type, startDate, endDate: end, classes: valid,
       updatedAt: new Date().toISOString(),
     };
-    await redis.set(`etkinlik:${data.id}`, updated);
+    await tdb().etkinlik.update({ where: { id: existing.id }, data: { title, type, startDate, endDate: end || null, data: updated } });
     await logAudit({
       ...actorFrom(session),
       action: 'etkinlik.update',
@@ -165,12 +121,7 @@ export async function POST(req) {
     createdBy: session.id, createdByName: session.name || '', createdByRole: session.role,
     createdAt: new Date().toISOString(),
   };
-  if (isSqlEnabled()) {
-    await tdb().etkinlik.create({ data: { legacyId: id, title, type, startDate, endDate: end || null, data: rec } });
-  } else {
-    await redis.set(`etkinlik:${id}`, rec);
-    await redis.sadd('etkinlikler', id);
-  }
+  await tdb().etkinlik.create({ data: { legacyId: id, title, type, startDate, endDate: end || null, data: rec } });
 
   // Hedef kitleye push (sınıf boşsa herkes). Hata toleranslı.
   const payload = { title: `📅 ${TYPE_LABEL[type] || 'Takvim'}`, body: title.slice(0, 120), url: '/?tab=takvim', tag: `etkinlik-${id}` };
@@ -200,30 +151,14 @@ export async function DELETE(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
-  if (isSqlEnabled()) {
-    const existing = await tdb().etkinlik.findFirst({ where: { legacyId: id } });
-    if (!existing) return NextResponse.json({ error: 'Etkinlik bulunamadı' }, { status: 404 });
-    await tdb().etkinlik.delete({ where: { id: existing.id } });
-    await logAudit({
-      ...actorFrom(session),
-      action: 'etkinlik.delete',
-      target: { type: 'etkinlik', id, name: existing.data?.title || '' },
-      detail: `Takvim etkinliği silindi: "${existing.data?.title || ''}"`,
-    });
-    return NextResponse.json({ ok: true });
-  }
-
-  const rec = await redis.get(`etkinlik:${id}`);
-  if (!rec) return NextResponse.json({ error: 'Etkinlik bulunamadı' }, { status: 404 });
-
-  await redis.del(`etkinlik:${id}`);
-  await redis.srem('etkinlikler', id);
-
+  const existing = await tdb().etkinlik.findFirst({ where: { legacyId: id } });
+  if (!existing) return NextResponse.json({ error: 'Etkinlik bulunamadı' }, { status: 404 });
+  await tdb().etkinlik.delete({ where: { id: existing.id } });
   await logAudit({
     ...actorFrom(session),
     action: 'etkinlik.delete',
-    target: { type: 'etkinlik', id, name: rec.title },
-    detail: `Takvim etkinliği silindi: "${rec.title}"`,
+    target: { type: 'etkinlik', id, name: existing.data?.title || '' },
+    detail: `Takvim etkinliği silindi: "${existing.data?.title || ''}"`,
   });
   return NextResponse.json({ ok: true });
 }

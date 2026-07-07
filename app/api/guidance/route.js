@@ -1,20 +1,11 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession, canReadStudent } from '@/lib/auth';
 import { getWeekKey } from '@/lib/slots';
 import { parseBody, z, zId } from '@/lib/validate';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 const GuidancePostSchema = z.object({ entries: z.record(z.unknown()) });
 const GuidanceReviewSchema = z.object({ studentId: zId, weekKey: z.string().min(1).max(40) });
-
-// guidance:{studentId}:{weekKey}
-// → { entries: { [subject]: { correct, wrong, empty } }, reviewed: bool, submittedAt, reviewedAt }
-
-function key(studentId, weekKey) {
-  return `guidance:${studentId}:${weekKey}`;
-}
 
 // GET /api/guidance?studentId=...&week=...
 // Tek hafta için kayıt döner. studentId yoksa, öğrenci kendi kaydını ister.
@@ -38,39 +29,16 @@ export async function GET(req) {
   if (!studentId) return NextResponse.json({ error: 'studentId gerekli' }, { status: 400 });
 
   if (listAll) {
-    if (isSqlEnabled()) {
-      const rows = await tdb().guidance.findMany({ where: { studentId } });
-      if (rows.length === 0) return NextResponse.json({ weeks: [] });
-      const weeks = rows.map(r => ({ weekKey: r.week, ...(r.data || {}) }))
-        .sort((a, b) => b.weekKey.localeCompare(a.weekKey));
-      return NextResponse.json({ weeks });
-    }
-    // Tüm guidance:{studentId}:* anahtarlarını scan
-    let cursor = '0';
-    const keys = [];
-    do {
-      const [next, found] = await redis.scan(cursor, { match: `guidance:${studentId}:*`, count: 100 });
-      cursor = String(next);
-      keys.push(...found);
-    } while (cursor !== '0');
-    if (keys.length === 0) return NextResponse.json({ weeks: [] });
-    const pipeline = redis.pipeline();
-    keys.forEach(k => pipeline.get(k));
-    const results = await pipeline.exec();
-    const weeks = keys.map((k, i) => {
-      const weekKey = k.split(':').slice(2).join(':');
-      return { weekKey, ...(results[i] || {}) };
-    }).sort((a, b) => b.weekKey.localeCompare(a.weekKey));
+    const rows = await tdb().guidance.findMany({ where: { studentId } });
+    if (rows.length === 0) return NextResponse.json({ weeks: [] });
+    const weeks = rows.map(r => ({ weekKey: r.week, ...(r.data || {}) }))
+      .sort((a, b) => b.weekKey.localeCompare(a.weekKey));
     return NextResponse.json({ weeks });
   }
 
   const weekKey = searchParams.get('week') || getWeekKey();
-  if (isSqlEnabled()) {
-    const row = await tdb().guidance.findFirst({ where: { studentId, week: weekKey } });
-    return NextResponse.json({ weekKey, ...(row?.data || { entries: {}, reviewed: false }) });
-  }
-  const data = await redis.get(key(studentId, weekKey));
-  return NextResponse.json({ weekKey, ...(data || { entries: {}, reviewed: false }) });
+  const row = await tdb().guidance.findFirst({ where: { studentId, week: weekKey } });
+  return NextResponse.json({ weekKey, ...(row?.data || { entries: {}, reviewed: false }) });
 }
 
 // POST /api/guidance
@@ -106,13 +74,9 @@ export async function POST(req) {
     reviewed: false,
     submittedAt: new Date().toISOString(),
   };
-  if (isSqlEnabled()) {
-    const existing = await tdb().guidance.findFirst({ where: { studentId: session.id, week: weekKey } });
-    if (existing) await tdb().guidance.update({ where: { id: existing.id }, data: { data: payload } });
-    else await tdb().guidance.create({ data: { studentId: session.id, week: weekKey, data: payload } });
-    return NextResponse.json({ ok: true, weekKey });
-  }
-  await redis.set(key(session.id, weekKey), payload, { ex: 60 * 60 * 24 * 180 }); // 6 ay
+  const existing = await tdb().guidance.findFirst({ where: { studentId: session.id, week: weekKey } });
+  if (existing) await tdb().guidance.update({ where: { id: existing.id }, data: { data: payload } });
+  else await tdb().guidance.create({ data: { studentId: session.id, week: weekKey, data: payload } });
   return NextResponse.json({ ok: true, weekKey });
 }
 
@@ -126,16 +90,9 @@ export async function PUT(req) {
   const parsed = await parseBody(req, GuidanceReviewSchema);
   if (!parsed.ok) return parsed.response;
   const { studentId, weekKey } = parsed.data;
-  if (isSqlEnabled()) {
-    const existing = await tdb().guidance.findFirst({ where: { studentId, week: weekKey } });
-    if (!existing) return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });
-    const updated = { ...(existing.data || {}), reviewed: true, reviewedAt: new Date().toISOString() };
-    await tdb().guidance.update({ where: { id: existing.id }, data: { data: updated } });
-    return NextResponse.json({ ok: true });
-  }
-  const existing = await redis.get(key(studentId, weekKey));
+  const existing = await tdb().guidance.findFirst({ where: { studentId, week: weekKey } });
   if (!existing) return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });
-  const updated = { ...existing, reviewed: true, reviewedAt: new Date().toISOString() };
-  await redis.set(key(studentId, weekKey), updated, { ex: 60 * 60 * 24 * 180 });
+  const updated = { ...(existing.data || {}), reviewed: true, reviewedAt: new Date().toISOString() };
+  await tdb().guidance.update({ where: { id: existing.id }, data: { data: updated } });
   return NextResponse.json({ ok: true });
 }

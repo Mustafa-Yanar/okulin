@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import redis from '@/lib/db';
 import { getSession, initialPassword } from '@/lib/auth';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
-import { addToIndex, removeFromIndex, updateIndexUsername } from '@/lib/userIndex';
 import { parseBody, z, zName, zId } from '@/lib/validate';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 import { newId as makeId } from '@/lib/id';
 
@@ -22,21 +19,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  if (isSqlEnabled()) {
-    const rows = await tdb().accountant.findMany();
-    return NextResponse.json(rows.map(a => ({ id: a.legacyId, name: a.name, username: a.username, phone: a.phone || '' })));
-  }
-
-  const ids = await redis.smembers('accountants');
-  if (!ids || ids.length === 0) return NextResponse.json([]);
-
-  const pipeline = redis.pipeline();
-  ids.forEach(id => pipeline.get(`accountant:${id}`));
-  const results = await pipeline.exec();
-  const accountants = results.filter(Boolean).map(a => ({
-    id: a.id, name: a.name, username: a.username, phone: a.phone || '',
-  }));
-  return NextResponse.json(accountants);
+  const rows = await tdb().accountant.findMany();
+  return NextResponse.json(rows.map(a => ({ id: a.legacyId, name: a.name, username: a.username, phone: a.phone || '' })));
 }
 
 export async function POST(req) {
@@ -51,44 +35,13 @@ export async function POST(req) {
 
   const username = name;
 
-  if (isSqlEnabled()) {
-    const dup = await tdb().accountant.findFirst({ where: { username } });
-    if (dup) return NextResponse.json({ error: 'Bu isimde bir muhasebeci zaten kayıtlı' }, { status: 400 });
-    const id = makeId();
-    const normPhone = phone ? (normalizeTurkishMobile(phone) || '') : '';
-    const initPassword = initialPassword(password, normPhone);
-    const hash = await bcrypt.hash(initPassword, 10);
-    await tdb().accountant.create({ data: { legacyId: id, name, username, passwordHash: hash, phone: normPhone, mustChangePassword: true } });
-    // NOT: userIndex (SQL'de login doğrudan sorgular) bayrak-açıkta atlandı → auth göçü.
-    return NextResponse.json({ id, name, username });
-  }
-
-  // Aynı isimde muhasebeci var mı kontrol et
-  const existingIds = await redis.smembers('accountants');
-  if (existingIds && existingIds.length > 0) {
-    const pipeline = redis.pipeline();
-    existingIds.forEach(id => pipeline.get(`accountant:${id}`));
-    const existing = await pipeline.exec();
-    const found = existing.some(a => a && a.username === username);
-    if (found) {
-      return NextResponse.json({ error: 'Bu isimde bir muhasebeci zaten kayıtlı' }, { status: 400 });
-    }
-  }
-
+  const dup = await tdb().accountant.findFirst({ where: { username } });
+  if (dup) return NextResponse.json({ error: 'Bu isimde bir muhasebeci zaten kayıtlı' }, { status: 400 });
   const id = makeId();
   const normPhone = phone ? (normalizeTurkishMobile(phone) || '') : '';
-  // İlk şifre: girilen şifre → telefon → "12345678". İlk girişte zorunlu değişim.
   const initPassword = initialPassword(password, normPhone);
   const hash = await bcrypt.hash(initPassword, 10);
-  const accountant = {
-    id, name, username, passwordHash: hash,
-    phone: normPhone,
-    mustChangePassword: true,  // ilk girişte muhasebeci kendi şifresini belirleyecek
-  };
-  await redis.set(`accountant:${id}`, accountant);
-  await redis.sadd('accountants', id);
-  await addToIndex(username, 'accountant', id);
-
+  await tdb().accountant.create({ data: { legacyId: id, name, username, passwordHash: hash, phone: normPhone, mustChangePassword: true } });
   return NextResponse.json({ id, name, username });
 }
 
@@ -102,27 +55,11 @@ export async function PUT(req) {
   if (!parsed.ok) return parsed.response;
   const { id, name, password, phone } = parsed.data;
 
-  if (isSqlEnabled()) {
-    const a = await tdb().accountant.findFirst({ where: { legacyId: id } });
-    if (!a) return NextResponse.json({ error: 'Muhasebeci bulunamadı' }, { status: 404 });
-    const data = { name, username: name, phone: phone !== undefined ? (normalizeTurkishMobile(phone) || phone || '') : (a.phone || '') };
-    if (password) data.passwordHash = await bcrypt.hash(password, 10);
-    await tdb().accountant.update({ where: { id: a.id }, data });
-    // NOT: updateIndexUsername → SQL login doğrudan sorgular → auth göçü.
-    return NextResponse.json({ ok: true });
-  }
-
-  const accountant = await redis.get(`accountant:${id}`);
-  if (!accountant) return NextResponse.json({ error: 'Muhasebeci bulunamadı' }, { status: 404 });
-
-  const updated = { ...accountant, name, username: name,
-    phone: phone !== undefined ? (normalizeTurkishMobile(phone) || phone || '') : (accountant.phone || ''),
-  };
-  if (password) {
-    updated.passwordHash = await bcrypt.hash(password, 10);
-  }
-  await redis.set(`accountant:${id}`, updated);
-  await updateIndexUsername(accountant.username, name, 'accountant', id);
+  const a = await tdb().accountant.findFirst({ where: { legacyId: id } });
+  if (!a) return NextResponse.json({ error: 'Muhasebeci bulunamadı' }, { status: 404 });
+  const data = { name, username: name, phone: phone !== undefined ? (normalizeTurkishMobile(phone) || phone || '') : (a.phone || '') };
+  if (password) data.passwordHash = await bcrypt.hash(password, 10);
+  await tdb().accountant.update({ where: { id: a.id }, data });
   return NextResponse.json({ ok: true });
 }
 
@@ -136,27 +73,13 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
 
-  if (isSqlEnabled()) {
-    const a = await tdb().accountant.findFirst({ where: { legacyId: id } });
-    if (a) await tdb().accountant.delete({ where: { id: a.id } });
-    await logAudit({
-      ...actorFrom(session),
-      action: 'accountant.delete',
-      target: { type: 'accountant', id, name: a?.name || id },
-      detail: `Muhasebeci silindi: ${a?.name || id}`,
-    });
-    return NextResponse.json({ ok: true });
-  }
-
-  const accountant = await redis.get(`accountant:${id}`);
-  await redis.del(`accountant:${id}`);
-  await redis.srem('accountants', id);
-  if (accountant?.username) await removeFromIndex(accountant.username, 'accountant', id);
+  const a = await tdb().accountant.findFirst({ where: { legacyId: id } });
+  if (a) await tdb().accountant.delete({ where: { id: a.id } });
   await logAudit({
     ...actorFrom(session),
     action: 'accountant.delete',
-    target: { type: 'accountant', id, name: accountant?.name || id },
-    detail: `Muhasebeci silindi: ${accountant?.name || id}`,
+    target: { type: 'accountant', id, name: a?.name || id },
+    detail: `Muhasebeci silindi: ${a?.name || id}`,
   });
   return NextResponse.json({ ok: true });
 }

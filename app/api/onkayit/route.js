@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession, isManager, canManage } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Ön kayıt / CRM — aday öğrenci (lead) yönetimi.
@@ -11,10 +9,6 @@ import { tdb } from '@/lib/sqldb';
 // (yeni → arandı → görüşme → kayıt / kayıp) + takip notları (history timeline).
 // Aday HENÜZ kullanıcı değil → push yok, login yok. Kayda dönüşünce öğrenci elle
 // Öğrenciler sekmesinden eklenir (v1'de otomatik dönüştürme yok — bilinçli dar kapsam).
-//
-// "Aktivite omurgası" adlandırma deseni (set + tekil anahtar, hash yok):
-//   leadler (set)   → aday id'leri
-//   lead:<id>       → {id, studentName, parentName, phone, level, source, status, history[], createdBy, ...}
 
 import { newId as genId } from '@/lib/id';
 
@@ -62,26 +56,11 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
   if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
-  if (isSqlEnabled()) {
-    const rows = await tdb().lead.findMany();
-    const leads = rows.map(r => r.data);
-    const stats = emptyStats();
-    leads.forEach(l => { if (stats[l.status] !== undefined) stats[l.status]++; });
-    leads.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
-    return NextResponse.json({ leadler: leads, stats });
-  }
-
-  const ids = await redis.smembers('leadler');
-  if (!ids || ids.length === 0) return NextResponse.json({ leadler: [], stats: emptyStats() });
-
-  const pipe = redis.pipeline();
-  ids.forEach(id => pipe.get(`lead:${id}`));
-  const leads = (await pipe.exec()).filter(Boolean);
-
+  const rows = await tdb().lead.findMany();
+  const leads = rows.map(r => r.data);
   const stats = emptyStats();
   leads.forEach(l => { if (stats[l.status] !== undefined) stats[l.status]++; });
   leads.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
-
   return NextResponse.json({ leadler: leads, stats });
 }
 
@@ -112,12 +91,7 @@ export async function POST(req) {
     };
     pushHistory(rec, session.name, 'Ön kayıt oluşturuldu');
     if (data.note?.trim()) pushHistory(rec, session.name, data.note.trim());
-    if (isSqlEnabled()) {
-      await tdb().lead.create({ data: { legacyId: id, name: rec.studentName, stage: rec.status, data: rec } });
-    } else {
-      await redis.set(`lead:${id}`, rec);
-      await redis.sadd('leadler', id);
-    }
+    await tdb().lead.create({ data: { legacyId: id, name: rec.studentName, stage: rec.status, data: rec } });
 
     await logAudit({
       ...actorFrom(session),
@@ -129,8 +103,8 @@ export async function POST(req) {
   }
 
   // ── Güncelle (alan + durum + takip notu) ──
-  const sqlRow = isSqlEnabled() ? await tdb().lead.findFirst({ where: { legacyId: data.id } }) : null;
-  const rec = isSqlEnabled() ? sqlRow?.data : await redis.get(`lead:${data.id}`);
+  const sqlRow = await tdb().lead.findFirst({ where: { legacyId: data.id } });
+  const rec = sqlRow?.data;
   if (!rec) return NextResponse.json({ error: 'Aday bulunamadı' }, { status: 404 });
 
   for (const f of ['studentName', 'parentName', 'phone', 'level', 'source']) {
@@ -144,11 +118,7 @@ export async function POST(req) {
   }
   if (data.followUp?.trim()) pushHistory(rec, session.name, data.followUp.trim());
   rec.updatedAt = now;
-  if (isSqlEnabled()) {
-    await tdb().lead.update({ where: { id: sqlRow.id }, data: { name: rec.studentName, stage: rec.status, data: rec } });
-  } else {
-    await redis.set(`lead:${data.id}`, rec);
-  }
+  await tdb().lead.update({ where: { id: sqlRow.id }, data: { name: rec.studentName, stage: rec.status, data: rec } });
 
   if (statusChanged) {
     await logAudit({
@@ -169,30 +139,14 @@ export async function DELETE(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
-  if (isSqlEnabled()) {
-    const sqlRow = await tdb().lead.findFirst({ where: { legacyId: id } });
-    if (!sqlRow) return NextResponse.json({ error: 'Aday bulunamadı' }, { status: 404 });
-    await tdb().lead.delete({ where: { id: sqlRow.id } });
-    await logAudit({
-      ...actorFrom(session),
-      action: 'lead.delete',
-      target: { type: 'lead', id, name: sqlRow.data?.studentName || '' },
-      detail: `Aday öğrenci silindi: "${sqlRow.data?.studentName || ''}"`,
-    });
-    return NextResponse.json({ ok: true });
-  }
-
-  const rec = await redis.get(`lead:${id}`);
-  if (!rec) return NextResponse.json({ error: 'Aday bulunamadı' }, { status: 404 });
-
-  await redis.del(`lead:${id}`);
-  await redis.srem('leadler', id);
-
+  const sqlRow = await tdb().lead.findFirst({ where: { legacyId: id } });
+  if (!sqlRow) return NextResponse.json({ error: 'Aday bulunamadı' }, { status: 404 });
+  await tdb().lead.delete({ where: { id: sqlRow.id } });
   await logAudit({
     ...actorFrom(session),
     action: 'lead.delete',
-    target: { type: 'lead', id, name: rec.studentName },
-    detail: `Aday öğrenci silindi: "${rec.studentName}"`,
+    target: { type: 'lead', id, name: sqlRow.data?.studentName || '' },
+    detail: `Aday öğrenci silindi: "${sqlRow.data?.studentName || ''}"`,
   });
   return NextResponse.json({ ok: true });
 }
