@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { rawRedis } from '@/lib/tenant';
 import { demoRatelimit, getClientIp, formatResetWait, safeLimit } from '@/lib/ratelimit';
 import { sendEmail } from '@/lib/email';
-import { isSqlEnabled } from '@/lib/usesql';
 import { prisma } from '@/lib/prisma';
 
 function esc(s) {
@@ -41,10 +39,8 @@ async function notifyOwner(rec) {
 }
 
 // Landing demo/iletişim talebi: potansiyel kurum bilgilerini bırakır.
-// Kurum-bağımsız (apex/landing'den çağrılır) → rawRedis (t: prefix YOK).
-// Talepler global `demo:requests` listesinde (en yeni başta), süper-admin görür.
-const LIST_KEY = 'demo:requests';
-const MAX_KEEP = 200;
+// Kurum-bağımsız (apex/landing'den çağrılır). Talepler global DemoRequest
+// tablosunda (en yeni başta), süper-admin görür.
 
 function clean(v, max) {
   return String(v ?? '').trim().slice(0, max);
@@ -84,12 +80,7 @@ export async function POST(req) {
     ip,
   };
 
-  if (isSqlEnabled()) {
-    await prisma.demoRequest.create({ data: { name, org, phone, email: email || null, note: note || null, ip } });
-  } else {
-    await rawRedis.lpush(LIST_KEY, JSON.stringify(record));
-    await rawRedis.ltrim(LIST_KEY, 0, MAX_KEEP - 1);
-  }
+  await prisma.demoRequest.create({ data: { name, org, phone, email: email || null, note: note || null, ip } });
 
   // Bildirim e-postası — talep zaten kaydedildi; mail hatası isteği bozmamalı.
   try { await notifyOwner(record); } catch (e) { console.error('[demo-request] bildirim hatası:', e); }

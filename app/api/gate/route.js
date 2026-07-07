@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server';
-import { rawRedis } from '@/lib/tenant';
 import { gateRatelimit, getClientIp, formatResetWait, safeLimit } from '@/lib/ratelimit';
 import { normalizeCode, hostForOrg } from '@/lib/orgcode';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Landing kurum kodu kapısı: kod → hedef subdomain çözer.
-// Kurum-bağımsız (apex/landing'den çağrılır) → rawRedis (t: prefix YOK).
-// orgcode:<KOD> → { slug, branch, name, host }. Kod yoksa/pasifse 404.
+// Kurum-bağımsız (apex/landing'den çağrılır). Kod yoksa/pasifse 404.
 export async function POST(req) {
   // Brute-force koruması (IP başına)
   const ip = getClientIp(req);
@@ -26,26 +23,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Geçersiz kurum kodu.' }, { status: 400 });
   }
 
-  // Kod → kurum (SQL: Org.code; reverse kayda gerek yok). host = hostForOrg(slug,'main').
-  if (isSqlEnabled()) {
-    const org = await tdb().org.findFirst({ where: { code } });
-    if (!org) return NextResponse.json({ error: 'Bu koda ait kurum bulunamadı.' }, { status: 404 });
-    if (org.active === false) return NextResponse.json({ error: 'Bu kurum şu anda aktif değil.' }, { status: 403 });
-    return NextResponse.json({ ok: true, name: org.name, host: hostForOrg(org.slug, 'main') });
-  }
-
-  let rec = await rawRedis.get(`orgcode:${code}`);
-  if (typeof rec === 'string') { try { rec = JSON.parse(rec); } catch { rec = null; } }
-  if (!rec || !rec.host) {
-    return NextResponse.json({ error: 'Bu koda ait kurum bulunamadı.' }, { status: 404 });
-  }
-
-  // Kurum pasifse girişe izin verme
-  let org = await rawRedis.get(`org:${rec.slug}`);
-  if (typeof org === 'string') { try { org = JSON.parse(org); } catch { org = null; } }
-  if (org && org.active === false) {
-    return NextResponse.json({ error: 'Bu kurum şu anda aktif değil.' }, { status: 403 });
-  }
-
-  return NextResponse.json({ ok: true, name: rec.name, host: rec.host });
+  // Kod → kurum (Org.code; reverse kayda gerek yok). host = hostForOrg(slug,'main').
+  const org = await tdb().org.findFirst({ where: { code } });
+  if (!org) return NextResponse.json({ error: 'Bu koda ait kurum bulunamadı.' }, { status: 404 });
+  if (org.active === false) return NextResponse.json({ error: 'Bu kurum şu anda aktif değil.' }, { status: 403 });
+  return NextResponse.json({ ok: true, name: org.name, host: hostForOrg(org.slug, 'main') });
 }
