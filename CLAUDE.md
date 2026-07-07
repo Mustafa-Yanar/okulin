@@ -77,12 +77,12 @@ Her özellik veya düzeltme tamamlandığında **onay beklemeden:**
 
 | # | Aksiyon | Durum |
 |---|---------|-------|
-| 1 | SQL göçünü tamamla, Redis kod yolunu temizle | 🔄 Test sürecinde — en büyük teknik borç kapanmak üzere |
-| 2 | TypeScript'e geçiş | ⏳ Henüz başlanmadı |
+| 1 | SQL göçünü tamamla, Redis kod yolunu temizle | ✅ TAMAMLANDI (2026-07-08) — `isSqlEnabled`/çift-yol kod tabanında sıfır, `lib/usesql.js` silindi, Vercel `OKULIN_USE_SQL` env kaldırıldı. Redis yalnız bilinçli alt-sistemlerde (OTP cihaz tanıma, haftalık arşiv, rate-limit, backup snapshot) kalıyor. |
+| 2 | TypeScript'e geçiş | ⏳ Henüz başlanmadı — şimdi en büyük öncelik |
 | 3 | `makeId` → `crypto.randomUUID()` | ✅ `lib/id.js` tek kaynak (newId + sortable), 19 dosya geçti. courses slug / audit-errlog key / payment oid bilinçli hariç. |
 | 4 | Merkezi yetkilendirme wrapper'ı | ⏳ |
 | 5 | Kritik route'lara entegrasyon testi | ⏳ |
 | 6 | İstemci ortak yardımcıları: `shared.js` | ⏳ |
 | 7 | Global hata handler | ⏳ |
 
-**NOT:** SQL göçü tamamlandığında çift-yol kod tekrarı biteceği için #1 sonrası en büyük öncelik #2 TypeScript. Redis'in kalıcı anahtarları (ratelimit, backup, payment lock) için ayrı bir client kullanılacak.
+**NOT:** #1 bittiği için çift-yol kod tekrarı artık yok, en büyük öncelik #2 TypeScript. Redis'in kalıcı anahtarları (ratelimit, backup, payment lock, OTP cihaz tanıma, haftalık arşiv) bilinçli olarak kalmaya devam ediyor.
