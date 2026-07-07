@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
 import { notifyAbsentParents } from '@/lib/notify';
 import { tdb } from '@/lib/sqldb';
-import { isSqlEnabled } from '@/lib/usesql';
 
 export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
@@ -15,12 +13,7 @@ const AttendancePostSchema = z.object({
   attendance: z.record(z.enum(['var', 'gec', 'yok'])),
 });
 
-// attendance:{YYYY-MM-DD}:{teacherId}:{cls}:{lessonNo}
-// → { [studentId]: 'var' | 'gec' | 'yok' }
-
-function attendanceKey(date, teacherId, cls, lessonNo) {
-  return `attendance:${date}:${teacherId}:${cls}:${lessonNo}`;
-}
+// Attendance.records: { [studentId]: 'var' | 'gec' | 'yok' }
 
 export async function GET(req) {
   const session = await getSession();
@@ -36,17 +29,12 @@ export async function GET(req) {
     return NextResponse.json({ error: 'date, teacherId, cls ve lessonNo gerekli' }, { status: 400 });
   }
 
-  if (isSqlEnabled()) {
-    const teacher = await tdb().teacher.findFirst({ where: { legacyId: teacherId } });
-    if (!teacher) return NextResponse.json({});
-    const att = await tdb().attendance.findFirst({
-      where: { date, teacherId: teacher.id, cls, lessonNo: String(lessonNo) },
-    });
-    return NextResponse.json(att?.records || {});
-  }
-
-  const data = await redis.get(attendanceKey(date, teacherId, cls, lessonNo));
-  return NextResponse.json(data || {});
+  const teacher = await tdb().teacher.findFirst({ where: { legacyId: teacherId } });
+  if (!teacher) return NextResponse.json({});
+  const att = await tdb().attendance.findFirst({
+    where: { date, teacherId: teacher.id, cls, lessonNo: String(lessonNo) },
+  });
+  return NextResponse.json(att?.records || {});
 }
 
 export async function POST(req) {
@@ -59,26 +47,19 @@ export async function POST(req) {
   if (!parsed.ok) return parsed.response;
   const { date, cls, lessonNo, attendance } = parsed.data;
 
-  if (isSqlEnabled()) {
-    const teacher = await tdb().teacher.findFirst({ where: { legacyId: session.id } });
-    if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
-    const lessonNoStr = String(lessonNo);
-    const existing = await tdb().attendance.findFirst({
-      where: { date, teacherId: teacher.id, cls, lessonNo: lessonNoStr },
+  const teacher = await tdb().teacher.findFirst({ where: { legacyId: session.id } });
+  if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
+  const lessonNoStr = String(lessonNo);
+  const existing = await tdb().attendance.findFirst({
+    where: { date, teacherId: teacher.id, cls, lessonNo: lessonNoStr },
+  });
+  if (existing) {
+    await tdb().attendance.update({ where: { id: existing.id }, data: { records: attendance } });
+  } else {
+    await tdb().attendance.create({
+      data: { date, teacherId: teacher.id, cls, lessonNo: lessonNoStr, records: attendance },
     });
-    if (existing) {
-      await tdb().attendance.update({ where: { id: existing.id }, data: { records: attendance } });
-    } else {
-      await tdb().attendance.create({
-        data: { date, teacherId: teacher.id, cls, lessonNo: lessonNoStr, records: attendance },
-      });
-    }
-    await notifyAbsentParents(date, attendance);
-    return NextResponse.json({ ok: true });
   }
-
-  const key = attendanceKey(date, session.id, cls, lessonNo);
-  await redis.set(key, attendance, { ex: 60 * 60 * 24 * 90 });
 
   // "Gelmedi" tetikleyicisi — yok işaretli öğrencilerin velilerine push (best-effort, bir kez/gün)
   await notifyAbsentParents(date, attendance);

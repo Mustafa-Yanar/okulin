@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession, canManage } from '@/lib/auth';
 import { DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES, DEFAULT_ETUT_SURESI, DEFAULT_MOLA_SURESI } from '@/lib/constants';
 import { parseBody, z } from '@/lib/validate';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Şekil doğrulaması — saat/sıra mantığı aşağıda ayrıca kontrol edilir.
@@ -36,18 +34,8 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
 
-  if (isSqlEnabled()) {
-    const cfg = await tdb().tenantConfig.findFirst();
-    const stored = cfg?.slotTimes;
-    return NextResponse.json({
-      weekday: stored?.weekday || DEFAULT_WEEKDAY_TIMES,
-      weekend: stored?.weekend || DEFAULT_WEEKEND_TIMES,
-      etutSuresi: stored?.etutSuresi ?? DEFAULT_ETUT_SURESI,
-      molaSuresi: stored?.molaSuresi ?? DEFAULT_MOLA_SURESI,
-    });
-  }
-
-  const stored = await redis.get('slot_times');
+  const cfg = await tdb().tenantConfig.findFirst();
+  const stored = cfg?.slotTimes;
   return NextResponse.json({
     weekday: stored?.weekday || DEFAULT_WEEKDAY_TIMES,
     weekend: stored?.weekend || DEFAULT_WEEKEND_TIMES,
@@ -85,32 +73,20 @@ export async function POST(req) {
     }
   }
 
-  if (isSqlEnabled()) {
-    const cfg = await tdb().tenantConfig.findFirst();
-    const prev = cfg?.slotTimes;
-    const newSlotTimes = {
-      weekday, weekend,
-      etutSuresi: etutSuresi ?? prev?.etutSuresi ?? DEFAULT_ETUT_SURESI,
-      molaSuresi: molaSuresi ?? prev?.molaSuresi ?? DEFAULT_MOLA_SURESI,
-    };
-    if (cfg) {
-      await tdb().tenantConfig.update({
-        where: { orgSlug_branch: { orgSlug: cfg.orgSlug, branch: cfg.branch } },
-        data: { slotTimes: newSlotTimes },
-      });
-    } else {
-      await tdb().tenantConfig.create({ data: { slotTimes: newSlotTimes } });
-    }
-    return NextResponse.json({ ok: true });
-  }
-
-  // Mevcut etüt/mola ayarlarını koru (gönderilmezse), gönderilmişse güncelle
-  const prev = await redis.get('slot_times');
-  await redis.set('slot_times', {
-    weekday,
-    weekend,
+  const cfg = await tdb().tenantConfig.findFirst();
+  const prev = cfg?.slotTimes;
+  const newSlotTimes = {
+    weekday, weekend,
     etutSuresi: etutSuresi ?? prev?.etutSuresi ?? DEFAULT_ETUT_SURESI,
     molaSuresi: molaSuresi ?? prev?.molaSuresi ?? DEFAULT_MOLA_SURESI,
-  });
+  };
+  if (cfg) {
+    await tdb().tenantConfig.update({
+      where: { orgSlug_branch: { orgSlug: cfg.orgSlug, branch: cfg.branch } },
+      data: { slotTimes: newSlotTimes },
+    });
+  } else {
+    await tdb().tenantConfig.create({ data: { slotTimes: newSlotTimes } });
+  }
   return NextResponse.json({ ok: true });
 }
