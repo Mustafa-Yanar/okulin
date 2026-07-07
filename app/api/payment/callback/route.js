@@ -1,9 +1,7 @@
-import { rawRedis, tenantRedis } from '@/lib/tenant';
 import { logAudit } from '@/lib/audit';
 import { decryptSecret } from '@/lib/payment/crypto';
 import { getProvider } from '@/lib/payment';
-import { applyInstallmentPayment, applyInstallmentPaymentSql } from '@/lib/finance';
-import { isSqlEnabled } from '@/lib/usesql';
+import { applyInstallmentPaymentSql } from '@/lib/finance';
 import { tdb } from '@/lib/sqldb';
 import { prisma } from '@/lib/prisma';
 
@@ -12,8 +10,8 @@ export const runtime = 'nodejs'; // HMAC + crypto
 // PayTR Bildirim (callback) URL'i. Server-to-server, form-urlencoded POST.
 // Kimlik doğrulama: HMAC hash (oturum/cookie YOK). Middleware'de CSRF'ten MUAF.
 // Para kredilendiren KRİTİK uç → idempotent olmalı; her durumda düz metin "OK".
-// SQL-aware: payorder = PayOrder modeli; finans = applyInstallmentPaymentSql.
-// paylock (NX kilit) transient → Redis kalır.
+// payorder = PayOrder modeli; finans = applyInstallmentPaymentSql.
+// Çift işleme kilidi: PayOrder.status ATOMİK claim (bkz. aşağı), ayrı Redis kilidi gerekmez.
 
 function ok() {
   return new Response('OK', { status: 200, headers: { 'Content-Type': 'text/plain' } });
@@ -22,26 +20,19 @@ function fail(msg) {
   return new Response(`FAIL: ${msg}`, { status: 400, headers: { 'Content-Type': 'text/plain' } });
 }
 
-// PayOrder okuma — SQL (PayOrder modeli) veya Redis. Ortak şekle normalize eder.
+// PayOrder okuma — ortak şekle normalize eder.
 async function readOrder(oid) {
-  if (isSqlEnabled()) {
-    const po = await prisma.payOrder.findUnique({ where: { oid } });
-    if (!po) return null;
-    return {
-      org: po.orgSlug, branch: po.branch, studentId: po.studentId, status: po.status,
-      installmentIdx: po.data?.installmentIdx, studentName: po.data?.studentName, data: po.data || {},
-    };
-  }
-  return rawRedis.get(`payorder:${oid}`);
+  const po = await prisma.payOrder.findUnique({ where: { oid } });
+  if (!po) return null;
+  return {
+    org: po.orgSlug, branch: po.branch, studentId: po.studentId, status: po.status,
+    installmentIdx: po.data?.installmentIdx, studentName: po.data?.studentName, data: po.data || {},
+  };
 }
 // PayOrder durum güncelle (idempotency kaydı).
-async function patchOrder(oid, order, patch, days) {
-  if (isSqlEnabled()) {
-    const { status, ...rest } = patch;
-    await prisma.payOrder.update({ where: { oid }, data: { status, data: { ...(order.data || {}), ...rest } } });
-  } else {
-    await rawRedis.set(`payorder:${oid}`, { ...order, ...patch }, { ex: 60 * 60 * 24 * (days || 7) });
-  }
+async function patchOrder(oid, order, patch) {
+  const { status, ...rest } = patch;
+  await prisma.payOrder.update({ where: { oid }, data: { status, data: { ...(order.data || {}), ...rest } } });
 }
 
 export async function POST(req) {
@@ -62,9 +53,7 @@ export async function POST(req) {
   if (order.status === 'paid') return ok(); // idempotency
 
   // İlgili kurumun config'ini AÇIKÇA order'ın tenant'ından yükle.
-  const cfg = isSqlEnabled()
-    ? (await tdb(order.org, order.branch).tenantConfig.findFirst())?.paymentConfig
-    : await tenantRedis(order.org, order.branch).get('payment:config');
+  const cfg = (await tdb(order.org, order.branch).tenantConfig.findFirst())?.paymentConfig;
   if (!cfg || !cfg.keyEnc || !cfg.saltEnc) return fail('config yok');
 
   let key, salt;
@@ -81,27 +70,18 @@ export async function POST(req) {
 
   // Başarısız ödeme → işaretle, OK dön (tekrar deneme istemeyiz).
   if (status !== 'success') {
-    await patchOrder(merchantOid, order, { status: 'failed', failedAt: new Date().toISOString() }, 7);
+    await patchOrder(merchantOid, order, { status: 'failed', failedAt: new Date().toISOString() });
     return ok();
   }
 
-  // Çift işlemeye karşı kilit. SQL'de: PayOrder.status'ta ATOMİK claim
-  // (updateMany WHERE status≠paid/processing → count:1 ise bu çağrı sahiplendi,
-  // count:0 ise başka callback zaten işliyor/işledi). PostgreSQL UPDATE atomik →
-  // Redis NX lock'un birebir eşdeğeri, ödeme verisiyle AYNI sistemde (tutarlı).
-  // Redis yolunda: eski NX kilit (göç sonrası ölecek).
-  let lockKey = null;
-  if (isSqlEnabled()) {
-    const claim = await prisma.payOrder.updateMany({
-      where: { oid: merchantOid, status: { notIn: ['paid', 'processing'] } },
-      data: { status: 'processing' },
-    });
-    if (claim.count === 0) return ok(); // başka çağrı sahiplendi/işledi → idempotent çık
-  } else {
-    lockKey = `paylock:${merchantOid}`;
-    const lock = await rawRedis.set(lockKey, '1', { nx: true, ex: 30 });
-    if (!lock) return ok();
-  }
+  // Çift işlemeye karşı ATOMİK claim: updateMany WHERE status≠paid/processing →
+  // count:1 ise bu çağrı sahiplendi, count:0 ise başka callback zaten işliyor/işledi.
+  // PostgreSQL UPDATE atomik → tek satırlık NX lock'un birebir eşdeğeri.
+  const claim = await prisma.payOrder.updateMany({
+    where: { oid: merchantOid, status: { notIn: ['paid', 'processing'] } },
+    data: { status: 'processing' },
+  });
+  if (claim.count === 0) return ok(); // başka çağrı sahiplendi/işledi → idempotent çık
 
   try {
     // Son kontrol: kilidi aldıktan sonra order durumunu yeniden oku.
@@ -114,17 +94,17 @@ export async function POST(req) {
       method: 'PayTR (online)',
       date: new Date().toISOString().slice(0, 10),
       recordedBy: 'Online ödeme',
+      orgOverride: order.org,
+      branchOverride: order.branch,
     };
-    const result = isSqlEnabled()
-      ? await applyInstallmentPaymentSql({ ...paymentOpts, orgOverride: order.org, branchOverride: order.branch })
-      : await applyInstallmentPayment(tenantRedis(order.org, order.branch), paymentOpts);
+    const result = await applyInstallmentPaymentSql(paymentOpts);
 
     if (!result.ok) {
-      await patchOrder(merchantOid, order, { status: 'error', error: result.error, at: new Date().toISOString() }, 7);
+      await patchOrder(merchantOid, order, { status: 'error', error: result.error, at: new Date().toISOString() });
       return ok();
     }
 
-    await patchOrder(merchantOid, order, { status: 'paid', paidAt: new Date().toISOString(), receiptNo: result.receiptNo }, 30);
+    await patchOrder(merchantOid, order, { status: 'paid', paidAt: new Date().toISOString(), receiptNo: result.receiptNo });
 
     await logAudit({
       actorRole: 'system', actorName: 'Online Ödeme (PayTR)', actorId: 'paytr',
@@ -135,18 +115,13 @@ export async function POST(req) {
 
     return ok();
   } catch (e) {
-    // Kilidi serbest bırak ki tekrar deneme işleyebilsin.
-    // SQL: 'processing' claim'ini geri al (yoksa sipariş kalıcı kilitlenir).
-    if (isSqlEnabled()) {
-      try {
-        await prisma.payOrder.updateMany({
-          where: { oid: merchantOid, status: 'processing' },
-          data: { status: 'pending' },
-        });
-      } catch { /* en iyi çaba */ }
-    } else if (lockKey) {
-      await rawRedis.del(lockKey);
-    }
+    // Claim'i geri al (yoksa sipariş kalıcı kilitlenir), tekrar deneme işleyebilsin.
+    try {
+      await prisma.payOrder.updateMany({
+        where: { oid: merchantOid, status: 'processing' },
+        data: { status: 'pending' },
+      });
+    } catch { /* en iyi çaba */ }
     return fail('işleme hatası');
   }
 }

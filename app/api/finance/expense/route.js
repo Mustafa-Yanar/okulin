@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId, zMoney } from '@/lib/validate';
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 import { getOrgConfig } from '@/lib/config';
 
@@ -84,28 +82,11 @@ export async function GET(req) {
   const from = searchParams.get('from');
   const to = searchParams.get('to');
 
-  if (isSqlEnabled()) {
-    let list = (await tdb().expense.findMany()).map((r) => r.data);
-    if (type) list = list.filter(e => e.type === type);
-    if (period) list = list.filter(e => (e.period || e.date?.slice(0, 7)) === period);
-    if (from) list = list.filter(e => (e.date || '') >= from);
-    if (to) list = list.filter(e => (e.date || '') <= to);
-    list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    return NextResponse.json(list);
-  }
-
-  const ids = await redis.smembers('expenses');
-  if (!ids || ids.length === 0) return NextResponse.json([]);
-
-  const pipeline = redis.pipeline();
-  ids.forEach(id => pipeline.get(`expense:${id}`));
-  let list = (await pipeline.exec()).filter(Boolean);
-
+  let list = (await tdb().expense.findMany()).map((r) => r.data);
   if (type) list = list.filter(e => e.type === type);
   if (period) list = list.filter(e => (e.period || e.date?.slice(0, 7)) === period);
   if (from) list = list.filter(e => (e.date || '') >= from);
   if (to) list = list.filter(e => (e.date || '') <= to);
-
   list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   return NextResponse.json(list);
 }
@@ -135,21 +116,8 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Tutar sıfırdan büyük olmalı' }, { status: 400 });
   }
 
-  if (isSqlEnabled()) {
-    await tdb().expense.create({ data: { legacyId: id, type: record.type, amount: record.amount, date: record.date, data: record } });
-    await logAudit({ ...actorFrom(session), action: 'finance.expense.create', target: { type: 'expense', id, name: record.type === 'personnel' ? record.personnelName : record.category }, detail: `Gider eklendi (${record.type === 'personnel' ? 'personel: ' + record.personnelName : record.category}) — ${record.amount} TL` });
-    return NextResponse.json({ ok: true, record });
-  }
-
-  await redis.set(`expense:${id}`, record);
-  await redis.sadd('expenses', id);
-
-  await logAudit({
-    ...actorFrom(session),
-    action: 'finance.expense.create',
-    target: { type: 'expense', id, name: record.type === 'personnel' ? record.personnelName : record.category },
-    detail: `Gider eklendi (${record.type === 'personnel' ? 'personel: ' + record.personnelName : record.category}) — ${record.amount} TL`,
-  });
+  await tdb().expense.create({ data: { legacyId: id, type: record.type, amount: record.amount, date: record.date, data: record } });
+  await logAudit({ ...actorFrom(session), action: 'finance.expense.create', target: { type: 'expense', id, name: record.type === 'personnel' ? record.personnelName : record.category }, detail: `Gider eklendi (${record.type === 'personnel' ? 'personel: ' + record.personnelName : record.category}) — ${record.amount} TL` });
   return NextResponse.json({ ok: true, record });
 }
 
@@ -163,45 +131,14 @@ export async function PUT(req) {
   if (!data.id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
   const validCategories = await getOrgConfig('expenseCategories');
 
-  if (isSqlEnabled()) {
-    const ex = await tdb().expense.findFirst({ where: { legacyId: data.id } });
-    if (!ex) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
-    const old = ex.data || {};
-    const record = buildRecord(data, { id: old.id || data.id, createdBy: old.createdBy, createdByRole: old.createdByRole, createdAt: old.createdAt, updatedBy: session.name, updatedAt: new Date().toISOString() }, session, validCategories);
-    if (record.type === 'personnel' && !record.personnelName) return NextResponse.json({ error: 'Personel adı gerekli' }, { status: 400 });
-    if (record.amount <= 0) return NextResponse.json({ error: 'Tutar sıfırdan büyük olmalı' }, { status: 400 });
-    await tdb().expense.update({ where: { id: ex.id }, data: { type: record.type, amount: record.amount, date: record.date, data: record } });
-    await logAudit({ ...actorFrom(session), action: 'finance.expense.update', target: { type: 'expense', id: data.id, name: record.type === 'personnel' ? record.personnelName : record.category }, detail: `Gider güncellendi — ${record.amount} TL` });
-    return NextResponse.json({ ok: true, record });
-  }
-
-  const existing = await redis.get(`expense:${data.id}`);
-  if (!existing) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
-
-  const base = {
-    id: existing.id,
-    createdBy: existing.createdBy,
-    createdByRole: existing.createdByRole,
-    createdAt: existing.createdAt,
-    updatedBy: session.name,
-    updatedAt: new Date().toISOString(),
-  };
-  const record = buildRecord(data, base, session, validCategories);
-
-  if (record.type === 'personnel' && !record.personnelName) {
-    return NextResponse.json({ error: 'Personel adı gerekli' }, { status: 400 });
-  }
-  if (record.amount <= 0) {
-    return NextResponse.json({ error: 'Tutar sıfırdan büyük olmalı' }, { status: 400 });
-  }
-
-  await redis.set(`expense:${data.id}`, record);
-  await logAudit({
-    ...actorFrom(session),
-    action: 'finance.expense.update',
-    target: { type: 'expense', id: data.id, name: record.type === 'personnel' ? record.personnelName : record.category },
-    detail: `Gider güncellendi — ${record.amount} TL`,
-  });
+  const ex = await tdb().expense.findFirst({ where: { legacyId: data.id } });
+  if (!ex) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
+  const old = ex.data || {};
+  const record = buildRecord(data, { id: old.id || data.id, createdBy: old.createdBy, createdByRole: old.createdByRole, createdAt: old.createdAt, updatedBy: session.name, updatedAt: new Date().toISOString() }, session, validCategories);
+  if (record.type === 'personnel' && !record.personnelName) return NextResponse.json({ error: 'Personel adı gerekli' }, { status: 400 });
+  if (record.amount <= 0) return NextResponse.json({ error: 'Tutar sıfırdan büyük olmalı' }, { status: 400 });
+  await tdb().expense.update({ where: { id: ex.id }, data: { type: record.type, amount: record.amount, date: record.date, data: record } });
+  await logAudit({ ...actorFrom(session), action: 'finance.expense.update', target: { type: 'expense', id: data.id, name: record.type === 'personnel' ? record.personnelName : record.category }, detail: `Gider güncellendi — ${record.amount} TL` });
   return NextResponse.json({ ok: true, record });
 }
 
@@ -213,26 +150,10 @@ export async function DELETE(req) {
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
 
-  if (isSqlEnabled()) {
-    const ex = await tdb().expense.findFirst({ where: { legacyId: id } });
-    if (!ex) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
-    await tdb().expense.delete({ where: { id: ex.id } });
-    const old = ex.data || {};
-    await logAudit({ ...actorFrom(session), action: 'finance.expense.delete', target: { type: 'expense', id, name: old.type === 'personnel' ? old.personnelName : old.category }, detail: `Gider silindi — ${old.amount} TL` });
-    return NextResponse.json({ ok: true });
-  }
-
-  const existing = await redis.get(`expense:${id}`);
-  if (!existing) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
-
-  await redis.srem('expenses', id);
-  await redis.del(`expense:${id}`);
-
-  await logAudit({
-    ...actorFrom(session),
-    action: 'finance.expense.delete',
-    target: { type: 'expense', id, name: existing.type === 'personnel' ? existing.personnelName : existing.category },
-    detail: `Gider silindi — ${existing.amount} TL`,
-  });
+  const ex = await tdb().expense.findFirst({ where: { legacyId: id } });
+  if (!ex) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
+  await tdb().expense.delete({ where: { id: ex.id } });
+  const old = ex.data || {};
+  await logAudit({ ...actorFrom(session), action: 'finance.expense.delete', target: { type: 'expense', id, name: old.type === 'personnel' ? old.personnelName : old.category }, detail: `Gider silindi — ${old.amount} TL` });
   return NextResponse.json({ ok: true });
 }

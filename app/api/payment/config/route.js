@@ -1,36 +1,25 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z } from '@/lib/validate';
 import { encryptSecret } from '@/lib/payment/crypto';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
-// payment:config okuma/yazma — SQL-aware (TenantConfig.paymentConfig).
+// payment:config okuma/yazma (TenantConfig.paymentConfig).
 async function readPaymentConfig() {
-  if (isSqlEnabled()) {
-    const tc = await tdb().tenantConfig.findFirst();
-    return tc?.paymentConfig || null;
-  }
-  return redis.get('payment:config');
+  const tc = await tdb().tenantConfig.findFirst();
+  return tc?.paymentConfig || null;
 }
 async function writePaymentConfig(cfg) {
-  if (isSqlEnabled()) {
-    const tc = await tdb().tenantConfig.findFirst();
-    if (tc) await tdb().tenantConfig.update({ where: { orgSlug_branch: { orgSlug: tc.orgSlug, branch: tc.branch } }, data: { paymentConfig: cfg } });
-    else await tdb().tenantConfig.create({ data: { paymentConfig: cfg } });
-    return;
-  }
-  await redis.set('payment:config', cfg);
+  const tc = await tdb().tenantConfig.findFirst();
+  if (tc) await tdb().tenantConfig.update({ where: { orgSlug_branch: { orgSlug: tc.orgSlug, branch: tc.branch } }, data: { paymentConfig: cfg } });
+  else await tdb().tenantConfig.create({ data: { paymentConfig: cfg } });
 }
 
 export const runtime = 'nodejs'; // crypto
 
 // Kurumun (şubenin) online ödeme yapılandırması — tenant-scoped `payment:config`.
 // Gizli anahtarlar (key/salt) ŞİFRELİ saklanır; GET ASLA düz secret döndürmez.
-
-const CONFIG_KEY = 'payment:config';
 
 function isEnabled(cfg) {
   return !!(cfg && cfg.active && cfg.merchantId && cfg.keyEnc && cfg.saltEnc);

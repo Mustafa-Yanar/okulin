@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
-import { rawRedis, currentOrg, currentBranch } from '@/lib/tenant';
+import { currentOrg, currentBranch } from '@/lib/tenant';
 import { getSession, canReadStudent } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
 import { decryptSecret } from '@/lib/payment/crypto';
 import { getProvider } from '@/lib/payment';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 import { prisma } from '@/lib/prisma';
 
@@ -35,28 +33,19 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  // Tenant ödeme yapılandırması (SQL: TenantConfig.paymentConfig)
-  const cfg = isSqlEnabled()
-    ? (await tdb().tenantConfig.findFirst())?.paymentConfig
-    : await redis.get('payment:config');
+  // Tenant ödeme yapılandırması
+  const cfg = (await tdb().tenantConfig.findFirst())?.paymentConfig;
   if (!cfg || !cfg.active || !cfg.merchantId || !cfg.keyEnc || !cfg.saltEnc) {
     return NextResponse.json({ error: 'Online ödeme bu kurumda aktif değil' }, { status: 400 });
   }
 
-  // Finans kaydı + taksit doğrulama (SQL-aware)
-  let inst, studentName;
-  if (isSqlEnabled()) {
-    const stu = await tdb().student.findFirst({
-      where: { legacyId: studentId },
-      include: { finance: { include: { installments: { orderBy: { idx: 'asc' } } } } },
-    });
-    studentName = stu?.name;
-    inst = stu?.finance?.installments?.find((i) => i.idx === installmentIdx);
-  } else {
-    const finance = await redis.get(`finance:${studentId}`);
-    studentName = finance?.studentName;
-    inst = finance?.installments?.[installmentIdx];
-  }
+  // Finans kaydı + taksit doğrulama
+  const stu = await tdb().student.findFirst({
+    where: { legacyId: studentId },
+    include: { finance: { include: { installments: { orderBy: { idx: 'asc' } } } } },
+  });
+  const studentName = stu?.name;
+  const inst = stu?.finance?.installments?.find((i) => i.idx === installmentIdx);
   if (!inst) return NextResponse.json({ error: 'Taksit bulunamadı' }, { status: 404 });
   if (inst.paid) return NextResponse.json({ error: 'Bu taksit zaten ödenmiş' }, { status: 400 });
   const amountTL = parseFloat(inst.amount) || 0;
@@ -78,21 +67,11 @@ export async function POST(req) {
   const childName = (session.children || []).find(c => (c.id || c) === studentId)?.name || studentName || 'Öğrenci';
 
   // Global order kaydı — callback bunu okuyup doğru kuruma yazar (host'a güvenmez).
-  if (isSqlEnabled()) {
-    await prisma.payOrder.create({ data: {
-      oid: merchantOid, orgSlug: org, branch, studentId,
-      amount: amountKurus, status: 'pending',
-      data: { installmentIdx, amountTL, amountKurus, studentName: childName, createdAt: new Date().toISOString() },
-    } });
-  } else {
-    await rawRedis.set(`payorder:${merchantOid}`, {
-      org, branch, studentId, installmentIdx,
-      amountTL, amountKurus,
-      studentName: childName,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-    }, { ex: 60 * 60 * 24 * 7 }); // 7 gün
-  }
+  await prisma.payOrder.create({ data: {
+    oid: merchantOid, orgSlug: org, branch, studentId,
+    amount: amountKurus, status: 'pending',
+    data: { installmentIdx, amountTL, amountKurus, studentName: childName, createdAt: new Date().toISOString() },
+  } });
 
   const origin = new URL(req.url).origin;
   const reqIp = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '';
