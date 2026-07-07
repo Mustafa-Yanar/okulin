@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { rawRedis, currentOrg, tenantRedis } from '@/lib/tenant';
+import { currentOrg } from '@/lib/tenant';
 import { getSession } from '@/lib/auth';
 import { parseBody, z, zName, zPassword } from '@/lib/validate';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // HQ (Genel Merkez) API — çok şubeli kurumların şube yönetimi.
@@ -27,83 +26,34 @@ export async function GET() {
   const org = currentOrg();
   if (!requireHQ(session, org)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
-  if (isSqlEnabled()) {
-    const rows = await tdb().branch.findMany({ where: { orgSlug: org } });
-    const metaMap = {};
-    rows.forEach((r) => { metaMap[r.slug] = r; });
-    const branchSlugs = rows.length > 0 ? rows.map((r) => r.slug) : ['main'];
+  const rows = await tdb().branch.findMany({ where: { orgSlug: org } });
+  const metaMap = {};
+  rows.forEach((r) => { metaMap[r.slug] = r; });
+  const branchSlugs = rows.length > 0 ? rows.map((r) => r.slug) : ['main'];
 
-    const branches = [];
-    for (const slug of branchSlugs) {
-      const meta = metaMap[slug] || { slug, name: slug === 'main' ? 'Ana Şube' : slug, active: true, createdAt: null };
-      const dir = await tdb(org, slug).director.findFirst();
-      const studentCount = await tdb(org, slug).student.count();
-      const teacherCount = await tdb(org, slug).teacher.count();
-      branches.push({
-        slug,
-        name: meta.name || slug,
-        active: meta.active !== false,
-        createdAt: meta.createdAt instanceof Date ? meta.createdAt.toISOString() : (meta.createdAt || null),
-        directorUsername: dir?.username || null,
-        studentCount, teacherCount,
-      });
-    }
-    branches.sort((a, b) => {
-      if (a.slug === 'main') return -1;
-      if (b.slug === 'main') return 1;
-      return (a.createdAt || '').localeCompare(b.createdAt || '');
-    });
-
-    const orgRec = await tdb().org.findFirst({ where: { slug: org } });
-    return NextResponse.json({ org, orgName: orgRec?.name || org, branches, appDomain: process.env.APP_DOMAIN || '' });
-  }
-
-  const slugs = await rawRedis.smembers(`org:${org}:branches`);
-
-  // 'main' yoksa ekle (tek şube fallback — eski/single-type org'lar için)
-  const branchSlugs = slugs && slugs.length > 0 ? slugs : ['main'];
-
-  // Branch metadata + müdür + istatistik paralel çek
-  const pipeline = rawRedis.pipeline();
-  branchSlugs.forEach(slug => {
-    pipeline.get(`org:${org}:branch:${slug}`);
-    pipeline.get(`t:${org}:${slug}:director`);
-  });
-  const results = await pipeline.exec();
-
-  // scard için ayrı pipeline (scard pipeline'da destekleniyor)
-  const scardPipeline = rawRedis.pipeline();
-  branchSlugs.forEach(slug => {
-    // scard raw redis ile doğrudan — prefix manuel yazılır (raw client)
-    scardPipeline.scard(`t:${org}:${slug}:students`);
-    scardPipeline.scard(`t:${org}:${slug}:teachers`);
-  });
-  const counts = await scardPipeline.exec();
-
-  const branches = branchSlugs.map((slug, i) => {
-    const meta = results[i * 2] || { slug, name: slug === 'main' ? 'Ana Şube' : slug, active: true };
-    const dir = results[i * 2 + 1];
-    return {
+  const branches = [];
+  for (const slug of branchSlugs) {
+    const meta = metaMap[slug] || { slug, name: slug === 'main' ? 'Ana Şube' : slug, active: true, createdAt: null };
+    const dir = await tdb(org, slug).director.findFirst();
+    const studentCount = await tdb(org, slug).student.count();
+    const teacherCount = await tdb(org, slug).teacher.count();
+    branches.push({
       slug,
       name: meta.name || slug,
       active: meta.active !== false,
-      createdAt: meta.createdAt || null,
+      createdAt: meta.createdAt instanceof Date ? meta.createdAt.toISOString() : (meta.createdAt || null),
       directorUsername: dir?.username || null,
-      studentCount: counts[i * 2] || 0,
-      teacherCount: counts[i * 2 + 1] || 0,
-    };
-  }).sort((a, b) => {
+      studentCount, teacherCount,
+    });
+  }
+  branches.sort((a, b) => {
     if (a.slug === 'main') return -1;
     if (b.slug === 'main') return 1;
     return (a.createdAt || '').localeCompare(b.createdAt || '');
   });
 
-  const orgRec = await rawRedis.get(`org:${org}`);
-
-  // Şube giriş linklerini panelde göstermek için public domain (boşsa link gösterilmez).
-  const appDomain = process.env.APP_DOMAIN || '';
-
-  return NextResponse.json({ org, orgName: orgRec?.name || org, branches, appDomain });
+  const orgRec = await tdb().org.findFirst({ where: { slug: org } });
+  return NextResponse.json({ org, orgName: orgRec?.name || org, branches, appDomain: process.env.APP_DOMAIN || '' });
 }
 
 const HQActionSchema = z.discriminatedUnion('action', [
@@ -141,99 +91,37 @@ export async function POST(req) {
   if (!parsed.ok) return parsed.response;
   const { action, branchSlug } = parsed.data;
 
-  if (isSqlEnabled()) {
-    if (action === 'create_branch') {
-      if (!isValidBranchSlug(branchSlug)) {
-        return NextResponse.json({ error: 'Geçersiz slug — küçük harf, rakam ve tire, "main" dışında' }, { status: 400 });
-      }
-      const dup = await tdb().branch.findFirst({ where: { orgSlug: org, slug: branchSlug } });
-      if (dup) return NextResponse.json({ error: `"${branchSlug}" şubesi zaten var` }, { status: 409 });
-      const { name, directorUsername, directorPassword, directorName } = parsed.data;
-      await tdb().branch.create({ data: { orgSlug: org, slug: branchSlug, name, active: true } });
-      const passwordHash = await bcrypt.hash(directorPassword, 10);
-      await tdb(org, branchSlug).director.create({ data: { username: directorUsername, passwordHash, name: directorName || name } });
-      return NextResponse.json({ ok: true, branchSlug });
-    }
-
-    const meta = await tdb().branch.findFirst({ where: { orgSlug: org, slug: branchSlug } });
-    if (!meta && branchSlug !== 'main') return NextResponse.json({ error: 'Şube bulunamadı' }, { status: 404 });
-
-    if (action === 'toggle_active') {
-      if (branchSlug === 'main') return NextResponse.json({ error: 'Ana şube devre dışı bırakılamaz' }, { status: 400 });
-      await tdb().branch.update({ where: { orgSlug_slug: { orgSlug: org, slug: branchSlug } }, data: { active: !meta.active } });
-      return NextResponse.json({ ok: true, active: !meta.active });
-    }
-    if (action === 'reset_director') {
-      const dir = await tdb(org, branchSlug).director.findFirst();
-      if (!dir) return NextResponse.json({ error: 'Müdür kaydı bulunamadı' }, { status: 404 });
-      await tdb(org, branchSlug).director.update({ where: { id: dir.id }, data: { passwordHash: await bcrypt.hash(parsed.data.newPassword, 10) } });
-      return NextResponse.json({ ok: true });
-    }
-    if (action === 'rename') {
-      if (meta) await tdb().branch.update({ where: { orgSlug_slug: { orgSlug: org, slug: branchSlug } }, data: { name: parsed.data.name } });
-      else await tdb().branch.create({ data: { orgSlug: org, slug: branchSlug, name: parsed.data.name, active: true } }); // main fallback
-      return NextResponse.json({ ok: true });
-    }
-    return NextResponse.json({ error: 'Geçersiz action' }, { status: 400 });
-  }
-
   if (action === 'create_branch') {
     if (!isValidBranchSlug(branchSlug)) {
       return NextResponse.json({ error: 'Geçersiz slug — küçük harf, rakam ve tire, "main" dışında' }, { status: 400 });
     }
-
-    // Çakışma kontrolü
-    const existing = await rawRedis.sismember(`org:${org}:branches`, branchSlug);
-    if (existing) return NextResponse.json({ error: `"${branchSlug}" şubesi zaten var` }, { status: 409 });
-
+    const dup = await tdb().branch.findFirst({ where: { orgSlug: org, slug: branchSlug } });
+    if (dup) return NextResponse.json({ error: `"${branchSlug}" şubesi zaten var` }, { status: 409 });
     const { name, directorUsername, directorPassword, directorName } = parsed.data;
-
-    // Branch metadata (global)
-    await rawRedis.sadd(`org:${org}:branches`, branchSlug);
-    await rawRedis.set(`org:${org}:branch:${branchSlug}`, {
-      slug: branchSlug,
-      name,
-      active: true,
-      createdAt: new Date().toISOString(),
-    });
-
-    // Müdür (scoped — bu şubeye ait)
+    await tdb().branch.create({ data: { orgSlug: org, slug: branchSlug, name, active: true } });
     const passwordHash = await bcrypt.hash(directorPassword, 10);
-    await rawRedis.set(`t:${org}:${branchSlug}:director`, {
-      username: directorUsername,
-      passwordHash,
-      name: directorName || name,
-    });
-
+    await tdb(org, branchSlug).director.create({ data: { username: directorUsername, passwordHash, name: directorName || name } });
     return NextResponse.json({ ok: true, branchSlug });
   }
 
-  // Şube güncelleme işlemleri
-  const meta = await rawRedis.get(`org:${org}:branch:${branchSlug}`);
-  if (!meta && branchSlug !== 'main') {
-    return NextResponse.json({ error: 'Şube bulunamadı' }, { status: 404 });
-  }
-  const currentMeta = meta || { slug: branchSlug, name: branchSlug === 'main' ? 'Ana Şube' : branchSlug, active: true };
+  const meta = await tdb().branch.findFirst({ where: { orgSlug: org, slug: branchSlug } });
+  if (!meta && branchSlug !== 'main') return NextResponse.json({ error: 'Şube bulunamadı' }, { status: 404 });
 
   if (action === 'toggle_active') {
     if (branchSlug === 'main') return NextResponse.json({ error: 'Ana şube devre dışı bırakılamaz' }, { status: 400 });
-    await rawRedis.set(`org:${org}:branch:${branchSlug}`, { ...currentMeta, active: !currentMeta.active });
-    return NextResponse.json({ ok: true, active: !currentMeta.active });
+    await tdb().branch.update({ where: { orgSlug_slug: { orgSlug: org, slug: branchSlug } }, data: { active: !meta.active } });
+    return NextResponse.json({ ok: true, active: !meta.active });
   }
-
   if (action === 'reset_director') {
-    const dirKey = `t:${org}:${branchSlug}:director`;
-    const dir = await rawRedis.get(dirKey);
+    const dir = await tdb(org, branchSlug).director.findFirst();
     if (!dir) return NextResponse.json({ error: 'Müdür kaydı bulunamadı' }, { status: 404 });
-    const passwordHash = await bcrypt.hash(parsed.data.newPassword, 10);
-    await rawRedis.set(dirKey, { ...dir, passwordHash, mustChangePassword: true });
+    await tdb(org, branchSlug).director.update({ where: { id: dir.id }, data: { passwordHash: await bcrypt.hash(parsed.data.newPassword, 10) } });
     return NextResponse.json({ ok: true });
   }
-
   if (action === 'rename') {
-    await rawRedis.set(`org:${org}:branch:${branchSlug}`, { ...currentMeta, name: parsed.data.name });
+    if (meta) await tdb().branch.update({ where: { orgSlug_slug: { orgSlug: org, slug: branchSlug } }, data: { name: parsed.data.name } });
+    else await tdb().branch.create({ data: { orgSlug: org, slug: branchSlug, name: parsed.data.name, active: true } }); // main fallback
     return NextResponse.json({ ok: true });
   }
-
   return NextResponse.json({ error: 'Geçersiz action' }, { status: 400 });
 }

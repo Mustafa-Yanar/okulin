@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { sendPushToUser } from '@/lib/push';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Günlük ödeme hatırlatması cron'u.
@@ -21,26 +19,9 @@ export async function GET(req) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Öğrenci + finans/taksit verisini çek (SQL-aware). rows: [{ name, parentPhone, installments }]
-  let rows;
-  if (isSqlEnabled()) {
-    const studs = await tdb().student.findMany({ include: { finance: { include: { installments: true } } } });
-    rows = studs.map(s => ({ name: s.name, parentPhone: s.parentPhone, installments: s.finance?.installments || [] }));
-  } else {
-    const sids = await redis.smembers('students');
-    if (!sids || sids.length === 0) return NextResponse.json({ ok: true, parents: 0, devices: 0 });
-    const sp = redis.pipeline();
-    sids.forEach(id => sp.get(`student:${id}`));
-    const students = await sp.exec();
-    const fp = redis.pipeline();
-    sids.forEach(id => fp.get(`finance:${id}`));
-    const finances = await fp.exec();
-    rows = sids.map((id, i) => ({
-      name: students[i]?.name,
-      parentPhone: students[i]?.parentPhone,
-      installments: Array.isArray(finances[i]?.installments) ? finances[i].installments : [],
-    })).filter(r => r.name);
-  }
+  // Öğrenci + finans/taksit verisini çek. rows: [{ name, parentPhone, installments }]
+  const studs = await tdb().student.findMany({ include: { finance: { include: { installments: true } } } });
+  const rows = studs.map(s => ({ name: s.name, parentPhone: s.parentPhone, installments: s.finance?.installments || [] }));
   if (rows.length === 0) return NextResponse.json({ ok: true, parents: 0, devices: 0 });
 
   const today = todayISO();

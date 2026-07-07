@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
-import { isSqlEnabled } from '@/lib/usesql';
 import {
   getWeekKey, getMondayOfWeek, initWeekForTeacher,
   getAllTeachers, getCurrentWeek, setCurrentWeek, getTeacherWeekSlots,
@@ -8,7 +7,7 @@ import {
 import { ALL_DAYS, slotsForDay } from '@/lib/constants';
 
 // Pazar 11:00 UTC+3 = 08:00 UTC → "0 8 * * 0"
-// SQL-aware: öğretmen listesi / current_week / slot okuma / hafta init SQL'den.
+// Öğretmen listesi / current_week / slot okuma / hafta init SQL'den.
 // NOT: haftalık arşiv (archive:teacher|student) hâlâ Redis — arşiv alt-sistemi SQL'e
 // taşınmadı (okuyan /api/archive de Redis). Tutarlı; ayrı bir göç işi.
 export async function GET(req) {
@@ -69,20 +68,17 @@ export async function GET(req) {
   }
 
   // 2. Arşivleri Redis'e yaz (arşiv alt-sistemi Redis — yukarıdaki NOT)
-  // SQL modunda SlotBooking kalıcı olduğu için Redis'e yazmaya gerek yoktur.
-  if (!isSqlEnabled()) {
-    const writePipeline = redis.pipeline();
-    let hasWriteOps = false;
-    for (const [tid, entries] of Object.entries(teacherArchiveMap)) {
-      writePipeline.set(`archive:teacher:${tid}:${currentWeek}`, entries);
-      hasWriteOps = true;
-    }
-    for (const [sid, entries] of Object.entries(studentArchiveMap)) {
-      writePipeline.set(`archive:student:${sid}:${currentWeek}`, entries);
-      hasWriteOps = true;
-    }
-    if (hasWriteOps) await writePipeline.exec();
+  const writePipeline = redis.pipeline();
+  let hasWriteOps = false;
+  for (const [tid, entries] of Object.entries(teacherArchiveMap)) {
+    writePipeline.set(`archive:teacher:${tid}:${currentWeek}`, entries);
+    hasWriteOps = true;
   }
+  for (const [sid, entries] of Object.entries(studentArchiveMap)) {
+    writePipeline.set(`archive:student:${sid}:${currentWeek}`, entries);
+    hasWriteOps = true;
+  }
+  if (hasWriteOps) await writePipeline.exec();
 
   // 3. Tüm öğretmenlerin yeni haftasını init et (SQL-aware)
   await Promise.all(teachers.map(t => initWeekForTeacher(t.id, nextWeek)));
