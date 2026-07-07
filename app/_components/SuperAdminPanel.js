@@ -465,7 +465,7 @@ function DemoRequests() {
           <Inbox size={16} /> Demo Talepleri
           <span className="text-slate-400 font-normal text-sm">({items.length})</span>
         </h2>
-        <button onClick={load} aria-label="Yenile" className="btn-icon">
+        <button onClick={() => mutate()} aria-label="Yenile" className="btn-icon">
           <RefreshCw size={16} />
         </button>
       </div>
