@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import * as XLSX from 'xlsx';
-import redis from '@/lib/db';
 import { getSession, initialPassword, canManage } from '@/lib/auth';
 import { getClasses } from '@/lib/classes';
 import { normalizeTurkishMobile } from '@/lib/phone';
-import { addToIndex } from '@/lib/userIndex';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 import { newId as makeId } from '@/lib/id';
@@ -41,23 +38,11 @@ export async function POST(req) {
   const allClasses = await getClasses();
   const groupById = new Map(allClasses.map((c) => [c.id, c.group]));
 
-  const sqlMode = isSqlEnabled();
-
-  // Mevcut öğrenci kullanıcı adları + (SQL) sınıf legacyId→id haritası
-  const existingUsernames = new Set();
-  let clsIdMap = null;
-  if (sqlMode) {
-    const studs = await tdb().student.findMany({ select: { username: true } });
-    studs.forEach((s) => { if (s.username) existingUsernames.add(s.username); });
-    const classes = await tdb().class.findMany({ select: { id: true, legacyId: true } });
-    clsIdMap = new Map(classes.map((c) => [c.legacyId, c.id]));
-  } else {
-    const existingIds = await redis.smembers('students');
-    for (const sid of existingIds) {
-      const s = await redis.get(`student:${sid}`);
-      if (s?.username) existingUsernames.add(s.username);
-    }
-  }
+  // Mevcut öğrenci kullanıcı adları + sınıf legacyId→id haritası
+  const studs = await tdb().student.findMany({ select: { username: true } });
+  const existingUsernames = new Set(studs.filter((s) => s.username).map((s) => s.username));
+  const classes = await tdb().class.findMany({ select: { id: true, legacyId: true } });
+  const clsIdMap = new Map(classes.map((c) => [c.legacyId, c.id]));
 
   const results = { added: [], skipped: [], errors: [] };
 
@@ -109,27 +94,14 @@ export async function POST(req) {
     const password = initialPassword('', normPhone);
     const hash = await bcrypt.hash(password, 10);
     const id = makeId();
-    if (sqlMode) {
-      await tdb().student.create({ data: {
-        legacyId: id, name, username: name, passwordHash: hash,
-        classId: clsIdMap.get(cls) || null, group,
-        phone: normPhone || null, parentPhone: normParentPhone || null,
-        parentName: parentName || null,
-        diplomaNotu: diplomaNotu === '' ? null : diplomaNotu, // Float? ; '' → null
-        mustChangePassword: true,
-      } });
-    } else {
-      const student = {
-        id, name, username: name, passwordHash: hash, cls, group,
-        phone: normPhone, parentPhone: normParentPhone,
-        parentName,
-        diplomaNotu, // '' (mezun değil/boş) veya 50-100 arası sayı; OBP = ×5
-        mustChangePassword: true,  // ilk girişte öğrenci kendi şifresini belirleyecek
-      };
-      await redis.set(`student:${id}`, student);
-      await redis.sadd('students', id);
-      await addToIndex(name, 'student', id);
-    }
+    await tdb().student.create({ data: {
+      legacyId: id, name, username: name, passwordHash: hash,
+      classId: clsIdMap.get(cls) || null, group,
+      phone: normPhone || null, parentPhone: normParentPhone || null,
+      parentName: parentName || null,
+      diplomaNotu: diplomaNotu === '' ? null : diplomaNotu, // Float? ; '' → null
+      mustChangePassword: true,
+    } });
     existingUsernames.add(name);
     results.added.push({ name, cls, password });
   }

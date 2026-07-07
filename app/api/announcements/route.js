@@ -1,23 +1,15 @@
 import { NextResponse } from 'next/server';
-import redis from '@/lib/db';
 import { getSession, isManager } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
 import { classToGroup, classLabel, STUDENT_GROUPS } from '@/lib/constants';
 import { getClasses, getClass } from '@/lib/classes';
-import { isSqlEnabled } from '@/lib/usesql';
 import { tdb } from '@/lib/sqldb';
 
 // Tek yön duyuru/bilgilendirme sistemi (hub-spoke). Gönderen: müdür + rehber.
 // Alıcı: rol×kapsam ile hedeflenir; rol-içi (veli-veli vb.) YOK. Okundu + push.
-// Anahtarlar (tenant-scoped):
-//   announcements (set) → id'ler
-//   announcement:<id> → {id, title, body, audience, audienceLabel, recipients:[{role,id,name}], recipientCount, sender..., createdAt}
-//   announcement:<id>:reads (set) → okuyan id'leri
-//   inbox:<role>:<id> (set) → o kullanıcıya hedeflenen duyuru id'leri (fan-out)
 
-const TTL = 60 * 60 * 24 * 365; // 1 yıl
 export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
 import { newId as genId } from '@/lib/id';
@@ -48,26 +40,11 @@ async function resolveRecipients(audience) {
   const groupMap = async () => new Map((await getClasses()).map(c => [c.id, c.group]));
 
   if (role === 'parent') {
-    if (isSqlEnabled()) {
-      const rows = await tdb().parent.findMany();
-      let recs = rows.map(p => ({ id: p.phone, children: p.children || [] }));
-      if (scope === 'selected') recs = recs.filter(r => ids?.includes(r.id));
-      else if (scope === 'class') recs = recs.filter(r => (r.children || []).some(c => c.cls === cls));
-      else if (scope === 'group') {
-        const groupById = await groupMap();
-        recs = recs.filter(r => (r.children || []).some(c => (groupById.get(c.cls) ?? classToGroup(c.cls)) === group));
-      }
-      return recs.map(r => ({ role: 'parent', id: r.id, name: (r.children || []).map(c => c.name).join(', ') + ' (Veli)' }));
-    }
-    const phones = await redis.smembers('parents');
-    if (!phones || phones.length === 0) return [];
-    const pipe = redis.pipeline();
-    phones.forEach(p => pipe.get(`parent:${p}`));
-    let recs = (await pipe.exec()).filter(Boolean);
+    const rows = await tdb().parent.findMany();
+    let recs = rows.map(p => ({ id: p.phone, children: p.children || [] }));
     if (scope === 'selected') recs = recs.filter(r => ids?.includes(r.id));
     else if (scope === 'class') recs = recs.filter(r => (r.children || []).some(c => c.cls === cls));
     else if (scope === 'group') {
-      // Çocuğun şube id'sinden grubu çöz — registry-aware (özel şube id'leri classToGroup'ta yok).
       const groupById = await groupMap();
       recs = recs.filter(r => (r.children || []).some(c => (groupById.get(c.cls) ?? classToGroup(c.cls)) === group));
     }
@@ -75,19 +52,8 @@ async function resolveRecipients(audience) {
   }
 
   if (role === 'student') {
-    if (isSqlEnabled()) {
-      const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
-      let recs = rows.map(s => ({ id: s.legacyId, name: s.name, cls: s.class?.legacyId || '', group: s.group }));
-      if (scope === 'selected') recs = recs.filter(s => ids?.includes(s.id));
-      else if (scope === 'class') recs = recs.filter(s => s.cls === cls);
-      else if (scope === 'group') recs = recs.filter(s => s.group === group);
-      return recs.map(s => ({ role: 'student', id: s.id, name: s.name }));
-    }
-    const sids = await redis.smembers('students');
-    if (!sids || sids.length === 0) return [];
-    const pipe = redis.pipeline();
-    sids.forEach(id => pipe.get(`student:${id}`));
-    let recs = (await pipe.exec()).filter(Boolean);
+    const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
+    let recs = rows.map(s => ({ id: s.legacyId, name: s.name, cls: s.class?.legacyId || '', group: s.group }));
     if (scope === 'selected') recs = recs.filter(s => ids?.includes(s.id));
     else if (scope === 'class') recs = recs.filter(s => s.cls === cls);
     else if (scope === 'group') recs = recs.filter(s => s.group === group);
@@ -95,17 +61,8 @@ async function resolveRecipients(audience) {
   }
 
   // teacher — şimdilik yalnız 'all' veya 'selected' (branş/sınıf hedefi sonra)
-  if (isSqlEnabled()) {
-    const rows = await tdb().teacher.findMany();
-    let recs = rows.map(t => ({ id: t.legacyId, name: t.name }));
-    if (scope === 'selected') recs = recs.filter(t => ids?.includes(t.id));
-    return recs.map(t => ({ role: 'teacher', id: t.id, name: t.name }));
-  }
-  const tids = await redis.smembers('teachers');
-  if (!tids || tids.length === 0) return [];
-  const pipe = redis.pipeline();
-  tids.forEach(id => pipe.get(`teacher:${id}`));
-  let recs = (await pipe.exec()).filter(Boolean);
+  const rows = await tdb().teacher.findMany();
+  let recs = rows.map(t => ({ id: t.legacyId, name: t.name }));
   if (scope === 'selected') recs = recs.filter(t => ids?.includes(t.id));
   return recs.map(t => ({ role: 'teacher', id: t.id, name: t.name }));
 }
@@ -137,73 +94,31 @@ export async function GET(req) {
 
   // Kim okudu detayı (yönetici)
   if (detailId && isManager(session)) {
-    if (isSqlEnabled()) {
-      const ann = await tdb().announcement.findFirst({ where: { legacyId: detailId }, include: { recipients: true } });
-      if (!ann) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
-      const recipients = ann.recipients.map(r => ({ id: r.recipientId, name: r.name, read: r.read }));
-      return NextResponse.json({ id: detailId, title: ann.data.title, recipients });
-    }
-    const rec = await redis.get(`announcement:${detailId}`);
-    if (!rec) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
-    const readers = new Set(await redis.smembers(`announcement:${detailId}:reads`) || []);
-    const recipients = (rec.recipients || []).map(r => ({ id: r.id, name: r.name, read: readers.has(r.id) }));
-    return NextResponse.json({ id: detailId, title: rec.title, recipients });
+    const ann = await tdb().announcement.findFirst({ where: { legacyId: detailId }, include: { recipients: true } });
+    if (!ann) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
+    const recipients = ann.recipients.map(r => ({ id: r.recipientId, name: r.name, read: r.read }));
+    return NextResponse.json({ id: detailId, title: ann.data.title, recipients });
   }
 
   if (isManager(session)) {
-    if (isSqlEnabled()) {
-      const rows = await tdb().announcement.findMany({ include: { _count: { select: { recipients: { where: { read: true } } } } } });
-      const list = rows.map(r => ({ ...r.data, readCount: r._count.recipients }));
-      list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-      return NextResponse.json({ announcements: list });
-    }
-    const ids = await redis.smembers('announcements');
-    if (!ids || ids.length === 0) return NextResponse.json({ announcements: [] });
-    const pipe = redis.pipeline();
-    ids.forEach(id => { pipe.get(`announcement:${id}`); pipe.scard(`announcement:${id}:reads`); });
-    const res = await pipe.exec();
-    const list = [];
-    ids.forEach((id, i) => {
-      const rec = res[i * 2];
-      if (!rec) return;
-      list.push({ ...rec, readCount: res[i * 2 + 1] || 0 });
-    });
+    const rows = await tdb().announcement.findMany({ include: { _count: { select: { recipients: { where: { read: true } } } } } });
+    const list = rows.map(r => ({ ...r.data, readCount: r._count.recipients }));
     list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-    // body'yi listede kısaltma — composer detayda gösterir
     return NextResponse.json({ announcements: list });
   }
 
   // Alıcı gelen kutusu
-  if (isSqlEnabled()) {
-    const myRecs = await tdb().announcementRecipient.findMany({
-      where: { role: session.role, recipientId: session.id },
-      include: { announcement: true },
-    });
-    const list = myRecs
-      .filter(r => r.announcement)
-      .map(r => {
-        const d = r.announcement.data;
-        return { id: d.id, title: d.title, body: d.body, senderName: d.senderName, createdAt: d.createdAt, read: r.read };
-      })
-      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-    return NextResponse.json({ announcements: list });
-  }
-  const inboxIds = await redis.smembers(`inbox:${session.role}:${session.id}`);
-  if (!inboxIds || inboxIds.length === 0) return NextResponse.json({ announcements: [] });
-  const pipe = redis.pipeline();
-  inboxIds.forEach(id => { pipe.get(`announcement:${id}`); pipe.sismember(`announcement:${id}:reads`, session.id); });
-  const res = await pipe.exec();
-  const list = [];
-  inboxIds.forEach((id, i) => {
-    const rec = res[i * 2];
-    if (!rec) return; // süresi dolmuş / silinmiş → atla
-    list.push({
-      id: rec.id, title: rec.title, body: rec.body,
-      senderName: rec.senderName, createdAt: rec.createdAt,
-      read: !!res[i * 2 + 1],
-    });
+  const myRecs = await tdb().announcementRecipient.findMany({
+    where: { role: session.role, recipientId: session.id },
+    include: { announcement: true },
   });
-  list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  const list = myRecs
+    .filter(r => r.announcement)
+    .map(r => {
+      const d = r.announcement.data;
+      return { id: d.id, title: d.title, body: d.body, senderName: d.senderName, createdAt: d.createdAt, read: r.read };
+    })
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   return NextResponse.json({ announcements: list });
 }
 
@@ -217,21 +132,13 @@ export async function POST(req) {
 
   // Alıcı: duyuruyu okundu işaretler
   if (data.action === 'read') {
-    if (isSqlEnabled()) {
-      const ann = await tdb().announcement.findFirst({ where: { legacyId: data.id } });
-      if (!ann) return NextResponse.json({ error: 'Bu duyuru size ait değil' }, { status: 403 });
-      const r = await tdb().announcementRecipient.updateMany({
-        where: { announcementId: ann.id, role: session.role, recipientId: session.id },
-        data: { read: true },
-      });
-      if (r.count === 0) return NextResponse.json({ error: 'Bu duyuru size ait değil' }, { status: 403 });
-      return NextResponse.json({ ok: true });
-    }
-    // yalnız kendi inbox'undaki duyuruyu işaretleyebilir
-    const inMy = await redis.sismember(`inbox:${session.role}:${session.id}`, data.id);
-    if (!inMy) return NextResponse.json({ error: 'Bu duyuru size ait değil' }, { status: 403 });
-    await redis.sadd(`announcement:${data.id}:reads`, session.id);
-    await redis.expire(`announcement:${data.id}:reads`, TTL);
+    const ann = await tdb().announcement.findFirst({ where: { legacyId: data.id } });
+    if (!ann) return NextResponse.json({ error: 'Bu duyuru size ait değil' }, { status: 403 });
+    const r = await tdb().announcementRecipient.updateMany({
+      where: { announcementId: ann.id, role: session.role, recipientId: session.id },
+      data: { read: true },
+    });
+    if (r.count === 0) return NextResponse.json({ error: 'Bu duyuru size ait değil' }, { status: 403 });
     return NextResponse.json({ ok: true });
   }
 
@@ -252,23 +159,13 @@ export async function POST(req) {
     senderId: session.id, senderName: session.name, senderRole: session.role,
     createdAt: new Date().toISOString(),
   };
-  if (isSqlEnabled()) {
-    // data = içerik (recipients normalize AnnouncementRecipient'a, recipientCount data'da kalır).
-    const { recipients: _omit, ...dataNoRecips } = rec;
-    const ann = await tdb().announcement.create({ data: { legacyId: id, data: dataNoRecips } });
-    if (recipients.length) {
-      await tdb().announcementRecipient.createMany({
-        data: recipients.map(r => ({ announcementId: ann.id, role: r.role, recipientId: r.id, name: r.name })),
-      });
-    }
-  } else {
-    await redis.set(`announcement:${id}`, rec, { ex: TTL });
-    await redis.sadd('announcements', id);
-
-    // Fan-out: her alıcının inbox'una ekle
-    const pipe = redis.pipeline();
-    recipients.forEach(r => pipe.sadd(`inbox:${r.role}:${r.id}`, id));
-    await pipe.exec();
+  // data = içerik (recipients normalize AnnouncementRecipient'a, recipientCount data'da kalır).
+  const { recipients: _omit, ...dataNoRecips } = rec;
+  const ann = await tdb().announcement.create({ data: { legacyId: id, data: dataNoRecips } });
+  if (recipients.length) {
+    await tdb().announcementRecipient.createMany({
+      data: recipients.map(r => ({ announcementId: ann.id, role: r.role, recipientId: r.id, name: r.name })),
+    });
   }
 
   // Push bildirimi (paralel, hata toleranslı)
@@ -293,23 +190,8 @@ export async function DELETE(req) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
-  if (isSqlEnabled()) {
-    const ann = await tdb().announcement.findFirst({ where: { legacyId: id } });
-    if (!ann) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
-    await tdb().announcement.delete({ where: { id: ann.id } }); // recipients cascade
-    return NextResponse.json({ ok: true });
-  }
-
-  const rec = await redis.get(`announcement:${id}`);
-  if (!rec) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
-
-  // inbox referanslarını temizle
-  const pipe = redis.pipeline();
-  (rec.recipients || []).forEach(r => pipe.srem(`inbox:${r.role}:${r.id}`, id));
-  await pipe.exec();
-  await redis.del(`announcement:${id}`);
-  await redis.del(`announcement:${id}:reads`);
-  await redis.srem('announcements', id);
-
+  const ann = await tdb().announcement.findFirst({ where: { legacyId: id } });
+  if (!ann) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
+  await tdb().announcement.delete({ where: { id: ann.id } }); // recipients cascade
   return NextResponse.json({ ok: true });
 }
