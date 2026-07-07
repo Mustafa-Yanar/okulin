@@ -4,7 +4,7 @@ import { parseBody, z } from '@/lib/validate';
 import {
   getClasses, defaultCoursesFor, seedClassesFromConstants,
 } from '@/lib/classes';
-import { getCourses, seedCoursesFromConstants } from '@/lib/courses';
+import { getCourses } from '@/lib/courses';
 import { tdb } from '@/lib/sqldb';
 
 export const runtime = 'nodejs';
