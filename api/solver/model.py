@@ -9,6 +9,7 @@ Girdi payload:
   blocks: {cls: [[day, slotA, slotB], ...]},   # classBlockPairs(cls) çıktısı (frontend)
   colKey: {cls: key},                           # colKeyFor(cls) (frontend)
   group:  {cls: 'ortaokul'|'lise'|'mezun'},     # classToGroup(cls) (frontend)
+  dayLimits: {cls: {day: hours}},               # opsiyonel — sınıf-gün saat üst sınırı (K7)
 }
 
 Çıktı:
@@ -180,6 +181,26 @@ def solve(payload):
         for ds, terms in cover.items():
             if len(terms) > 1:
                 model.Add(sum(terms) <= 1)
+
+    # ── HARD: K7 — sınıf-gün saat üst sınırı (dayLimits) ──
+    # Müdür "bu sınıfın pazartesi en fazla 6 saati olsun" der; o gün sınıfa yerleşen
+    # toplam saat (blok başına 2) limiti aşamaz. Limit girilmeyen gün serbesttir.
+    # JSON anahtarları string gelir (gün "0".."6") — int'e çevrilir.
+    day_limits = payload.get('dayLimits') or {}
+    for cls, us in units_by_cls.items():
+        limits = day_limits.get(cls) or {}
+        if not limits:
+            continue
+        pool = blocks_by_cls.get(cls, [])
+        for day_key, lim in limits.items():
+            try:
+                d = int(day_key)
+                lim = int(lim)
+            except (TypeError, ValueError):
+                continue
+            terms = [x[u][p] for u in us for p, b in enumerate(pool) if b[0] == d]
+            if terms:
+                model.Add(2 * sum(terms) <= lim)
 
     # ── HARD: K6 — öğretmen izin günü → o gün ders yok ──
     # z lineerleştirmesi K4 için zaten kurulacak; izin gününü de z üzerinden engelle.

@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Sparkles, AlertTriangle, Check, Download, Eye } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Sparkles, AlertTriangle, Check, Download, Eye, Save } from 'lucide-react';
 import {
   STUDENT_GROUPS, classToGroup, WEEKDAY_SLOT_IDS, WEEKEND_SLOT_IDS,
   DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES,
 } from '@/lib/constants';
 import TeacherPresets from '../director/TeacherPresets';
 import { useConfirm } from '../ConfirmProvider';
+import { useClasses } from '../ClassesContext';
 
 // Ders adı = branş adı; otomatik eşleme yok (çoklu branş modeli).
 
@@ -24,8 +25,6 @@ const WEEKDAY_LISE_SLOTS = [9,10];
 // Lise: e1-e12 (idx 0-11) = 6 blok/gün (tüm hafta sonu açık)
 const WEEKEND_ORTAOKUL_SLOTS = [0,1,2,3,4,5,6,7,8,9];
 const WEEKEND_LISE_SLOTS     = [0,1,2,3,4,5,6,7,8,9,10,11];
-
-const FLOOR1 = [1,2,3,4,5], FLOOR2 = [6,7,8], FLOOR3 = [9,10,11,12];
 
 const COURSE_COLOR = {
   'Türkçe':'#ec4899','TYT Matematik':'#6366f1','AYT Matematik':'#4f46e5','Geometri':'#818cf8','Matematik':'#6366f1',
@@ -61,19 +60,6 @@ const COL_COURSES = {
   'Mezun Eşit Ağırlık':     ['Türkçe','TYT Matematik','AYT Matematik','Geometri','Tarih','Coğrafya','Felsefe'],
 };
 
-const DEFAULT_LOAD = {
-  'Ortaokul_7':              {'Türkçe':4,'Matematik':4,'Fen Bilgisi':4,'Sosyal Bilgiler':4,'İngilizce':4},
-  'Ortaokul_8':              {'Türkçe':4,'Matematik':4,'Fen Bilgisi':4,'İnkılap Tarihi':4,'İngilizce':4},
-  'Lise Ortak_9':            {'Türkçe':4,'Matematik':4,'Fizik':2,'Kimya':2,'Biyoloji':2,'Tarih':2,'Coğrafya':2,'Felsefe':0},
-  'Lise Ortak_10':           {'Türkçe':4,'Matematik':4,'Fizik':2,'Kimya':2,'Biyoloji':2,'Tarih':2,'Coğrafya':2,'Felsefe':0},
-  'Lise Sayısal_11':         {'Türkçe':4,'Matematik':4,'Fizik':4,'Kimya':4,'Biyoloji':4},
-  'Lise Eşit Ağırlık_11':   {'Türkçe':4,'Matematik':4,'Tarih':4,'Coğrafya':4,'Felsefe':0},
-  'Lise Sayısal_12':         {'Türkçe':4,'TYT Matematik':4,'AYT Matematik':4,'Geometri':2,'Fizik':4,'Kimya':4,'Biyoloji':4},
-  'Lise Eşit Ağırlık_12':   {'Türkçe':4,'TYT Matematik':4,'AYT Matematik':4,'Geometri':2,'Tarih':4,'Coğrafya':4,'Felsefe':2},
-  'Mezun Sayısal':           {'Türkçe':2,'TYT Matematik':4,'AYT Matematik':4,'Geometri':2,'Fizik':4,'Kimya':4,'Biyoloji':4},
-  'Mezun Eşit Ağırlık':     {'Türkçe':4,'TYT Matematik':4,'AYT Matematik':4,'Geometri':2,'Tarih':4,'Coğrafya':4,'Felsefe':2},
-};
-
 // Sınıf → sütun anahtarı
 function colKeyFor(cls) {
   if (cls.startsWith('m')) {
@@ -91,17 +77,43 @@ function colKeyFor(cls) {
 }
 function coursesForCol(key) { return COL_COURSES[key] || []; }
 
+// Registry şube kaydından (kademe/duzey/dal) sütun anahtarı türet. Özel şubeler
+// (s_…) sabit-kod colKeyFor ile çözülemez; kayıttaki metadata tek doğru kaynak.
+// Eşleşen sütun yoksa null → şube listede görünür ama ders talebi üretmez.
+function colKeyFromRegistry(c) {
+  if (!c) return null;
+  if (c.group === 'mezun') {
+    if (c.dal === 'ea') return 'Mezun Eşit Ağırlık';
+    if (c.dal === 'sayisal' || !c.dal) return 'Mezun Sayısal';
+    return null;
+  }
+  if (c.group === 'ortaokul') {
+    return (c.duzey === '7' || c.duzey === '8') ? `Ortaokul_${c.duzey}` : null;
+  }
+  if (c.group === 'lise') {
+    if (c.duzey === '9' || c.duzey === '10') return `Lise Ortak_${c.duzey}`;
+    if (c.duzey === '11' || c.duzey === '12') {
+      if (c.dal === 'ea') return `Lise Eşit Ağırlık_${c.duzey}`;
+      if (c.dal === 'sayisal' || !c.dal) return `Lise Sayısal_${c.duzey}`;
+    }
+  }
+  return null;
+}
+
+// Çözücünün blok havuzu ürettiği köprü grupları — ilkokul kapsam dışı (Faz 2+).
+const SOLVER_GROUPS = ['ortaokul', 'lise', 'mezun'];
+
 const ALL_CLASSES = [...STUDENT_GROUPS.ortaokul.classes,...STUDENT_GROUPS.lise.classes,...STUDENT_GROUPS.mezun.classes];
 
 function teacherTeaches(t, course) {
   return (t.branches || []).includes(course);
 }
 
-// Sınıfın ders bloklarını döndürür: [[gün, slotA, slotB], ...]
+// Grubun ders bloklarını döndürür: [[gün, slotA, slotB], ...]
 // Her blok = 2 ardışık slot (aynı ders çifti)
 // Kural: 9/10. hafta sonu blokları sadece ortaokula açık; lise ve mezun asla kullanamaz
-function classBlockPairs(cls) {
-  const g = classToGroup(cls);
+// Grup parametre olarak gelir — özel şubelerde (s_…) registry group'u kullanılır.
+function classBlockPairs(g) {
   const blocks = [];
   if (g === 'mezun') {
     // Sabah blokları: w1-w6 (idx 0-5) → 3 blok/gün × 4 gün = 12 blok
@@ -120,24 +132,6 @@ function classBlockPairs(cls) {
   // Hafta içi akşam: idx 9,10 → 1 blok per gün
   [0,1,2,3,4].forEach(d => blocks.push([d, 9, 10]));
   return blocks;
-}
-
-function classRoomMap(classes) {
-  const map = {}; const used1=[], used2=[], used3=[];
-  const nextFree = (floor, usedArr) => { for (const r of floor) if (!usedArr.includes(r)){usedArr.push(r);return r;} return floor[0]; };
-  classes.forEach(cls => {
-    const g = classToGroup(cls);
-    if (g === 'ortaokul') map[cls] = nextFree(FLOOR3, used3);
-    else if (g === 'mezun') {
-      if (['m1','m2','m3','m6','m7'].includes(cls)) map[cls] = nextFree(FLOOR1, used1);
-      else if (['m4','m8','m9'].includes(cls)) map[cls] = nextFree(FLOOR2, used2);
-      else map[cls] = nextFree([...FLOOR1,...FLOOR2], [...used1,...used2]);
-    }
-  });
-  classes.filter(c=>classToGroup(c)==='lise')
-    .sort((a,b)=>parseInt(b[0])-parseInt(a[0])||a.localeCompare(b))
-    .forEach(cls=>{ map[cls]=nextFree([...FLOOR1,...FLOOR2,...FLOOR3],[...used1,...used2,...used3]); });
-  return map;
 }
 
 function slotIdFor(day, slotIdx) {
@@ -179,30 +173,30 @@ function teacherBlockCap(t, grp) {
 }
 
 // Ön analiz: oluşturmadan önce kapasite/çakışma sorunlarını hesapla
-function analyzeLoad(classes, load, teachers) {
+function analyzeLoad(classes, load, teachers, dayLimits, { colKeyOf, groupOf, labelOf }) {
   const errors = [], warnings = [], infos = [];
 
   // 1. Tek sayı kontrolü
   for (const cls of classes) {
-    const key = colKeyFor(cls);
+    const key = colKeyOf(cls);
     for (const course of coursesForCol(key)) {
       const h = (load[key]?.[course]) || 0;
       if (h > 0 && h % 2 !== 0) {
-        errors.push(`${cls.toUpperCase()} — ${course}: ${h} saat (tek sayı, blok yapılamaz)`);
+        errors.push(`${labelOf(cls)} — ${course}: ${h} saat (tek sayı, blok yapılamaz)`);
       }
     }
   }
 
   // 2. Uygun öğretmen yok
   for (const cls of classes) {
-    const key = colKeyFor(cls), grp = classToGroup(cls);
+    const key = colKeyOf(cls), grp = groupOf(cls);
     for (const course of coursesForCol(key)) {
       const h = (load[key]?.[course]) || 0; if (h <= 0) continue;
       const eligible = teachers.filter(tt =>
         teacherTeaches(tt, course) && teacherGroups(tt).includes(grp)
       );
       if (eligible.length === 0) {
-        errors.push(`${cls.toUpperCase()} — ${course}: uygun öğretmen yok`);
+        errors.push(`${labelOf(cls)} — ${course}: uygun öğretmen yok`);
       }
     }
   }
@@ -213,7 +207,7 @@ function analyzeLoad(classes, load, teachers) {
   const branchPairs = {};  // branch+grp kombinasyonu için toplam çift talebi
 
   for (const cls of classes) {
-    const key = colKeyFor(cls), grp = classToGroup(cls);
+    const key = colKeyOf(cls), grp = groupOf(cls);
     for (const course of coursesForCol(key)) {
       const h = (load[key]?.[course]) || 0; if (h <= 0) continue;
       const branch = course; // ders adı = branş
@@ -251,11 +245,38 @@ function analyzeLoad(classes, load, teachers) {
 
   // 5. Hiç talep yok kontrolü
   const totalHours = classes.reduce((s, cls) => {
-    const key = colKeyFor(cls);
+    const key = colKeyOf(cls);
     return s + coursesForCol(key).reduce((ss, c) => ss + ((load[key]?.[c]) || 0), 0);
   }, 0);
   if (totalHours === 0) {
     infos.push('Hiç ders saati girilmemiş — ders yükü tablosunu doldurun.');
+  }
+
+  // 6. Sınıf-gün limitleri: limitli kapasite toplam yükü karşılıyor mu?
+  // Blok = 2 saat olduğundan tek sayı limit fiilen bir alta yuvarlanır.
+  for (const cls of classes) {
+    const limits = dayLimits?.[cls];
+    if (!limits || Object.keys(limits).length === 0) continue;
+    const key = colKeyOf(cls);
+    const demand = coursesForCol(key).reduce((s, c) => s + ((load[key]?.[c]) || 0), 0);
+    const poolHours = {}; // gün → havuzdaki saat kapasitesi
+    classBlockPairs(groupOf(cls)).forEach(b => { poolHours[b[0]] = (poolHours[b[0]] || 0) + 2; });
+    for (const [d, lim] of Object.entries(limits)) {
+      if (lim % 2 === 1) {
+        warnings.push(`${labelOf(cls)} ${DAYS[d]}: limit ${lim} tek sayı — blok 2 saat, fiilen ${lim - 1} saat yerleşir`);
+      }
+      if (poolHours[d] == null) {
+        infos.push(`${labelOf(cls)} ${DAYS[d]}: bu grubun o gün ders havuzu yok — limit etkisiz`);
+      }
+    }
+    if (demand <= 0) continue;
+    const cap = Object.entries(poolHours).reduce((s, [d, ph]) => {
+      const lim = limits[d];
+      return s + (lim == null ? ph : Math.min(ph, Math.floor(lim / 2) * 2));
+    }, 0);
+    if (cap < demand) {
+      errors.push(`${labelOf(cls)} — günlük limitler yetersiz: ${demand} saat yük var, limitlerle en fazla ${cap} saat yerleşebilir`);
+    }
   }
 
   return { errors, warnings, infos, ok: errors.length === 0 };
@@ -264,10 +285,15 @@ function analyzeLoad(classes, load, teachers) {
 // ── Ana bileşen ──
 export default function ProgramOlusturucu({ api, showToast, activeClasses, branding }) {
   const confirm = useConfirm();
+  const { classes: registryClasses } = useClasses();
   const [teachers, setTeachers] = useState(null);
-  const [load, setLoad]         = useState(() => JSON.parse(JSON.stringify(DEFAULT_LOAD)));
+  // Ders yükü BOŞ başlar (tüm değerler 0) — kaydedilmiş plan varsa config'ten yüklenir.
+  const [load, setLoad]         = useState({});
+  const [dayLimits, setDayLimits] = useState({}); // {cls: {gün: saat}} — sınıf-gün üst sınırı
   const [result, setResult]     = useState(null);
   const [maxWeekly, setMaxWeekly] = useState(40);
+  const [planDirty, setPlanDirty] = useState(false);
+  const [savingPlan, setSavingPlan] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [applying, setApplying]   = useState(false);
   const [clearing, setClearing]   = useState(false);
@@ -277,10 +303,37 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
   const [analysis, setAnalysis]   = useState(null);
   const [presetTeacherId, setPresetTeacherId] = useState(''); // ön eşleştirme paneli (madde 11)
 
+  const classMeta = useMemo(
+    () => new Map((registryClasses || []).map(c => [c.id, c])),
+    [registryClasses]
+  );
+
+  // Sınıf listesi: kayıtlı şube registry'si varsa ONU kullan — içinde öğrenci olmayan
+  // şubeler de programa girer (boş/dolu olması engel değil). Registry yoksa (hata/eski
+  // kurum) öğrenci-türevli listeye, o da boşsa sabit listeye düşülür.
   const classes = useMemo(() => {
-    const base = (activeClasses?.length) ? activeClasses : ALL_CLASSES;
+    const fromRegistry = (registryClasses || [])
+      .filter(c => SOLVER_GROUPS.includes(c.group))
+      .map(c => c.id);
+    const base = fromRegistry.length ? fromRegistry
+      : (activeClasses?.length) ? activeClasses : ALL_CLASSES;
     return [...new Set(base)].sort();
-  }, [activeClasses]);
+  }, [registryClasses, activeClasses]);
+
+  // Registry-öncelikli köprüler: özel şubelerde (s_…) sabit-kod ayrıştırma çalışmaz.
+  const groupOf = useCallback(
+    cls => classMeta.get(cls)?.group || classToGroup(cls),
+    [classMeta]
+  );
+  const colKeyOf = useCallback(cls => {
+    const c = classMeta.get(cls);
+    if (c) return colKeyFromRegistry(c) || (/^s_/.test(cls) ? null : colKeyFor(cls));
+    return colKeyFor(cls);
+  }, [classMeta]);
+  const labelOf = useCallback(
+    cls => /^s_/.test(cls) ? (classMeta.get(cls)?.ad || cls) : String(cls).toUpperCase(),
+    [classMeta]
+  );
 
   useEffect(() => {
     (async () => {
@@ -291,11 +344,43 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
     })();
   }, [api, showToast]);
 
-  // Analizi yeniden hesapla: teachers/load/extraWeekend/classes değişince
+  // Kaydedilmiş planı yükle (haftalık ders yükü + günlük limitler + maks).
+  // Config yoksa/boşsa tablo 0'larla kalır.
+  useEffect(() => {
+    (async () => {
+      try {
+        const cfg = await api('/api/config');
+        const plan = cfg?.programPlan || {};
+        if (plan.load && Object.keys(plan.load).length) setLoad(plan.load);
+        if (plan.dayLimits && Object.keys(plan.dayLimits).length) setDayLimits(plan.dayLimits);
+        if (plan.maxWeekly) setMaxWeekly(plan.maxWeekly);
+      } catch { /* muhasebeci vb. okuyamazsa sessiz — boş tabloyla devam */ }
+    })();
+  }, [api]);
+
+  // Planı kaydet — sekme değiştirip dönünce girilen değerler kaybolmasın.
+  async function savePlan() {
+    setSavingPlan(true);
+    try {
+      await api('/api/config', {
+        method: 'PATCH',
+        body: JSON.stringify({ patch: { programPlan: { load, dayLimits, maxWeekly } } }),
+      });
+      setPlanDirty(false);
+      showToast?.('Ders yükü planı kaydedildi', 'success');
+    } catch(e) { showToast?.(e.message, 'error'); }
+    finally { setSavingPlan(false); }
+  }
+
+  // Dirty-işaretli sarmalayıcılar: kullanıcı girişi planı değiştirdi → Kaydet aktifleşir.
+  const updateLoad = useCallback(updater => { setLoad(updater); setPlanDirty(true); }, []);
+  const updateDayLimits = useCallback(updater => { setDayLimits(updater); setPlanDirty(true); }, []);
+
+  // Analizi yeniden hesapla: teachers/load/dayLimits/classes değişince
   useEffect(() => {
     if (!teachers) return;
-    setAnalysis(analyzeLoad(classes, load, teachers));
-  }, [teachers, load, classes]);
+    setAnalysis(analyzeLoad(classes, load, teachers, dayLimits, { colKeyOf, groupOf, labelOf }));
+  }, [teachers, load, dayLimits, classes, colKeyOf, groupOf, labelOf]);
 
   // Ders yükü tablosu her zaman tüm sütunları gösterir
   const activeCols = LOAD_COLUMNS;
@@ -311,9 +396,9 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
       // Her sınıfın blok havuzu + sütun anahtarı + grubu → payload (domain mantığı tek kaynak: burası)
       const blocks = {}, colKey = {}, group = {};
       classes.forEach(c => {
-        blocks[c] = classBlockPairs(c);
-        colKey[c] = colKeyFor(c);
-        group[c] = classToGroup(c);
+        blocks[c] = classBlockPairs(groupOf(c));
+        colKey[c] = colKeyOf(c);
+        group[c] = groupOf(c);
       });
 
       // KATI mod: her öğretmenin işaretlediği (gün, slotIndex) çiftlerini topla.
@@ -342,7 +427,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
         (t.presets || []).map(p => ({ teacherId: t.id, cls: p.cls, course: p.course }))
       );
 
-      const payload = { classes, teachers, load, maxWeekly, blocks, colKey, group, teacherSlots, presets };
+      const payload = { classes, teachers, load, maxWeekly, blocks, colKey, group, teacherSlots, presets, dayLimits };
       const data = await api('/api/program-solve', { method: 'POST', body: JSON.stringify(payload) });
 
       const assigned = data.assigned || [];
@@ -381,7 +466,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
         const cur = dayProg[sid];
         if (cur && cur.cls && cur.cls !== a.cls) {
           const tName = teachers.find(t=>t.id===a.teacherId)?.name || a.teacherId;
-          items.push(`${tName} — ${DAYS[a.day]} ${sid}: mevcut ${cur.cls.toUpperCase()} → yeni ${a.cls.toUpperCase()} (${a.course})`);
+          items.push(`${tName} — ${DAYS[a.day]} ${sid}: mevcut ${labelOf(cur.cls)} → yeni ${labelOf(a.cls)} (${a.course})`);
         }
       }
       setConflicts({ items, checked: true });
@@ -457,7 +542,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
 
   let totalDemand=0;
   classes.forEach(cls => {
-    const key=colKeyFor(cls);
+    const key=colKeyOf(cls);
     coursesForCol(key).forEach(course => { totalDemand+=(load[key]?.[course])||0; });
   });
   const capByBranch={};
@@ -471,7 +556,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
       <div className="flex items-center justify-end flex-wrap gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           <label className="text-xs text-gray-500 flex items-center gap-1">Haftalık maks
-            <input type="number" value={maxWeekly} onChange={e=>setMaxWeekly(parseInt(e.target.value)||40)}
+            <input type="number" value={maxWeekly} onChange={e=>{setMaxWeekly(parseInt(e.target.value)||40); setPlanDirty(true);}}
               className="input !w-16 !py-1.5 text-center" />
           </label>
           <button onClick={clearAllPrograms} disabled={clearing}
@@ -502,9 +587,33 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
 
       {/* Ders yükü tablosu */}
       <div className="card p-4">
-        <h4 className="font-600 text-sm mb-1" style={{fontWeight:600}}>Haftalık Ders Yükü</h4>
-        <p className="text-xs text-gray-400 mb-3">Her sınıf türü için haftalık ders saatlerini girin.</p>
-        <LoadTable load={load} setLoad={setLoad} cols={activeCols} />
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <div>
+            <h4 className="font-600 text-sm mb-1" style={{fontWeight:600}}>Haftalık Ders Yükü</h4>
+            <p className="text-xs text-gray-400 mb-3">Her sınıf türü için haftalık ders saatlerini girin. Kaydet'e basarsanız değerler (günlük limitlerle birlikte) saklanır — sekme değiştirince sıfırlanmaz.</p>
+          </div>
+          <button onClick={savePlan} disabled={savingPlan || !planDirty}
+            className="btn-primary !px-3 !py-1.5 text-xs flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+            title={planDirty ? 'Girilen değerleri kaydet' : 'Kaydedilmemiş değişiklik yok'}>
+            <Save size={12}/> {savingPlan ? 'Kaydediliyor…' : planDirty ? 'Kaydet' : 'Kaydedildi'}
+          </button>
+        </div>
+        <LoadTable load={load} setLoad={updateLoad} cols={activeCols} />
+      </div>
+
+      {/* Sınıf bazlı günlük ders limiti (K7) — boş bırakılan gün serbesttir */}
+      <div className="card p-4">
+        <details>
+          <summary className="cursor-pointer text-sm" style={{fontWeight:600}}>
+            Sınıf Bazlı Günlük Ders Limiti <span className="text-xs text-gray-400" style={{fontWeight:400}}>(isteğe bağlı)</span>
+          </summary>
+          <p className="text-xs text-gray-400 mt-2 mb-3">
+            Bir sınıfın o gün alabileceği en fazla ders saati. Boş = serbest (havuz kadar), 0 = o gün ders konmaz.
+            Blok 2 saat olduğundan çift sayı girin. Örn: Pazartesi 6, Salı 4. Kaydet butonu bu tabloyu da saklar.
+          </p>
+          <DayLimitsTable classes={classes} dayLimits={dayLimits} setDayLimits={updateDayLimits}
+            labelOf={labelOf} groupOf={groupOf} />
+        </details>
       </div>
 
       {/* Ön eşleştirme (sabit dersler) — öğretmen seç → o öğretmene sınıf-ders kilitle (CP-SAT HARD preset). */}
@@ -604,7 +713,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
       {/* Sonuç */}
       {result && (
         <ResultView
-          result={result} classes={classes} teachers={teachers}
+          result={result} classes={classes} teachers={teachers} labelOf={labelOf}
           maxWeekly={maxWeekly} applying={applying}
           conflictsChecked={conflicts?.checked && conflicts.items.length === 0}
           onApply={() => applyToTemplates(currentWeekKey())}
@@ -618,7 +727,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
       {preview && result && (
         <PrintPreview
           type={preview} id={previewId}
-          result={result} teachers={teachers} classes={classes}
+          result={result} teachers={teachers} classes={classes} labelOf={labelOf}
           brandName={branding?.name}
           onClose={()=>setPreview(null)}
         />
@@ -686,8 +795,69 @@ function LoadTable({ load, setLoad, cols }) {
   );
 }
 
+// ── Sınıf bazlı günlük ders limiti tablosu: satır=sınıf, sütun=gün ──
+// Değer = o gün en fazla kaç SAAT ders (blok=2 saat). Boş = serbest, 0 = o gün yok.
+// Sınıf grubunun havuzunda olmayan günler kilitli gösterilir (limit anlamsız).
+function DayLimitsTable({ classes, dayLimits, setDayLimits, labelOf, groupOf }) {
+  // grup → gün→saat kapasitesi (havuz), input placeholder + kilitli gün tespiti için
+  const poolByGroup = useMemo(() => {
+    const out = {};
+    ['ortaokul','lise','mezun'].forEach(g => {
+      const hours = {};
+      classBlockPairs(g).forEach(b => { hours[b[0]] = (hours[b[0]] || 0) + 2; });
+      out[g] = hours;
+    });
+    return out;
+  }, []);
+
+  const set = (cls, d, val) => setDayLimits(prev => {
+    const next = { ...prev, [cls]: { ...(prev[cls] || {}) } };
+    if (val === '') delete next[cls][d];
+    else next[cls][d] = Math.max(0, parseInt(val) || 0);
+    if (Object.keys(next[cls]).length === 0) delete next[cls];
+    return next;
+  });
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="text-xs w-full" style={{borderCollapse:'collapse'}}>
+        <thead>
+          <tr>
+            <th className="text-left px-2 py-1 text-gray-400 sticky left-0 bg-white" style={{fontWeight:600, minWidth:80}}>Sınıf</th>
+            {DAYS.map((d,i) => (
+              <th key={i} className="px-1 py-1 text-gray-600 text-center" style={{fontWeight:700, width:64}}>{d.slice(0,3)}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {classes.map(cls => {
+            const pool = poolByGroup[groupOf(cls)] || {};
+            return (
+              <tr key={cls} className="border-t border-gray-50">
+                <td className="px-2 py-1.5 sticky left-0 bg-white" style={{fontWeight:600}}>{labelOf(cls)}</td>
+                {DAYS.map((_,d) => pool[d] != null
+                  ? (
+                    <td key={d} className="text-center px-1 py-1">
+                      <input type="number" min="0" max={pool[d]}
+                        value={dayLimits[cls]?.[d] ?? ''}
+                        placeholder={String(pool[d])}
+                        onChange={e => set(cls, d, e.target.value)}
+                        className="input !w-full !py-1.5 text-center text-sm" />
+                    </td>
+                  )
+                  : <td key={d} className="text-center text-gray-100 px-1 py-1">–</td>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Sonuç görünümü ──
-function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsChecked, onApply, onCheckConflicts, onPrintTeacher, onPrintClass }) {
+function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, conflictsChecked, onApply, onCheckConflicts, onPrintTeacher, onPrintClass }) {
   const [viewMode, setViewMode] = useState('class');
   const [viewDay, setViewDay]   = useState('all');
 
@@ -750,7 +920,7 @@ function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsC
           </summary>
           <ul className="mt-2 space-y-1 text-gray-600">
             {Object.entries(unplacedGrouped).map(([k,v])=>(
-              <li key={k}>• <b>{k}</b> ×{v.n} <span className="text-gray-400">({[...v.cls].map(c=>c.toUpperCase()).join(', ')})</span></li>
+              <li key={k}>• <b>{k}</b> ×{v.n} <span className="text-gray-400">({[...v.cls].map(c=>labelOf(c)).join(', ')})</span></li>
             ))}
           </ul>
         </details>
@@ -779,7 +949,7 @@ function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsC
             {classes.map(cls=>(
               <button key={cls} onClick={()=>onPrintClass(cls)}
                 className="px-2 py-1 rounded-lg border border-gray-200 text-[10px] text-gray-500 hover:border-indigo-300 hover:text-indigo-600 flex items-center gap-1">
-                <Download size={9}/> {cls.toUpperCase()}
+                <Download size={9}/> {labelOf(cls)}
               </button>
             ))}
           </div>
@@ -822,7 +992,7 @@ function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsC
             {rowKeys.map(rk=>(
               <tr key={rk}>
                 <td className="p-2 sticky left-0 z-10 whitespace-nowrap" style={{background:'#fff',fontWeight:700,border:'1px solid #eef0f5'}}>
-                  {viewMode==='class'?String(rk).toUpperCase():viewMode==='room'?`D${rk} (${rk<=5?'1.k':rk<=8?'2.k':'3.k'})`:rk}
+                  {viewMode==='class'?labelOf(rk):viewMode==='room'?`D${rk} (${rk<=5?'1.k':rk<=8?'2.k':'3.k'})`:rk}
                 </td>
                 {days.map(d => {
                   const slotsInDay = [...new Set(result.assigned.filter(a=>a.day===d).map(a=>a.slot))].sort((a,b)=>a-b);
@@ -833,7 +1003,7 @@ function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsC
                     const col=COURSE_COLOR[a.course]||'#6366f1';
                     return (
                       <td key={d+'-'+s} className="p-1 text-center" style={{minWidth:64,border:`1px solid ${col}30`,borderLeft:si===0?`3px solid ${col}60`:undefined,background:`${col}14`,color:col}}>
-                        <b>{viewMode==='class'?shortCourse(a.course):a.cls.toUpperCase()}</b><br/>
+                        <b>{viewMode==='class'?shortCourse(a.course):labelOf(a.cls)}</b><br/>
                         <span style={{opacity:.6,fontSize:10}}>{viewMode==='class'?a.teacherName.split(' ')[0]:shortCourse(a.course)}</span>
                       </td>
                     );
@@ -849,27 +1019,23 @@ function ResultView({ result, classes, teachers, maxWeekly, applying, conflictsC
 }
 
 // ── Yazdırma önizleme (print-only div) ──
-function PrintPreview({ type, id, result, teachers, classes, brandName, onClose }) {
-  const teacherById={}; teachers.forEach(t=>teacherById[t.id]=t);
-
+function PrintPreview({ type, id, result, teachers, classes, labelOf, brandName, onClose }) {
   // Bir öğretmenin programını veya bir sınıfın programını oluştur
   const pages = useMemo(() => {
     if (type==='teacher') {
       return teachers.map(t => {
         const lessons = result.assigned.filter(a=>a.teacherId===t.id);
-        return { title:`${t.name} — ${(t.branches||[]).join(', ')}`, lessons };
+        return { key:t.id, title:`${t.name} — ${(t.branches||[]).join(', ')}`, lessons };
       });
     } else {
       return classes.map(cls => {
         const lessons = result.assigned.filter(a=>a.cls===cls);
-        return { title:`${cls.toUpperCase()} Sınıfı Ders Programı`, lessons };
+        return { key:cls, title:`${labelOf(cls)} Sınıfı Ders Programı`, lessons };
       });
     }
-  }, [type, id, result, teachers, classes]);
+  }, [type, result, teachers, classes, labelOf]);
 
-  const filteredPages = id
-    ? pages.filter(p => type==='teacher' ? teacherById[id] && p.title.startsWith(teacherById[id].name) : p.title.startsWith(id.toUpperCase()))
-    : pages;
+  const filteredPages = id ? pages.filter(p => p.key === id) : pages;
 
   return (
     <div className="fixed inset-0 bg-white z-50 overflow-auto print:static" id="print-preview">
@@ -886,13 +1052,13 @@ function PrintPreview({ type, id, result, teachers, classes, brandName, onClose 
         </div>
       </div>
       {filteredPages.map((pg,pi)=>(
-        <SchedulePage key={pi} title={pg.title} lessons={pg.lessons} brandName={brandName} />
+        <SchedulePage key={pi} title={pg.title} lessons={pg.lessons} labelOf={labelOf} brandName={brandName} />
       ))}
     </div>
   );
 }
 
-function SchedulePage({ title, lessons, brandName }) {
+function SchedulePage({ title, lessons, labelOf, brandName }) {
   const usedDays = [...new Set(lessons.map(a=>a.day))].sort();
   // Her gün için slotları sıralı dizi — sıra numarası = slot sırası
   const dayLessons = usedDays.map(d =>
@@ -932,7 +1098,7 @@ function SchedulePage({ title, lessons, brandName }) {
                     <td key={d+'-'+rowIdx} style={{border:`1px solid ${col}30`,borderLeft:`3px solid ${col}60`,background:`${col}12`,padding:'5px 8px',textAlign:'center'}}>
                       <div style={{fontWeight:700,color:col,fontSize:11}}>{a.course}</div>
                       <div style={{fontSize:10,color:'#6b7280'}}>{slotLabel(d, a.slot)}</div>
-                      <div style={{fontSize:10,color:'#9ca3af'}}>{a.cls.toUpperCase()}</div>
+                      <div style={{fontSize:10,color:'#9ca3af'}}>{labelOf(a.cls)}</div>
                     </td>
                   );
                 })}
