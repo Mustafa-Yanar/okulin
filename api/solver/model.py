@@ -3,22 +3,32 @@
 Girdi payload:
 {
   classes: [cls, ...],
-  teachers: [{id, name, branch, extraBranches, allowedGroups, offDays}, ...],
+  teachers: [{id, name, branches, allowedGroups, offDays}, ...],
   load: {colKey: {course: hours}},
-  maxWeekly: int,
-  blocks: {cls: [[day, slotA, slotB], ...]},   # classBlockPairs(cls) çıktısı (frontend)
-  colKey: {cls: key},                           # colKeyFor(cls) (frontend)
-  group:  {cls: 'ortaokul'|'lise'|'mezun'},     # classToGroup(cls) (frontend)
-  dayLimits: {cls: {day: hours}},               # opsiyonel — sınıf-gün saat üst sınırı (K7)
+  pieces: {colKey: {course: [L, ...]}},        # opsiyonel — gruplama deseni (örn 7 saat → [3,2,2]);
+                                               #   yoksa saatten varsayılan türetilir (2'liler + tek kalan 1)
+  maxWeekly: int,                              # öğretmen haftalık saat hedefi (soft aşım cezası)
+  windows: {cls: {day: [slotIdx, ...]}},       # sınıfın gün→ardışık slot penceresi (öncelikli)
+  blocks: {cls: [[day, slotA, slotB], ...]},   # ESKİ sözleşme — windows yoksa bundan türetilir
+  colKey: {cls: key},                          # colKeyFor(cls) (frontend)
+  group:  {cls: 'ortaokul'|'lise'|'mezun'},    # classToGroup(cls) (frontend)
+  dayLimits: {cls: {day: hours}},              # opsiyonel — sınıf-gün saat üst sınırı (K7)
+  teacherSlots: {tid: [[day, slotIdx], ...]},  # KATI mod (Özellik 1)
+  presets: [{teacherId, cls, course}, ...],    # HARD kilit (Özellik 2)
 }
 
 Çıktı:
 {
-  assigned: [{cls, course, teacherId, teacherName, day, slot}, ...],  # her slot ayrı satır
-  unplaced: [{cls, course, reason}, ...],
-  tLoad:    {teacherId: blokSayısı},
+  assigned: [{cls, course, teacherId, teacherName, day, slot}, ...],  # her SAAT ayrı satır
+  unplaced: [{cls, course, reason}, ...],      # her grup (parça) için bir satır
+  tLoad:    {teacherId: saat},                 # NOT: 2026-07-08'e dek blok sayısıydı, artık saat
   ms:       int,
 }
+
+Grup (parça) modeli: bir dersin haftalık saati parçalara bölünür; her parça AYNI GÜN
+içinde L ardışık slottur. Aynı sınıf+ders aynı güne en fazla 1 parça (K3) → 3-2-2
+deseni üç farklı güne yayılır. Desen verilmezse 2'li parçalar (+tek kalan saat 1'lik
+parça) kullanılır — eski blok davranışıyla uyumlu, tek sayı artık hata değildir.
 """
 
 import time
@@ -26,7 +36,7 @@ from ortools.sat.python import cp_model
 
 from solver.domain import eligible_teachers
 
-# Objective ağırlıkları: önce her şeyi yerleştir, sonra aşımı kıs, sonra dengele
+# Objective ağırlıkları: önce her şeyi yerleştir (saat ağırlıklı), sonra aşımı kıs, sonra dengele
 W_UNPLACED = 100000
 W_OVER = 100
 W_BALANCE = 1
@@ -35,16 +45,70 @@ TIME_LIMIT_SECONDS = 30
 NUM_WORKERS = 8
 
 
+def default_pieces(hours):
+    """Desen verilmemişse: 2'li gruplar + tek kalan saat 1'lik grup."""
+    return [2] * (hours // 2) + ([1] if hours % 2 else [])
+
+
+def parse_pieces(raw, hours):
+    """Payload deseni → [L, ...]; geçersiz/boşsa saatten varsayılan türet."""
+    if isinstance(raw, (list, tuple)):
+        try:
+            pat = [int(v) for v in raw if int(v) > 0]
+        except (TypeError, ValueError):
+            pat = []
+        if pat:
+            return pat
+    return default_pieces(hours)
+
+
+def windows_from_blocks(blocks):
+    """Eski blok sözleşmesinden gün→slot penceresi türet (harness/eski istemci)."""
+    out = {}
+    for b in blocks or []:
+        out.setdefault(int(b[0]), set()).update((int(b[1]), int(b[2])))
+    return {d: sorted(s) for d, s in out.items()}
+
+
+def run_candidates(slots, length, aligned=False):
+    """Sıralı slot listesindeki L uzunluklu ARDIŞIK diziler.
+
+    aligned=True → yalnız çift ofsetli başlangıçlar (eski 2'li blok hizası).
+    Sınıftaki tüm parçalar çift uzunluklu ise hizalı adaylar kapasite kaybetmez
+    ama arama uzayını ciddi küçültür (ölçek testi 30s → saniye altı).
+    """
+    res = []
+    for i in range(len(slots) - length + 1):
+        if aligned and i % 2:
+            continue
+        seg = slots[i:i + length]
+        if seg[-1] - seg[0] == length - 1:
+            res.append(tuple(seg))
+    return res
+
+
 def solve(payload):
     t0 = time.time()
 
     classes = payload['classes']
     teachers = payload['teachers']
     load = payload.get('load', {})
+    pieces_by_key = payload.get('pieces') or {}
     max_weekly = payload.get('maxWeekly', 40)
-    blocks_by_cls = payload.get('blocks', {})
     colkey_by_cls = payload.get('colKey', {})
     group_by_cls = payload.get('group', {})
+
+    # Sınıf pencereleri: windows öncelikli, yoksa eski blocks sözleşmesinden türet
+    windows_raw = payload.get('windows') or {}
+    blocks_by_cls = payload.get('blocks') or {}
+    win_by_cls = {}
+    for cls in classes:
+        w = windows_raw.get(cls)
+        if w:
+            win_by_cls[cls] = {int(d): sorted(int(s) for s in slots)
+                               for d, slots in w.items() if slots}
+        else:
+            win_by_cls[cls] = windows_from_blocks(blocks_by_cls.get(cls))
 
     # Özellik 1 (KATI): öğretmen başına işaretli (gün, slotIndex) kümesi.
     # teacherSlots gönderildiyse katı uygulanır: öğretmen sadece bu slotlara atanır,
@@ -53,12 +117,12 @@ def solve(payload):
     avail = {tid: set(tuple(p) for p in pairs) for tid, pairs in teacher_slots_raw.items()}
     strict_mode = len(teacher_slots_raw) > 0
 
-    def block_ok(t, b):
-        # blok p=(day,slotA,slotB) öğretmen t'ye uygun mu (HEM slotA HEM slotB available)
+    def piece_ok(t, day, seg):
+        # parça (day, seg) öğretmen t'ye uygun mu (TÜM slotları available)
         if not strict_mode:
             return True
         av = avail.get(t, set())
-        return (b[0], b[1]) in av and (b[0], b[2]) in av
+        return all((day, s) in av for s in seg)
 
     # Özellik 2: ön eşleştirme kilitleri [{teacherId, cls, course}]
     presets = payload.get('presets') or []
@@ -72,38 +136,39 @@ def solve(payload):
     model = cp_model.CpModel()
 
     # ── Ders birimleri (units) ──
-    # unit = (cls, course, block_idx). Her unit bir bloğa + (cls,course üzerinden) bir öğretmene.
-    units = []                 # [(cls, course)]  block_idx ima edilir, units_of ile gruplanır
+    # unit = (cls, course, L): dersin L saatlik TEK parçası. Parça bir güne, ardışık
+    # L slota ve (cls,course üzerinden) bir öğretmene atanır.
+    units = []                 # [(cls, course, L)]
     units_of_cc = {}           # (cls, course) -> [unit_index, ...]
     eligible_of_cc = {}        # (cls, course) -> [teacherId, ...]
-    blocks_per_cc = {}         # (cls, course) -> B (blok sayısı)
+    hours_of_cc = {}           # (cls, course) -> toplam saat (desen toplamı)
 
     for cls in classes:
         key = colkey_by_cls.get(cls)
         grp = group_by_cls.get(cls)
         cc_load = load.get(key, {}) if key else {}
+        pats = pieces_by_key.get(key, {}) if key else {}
         for course, hours in cc_load.items():
             hours = int(hours or 0)
             if hours <= 0:
                 continue
-            if hours % 2 != 0:
-                unplaced.append({'cls': cls, 'course': course, 'reason': 'tek saat, blok yapılamaz'})
+            pat = parse_pieces(pats.get(course), hours)
+            if not pat:
                 continue
             elig = eligible_teachers(teachers, course, grp)
             if not elig:
-                # her blok için bir unplaced satırı
-                for _ in range(hours // 2):
+                # her parça için bir unplaced satırı
+                for _ in pat:
                     unplaced.append({'cls': cls, 'course': course,
                                      'reason': 'uygun öğretmen yok (ders: %s)' % course})
                 continue
-            B = hours // 2
             cc = (cls, course)
             eligible_of_cc[cc] = elig
-            blocks_per_cc[cc] = B
+            hours_of_cc[cc] = sum(pat)
             idxs = []
-            for _bi in range(B):
+            for length in pat:
                 idxs.append(len(units))
-                units.append(cc)
+                units.append((cls, course, length))
             units_of_cc[cc] = idxs
 
     # Çözülecek bir şey yoksa erken dön
@@ -112,17 +177,30 @@ def solve(payload):
                 'tLoad': {t['id']: 0 for t in teachers},
                 'ms': int((time.time() - t0) * 1000)}
 
+    # Hizalama kararı (sınıf başına): sınıftaki TÜM parçalar çift uzunluklu ise adaylar
+    # çift ofsetli başlangıçlara kısıtlanır — kapasite kaybı yok, arama uzayı küçük.
+    # Tek uzunluklu parça (1/3/5 saat) varsa o sınıfın tüm adayları serbest, çünkü
+    # esnek paketleme (örn 3+3 = 6 slotluk gün) hizasız başlangıç gerektirir.
+    free_cls = {}
+    for (cls, _course, length) in units:
+        if length % 2 == 1:
+            free_cls[cls] = True
+
     # ── Karar değişkenleri ──
-    # x[u][p] : unit u, sınıfının blok havuzundaki p indeksli bloğa atandı mı
+    # x[u][p] : unit u, aday yerleşim p=(day, seg)'e atandı mı.
+    # Aday havuzu: sınıf penceresindeki her günün L uzunluklu ardışık dizileri.
     x = {}
     placed = {}
-    pool_of_unit = {}  # u -> blok havuzu (cls'in blocks listesi)
-    for u, (cls, course) in enumerate(units):
-        pool = blocks_by_cls.get(cls, [])
+    pool_of_unit = {}  # u -> [(day, (slot,...)), ...]
+    for u, (cls, course, length) in enumerate(units):
+        win = win_by_cls.get(cls, {})
+        aligned = not free_cls.get(cls, False)
+        pool = [(d, seg) for d in sorted(win)
+                for seg in run_candidates(win[d], length, aligned)]
         pool_of_unit[u] = pool
         x[u] = [model.NewBoolVar('x_%d_%d' % (u, p)) for p in range(len(pool))]
         placed[u] = model.NewBoolVar('placed_%d' % u)
-        # u ya tam 1 bloğa ya hiçbirine
+        # u ya tam 1 yerleşime ya hiçbirine; havuz boşsa (parça sığmıyor) placed 0'a düşer
         model.Add(sum(x[u]) == placed[u])
 
     # y[(cls,course)][t] : bu sınıf-dersi öğretmen t veriyor mu (sadece eligible)
@@ -135,7 +213,7 @@ def solve(payload):
         model.AddAtMostOne(list(y[cc].values()))
         sum_y = sum(y[cc].values())
         for u in units_of_cc[cc]:
-            # öğretmen seçilmediyse (sum_y=0) bu cc'nin hiçbir unit'i yerleşemez
+            # öğretmen seçilmediyse (sum_y=0) bu cc'nin hiçbir parçası yerleşemez
             model.Add(placed[u] <= sum_y)
 
     # ── Özellik 2: ön eşleştirme kilitleri (HARD) ──
@@ -150,62 +228,82 @@ def solve(payload):
             continue
         model.Add(y[cc][tid] == 1)
 
-    # ── HARD: K3 — aynı sınıf+ders aynı günde en fazla 1 blok ──
+    # ── HARD: K3 — aynı sınıf+ders aynı günde en fazla 1 parça ──
     for cc, idxs in units_of_cc.items():
-        cls = cc[0]
-        pool = blocks_by_cls.get(cls, [])
-        days = sorted(set(b[0] for b in pool))
+        days = sorted(win_by_cls.get(cc[0], {}).keys())
         for d in days:
             terms = []
             for u in idxs:
-                for p, b in enumerate(pool):
-                    if b[0] == d:
+                for p, (day, _seg) in enumerate(pool_of_unit[u]):
+                    if day == d:
                         terms.append(x[u][p])
-            if terms:
+            if len(terms) > 1:
                 model.Add(sum(terms) <= 1)
 
+    # ── Simetri kırma: aynı (cls,course) içindeki EŞ uzunluklu parçalar birbirinin ──
+    # yerine geçebilir (değiş-tokuş aynı çözüm). Aramayı küçültmek için sıra dayatılır:
+    # düşük indeksli parça önce yerleşir ve günü kesin daha erken olur (K3 aynı günü
+    # zaten yasaklar). Bu olmadan ölçek testi 30s limitine çarpıyordu.
+    day_expr = {}
+
+    def day_of(u):
+        if u not in day_expr:
+            day_expr[u] = sum((d + 1) * x[u][p]
+                              for p, (d, _seg) in enumerate(pool_of_unit[u]))
+        return day_expr[u]
+
+    for cc, idxs in units_of_cc.items():
+        by_len = {}
+        for u in idxs:
+            by_len.setdefault(units[u][2], []).append(u)
+        for us in by_len.values():
+            for ua, ub in zip(us, us[1:]):
+                model.Add(placed[ub] <= placed[ua])
+                # ub yerleştiyse günü ua'dan kesin sonra; ub açıktaysa kısıt gevşer
+                # (8 > maks D = 7 [Pazar günü+1] — ua Pazar'dayken bile 7 ≤ -1+8 sağlanır)
+                model.Add(day_of(ua) <= day_of(ub) - 1 + 8 * (1 - placed[ub]))
+
     # ── HARD: K5 — bir sınıf aynı (gün,slot)'ta en fazla 1 ders ──
-    # units'i sınıfa göre grupla
     units_by_cls = {}
-    for u, (cls, course) in enumerate(units):
+    for u, (cls, course, _length) in enumerate(units):
         units_by_cls.setdefault(cls, []).append(u)
     for cls, us in units_by_cls.items():
-        pool = blocks_by_cls.get(cls, [])
         # (gün, slot) -> kaplayan x değişkenleri
         cover = {}
         for u in us:
-            for p, b in enumerate(pool):
-                day, sA, sB = b[0], b[1], b[2]
-                for s in (sA, sB):
+            for p, (day, seg) in enumerate(pool_of_unit[u]):
+                for s in seg:
                     cover.setdefault((day, s), []).append(x[u][p])
         for ds, terms in cover.items():
             if len(terms) > 1:
                 model.Add(sum(terms) <= 1)
 
     # ── HARD: K7 — sınıf-gün saat üst sınırı (dayLimits) ──
-    # Müdür "bu sınıfın pazartesi en fazla 6 saati olsun" der; o gün sınıfa yerleşen
-    # toplam saat (blok başına 2) limiti aşamaz. Limit girilmeyen gün serbesttir.
+    # O gün sınıfa yerleşen toplam saat (parça uzunlukları) limiti aşamaz.
     # JSON anahtarları string gelir (gün "0".."6") — int'e çevrilir.
     day_limits = payload.get('dayLimits') or {}
     for cls, us in units_by_cls.items():
         limits = day_limits.get(cls) or {}
         if not limits:
             continue
-        pool = blocks_by_cls.get(cls, [])
         for day_key, lim in limits.items():
             try:
                 d = int(day_key)
                 lim = int(lim)
             except (TypeError, ValueError):
                 continue
-            terms = [x[u][p] for u in us for p, b in enumerate(pool) if b[0] == d]
+            terms = []
+            for u in us:
+                for p, (day, seg) in enumerate(pool_of_unit[u]):
+                    if day == d:
+                        terms.append(len(seg) * x[u][p])
             if terms:
-                model.Add(2 * sum(terms) <= lim)
+                model.Add(sum(terms) <= lim)
 
-    # ── HARD: K6 — öğretmen izin günü → o gün ders yok ──
-    # z lineerleştirmesi K4 için zaten kurulacak; izin gününü de z üzerinden engelle.
-    # z[(u,p,t)] = x[u][p] AND y[cc][t]
+    # ── HARD: K6 (izin günü) + Özellik 1 (aktif slot) — parça-öğretmen yasakları ──
+    # z[(u,p,t)] = x[u][p] AND y[cc][t] lineerleştirmesi, öğretmen çakışması (K4) için.
     z = {}
+
     def get_z(u, p, t, cc):
         keyz = (u, p, t)
         if keyz in z:
@@ -217,70 +315,54 @@ def solve(payload):
         z[keyz] = zv
         return zv
 
-    # ── HARD: K6 (izin günü) + Özellik 1 (aktif slot) — blok-öğretmen yasakları ──
-    # Bir blok p, öğretmen t'ye uygun değilse (izin günü VEYA katı modda işaretsiz slot)
-    # x[u][p] AND y[cc][t] olamaz.
+    # Bir parça p, öğretmen t'ye uygun değilse (izin günü VEYA katı modda işaretsiz slot)
+    # x[u][p] AND y[cc][t] olamaz. Uygunsa z üzerinden K4 çakışma toplamına girer.
+    teacher_slot_cover = {}  # (t, day, slot) -> z listesi
     for cc, idxs in units_of_cc.items():
-        cls = cc[0]
-        pool = blocks_by_cls.get(cls, [])
         elig = eligible_of_cc[cc]
         for t in elig:
             off = set(teacher_by_id[t].get('offDays') or [])
             for u in idxs:
-                for p, b in enumerate(pool):
-                    if b[0] in off or not block_ok(t, b):
+                for p, (day, seg) in enumerate(pool_of_unit[u]):
+                    if day in off or not piece_ok(t, day, seg):
                         model.AddBoolOr([x[u][p].Not(), y[cc][t].Not()])
-
-    # K4 çakışma toplamları: (t, day, slot) -> z listesi
-    teacher_slot_cover = {}
-    for cc, idxs in units_of_cc.items():
-        cls = cc[0]
-        pool = blocks_by_cls.get(cls, [])
-        elig = eligible_of_cc[cc]
-        for t in elig:
-            off = set(teacher_by_id[t].get('offDays') or [])
-            for u in idxs:
-                for p, b in enumerate(pool):
-                    day, sA, sB = b[0], b[1], b[2]
-                    if day in off or not block_ok(t, b):
-                        continue  # yasak (izin günü / işaretsiz slot) — z yaratma
+                        continue
                     zv = get_z(u, p, t, cc)
-                    for s in (sA, sB):
+                    for s in seg:
                         teacher_slot_cover.setdefault((t, day, s), []).append(zv)
     for tds, terms in teacher_slot_cover.items():
         if len(terms) > 1:
             model.Add(sum(terms) <= 1)
 
-    # ── SOFT: öğretmen yükü, aşım, denge ──
-    # load_t = sum over (cls,course) of B * y[cc][t]  (z'siz, lineer)
+    # ── SOFT: öğretmen yükü (SAAT), aşım, denge ──
+    # load_t = sum over (cls,course) of saat * y[cc][t]  (z'siz, lineer)
     load_vars = {}
     over_vars = {}
-    # üst sınır: tüm bloklar tek öğretmene
-    total_blocks = sum(blocks_per_cc.values())
+    total_hours = sum(hours_of_cc.values())  # üst sınır: tüm dersler tek öğretmene
     for t in teacher_by_id:
         terms = []
         for cc, elig in eligible_of_cc.items():
             if t in y[cc]:
-                terms.append(blocks_per_cc[cc] * y[cc][t])
-        lv = model.NewIntVar(0, total_blocks, 'load_%s' % t)
+                terms.append(hours_of_cc[cc] * y[cc][t])
+        lv = model.NewIntVar(0, total_hours, 'load_%s' % t)
         if terms:
             model.Add(lv == sum(terms))
         else:
             model.Add(lv == 0)
         load_vars[t] = lv
-        ov = model.NewIntVar(0, total_blocks, 'over_%s' % t)
+        ov = model.NewIntVar(0, total_hours, 'over_%s' % t)
         model.Add(ov >= lv - max_weekly)
         model.Add(ov >= 0)
         over_vars[t] = ov
 
-    peak = model.NewIntVar(0, total_blocks, 'peak')
+    peak = model.NewIntVar(0, total_hours, 'peak')
     model.AddMaxEquality(peak, list(load_vars.values()))
 
     # ── Objective ──
+    # Açıkta kalan parçalar SAAT ağırlıklı cezalandırılır (3 saatlik parça 1 saatlikten önemli).
     unplaced_terms = []
-    for u in range(len(units)):
-        # (1 - placed[u]) minimize
-        unplaced_terms.append(1 - placed[u])
+    for u, (_cls, _course, length) in enumerate(units):
+        unplaced_terms.append(length * (1 - placed[u]))
     model.Minimize(
         W_UNPLACED * sum(unplaced_terms)
         + W_OVER * sum(over_vars.values())
@@ -312,33 +394,33 @@ def solve(payload):
                 chosen_teacher[cc] = t
                 break
 
-    for u, (cls, course) in enumerate(units):
+    for u, (cls, course, length) in enumerate(units):
         if solver.Value(placed[u]) == 0:
-            # öğretmen hiç seçilemediyse (katı modda available yok) ayrı reason
-            if strict_mode and chosen_teacher.get((cls, course)) is None:
+            if not pool_of_unit[u]:
+                reason = 'grup havuza sığmıyor (%d saat ardışık pencere yok)' % length
+            elif strict_mode and chosen_teacher.get((cls, course)) is None:
                 reason = 'müsait slot yok (katı mod — öğretmen işaretlenmemiş)'
             else:
                 reason = 'yerleştirilemedi (çakışma/kapasite)'
             unplaced.append({'cls': cls, 'course': course, 'reason': reason})
             continue
-        pool = pool_of_unit[u]
-        chosen_p = None
-        for p in range(len(pool)):
+        chosen = None
+        for p in range(len(pool_of_unit[u])):
             if solver.Value(x[u][p]) == 1:
-                chosen_p = p
+                chosen = pool_of_unit[u][p]
                 break
-        if chosen_p is None:
+        if chosen is None:
             unplaced.append({'cls': cls, 'course': course, 'reason': 'yerleştirilemedi'})
             continue
-        day, sA, sB = pool[chosen_p][0], pool[chosen_p][1], pool[chosen_p][2]
+        day, seg = chosen
         tid = chosen_teacher.get((cls, course))
         tname = teacher_by_id[tid]['name'] if tid in teacher_by_id else ''
-        # her blok = 2 slot → 2 ayrı assigned satırı (JS sözleşmesi)
-        for s in (sA, sB):
+        # parçanın her saati ayrı assigned satırı (JS sözleşmesi)
+        for s in seg:
             assigned.append({'cls': cls, 'course': course, 'teacherId': tid,
                              'teacherName': tname, 'day': day, 'slot': s})
 
-    # tLoad: çözücüden gerçek yük (blok sayısı)
+    # tLoad: çözücüden gerçek yük (SAAT)
     tload = {}
     for t in teacher_by_id:
         tload[t] = int(solver.Value(load_vars[t]))
