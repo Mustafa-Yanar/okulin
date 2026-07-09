@@ -374,12 +374,40 @@ def solve(payload):
                 chosen_teacher[cc] = t
                 break
 
+    # (cls,course) → öğretmen uygunluğuyla erişilebilir günler (izin + katı mod süzülür).
+    # Açıkta kalan parçalara AÇIKLAYICI neden üretmek için: uygun gün sayısı parça
+    # sayısından azsa asıl kısıt K3+uygunluktur, genel "çakışma" mesajı yanıltır.
+    _fdays_cache = {}
+
+    def cc_feasible_days(cc):
+        if cc in _fdays_cache:
+            return _fdays_cache[cc]
+        days = set()
+        for u in units_of_cc.get(cc, []):
+            for (day, seg) in pool_of_unit[u]:
+                if day in days:
+                    continue
+                for t in eligible_of_cc.get(cc, []):
+                    if day in set(teacher_by_id[t].get('offDays') or []):
+                        continue
+                    if piece_ok(t, day, seg):
+                        days.add(day)
+                        break
+        _fdays_cache[cc] = days
+        return days
+
     for u, (cls, course, length) in enumerate(units):
         if solver.Value(placed[u]) == 0:
+            cc = (cls, course)
+            n_pieces = len(units_of_cc.get(cc, []))
+            fdays = cc_feasible_days(cc)
             if not pool_of_unit[u]:
                 reason = 'grup havuza sığmıyor (%d saat ardışık pencere yok)' % length
-            elif strict_mode and chosen_teacher.get((cls, course)) is None:
-                reason = 'müsait slot yok (katı mod — öğretmen işaretlenmemiş)'
+            elif strict_mode and not fdays:
+                reason = 'müsait slot yok (katı mod — uygun öğretmen hiçbir gün işaretli değil)'
+            elif len(fdays) < n_pieces:
+                reason = ('aynı derse %d grup için öğretmen uygunluğu yalnız %d güne izin veriyor'
+                          % (n_pieces, len(fdays)))
             else:
                 reason = 'yerleştirilemedi (çakışma/kapasite)'
             unplaced.append({'cls': cls, 'course': course, 'reason': reason})
@@ -400,10 +428,12 @@ def solve(payload):
             assigned.append({'cls': cls, 'course': course, 'teacherId': tid,
                              'teacherName': tname, 'day': day, 'slot': s})
 
-    # tLoad: çözücüden gerçek yük (SAAT)
-    tload = {}
-    for t in teacher_by_id:
-        tload[t] = int(solver.Value(load_vars[t]))
+    # tLoad: gerçekte YERLEŞEN saat. load_vars kullanılmaz — o, seçilen (cls,ders)
+    # çiftinin TÜM desen saatini sayar; parçası açıkta kalan derste fazla gösterirdi.
+    tload = {t: 0 for t in teacher_by_id}
+    for a in assigned:
+        if a['teacherId'] in tload:
+            tload[a['teacherId']] += 1
 
     return {'assigned': assigned, 'unplaced': unplaced, 'tLoad': tload,
             'presetWarnings': preset_warnings,

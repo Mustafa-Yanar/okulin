@@ -212,11 +212,52 @@ function teacherHourCap(t, grp, classes, windowsOf, groupOf, teacherSlots) {
   return cap;
 }
 
+// Bir parçanın (L saat, ARDIŞIK) yerleşebileceği günler: sınıf penceresinde L'lik
+// ardışık dizi VAR ve en az bir uygun öğretmen o dizinin TÜM slotlarını available
+// işaretlemiş (solver'ın piece_ok kuralıyla aynı). Çapraz-sınıf öğretmen çekişmesi
+// YOK SAYILIR (iyimser) — bu yüzden buradan çıkan hatalar KESİNDİR: hiçbir gün
+// dağıtımıyla çözülemez, yanlış pozitif üretmez.
+function pieceFeasibleDays(win, L, eligTeachers, teacherSlots) {
+  const days = [];
+  for (const [dStr, slots] of Object.entries(win)) {
+    const d = parseInt(dStr);
+    const ok = eligTeachers.some(t => {
+      if ((t.offDays || []).includes(d)) return false;
+      const av = new Set((teacherSlots[t.id] || []).filter(([dd]) => dd === d).map(([, i]) => i));
+      for (let i = 0; i + L <= slots.length; i++) {
+        const seg = slots.slice(i, i + L);
+        if (seg[L - 1] - seg[0] === L - 1 && seg.every(s => av.has(s))) return true;
+      }
+      return false;
+    });
+    if (ok) days.push(d);
+  }
+  return days;
+}
+
+// Parça→gün ikili eşleme (augmenting path). K3 gereği aynı dersin parçaları FARKLI
+// günlere gider; kaç parçaya gün bulunabildiğini döner (maksimum eşleme — kesin).
+function maxDayMatching(feasibleSets) {
+  const dayOf = new Map(); // day -> piece index
+  function tryAssign(i, visited) {
+    for (const d of feasibleSets[i]) {
+      if (visited.has(d)) continue;
+      visited.add(d);
+      if (!dayOf.has(d) || tryAssign(dayOf.get(d), visited)) { dayOf.set(d, i); return true; }
+    }
+    return false;
+  }
+  let matched = 0;
+  for (let i = 0; i < feasibleSets.length; i++) if (tryAssign(i, new Set())) matched++;
+  return matched;
+}
+
 // Ön analiz: oluşturmadan önce kapasite/çakışma sorunlarını hesapla. teacherSlots
 // varsa (Oluştur ile aynı kaynak — /api/program available işaretleri) SAAT bazlı
-// kapasite kontrolü (#3) öğretmenin gerçekte uygun olduğu slotlarla sınırlandırılır.
-// NOT: hangi sınıfın hangi güne denk geleceğini TAHMİN etmiyoruz — bu solver'ın kendi
-// optimizasyonu; bu yüzden gün-bazlı bir "kanal" kontrolü YOK, yalnız toplam saat kapasitesi.
+// kapasite kontrolü (#3) öğretmenin gerçekte uygun olduğu slotlarla sınırlandırılır,
+// ayrıca sınıf-yerel KESİN kontroller (#3b K3 gün eşleme, #3c gün-kümesi kapasitesi)
+// çalışır. Hangi sınıfın hangi güne gideceği TAHMİN edilmez — yalnız hiçbir dağıtımla
+// çözülemeyecek durumlar hata olur (çapraz-sınıf çekişme yok sayılır → iyimser sınır).
 function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf, teacherSlots }) {
   const errors = [], warnings = [], infos = [];
 
@@ -290,6 +331,47 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
     } else if (demand > totalCap * 0.85) {
       const grpLabel = grp === 'mezun' ? 'Mezun' : grp === 'lise' ? 'Lise' : 'Ortaokul';
       warnings.push(`${branch} (${grpLabel}): kapasite %${Math.round(demand/totalCap*100)} dolu — yerleştirme zorlaşabilir`);
+    }
+  }
+
+  // 3b + 3c: öğretmen uygunluğuna dayalı sınıf-yerel KESİN kontroller.
+  if (teacherSlots) {
+    for (const cls of classes) {
+      const key = colKeyOf(cls), grp = groupOf(cls);
+      const win = windowsOf(cls);
+      const winDays = Object.keys(win).map(Number).sort((a, b) => a - b);
+      if (!winDays.length) continue; // #0'da raporlandı
+      const clsPieces = []; // {course, L, days:Set} — 3c için birikir
+      for (const course of coursesForCol(key)) {
+        const pat = resolvePieces(load, grouping, key, course);
+        if (!pat.length) continue;
+        const elig = teachers.filter(tt => teacherTeaches(tt, course) && teacherGroups(tt).includes(grp));
+        if (!elig.length) continue; // #2'de raporlandı
+        const sets = pat.map(L => pieceFeasibleDays(win, L, elig, teacherSlots));
+        // 3b: K3 — her grup AYRI güne gitmek zorunda; eşleme kaç gruba gün bulabiliyor?
+        const matched = maxDayMatching(sets);
+        if (matched < pat.length) {
+          const dayNames = [...new Set(sets.flat())].sort().map(d => DAYS[d]).join(', ') || 'hiçbiri';
+          errors.push(`${labelOf(cls)} — ${course}: ${pat.join('-')} deseni ${pat.length} ayrı gün ister; öğretmen uygunluğu yalnız ${matched} güne izin veriyor (uygun: ${dayNames}) — ${pat.length - matched} grup açıkta kalır`);
+        }
+        pat.forEach((L, i) => clsPieces.push({ course, L, days: new Set(sets[i]) }));
+      }
+      // 3c: gün-kümesi kapasitesi (Hall) — yalnız S günlerine yerleşebilen derslerin
+      // toplam saati S'in pencere slot toplamını aşarsa kesin sığmaz.
+      const usable = clsPieces.filter(p => p.days.size > 0); // günsüzler 3b'de raporlandı
+      const reported = [];
+      for (let mask = 1; mask < (1 << winDays.length); mask++) {
+        if (reported.some(r => (mask & r) === r)) continue; // alt kümesi zaten raporlandı
+        const S = winDays.filter((_, i) => mask & (1 << i));
+        const cap = S.reduce((s, d) => s + (win[d]?.length || 0), 0);
+        const inS = usable.filter(p => [...p.days].every(d => S.includes(d)));
+        const demand = inS.reduce((s, p) => s + p.L, 0);
+        if (demand > cap) {
+          const courseNames = [...new Set(inS.map(p => p.course))].join(', ');
+          errors.push(`${labelOf(cls)} — ${S.map(d => DAYS[d]).join('+')}: öğretmen uygunluğu gereği bu günlere mecbur dersler (${courseNames}) toplam ${demand} saat, pencere ${cap} slot — ${demand - cap} saat kesin sığmaz`);
+          reported.push(mask);
+        }
+      }
     }
   }
 

@@ -112,18 +112,27 @@ export const POST = withAuth('manage', async (req) => {
     }
   }
 
-  // Hafta içi ilk 6 slot ders'e sadece mezun sınıfı atanabilir (slot NUMARASINA göre —
-  // güne özgü id'lerde d{gün}s1..s6; eski w1-w6 da slotNoFromId ile yakalanır).
-  const mezunClasses = new Set(STUDENT_GROUPS.mezun?.classes || []);
+  // Hafta içi ilk 6 slot 'ders' kuralı (eski dershane modeli: gündüz = mezun).
+  // ÖNCELİK sınıfın kendi ders penceresi (Class.slotTemplate, Faz 4 KATI pencere):
+  // müdür o (gün, slot)'u pencereye işaretlediyse kural UYGULANMAZ — pencere bilinçli
+  // tercihtir. Penceresi olmayan sınıflar için eski kural sürer; mezun tespiti registry
+  // group'undan (s_… id'ler) + eski sabit kodlardan (m1-m10) yapılır.
+  const classRows = await tdb().class.findMany();
+  const classByLegacy = new Map(classRows.map((c) => [c.legacyId, c]));
+  const mezunLegacy = new Set(STUDENT_GROUPS.mezun?.classes || []);
   const mezunOnlyCount = MEZUN_ONLY_LESSON_SLOTS.length; // 6
   for (const [dayIdx, daySlotEntries] of Object.entries(program)) {
-    if (parseInt(dayIdx) >= 5) continue;
+    const day = parseInt(dayIdx);
+    if (day >= 5) continue;
     for (const [slotId, entry] of Object.entries(daySlotEntries || {})) {
       const slotNo = slotNoFromId(slotId);
-      if (entry?.type === 'ders' && slotNo != null && slotNo <= mezunOnlyCount) {
-        if (entry.cls && !mezunClasses.has(entry.cls)) {
-          return NextResponse.json({ error: `${slotNo}. slot (hafta içi ilk 6) sadece mezun sınıflarına ders eklenebilir` }, { status: 400 });
-        }
+      if (entry?.type !== 'ders' || slotNo == null || slotNo > mezunOnlyCount || !entry.cls) continue;
+      const row = classByLegacy.get(entry.cls);
+      const windowNos = row?.slotTemplate?.[String(day)];
+      if (Array.isArray(windowNos) && windowNos.includes(slotNo)) continue; // pencere izni
+      const isMezun = row ? row.group === 'mezun' : mezunLegacy.has(entry.cls);
+      if (!isMezun) {
+        return NextResponse.json({ error: `${slotNo}. slot (hafta içi ilk 6) sadece mezun sınıflarına ders eklenebilir — ya da sınıfın "Program Penceresi"nde bu saat işaretli olmalı` }, { status: 400 });
       }
     }
   }
@@ -213,12 +222,25 @@ export const POST = withAuth('manage', async (req) => {
   return NextResponse.json({ ok: true });
 });
 
-// DELETE /api/program — bir öğretmenin şablon programını tamamen siler
+// DELETE /api/program — öğretmenin şablonundaki DERS/ETÜT girdilerini siler.
+// 'available' (uygunluk) işaretleri ve etutSablonlari KORUNUR: uygunluk çözücünün
+// girdisidir, program yeniden oluşturulduğunda müdürün baştan işaretlemesi gerekmemeli.
+// (Tam sıfırlama gerekiyorsa: /api/admin/week reset-all)
 export const DELETE = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, ProgramDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId: legacyTeacherId } = parsed.data;
 
-  await deleteProgramTemplate(legacyTeacherId); // SQL-aware (grid'i siler, etutSablonlari'nı da temizler)
+  const full = await getProgramTemplate(legacyTeacherId);
+  const { etutSablonlari, ...grid } = full;
+  const kept = {};
+  for (const [dayIdx, daySlots] of Object.entries(grid)) {
+    for (const [slotId, entry] of Object.entries(daySlots || {})) {
+      if (entry?.type === 'available') (kept[dayIdx] = kept[dayIdx] || {})[slotId] = entry;
+    }
+  }
+  if (etutSablonlari !== undefined) kept.etutSablonlari = etutSablonlari;
+  if (Object.keys(kept).length) await setProgramTemplate(legacyTeacherId, kept);
+  else await deleteProgramTemplate(legacyTeacherId);
   return NextResponse.json({ ok: true });
 });

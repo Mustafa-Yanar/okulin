@@ -5,7 +5,7 @@ import { getWeekKey, initWeekForTeacher } from '@/lib/slots';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zName, zId, zStringArray } from '@/lib/validate';
-import { COL_COURSES, colKeyForClass, classToGroup, ALL_CLASSES } from '@/lib/constants';
+import { defaultCoursesFor } from '@/lib/classes';
 import { tdb } from '@/lib/sqldb';
 
 // SQL TeacherPreset satırları → {cls, course} sözleşmesi (classId = legacy cls kodu).
@@ -19,22 +19,29 @@ async function replacePresetsSql(teacherCuid, clean) {
 import { newId as makeId } from '@/lib/id';
 
 // Ön eşleştirme listesini öğretmenin branşlarına + grup izinlerine göre süz.
+// Sınıf REGISTRY'den doğrulanır (Class tablosu, legacyId) — sabit-kod listesi değil;
+// ders, sınıfın kendi ders kümesinden (dersler, boşsa kademe şablonu) kontrol edilir.
 // Geçersiz (branş dışı ders / izin dışı grup / bilinmeyen sınıf) satırlar sessizce atılır.
-function sanitizePresets(list, teacher) {
+function sanitizePresets(list, teacher, classRows) {
   if (!Array.isArray(list)) return [];
   const branches = new Set(teacher.branches || []);
   const ag = teacher.allowedGroups || [];
   const groups = ag.length > 0 ? new Set(ag) : new Set(['ortaokul', 'lise', 'mezun']);
+  const byId = new Map((classRows || []).map((c) => [c.legacyId, c]));
   const seen = new Set();
   const out = [];
   for (const p of list) {
     const cls = String(p?.cls || '');
     const course = String(p?.course || '');
-    if (!ALL_CLASSES.includes(cls)) continue;
+    const row = byId.get(cls);
+    if (!row) continue;
     if (seen.has(cls)) continue;                       // sınıf başına tek ders
-    if (!groups.has(classToGroup(cls))) continue;
+    if (!groups.has(row.group)) continue;
     if (!branches.has(course)) continue;
-    if (!(COL_COURSES[colKeyForClass(cls)] || []).includes(course)) continue;
+    const allowed = (row.dersler && row.dersler.length)
+      ? row.dersler
+      : defaultCoursesFor(row.kademe, row.duzey, row.dal);
+    if (!allowed.includes(course)) continue;
     seen.add(cls);
     out.push({ cls, course });
   }
@@ -44,7 +51,7 @@ function sanitizePresets(list, teacher) {
 const zPhotoUrl = z.string().max(1_000_000).optional(); // base64 data URL (~400KB)
 const zPhone = z.string().max(40).optional();
 const zPresets = z.array(z.object({
-  cls: z.string().max(10),
+  cls: z.string().max(60),   // registry legacyId (s_<uuid>) veya eski sabit kod
   course: z.string().max(40),
 })).max(200);
 const TeacherCreateSchema = z.object({
@@ -123,7 +130,8 @@ export const PUT = withAuth('manage', async (req) => {
     const { id, presets } = body;
     const t = await tdb().teacher.findFirst({ where: { legacyId: id } });
     if (!t) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
-    const clean = sanitizePresets(presets, { branches: t.branches, allowedGroups: t.allowedGroups });
+    const classRows = await tdb().class.findMany();
+    const clean = sanitizePresets(presets, { branches: t.branches, allowedGroups: t.allowedGroups }, classRows);
     await replacePresetsSql(t.id, clean);
     return NextResponse.json({ ok: true, presets: clean });
   }
@@ -140,7 +148,8 @@ export const PUT = withAuth('manage', async (req) => {
   if (password) data.passwordHash = await bcrypt.hash(password, 10);
   await tdb().teacher.update({ where: { id: t.id }, data });
   if ((t.presets || []).length) {
-    const clean = sanitizePresets(presetsOut(t.presets), { branches: data.branches, allowedGroups: data.allowedGroups });
+    const classRows = await tdb().class.findMany();
+    const clean = sanitizePresets(presetsOut(t.presets), { branches: data.branches, allowedGroups: data.allowedGroups }, classRows);
     await replacePresetsSql(t.id, clean);
   }
   return NextResponse.json({ ok: true });

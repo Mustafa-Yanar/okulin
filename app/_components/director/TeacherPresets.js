@@ -3,13 +3,12 @@
 // "Sabit Dersler (Ön Eşleştirme)" — öğretmen detay sayfasında gösterilir.
 // Müdür "bu öğretmen şu sınıfın şu dersini sabit versin" der → teacher.presets'e yazılır.
 // CP-SAT bunu HARD preset olarak alır; GÜN/SAATİ solver seçer (slot serbest).
-// Veri öğretmen kaydında: presets: [{ cls, course }].
+// Veri öğretmen kaydında: presets: [{ cls, course }] — cls = REGISTRY şube id'si
+// (s_<uuid>). Sabit-kod listesi (ALL_CLASSES) kullanılmaz; kurum ne açtıysa o.
 import React, { useState, useMemo } from 'react';
 import { Lock, Plus, Save, X } from 'lucide-react';
-import {
-  ALL_CLASSES, COL_COURSES, colKeyForClass, classToGroup, classLabel,
-} from '@/lib/constants';
 import { api } from './shared';
+import { useClasses } from '../ClassesContext';
 
 // Öğretmenin girebileceği gruplar (boşsa hepsi).
 function teacherGroups(t) {
@@ -17,21 +16,22 @@ function teacherGroups(t) {
   return ag.length > 0 ? ag : ['ortaokul', 'lise', 'mezun'];
 }
 
-// Bir öğretmen için seçilebilir sınıf → o sınıfta verebileceği dersler.
-// dersler = sınıfın ders sütunu ∩ öğretmenin branşları.
-function eligibleMap(t) {
+// Bir öğretmen için seçilebilir şube → o şubede verebileceği dersler.
+// dersler = şubenin ders kümesi (registry) ∩ öğretmenin branşları.
+function eligibleMap(t, registryClasses) {
   const groups = teacherGroups(t);
   const branches = new Set(t.branches || []);
-  const map = {}; // cls -> [course, ...]
-  for (const cls of ALL_CLASSES) {
-    if (!groups.includes(classToGroup(cls))) continue;
-    const courses = (COL_COURSES[colKeyForClass(cls)] || []).filter(c => branches.has(c));
-    if (courses.length) map[cls] = courses;
+  const map = {}; // cls id -> [course, ...]
+  for (const c of registryClasses || []) {
+    if (!groups.includes(c.group)) continue;
+    const courses = (c.dersler || []).filter(d => branches.has(d));
+    if (courses.length) map[c.id] = courses;
   }
   return map;
 }
 
 export default function TeacherPresets({ teacher, onSaved, showToast }) {
+  const { classes: registryClasses } = useClasses();
   const [presets, setPresets] = useState(() =>
     Array.isArray(teacher.presets) ? teacher.presets.map(p => ({ cls: p.cls, course: p.course })) : []
   );
@@ -39,8 +39,17 @@ export default function TeacherPresets({ teacher, onSaved, showToast }) {
   const [selCourse, setSelCourse] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const elig = useMemo(() => eligibleMap(teacher), [teacher]);
-  const eligClasses = useMemo(() => Object.keys(elig).sort(), [elig]);
+  // id → şube adı (görünüm); bilinmeyen id (eski/silinmiş kayıt) ham gösterilir.
+  const adOf = useMemo(() => {
+    const m = new Map((registryClasses || []).map(c => [c.id, c.ad]));
+    return (cls) => m.get(cls) || cls;
+  }, [registryClasses]);
+
+  const elig = useMemo(() => eligibleMap(teacher, registryClasses), [teacher, registryClasses]);
+  const eligClasses = useMemo(
+    () => Object.keys(elig).sort((a, b) => adOf(a).localeCompare(adOf(b), 'tr')),
+    [elig, adOf]
+  );
 
   // Seçili sınıfın dersleri; tek ders varsa otomatik seçilir (kullanıcı seçmez).
   const coursesForSel = selCls ? (elig[selCls] || []) : [];
@@ -108,7 +117,7 @@ export default function TeacherPresets({ teacher, onSaved, showToast }) {
             <select className="input !w-auto text-sm max-w-[7.5rem]" value={selCls}
               onChange={e => { setSelCls(e.target.value); setSelCourse(''); }}>
               <option value="">Seç</option>
-              {eligClasses.map(c => <option key={c} value={c}>{classLabel(c)}</option>)}
+              {eligClasses.map(c => <option key={c} value={c}>{adOf(c)}</option>)}
             </select>
           </div>
           {/* Ders seçimi: yalnız sınıfta birden çok uygun ders varsa göster (tekse otomatik). */}
@@ -145,7 +154,7 @@ export default function TeacherPresets({ teacher, onSaved, showToast }) {
             <div key={`${p.cls}-${i}`} className="flex items-center justify-between text-sm rounded-lg px-3 py-2"
               style={{ background: 'var(--bg-muted)' }}>
               <span style={{ color: 'var(--text-secondary)' }}>
-                <b style={{ color: 'var(--text-primary)' }}>{classLabel(p.cls)}</b> → {p.course}
+                <b style={{ color: 'var(--text-primary)' }}>{adOf(p.cls)}</b> → {p.course}
               </span>
               <button onClick={() => remove(i)} className="btn-icon btn-icon-danger" title="Kaldır">
                 <X size={14} />
