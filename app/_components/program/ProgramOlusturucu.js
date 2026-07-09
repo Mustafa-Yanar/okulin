@@ -157,6 +157,31 @@ function teacherGroups(t) {
   return ag.length > 0 ? ag : ['ortaokul','lise','mezun'];
 }
 
+// Her öğretmenin işaretlediği (gün, slotIndex) uygunluk çiftlerini topla — KATI mod,
+// solver da aynı kaynağı kullanır. Ön analiz ve generate() aynı fonksiyonu paylaşır ki
+// "hata yok" derken solver'ın gerçekte gördüğü kısıt kaçmasın.
+async function fetchTeacherSlots(teachers, api) {
+  const teacherSlots = {};
+  await Promise.all(teachers.map(async t => {
+    try {
+      const resp = await api(`/api/program?teacherId=${t.id}`); // {weekKey, program}
+      const prog = resp.program || {};
+      const pairs = [];
+      for (const dayStr of Object.keys(prog)) {
+        const day = parseInt(dayStr);
+        const slots = prog[dayStr] || {};
+        for (const slotId of Object.keys(slots)) {
+          if (slots[slotId]?.type !== 'available') continue;
+          const no = slotNoOf(slotId); // d{gün}s{no} → no (1-tabanlı)
+          if (no != null && no >= 1) pairs.push([day, no - 1]); // 0-tabanlı slotIdx
+        }
+      }
+      teacherSlots[t.id] = pairs;
+    } catch { teacherSlots[t.id] = []; }
+  }));
+  return teacherSlots;
+}
+
 // Bir grubun (gün,slot) pencere birleşimi: o gruptaki tüm sınıfların işaretli slotları.
 // Öğretmen kapasitesi bunun üst sınırı — aynı slotta tek sınıfa girer (birleşim sayılır).
 function groupSlotUnion(grp, classes, windowsOf, groupOf) {
@@ -182,8 +207,12 @@ function teacherHourCap(t, grp, classes, windowsOf, groupOf) {
   return cap;
 }
 
-// Ön analiz: oluşturmadan önce kapasite/çakışma sorunlarını hesapla
-function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf }) {
+// Ön analiz: oluşturmadan önce kapasite/çakışma sorunlarını hesapla. teacherSlots
+// varsa (Oluştur ile aynı kaynak — /api/program available işaretleri) günlük "kanal"
+// kısıtı da kontrol edilir: bir günde aynı derse ihtiyacı olan sınıf sayısı, o gün o
+// dersi verebilecek uygun öğretmen sayısını aşarsa SAAT toplamı yeterli olsa bile
+// bazı sınıflar açıkta kalır (pigeonhole) — saat bazlı #3 kontrolü bunu yakalayamaz.
+function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf, teacherSlots }) {
   const errors = [], warnings = [], infos = [];
 
   // 0. Program penceresi işaretlenmemiş sınıflar → o sınıfa hiç ders yerleşmez (uyarı).
@@ -256,6 +285,45 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
     } else if (demand > totalCap * 0.85) {
       const grpLabel = grp === 'mezun' ? 'Mezun' : grp === 'lise' ? 'Lise' : 'Ortaokul';
       warnings.push(`${branch} (${grpLabel}): kapasite %${Math.round(demand/totalCap*100)} dolu — yerleştirme zorlaşabilir`);
+    }
+  }
+
+  // 3b. Günlük kanal kısıtı: aynı gün aynı derse ihtiyacı olan sınıf sayısı, o gün o
+  // dersi verebilecek (uygun+available+izinsiz) öğretmen sayısını aşarsa, saat toplamı
+  // yeterli görünse bile bazı sınıflar açıkta kalır (K3: aynı gün aynı derse 1 grup →
+  // her sınıf kendi parçası için ayrı bir öğretmen-gün ister). teacherSlots yoksa atlanır.
+  if (teacherSlots) {
+    const need = {}; // "course|grp|day" → [labelOf(cls), ...]
+    for (const cls of classes) {
+      const key = colKeyOf(cls), grp = groupOf(cls);
+      const win = windowsOf(cls);
+      for (const course of coursesForCol(key)) {
+        const pat = resolvePieces(load, grouping, key, course);
+        if (!pat.length) continue;
+        // K3: en uzun parça en geniş güne — #1'deki eşlemeyle aynı sırayla günleri belirle.
+        const days = Object.entries(win)
+          .map(([d, slots]) => [parseInt(d), slots])
+          .sort((a, b) => b[1].length - a[1].length)
+          .slice(0, pat.length)
+          .map(([d]) => d);
+        for (const d of days) {
+          const k = `${course}|${grp}|${d}`;
+          (need[k] = need[k] || []).push(labelOf(cls));
+        }
+      }
+    }
+    for (const [k, clsLabels] of Object.entries(need)) {
+      const [course, grp, dayStr] = k.split('|');
+      const day = parseInt(dayStr);
+      const availableCount = teachers.filter(tt => {
+        if (!teacherTeaches(tt, course) || !teacherGroups(tt).includes(grp)) return false;
+        if ((tt.offDays || []).includes(day)) return false;
+        return (teacherSlots[tt.id] || []).some(([d]) => d === day);
+      }).length;
+      if (clsLabels.length > availableCount) {
+        const grpLabel = grp === 'mezun' ? 'Mezun' : grp === 'lise' ? 'Lise' : 'Ortaokul';
+        errors.push(`${course} (${grpLabel}, ${DAYS[day]}): ${clsLabels.join(', ')} aynı gün istiyor ama o gün yalnız ${availableCount} uygun öğretmen var — en az ${clsLabels.length - availableCount} sınıf açıkta kalır`);
+      }
     }
   }
 
@@ -379,11 +447,19 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
   const updateLoad = useCallback(updater => { setLoad(updater); setPlanDirty(true); }, []);
   const updateGrouping = useCallback(updater => { setGrouping(updater); setPlanDirty(true); }, []);
 
-  // Analizi yeniden hesapla: teachers/load/grouping/classes/pencere değişince
+  // Analizi yeniden hesapla: teachers/load/grouping/classes/pencere değişince.
+  // Öğretmen uygunluk (available) verisi de çekilir — Oluştur ile aynı kısıtı görür,
+  // aksi halde "hata yok" deyip solver'ın gerçekte açıkta bıraktığı dersleri kaçırır.
   useEffect(() => {
     if (!teachers) return;
-    setAnalysis(analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf }));
-  }, [teachers, load, grouping, classes, colKeyOf, groupOf, labelOf, windowsOf]);
+    let cancelled = false;
+    (async () => {
+      const teacherSlots = await fetchTeacherSlots(teachers, api);
+      if (cancelled) return;
+      setAnalysis(analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf, teacherSlots }));
+    })();
+    return () => { cancelled = true; };
+  }, [teachers, load, grouping, classes, colKeyOf, groupOf, labelOf, windowsOf, api]);
 
   // Ders yükü tablosu her zaman tüm sütunları gösterir
   const activeCols = LOAD_COLUMNS;
@@ -415,26 +491,8 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
         });
       });
 
-      // KATI mod: her öğretmenin işaretlediği (gün, slotIndex) çiftlerini topla.
-      // Müdür slotu 'available' olarak işaretliyor; işaretsiz öğretmene ders atanmaz.
-      const teacherSlots = {};
-      await Promise.all(teachers.map(async t => {
-        try {
-          const resp = await api(`/api/program?teacherId=${t.id}`); // {weekKey, program}
-          const prog = resp.program || {};
-          const pairs = [];
-          for (const dayStr of Object.keys(prog)) {
-            const day = parseInt(dayStr);
-            const slots = prog[dayStr] || {};
-            for (const slotId of Object.keys(slots)) {
-              if (slots[slotId]?.type !== 'available') continue;
-              const no = slotNoOf(slotId); // d{gün}s{no} → no (1-tabanlı)
-              if (no != null && no >= 1) pairs.push([day, no - 1]); // solver 0-tabanlı slotIdx
-            }
-          }
-          teacherSlots[t.id] = pairs;
-        } catch { teacherSlots[t.id] = []; }
-      }));
+      // KATI mod: her öğretmenin işaretlediği (gün, slotIndex) çiftleri — ön analizle aynı kaynak.
+      const teacherSlots = await fetchTeacherSlots(teachers, api);
 
       // Ön eşleştirmeler artık öğretmen kayıtlarında (teacher.presets) — düzleştir.
       const presets = teachers.flatMap(t =>
