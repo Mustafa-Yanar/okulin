@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Sparkles, AlertTriangle, Check, Download, Eye, Save } from 'lucide-react';
+import { Sparkles, AlertTriangle, Check, Download, Eye, Save, ShieldCheck } from 'lucide-react';
 import {
   classToGroup, slotId as makeSlotId, slotNoOf,
 } from '@/lib/constants';
@@ -477,6 +477,8 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
   const [previewId, setPreviewId] = useState(null);
   const [analysis, setAnalysis]   = useState(null);
   const [presetTeacherId, setPresetTeacherId] = useState(''); // ön eşleştirme paneli (madde 11)
+  const [feasChecking, setFeasChecking] = useState(false);   // Kesin Kontrol çalışıyor
+  const [feasResult, setFeasResult] = useState(null);        // {feasible, suggestions:[...]}
 
   const classMeta = useMemo(
     () => new Map((registryClasses || []).map(c => [c.id, c])),
@@ -583,56 +585,48 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
 
   // ── CP-SAT çözücü (OR-Tools, Python serverless) ──
   // Kısıtların tümü server'da modellenir; frontend payload'ı hazırlar ve sonucu gösterir.
+  // Solver payload'ını kur — hem generate() hem feasibilityCheck() kullanır.
+  // teacherSlots dışarıdan verilir (feasibility farklı senaryolar için değiştirir).
+  const buildPayload = useCallback((teacherSlots) => {
+    const windows = {}, colKey = {}, group = {};
+    classes.forEach(c => {
+      windows[c] = windowsOf(c);
+      colKey[c] = colKeyOf(c);
+      group[c] = groupOf(c);
+    });
+    // "Hayalet talep" temizliği: config'te kalmış ama sınıfların dersler[]'inde
+    // olmayan dersleri ayıkla (bkz commit 5d1d9c8).
+    const cleanLoad = {};
+    for (const [ck, courses] of Object.entries(load)) {
+      const valid = new Set(coursesOfCol(ck));
+      const filtered = {};
+      for (const [course, saat] of Object.entries(courses || {})) {
+        if (valid.has(course)) filtered[course] = saat;
+      }
+      if (Object.keys(filtered).length) cleanLoad[ck] = filtered;
+    }
+    const pieces = {};
+    Object.entries(grouping).forEach(([key, courses]) => {
+      Object.entries(courses || {}).forEach(([course, str]) => {
+        const pat = parsePattern(str);
+        if (pat.length) (pieces[key] = pieces[key] || {})[course] = pat;
+      });
+    });
+    const presets = teachers.flatMap(t =>
+      (t.presets || []).map(p => ({ teacherId: t.id, cls: p.cls, course: p.course }))
+    );
+    return { classes, teachers, load: cleanLoad, pieces, maxWeekly, windows, colKey, group, teacherSlots, presets };
+  }, [classes, teachers, windowsOf, colKeyOf, groupOf, load, coursesOfCol, grouping, maxWeekly]);
+
   async function generate() {
     if (!teachers) return;
     setResult(null);
     setConflicts(null);
     setGenerating(true);
     try {
-      // Her sınıfın KATI slot penceresi (slotTemplate) + sütun anahtarı + grubu → payload.
-      // Pencere işaretlenmemiş sınıf boş windows alır → solver o sınıfa ders koymaz.
-      const windows = {}, colKey = {}, group = {};
-      classes.forEach(c => {
-        windows[c] = windowsOf(c);
-        colKey[c] = colKeyOf(c);
-        group[c] = groupOf(c);
-      });
-
-      // "Hayalet talep" temizliği: load, plan config'inde kalmış ama sınıfların artık
-      // dersler[] listesinde OLMAYAN dersleri içerebilir (örn. bir sütundan Türkçe
-      // çıkarıldığı halde eski saat kaydı config'te duruyor). Tablo bunları registry'den
-      // okuduğu için GÖSTERMİYOR (Σ 24), ama solver ham load'u alıp talep sayardı (26) →
-      // görünmez fazladan talep = yerleşemeyen ders. Solver'a yalnız registry'de gerçekten
-      // var olan dersleri gönder — ekran ile solver aynı ders kümesini görsün.
-      const cleanLoad = {};
-      for (const [ck, courses] of Object.entries(load)) {
-        const valid = new Set(coursesOfCol(ck));
-        const filtered = {};
-        for (const [course, saat] of Object.entries(courses || {})) {
-          if (valid.has(course)) filtered[course] = saat;
-        }
-        if (Object.keys(filtered).length) cleanLoad[ck] = filtered;
-      }
-
-      // Gruplama desenleri: yalnız geçerli override'lar gönderilir; eksik hücrelerde
-      // çözücü saatten varsayılanı (2'liler + tek kalan 1) türetir.
-      const pieces = {};
-      Object.entries(grouping).forEach(([key, courses]) => {
-        Object.entries(courses || {}).forEach(([course, str]) => {
-          const pat = parsePattern(str);
-          if (pat.length) (pieces[key] = pieces[key] || {})[course] = pat;
-        });
-      });
-
       // KATI mod: her öğretmenin işaretlediği (gün, slotIndex) çiftleri — ön analizle aynı kaynak.
       const teacherSlots = await fetchTeacherSlots(teachers, api);
-
-      // Ön eşleştirmeler artık öğretmen kayıtlarında (teacher.presets) — düzleştir.
-      const presets = teachers.flatMap(t =>
-        (t.presets || []).map(p => ({ teacherId: t.id, cls: p.cls, course: p.course }))
-      );
-
-      const payload = { classes, teachers, load: cleanLoad, pieces, maxWeekly, windows, colKey, group, teacherSlots, presets };
+      const payload = buildPayload(teacherSlots);
       const data = await api('/api/program-solve', { method: 'POST', body: JSON.stringify(payload) });
 
       const assigned = data.assigned || [];
@@ -648,6 +642,109 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
       showToast?.(e.message, 'error');
     } finally {
       setGenerating(false);
+    }
+  }
+
+  // ── Kesin Kontrol: yerleşebilirliği solver'la KESİN test et ──
+  // Ön analiz (3b/3c) sınıf-yerel sezgisel; çapraz-sınıf öğretmen çekişmesini yok sayar.
+  // Bu buton solver'ı feasibilityTest modunda (tüm dersler zorunlu) çalıştırıp FEASIBLE
+  // (yerleşir) / INFEASIBLE (geometrik imkansız) kesin cevabını verir. INFEASIBLE ise
+  // hangi öğretmeni tam-güne çıkarmanın çözdüğünü deneyerek somut öneri üretir.
+  async function feasibilityCheck() {
+    if (!teachers) return;
+    setFeasChecking(true);
+    setFeasResult(null);
+    try {
+      const teacherSlots = await fetchTeacherSlots(teachers, api);
+      const base = buildPayload(teacherSlots);
+
+      // 1) Mevcut durumu kesin test et
+      const r0 = await api('/api/program-solve', {
+        method: 'POST',
+        body: JSON.stringify({ ...base, feasibilityTest: true }),
+      });
+      if (r0.feasible) {
+        setFeasResult({ feasible: true, suggestions: [] });
+        showToast?.('Tüm dersler yerleşebilir — program tam çözülür', 'success');
+        return;
+      }
+
+      // 1b) Normal solve → hangi ders(ler) açıkta kalıyor? O derslerin öğretmenleri
+      //     GERÇEK darboğaz adayıdır (solo-branş filtresinden çok daha isabetli).
+      const rNorm = await api('/api/program-solve', {
+        method: 'POST',
+        body: JSON.stringify(base),
+      });
+      const bottleneckCourses = new Set((rNorm.unplaced || []).map(u => u.course));
+
+      // 2) INFEASIBLE → darboğaz adaylarını dene. Aday = ders veren, tam-gün OLMAYAN
+      //    öğretmenler (müsaitliği sınıf pencerelerinden dar). Her birini tam-güne çıkar,
+      //    ilk çözeni öneri yap. En fazla birkaç aday denenir (çağrı maliyeti sınırlı).
+      // Tam-gün = her sınıf penceresinde geçen tüm (gün, slotIdx) birleşimi.
+      const allWin = {};
+      for (const c of classes) {
+        const w = windowsOf(c);
+        for (const [d, slots] of Object.entries(w)) {
+          (allWin[d] = allWin[d] || new Set());
+          for (const s of slots) allWin[d].add(s);
+        }
+      }
+      const fullSlots = [];
+      for (const [d, set] of Object.entries(allWin)) for (const s of set) fullSlots.push([Number(d), s]);
+
+      // Aday öğretmenler: en az bir ders veriyor + mevcut müsaitliği fullSlots'tan AZ.
+      // Ayrıca her branşın kaç öğretmeni olduğunu say — TEK öğretmenli branşlar (darboğaz
+      // adayı) öncelikli. Öneriyi darboğaza en yakın öğretmenden başlat: önce tek-öğretmenli
+      // branştakiler, sonra müsaitliği en dar olan → kullanıcıya en ANLAMLI öneri gelsin.
+      const teachesSomething = new Set();
+      const branchTeacherCount = {}; // branş → kaç öğretmen
+      for (const c of classes) {
+        const key = colKeyOf(c), grp = groupOf(c);
+        for (const course of coursesOfCol(key)) {
+          if (!((load[key]?.[course]) > 0)) continue;
+          const elig = teachers.filter(t => (t.branches || []).includes(course) && teacherGroups(t).includes(grp));
+          branchTeacherCount[course] = Math.max(branchTeacherCount[course] || 0, elig.length);
+          for (const t of elig) teachesSomething.add(t.id);
+        }
+      }
+      // Öğretmen darboğaz skoru: açıkta kalan bir dersi veriyorsa EN öncelikli (0),
+      // sonra tek-öğretmenli branşı olan (1), diğerleri (2). Eşitlikte müsaitliği dar olan.
+      const teachesBottleneck = (t) => (t.branches || []).some(b => bottleneckCourses.has(b));
+      const soloBranch = (t) => (t.branches || []).some(b => branchTeacherCount[b] === 1);
+      const score = (t) => teachesBottleneck(t) ? 0 : soloBranch(t) ? 1 : 2;
+      const candidates = teachers.filter(t => {
+        if (!teachesSomething.has(t.id)) return false;
+        const cur = (teacherSlots[t.id] || []).length;
+        return cur < fullSlots.length; // genişletilebilir
+      }).sort((a, b) => {
+        const sa = score(a), sb = score(b);
+        if (sa !== sb) return sa - sb;
+        return (teacherSlots[a.id] || []).length - (teacherSlots[b.id] || []).length;
+      });
+
+      const suggestions = [];
+      for (const t of candidates) {
+        const trySlots = { ...teacherSlots, [t.id]: fullSlots };
+        const rt = await api('/api/program-solve', {
+          method: 'POST',
+          body: JSON.stringify({ ...buildPayload(trySlots), feasibilityTest: true }),
+        });
+        if (rt.feasible) {
+          suggestions.push({ teacherId: t.id, name: t.name });
+          if (suggestions.length >= 3) break; // ilk birkaç çözümü göster, yeter
+        }
+      }
+      setFeasResult({ feasible: false, suggestions });
+      showToast?.(
+        suggestions.length
+          ? 'Mevcut haliyle tüm dersler yerleşemez — öneriler hazır'
+          : 'Mevcut haliyle tüm dersler yerleşemez (tek öğretmen genişletmesi yetmiyor)',
+        'error'
+      );
+    } catch (e) {
+      showToast?.(e.message, 'error');
+    } finally {
+      setFeasChecking(false);
     }
   }
 
@@ -769,12 +866,53 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
             title="Tüm öğretmenlerin mevcut programını sil">
             {clearing ? 'Siliniyor...' : 'Programları Temizle'}
           </button>
+          <button onClick={feasibilityCheck} disabled={feasChecking || generating}
+            className="btn-ghost !px-3 !py-2 text-xs flex items-center gap-1.5 border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+            title="Tüm derslerin yerleşip yerleşemeyeceğini solver ile KESİN test et">
+            <ShieldCheck size={14} /> {feasChecking ? 'Kontrol ediliyor…' : 'Kesin Kontrol'}
+          </button>
           <button onClick={generate} disabled={generating}
             className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm disabled:opacity-60">
             <Sparkles size={14} /> {generating ? 'Oluşturuluyor… (~30 sn)' : 'Oluştur'}
           </button>
         </div>
       </div>
+
+      {/* Kesin Kontrol sonucu */}
+      {feasResult && (
+        feasResult.feasible ? (
+          <div className="card p-3 border-l-4" style={{borderLeftColor:'#16a34a', background:'#f0fdf4'}}>
+            <div className="flex items-center gap-2 text-sm" style={{color:'#15803d', fontWeight:600}}>
+              <ShieldCheck size={16} /> Tüm dersler yerleşebilir — program tam çözülür.
+            </div>
+          </div>
+        ) : (
+          <div className="card p-3 border-l-4" style={{borderLeftColor:'#dc2626', background:'#fef2f2'}}>
+            <div className="flex items-center gap-2 text-sm mb-1.5" style={{color:'#b91c1c', fontWeight:700}}>
+              <AlertTriangle size={16} /> Mevcut haliyle tüm dersler yerleşemez (geometrik olarak imkansız)
+            </div>
+            <p className="text-xs text-gray-600 mb-1">
+              Toplam saatler yeterli olsa bile, ders bloklarının gün/saat ızgarasına çakışmadan
+              dizilmesi mümkün değil. Aşağıdakilerden <b>herhangi biri</b> sorunu çözer:
+            </p>
+            {feasResult.suggestions.length ? (
+              <ul className="text-xs space-y-1 mt-1.5">
+                {feasResult.suggestions.map(s => (
+                  <li key={s.teacherId} style={{color:'#374151'}}>
+                    • <b>{s.name}</b> öğretmeninin uygunluğunu (müsait gün/saat) genişletin —
+                    tüm sınıf pencerelerinde müsait yapılınca program çözülüyor.
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-gray-500 mt-1">
+                Tek bir öğretmenin uygunluğunu genişletmek yetmiyor — ders yükünü azaltmayı,
+                sınıf penceresine gün eklemeyi veya darboğaz branşa ikinci öğretmen eklemeyi deneyin.
+              </p>
+            )}
+          </div>
+        )
+      )}
 
       {/* Özet kartlar */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

@@ -354,6 +354,30 @@ def solve(payload):
     peak = model.NewIntVar(0, total_hours, 'peak')
     model.AddMaxEquality(peak, list(load_vars.values()))
 
+    # ── Fizibilite testi modu (Kesin Kontrol) ──
+    # feasibilityTest=True → "TÜM dersler yerleşmek ZORUNDA" (placed=1 hard) + presetler
+    # hard. Status ham döner: FEASIBLE = tam yerleşim mümkün, INFEASIBLE = geometrik
+    # olarak imkansız (toplam saat tutsa bile dizilim yok). Öneri üretimi için çağıran
+    # (route) bu testi farklı senaryolarla (öğretmen müsaitliği genişletilmiş) tekrarlar.
+    feasibility_test = bool(payload.get('feasibilityTest'))
+    if feasibility_test:
+        for u in range(len(units)):
+            model.Add(placed[u] == 1)
+        for miss in preset_miss:
+            model.Add(miss == 0)  # presetler de zorunlu (gerçek durumu test et)
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = payload.get('timeLimit', TIME_LIMIT_SECONDS)
+        solver.parameters.num_search_workers = NUM_WORKERS
+        status = solver.Solve(model)
+        feasible = status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+        return {
+            'feasibilityTest': True,
+            'feasible': feasible,
+            'status': solver.StatusName(status),
+            'totalUnits': len(units),
+            'ms': int((time.time() - t0) * 1000),
+        }
+
     # ── Objective ──
     # Açıkta kalan parçalar SAAT ağırlıklı cezalandırılır (3 saatlik parça 1 saatlikten önemli).
     unplaced_terms = []
