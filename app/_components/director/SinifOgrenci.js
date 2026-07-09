@@ -7,12 +7,13 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Plus, Trash2, Edit3, Calendar, GraduationCap, BookOpen, ChevronRight, ChevronLeft,
+  Plus, Trash2, Edit3, Calendar, CalendarClock, GraduationCap, BookOpen, ChevronRight, ChevronLeft,
 } from 'lucide-react';
 import { classLabel } from '@/lib/constants';
 import { classLabelFrom } from '@/lib/classCatalog';
 import { api } from './shared';
 import { StudentExpandedView, ClassScheduleModal } from './StudentList';
+import ClassScheduleEditor from './ClassScheduleEditor';
 import { ClassFormModal, CourseCatalog, KADEME_LABEL, KADEME_ORDER, DAL_LABEL } from './ClassManager';
 import LoadingBox from '../Loading';
 import EmptyState from '../EmptyState';
@@ -33,6 +34,7 @@ export default function SinifOgrenci({
   const [view, setView] = useState('list'); // list | catalog
   const [editClass, setEditClass] = useState(null); // {} = yeni, kayıt = düzenle
   const [scheduleCls, setScheduleCls] = useState(null);
+  const [windowCls, setWindowCls] = useState(null); // sınıf program penceresi editörü {id,label,slotTemplate}
   const [searchQ, setSearchQ] = useState('');
   const [openClsId, setOpenClsId] = useState(null);
   const [expandedId, setExpandedId] = useUrlParam('ogrenci');
@@ -230,6 +232,7 @@ export default function SinifOgrenci({
                         onToggle={() => setOpenClsId((prev) => (prev === c.id ? null : c.id))}
                         onEdit={() => setEditClass(c)}
                         onSchedule={() => setScheduleCls({ cls: c.id, label: c.ad })}
+                        onWindow={() => setWindowCls({ id: c.id, label: c.ad, slotTemplate: c.slotTemplate || null })}
                         onDelete={() => handleDeleteClass(c)}
                         onSelectStudent={setExpandedId}
                         pendingGuidance={pendingGuidance}
@@ -257,12 +260,21 @@ export default function SinifOgrenci({
       {scheduleCls && (
         <ClassScheduleModal cls={scheduleCls.cls} label={scheduleCls.label} onClose={() => setScheduleCls(null)} />
       )}
+      {windowCls && (
+        <ClassScheduleEditor
+          cls={windowCls.id} label={windowCls.label} initialTemplate={windowCls.slotTemplate}
+          showToast={showToast}
+          onSaved={(tpl) => setClasses(prev => prev.map(c => c.id === windowCls.id ? { ...c, slotTemplate: tpl } : c))}
+          onClose={() => setWindowCls(null)}
+        />
+      )}
     </div>
   );
 }
 
 // ─── Şube satırı (akordeon: başlık + 3 buton + açılınca öğrenciler) ───────────────────
-function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, onDelete, onSelectStudent, pendingGuidance, readOnly = false, busy }) {
+function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, onWindow, onDelete, onSelectStudent, pendingGuidance, readOnly = false, busy }) {
+  const hasWindow = c.slotTemplate && Object.keys(c.slotTemplate).length > 0;
   const courseLabel = (key) => courses.find((x) => x.key === key)?.ad || key;
   const dersler = c.dersler || [];
   const meta = [c.duzey && `${c.duzey}. sınıf`, c.dal && DAL_LABEL[c.dal]].filter(Boolean).join(' · ');
@@ -282,6 +294,10 @@ function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, 
         <div className="flex gap-1 shrink-0">
           <button className="btn-icon" onClick={onEdit} aria-label="Şubeyi düzenle" title="Düzenle" disabled={busy}><Edit3 size={14} /></button>
           <button className="btn-icon" onClick={onSchedule} aria-label="Ders programı" title="Ders Programı"><Calendar size={14} /></button>
+          <button className="btn-icon" onClick={onWindow} aria-label="Program penceresi" title="Program Penceresi (ders saatleri)"
+            style={hasWindow ? { color: '#3b82f6' } : undefined}>
+            <CalendarClock size={14} />
+          </button>
           <button className="btn-icon btn-icon-danger" onClick={onDelete} aria-label="Şubeyi sil" title="Sil" disabled={busy}><Trash2 size={14} /></button>
         </div>
         )}

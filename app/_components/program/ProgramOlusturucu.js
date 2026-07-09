@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Sparkles, AlertTriangle, Check, Download, Eye, Save } from 'lucide-react';
 import {
-  STUDENT_GROUPS, classToGroup, WEEKDAY_SLOT_IDS, WEEKEND_SLOT_IDS,
-  DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES,
+  STUDENT_GROUPS, classToGroup, slotId as makeSlotId, slotNoOf,
 } from '@/lib/constants';
 import TeacherPresets from '../director/TeacherPresets';
 import { useConfirm } from '../ConfirmProvider';
@@ -13,18 +12,6 @@ import { useClasses } from '../ClassesContext';
 // Ders adı = branş adı; otomatik eşleme yok (çoklu branş modeli).
 
 const DAYS = ['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'];
-const SLOTS_PER_DAY = 12;
-const MEZUN_DAYS = [0,1,2,3];           // Pzt–Per
-const MEZUN_SLOTS = [0,1,2,3,4,5];      // w1–w6
-const WEEKEND_DAYS = [5,6];
-
-// Hafta içi lise/ortaokul: sadece w10(idx=9) ve w11(idx=10) — 17:15-18:35
-const WEEKDAY_LISE_SLOTS = [9,10];
-// Hafta sonu — gruba göre kullanılabilir slotlar
-// Ortaokul: e1-e10 (idx 0-9) = 5 blok/gün
-// Lise: e1-e12 (idx 0-11) = 6 blok/gün (tüm hafta sonu açık)
-const WEEKEND_ORTAOKUL_SLOTS = [0,1,2,3,4,5,6,7,8,9];
-const WEEKEND_LISE_SLOTS     = [0,1,2,3,4,5,6,7,8,9,10,11];
 
 const COURSE_COLOR = {
   'Türkçe':'#ec4899','TYT Matematik':'#6366f1','AYT Matematik':'#4f46e5','Geometri':'#818cf8','Matematik':'#6366f1',
@@ -109,22 +96,17 @@ function teacherTeaches(t, course) {
   return (t.branches || []).includes(course);
 }
 
-// Grubun gün→ardışık slot penceresi: {gün: [slotIdx, ...]}. Ders grupları (parçalar)
-// pencere içindeki HERHANGİ ardışık diziye yerleşebilir — sabit 2'li blok kalktı.
-// Kural: 9/10. hafta sonu slotları sadece ortaokula açık; lise ve mezun asla kullanamaz
-// Grup parametre olarak gelir — özel şubelerde (s_…) registry group'u kullanılır.
-function classSlotWindows(g) {
+// Sınıfın KATI ders penceresi: slotTemplate {gün: [slotNo, ...]} → {gün: [slotIdx, ...]}.
+// slotNo 1-tabanlı (kullanıcı görünümü), solver 0-tabanlı slotIdx bekler → slotNo-1.
+// Şablon yoksa/boşsa boş pencere → o sınıfa hiç ders yerleşmez (yalnız işaretli slotlar).
+function windowsFromTemplate(slotTemplate) {
   const win = {};
-  if (g === 'mezun') {
-    // Sabah penceresi: w1-w6 (idx 0-5) → 6 saat/gün × 4 gün
-    MEZUN_DAYS.forEach(d => { win[d] = [...MEZUN_SLOTS]; });
-    return win;
+  if (!slotTemplate) return win;
+  for (const [dStr, nos] of Object.entries(slotTemplate)) {
+    const d = parseInt(dStr);
+    const idxs = [...new Set((nos || []).map(n => n - 1))].filter(i => i >= 0).sort((a, b) => a - b);
+    if (idxs.length) win[d] = idxs;
   }
-  // Ortaokul: 10 saat/gün (e1-e10); Lise: 12 saat/gün (e1-e12, sınır yok)
-  const wkendSlots = g === 'ortaokul' ? WEEKEND_ORTAOKUL_SLOTS : WEEKEND_LISE_SLOTS;
-  WEEKEND_DAYS.forEach(d => { win[d] = [...wkendSlots]; });
-  // Hafta içi akşam: idx 9,10 → 2 saat/gün
-  [0,1,2,3,4].forEach(d => { win[d] = [...WEEKDAY_LISE_SLOTS]; });
   return win;
 }
 
@@ -151,13 +133,14 @@ function resolvePieces(load, grouping, key, course) {
   return pat.length ? pat : defaultSplit(h);
 }
 
+// slotIdx (0-tabanlı, solver çıktısı) → 7-gün slot id (d{gün}s{no}). slotNo = idx+1.
 function slotIdFor(day, slotIdx) {
-  return day >= 5 ? WEEKEND_SLOT_IDS[slotIdx] : WEEKDAY_SLOT_IDS[slotIdx];
+  if (slotIdx == null || slotIdx < 0) return null;
+  return makeSlotId(day, slotIdx + 1);
 }
+// Sonuç kartı etiketi: gerçek saat artık güne özgü (sabit varsayılan yok) → ders no göster.
 function slotLabel(day, slotIdx) {
-  const times = day >= 5 ? DEFAULT_WEEKEND_TIMES : DEFAULT_WEEKDAY_TIMES;
-  const t = times[slotIdx];
-  return t ? `${t.start}–${t.end}` : '';
+  return slotIdx == null ? '' : `${slotIdx + 1}. ders`;
 }
 function shortCourse(c) {
   return ({'TYT Matematik':'TYT Mat','AYT Matematik':'AYT Mat','Geometri':'Geo','Matematik':'Mat','Fen Bilgisi':'Fen','Sosyal Bilgiler':'Sos','İnkılap Tarihi':'İnk','İngilizce':'İng'})[c] || c.slice(0,5);
@@ -176,24 +159,53 @@ function teacherGroups(t) {
   return ag.length > 0 ? ag : ['ortaokul','lise','mezun'];
 }
 
-// Bir grubun kullanabileceği toplam SAAT kapasitesi (öğretmen başına, izin günleri hariç)
-function teacherHourCap(t, grp) {
+// Bir grubun (gün,slot) pencere birleşimi: o gruptaki tüm sınıfların işaretli slotları.
+// Öğretmen kapasitesi bunun üst sınırı — aynı slotta tek sınıfa girer (birleşim sayılır).
+function groupSlotUnion(grp, classes, windowsOf, groupOf) {
+  const union = new Set();
+  for (const cls of classes) {
+    if (groupOf(cls) !== grp) continue;
+    const win = windowsOf(cls);
+    for (const [d, slots] of Object.entries(win)) {
+      for (const idx of slots) union.add(`${d}:${idx}`);
+    }
+  }
+  return union;
+}
+
+// Öğretmenin bir grupta çalışabileceği toplam SAAT kapasitesi (izin günleri hariç).
+function teacherHourCap(t, grp, classes, windowsOf, groupOf) {
   const offDays = new Set(t.offDays || []);
-  const win = classSlotWindows(grp);
-  return Object.entries(win).reduce(
-    (s, [d, slots]) => s + (offDays.has(parseInt(d)) ? 0 : slots.length), 0);
+  let cap = 0;
+  for (const key of groupSlotUnion(grp, classes, windowsOf, groupOf)) {
+    const d = parseInt(key.split(':')[0]);
+    if (!offDays.has(d)) cap++;
+  }
+  return cap;
 }
 
 // Ön analiz: oluşturmadan önce kapasite/çakışma sorunlarını hesapla
-function analyzeLoad(classes, load, teachers, dayLimits, grouping, { colKeyOf, groupOf, labelOf }) {
+function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf }) {
   const errors = [], warnings = [], infos = [];
+
+  // 0. Program penceresi işaretlenmemiş sınıflar → o sınıfa hiç ders yerleşmez (uyarı).
+  for (const cls of classes) {
+    const key = colKeyOf(cls);
+    const demand = coursesForCol(key).reduce((s, c) => s + ((load[key]?.[c]) || 0), 0);
+    if (demand <= 0) continue;
+    const win = windowsOf(cls);
+    if (!Object.keys(win).length) {
+      errors.push(`${labelOf(cls)} — ders yükü var ama program penceresi işaretlenmemiş (sınıf kartından "Program Penceresi" ile saat seçin)`);
+    }
+  }
 
   // 1. Gruplama deseni sınıfın gün pencerelerine sığıyor mu?
   // Aynı gün aynı derse 1 grup kuralı (K3) → her parça AYRI güne, o günün penceresi
   // parça uzunluğunu almalı. Greedy eşleme: en uzun parça → en geniş pencere.
   for (const cls of classes) {
     const key = colKeyOf(cls);
-    const win = classSlotWindows(groupOf(cls));
+    const win = windowsOf(cls);
+    if (!Object.keys(win).length) continue; // #0'da raporlandı
     const dayLens = Object.values(win).map(a => a.length).sort((a, b) => b - a);
     for (const course of coursesForCol(key)) {
       const pat = resolvePieces(load, grouping, key, course);
@@ -239,7 +251,7 @@ function analyzeLoad(classes, load, teachers, dayLimits, grouping, { colKeyOf, g
       teacherTeaches(tt, branch) && teacherGroups(tt).includes(grp)
     );
     if (eligible.length === 0) continue; // zaten hata var yukarıda
-    const totalCap = eligible.reduce((s, t) => s + teacherHourCap(t, grp), 0);
+    const totalCap = eligible.reduce((s, t) => s + teacherHourCap(t, grp, classes, windowsOf, groupOf), 0);
     if (demand > totalCap) {
       const grpLabel = grp === 'mezun' ? 'Mezun' : grp === 'lise' ? 'Lise' : 'Ortaokul';
       errors.push(`${branch} (${grpLabel}): ${demand} saat talep, ${totalCap} saat kapasite — ${demand - totalCap} saat sığmaz`);
@@ -267,30 +279,6 @@ function analyzeLoad(classes, load, teachers, dayLimits, grouping, { colKeyOf, g
     infos.push('Hiç ders saati girilmemiş — ders yükü tablosunu doldurun.');
   }
 
-  // 6. Sınıf-gün limitleri: limitli kapasite toplam yükü karşılıyor mu?
-  for (const cls of classes) {
-    const limits = dayLimits?.[cls];
-    if (!limits || Object.keys(limits).length === 0) continue;
-    const key = colKeyOf(cls);
-    const demand = coursesForCol(key).reduce((s, c) => s + ((load[key]?.[c]) || 0), 0);
-    const win = classSlotWindows(groupOf(cls));
-    const poolHours = {}; // gün → penceredeki saat kapasitesi
-    Object.entries(win).forEach(([d, slots]) => { poolHours[d] = slots.length; });
-    for (const d of Object.keys(limits)) {
-      if (poolHours[d] == null) {
-        infos.push(`${labelOf(cls)} ${DAYS[d]}: bu grubun o gün ders penceresi yok — limit etkisiz`);
-      }
-    }
-    if (demand <= 0) continue;
-    const cap = Object.entries(poolHours).reduce((s, [d, ph]) => {
-      const lim = limits[d];
-      return s + (lim == null ? ph : Math.min(ph, lim));
-    }, 0);
-    if (cap < demand) {
-      errors.push(`${labelOf(cls)} — günlük limitler yetersiz: ${demand} saat yük var, limitlerle en fazla ${cap} saat yerleşebilir`);
-    }
-  }
-
   return { errors, warnings, infos, ok: errors.length === 0 };
 }
 
@@ -302,7 +290,6 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
   // Ders yükü BOŞ başlar (tüm değerler 0) — kaydedilmiş plan varsa config'ten yüklenir.
   const [load, setLoad]         = useState({});
   const [grouping, setGrouping] = useState({}); // {colKey: {ders: "3-2-2"}} — gruplama override
-  const [dayLimits, setDayLimits] = useState({}); // {cls: {gün: saat}} — sınıf-gün üst sınırı
   const [result, setResult]     = useState(null);
   const [maxWeekly, setMaxWeekly] = useState(40);
   const [planDirty, setPlanDirty] = useState(false);
@@ -347,6 +334,11 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
     cls => /^s_/.test(cls) ? (classMeta.get(cls)?.ad || cls) : String(cls).toUpperCase(),
     [classMeta]
   );
+  // Sınıfın KATI ders penceresi (slotTemplate → {gün: [slotIdx]}). İşaretsizse boş.
+  const windowsOf = useCallback(
+    cls => windowsFromTemplate(classMeta.get(cls)?.slotTemplate),
+    [classMeta]
+  );
 
   useEffect(() => {
     (async () => {
@@ -366,7 +358,6 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
         const plan = cfg?.programPlan || {};
         if (plan.load && Object.keys(plan.load).length) setLoad(plan.load);
         if (plan.grouping && Object.keys(plan.grouping).length) setGrouping(plan.grouping);
-        if (plan.dayLimits && Object.keys(plan.dayLimits).length) setDayLimits(plan.dayLimits);
         if (plan.maxWeekly) setMaxWeekly(plan.maxWeekly);
       } catch { /* muhasebeci vb. okuyamazsa sessiz — boş tabloyla devam */ }
     })();
@@ -378,7 +369,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
     try {
       await api('/api/config', {
         method: 'PATCH',
-        body: JSON.stringify({ patch: { programPlan: { load, grouping, dayLimits, maxWeekly } } }),
+        body: JSON.stringify({ patch: { programPlan: { load, grouping, maxWeekly } } }),
       });
       setPlanDirty(false);
       showToast?.('Ders yükü planı kaydedildi', 'success');
@@ -389,13 +380,12 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
   // Dirty-işaretli sarmalayıcılar: kullanıcı girişi planı değiştirdi → Kaydet aktifleşir.
   const updateLoad = useCallback(updater => { setLoad(updater); setPlanDirty(true); }, []);
   const updateGrouping = useCallback(updater => { setGrouping(updater); setPlanDirty(true); }, []);
-  const updateDayLimits = useCallback(updater => { setDayLimits(updater); setPlanDirty(true); }, []);
 
-  // Analizi yeniden hesapla: teachers/load/grouping/dayLimits/classes değişince
+  // Analizi yeniden hesapla: teachers/load/grouping/classes/pencere değişince
   useEffect(() => {
     if (!teachers) return;
-    setAnalysis(analyzeLoad(classes, load, teachers, dayLimits, grouping, { colKeyOf, groupOf, labelOf }));
-  }, [teachers, load, grouping, dayLimits, classes, colKeyOf, groupOf, labelOf]);
+    setAnalysis(analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf }));
+  }, [teachers, load, grouping, classes, colKeyOf, groupOf, labelOf, windowsOf]);
 
   // Ders yükü tablosu her zaman tüm sütunları gösterir
   const activeCols = LOAD_COLUMNS;
@@ -408,10 +398,11 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
     setConflicts(null);
     setGenerating(true);
     try {
-      // Her sınıfın slot penceresi + sütun anahtarı + grubu → payload (domain mantığı tek kaynak: burası)
+      // Her sınıfın KATI slot penceresi (slotTemplate) + sütun anahtarı + grubu → payload.
+      // Pencere işaretlenmemiş sınıf boş windows alır → solver o sınıfa ders koymaz.
       const windows = {}, colKey = {}, group = {};
       classes.forEach(c => {
-        windows[c] = classSlotWindows(groupOf(c));
+        windows[c] = windowsOf(c);
         colKey[c] = colKeyOf(c);
         group[c] = groupOf(c);
       });
@@ -439,8 +430,8 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
             const slots = prog[dayStr] || {};
             for (const slotId of Object.keys(slots)) {
               if (slots[slotId]?.type !== 'available') continue;
-              const idx = day >= 5 ? WEEKEND_SLOT_IDS.indexOf(slotId) : WEEKDAY_SLOT_IDS.indexOf(slotId);
-              if (idx >= 0) pairs.push([day, idx]);
+              const no = slotNoOf(slotId); // d{gün}s{no} → no (1-tabanlı)
+              if (no != null && no >= 1) pairs.push([day, no - 1]); // solver 0-tabanlı slotIdx
             }
           }
           teacherSlots[t.id] = pairs;
@@ -452,7 +443,7 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
         (t.presets || []).map(p => ({ teacherId: t.id, cls: p.cls, course: p.course }))
       );
 
-      const payload = { classes, teachers, load, pieces, maxWeekly, windows, colKey, group, teacherSlots, presets, dayLimits };
+      const payload = { classes, teachers, load, pieces, maxWeekly, windows, colKey, group, teacherSlots, presets };
       const data = await api('/api/program-solve', { method: 'POST', body: JSON.stringify(payload) });
 
       const assigned = data.assigned || [];
@@ -631,19 +622,8 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
       </div>
 
       {/* Sınıf bazlı günlük ders limiti (K7) — boş bırakılan gün serbesttir */}
-      <div className="card p-4">
-        <details>
-          <summary className="cursor-pointer text-sm" style={{fontWeight:600}}>
-            Sınıf Bazlı Günlük Ders Limiti <span className="text-xs text-gray-400" style={{fontWeight:400}}>(isteğe bağlı)</span>
-          </summary>
-          <p className="text-xs text-gray-400 mt-2 mb-3">
-            Bir sınıfın o gün alabileceği en fazla ders saati. Boş = serbest (pencere kadar), 0 = o gün ders konmaz.
-            Örn: Pazartesi 6, Salı 4. Kaydet butonu bu tabloyu da saklar.
-          </p>
-          <DayLimitsTable classes={classes} dayLimits={dayLimits} setDayLimits={updateDayLimits}
-            labelOf={labelOf} groupOf={groupOf} />
-        </details>
-      </div>
+      {/* Sınıf ders penceresi artık her sınıf kartından "Program Penceresi" ile işaretlenir
+          (class.slotTemplate → KATI windows). Eski "Sınıf Bazlı Günlük Ders Limiti" kaldırıldı. */}
 
       {/* Ön eşleştirme (sabit dersler) — öğretmen seç → o öğretmene sınıf-ders kilitle (CP-SAT HARD preset). */}
       <div className="space-y-2">
@@ -858,67 +838,6 @@ function LoadTable({ load, setLoad, grouping, setGrouping, cols }) {
               return <td key={c.key} className="text-center px-1 py-2" style={{fontWeight:700,color:s>cap?'#dc2626':'var(--text-secondary)'}}>{s}</td>;
             })}
           </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ── Sınıf bazlı günlük ders limiti tablosu: satır=sınıf, sütun=gün ──
-// Değer = o gün en fazla kaç SAAT ders (blok=2 saat). Boş = serbest, 0 = o gün yok.
-// Sınıf grubunun havuzunda olmayan günler kilitli gösterilir (limit anlamsız).
-function DayLimitsTable({ classes, dayLimits, setDayLimits, labelOf, groupOf }) {
-  // grup → gün→saat kapasitesi (pencere uzunluğu), placeholder + kilitli gün tespiti için
-  const poolByGroup = useMemo(() => {
-    const out = {};
-    ['ortaokul','lise','mezun'].forEach(g => {
-      const hours = {};
-      Object.entries(classSlotWindows(g)).forEach(([d, slots]) => { hours[d] = slots.length; });
-      out[g] = hours;
-    });
-    return out;
-  }, []);
-
-  const set = (cls, d, val) => setDayLimits(prev => {
-    const next = { ...prev, [cls]: { ...(prev[cls] || {}) } };
-    if (val === '') delete next[cls][d];
-    else next[cls][d] = Math.max(0, parseInt(val) || 0);
-    if (Object.keys(next[cls]).length === 0) delete next[cls];
-    return next;
-  });
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="text-xs w-full" style={{borderCollapse:'collapse'}}>
-        <thead>
-          <tr>
-            <th className="text-left px-2 py-1 text-gray-400 sticky left-0 bg-white" style={{fontWeight:600, minWidth:80}}>Sınıf</th>
-            {DAYS.map((d,i) => (
-              <th key={i} className="px-1 py-1 text-gray-600 text-center" style={{fontWeight:700, width:64}}>{d.slice(0,3)}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {classes.map(cls => {
-            const pool = poolByGroup[groupOf(cls)] || {};
-            return (
-              <tr key={cls} className="border-t border-gray-50">
-                <td className="px-2 py-1.5 sticky left-0 bg-white" style={{fontWeight:600}}>{labelOf(cls)}</td>
-                {DAYS.map((_,d) => pool[d] != null
-                  ? (
-                    <td key={d} className="text-center px-1 py-1">
-                      <input type="number" min="0" max={pool[d]}
-                        value={dayLimits[cls]?.[d] ?? ''}
-                        placeholder={String(pool[d])}
-                        onChange={e => set(cls, d, e.target.value)}
-                        className="input !w-full !py-1.5 text-center text-sm" />
-                    </td>
-                  )
-                  : <td key={d} className="text-center text-gray-100 px-1 py-1">–</td>
-                )}
-              </tr>
-            );
-          })}
         </tbody>
       </table>
     </div>

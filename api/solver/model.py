@@ -12,7 +12,6 @@ Girdi payload:
   blocks: {cls: [[day, slotA, slotB], ...]},   # ESKİ sözleşme — windows yoksa bundan türetilir
   colKey: {cls: key},                          # colKeyFor(cls) (frontend)
   group:  {cls: 'ortaokul'|'lise'|'mezun'},    # classToGroup(cls) (frontend)
-  dayLimits: {cls: {day: hours}},              # opsiyonel — sınıf-gün saat üst sınırı (K7)
   teacherSlots: {tid: [[day, slotIdx], ...]},  # KATI mod (Özellik 1)
   presets: [{teacherId, cls, course}, ...],    # HARD kilit (Özellik 2)
 }
@@ -278,27 +277,8 @@ def solve(payload):
             if len(terms) > 1:
                 model.Add(sum(terms) <= 1)
 
-    # ── HARD: K7 — sınıf-gün saat üst sınırı (dayLimits) ──
-    # O gün sınıfa yerleşen toplam saat (parça uzunlukları) limiti aşamaz.
-    # JSON anahtarları string gelir (gün "0".."6") — int'e çevrilir.
-    day_limits = payload.get('dayLimits') or {}
-    for cls, us in units_by_cls.items():
-        limits = day_limits.get(cls) or {}
-        if not limits:
-            continue
-        for day_key, lim in limits.items():
-            try:
-                d = int(day_key)
-                lim = int(lim)
-            except (TypeError, ValueError):
-                continue
-            terms = []
-            for u in us:
-                for p, (day, seg) in enumerate(pool_of_unit[u]):
-                    if day == d:
-                        terms.append(len(seg) * x[u][p])
-            if terms:
-                model.Add(sum(terms) <= lim)
+    # (Eski K7 "sınıf-gün saat üst sınırı / dayLimits" kaldırıldı — sınıf başına KATI
+    #  windows, o günün ders penceresini zaten sınırlıyor. Ayrı limit tablosu gerekmiyor.)
 
     # ── HARD: K6 (izin günü) + Özellik 1 (aktif slot) — parça-öğretmen yasakları ──
     # z[(u,p,t)] = x[u][p] AND y[cc][t] lineerleştirmesi, öğretmen çakışması (K4) için.

@@ -10,7 +10,7 @@ import { tdb } from '@/lib/sqldb';
 export const runtime = 'nodejs';
 
 // SQL satırı → mevcut sözleşme şekli (id = legacyId).
-const classOut = (c) => ({ id: c.legacyId, ad: c.ad, kademe: c.kademe, duzey: c.duzey, dal: c.dal, group: c.group, dersler: c.dersler || [], seeded: c.seeded });
+const classOut = (c) => ({ id: c.legacyId, ad: c.ad, kademe: c.kademe, duzey: c.duzey, dal: c.dal, group: c.group, dersler: c.dersler || [], seeded: c.seeded, slotTemplate: c.slotTemplate || null });
 
 import { newId } from '@/lib/id';
 const newClassId = () => newId('s_');
@@ -53,18 +53,25 @@ export const POST = withAuth('manage', async (req) => {
   return NextResponse.json({ ok: true, class: classOut(row) });
 });
 
+// slotTemplate: gün (0-6) → o gün işaretli ders NO'ları (1-tabanlı). KATI pencere.
+const zSlotTemplate = z.record(
+  z.string().regex(/^[0-6]$/),
+  z.array(z.number().int().min(1).max(16)),
+);
+
 const UpdateClassSchema = z.object({
   id: z.string().min(1).max(60),
   ad: z.string().min(1).max(60).optional(),
   dal: z.enum(['sayisal', 'sozel', 'ea', 'dil']).nullable().optional(),
   dersler: z.array(z.string().max(60)).optional(),
+  slotTemplate: zSlotTemplate.nullable().optional(),
 });
 
-// PATCH /api/classes — şube düzenle (ad / dal / ders ataması). id SABİT, asla değişmez.
+// PATCH /api/classes — şube düzenle (ad / dal / ders ataması / slotTemplate). id SABİT, asla değişmez.
 export const PATCH = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, UpdateClassSchema);
   if (!parsed.ok) return parsed.response;
-  const { id, ad, dal, dersler } = parsed.data;
+  const { id, ad, dal, dersler, slotTemplate } = parsed.data;
 
   const existing = await tdb().class.findFirst({ where: { legacyId: id } });
   if (!existing) return NextResponse.json({ error: 'Şube bulunamadı' }, { status: 404 });
@@ -72,6 +79,18 @@ export const PATCH = withAuth('manage', async (req) => {
   if (ad !== undefined) patch.ad = ad.trim();
   if (dal !== undefined) patch.dal = dal || null;
   if (dersler !== undefined) patch.dersler = dersler;
+  if (slotTemplate !== undefined) {
+    // Boş dizileri temizle → sadece slotu olan günleri sakla (null = hiç işaret yok).
+    if (slotTemplate === null) patch.slotTemplate = null;
+    else {
+      const cleaned = {};
+      for (const [d, nos] of Object.entries(slotTemplate)) {
+        const arr = [...new Set(nos)].sort((a, b) => a - b);
+        if (arr.length) cleaned[d] = arr;
+      }
+      patch.slotTemplate = Object.keys(cleaned).length ? cleaned : null;
+    }
+  }
   const row = await tdb().class.update({ where: { id: existing.id }, data: patch });
   return NextResponse.json({ ok: true, class: classOut(row) });
 });

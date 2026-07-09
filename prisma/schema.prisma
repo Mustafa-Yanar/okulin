@@ -227,6 +227,9 @@ model Class {
   dal       String?
   dersler   String[]  @default([])
   seeded    Boolean   @default(true)
+  // Sınıf ders programı penceresi (KATI): { "0": [1,2,3], "5": [1,2] } — gün→ders NO listesi.
+  // İşaretli slotlar CP-SAT'a windows olarak gider; işaretsiz güne/slota ders yerleşmez.
+  slotTemplate Json?
   students  Student[]
   @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch])
