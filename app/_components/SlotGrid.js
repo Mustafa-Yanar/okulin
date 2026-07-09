@@ -6,11 +6,10 @@ import {
   allowedBranchesForClass,
   classLabel,
   ALL_DAYS,
-  slotsForDay,
-  WEEKDAY_SLOTS,
-  WEEKEND_SLOTS
+  daySlots as buildDaySlots,
 } from '@/lib/constants';
 import { useClasses } from './ClassesContext';
+import { useSlotTimes } from './SlotTimesContext';
 import { classLabelFrom, coursesForClass } from '@/lib/classCatalog';
 
 // Helper: Modal Component
@@ -177,8 +176,7 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
 
 // MobileDayCard — bir günün tüm slot'larını dikey kart olarak gösterir (mobile).
 // Boş, kapalı + geçmiş ve ders olmayan slot'ları gizler (kalabalığı azaltır).
-function MobileDayCard({ day, grid, program, teacher, weekKey, session, onCellClick, onCancel }) {
-  const slots = slotsForDay(day.index);
+function MobileDayCard({ day, slots, grid, program, teacher, weekKey, session, onCellClick, onCancel }) {
 
   // Hangi slot'lar gösterilsin? Boş + disabled + geçmiş olanları atla.
   const visibleEntries = slots.map((slot, slotIdx) => {
@@ -236,6 +234,13 @@ function MobileDayCard({ day, grid, program, teacher, weekKey, session, onCellCl
 
 export default function SlotGrid({ grid, program, teacher, weekKey, session, students, onBook, onCancel, hideEmptyDays }) {
   const { classes } = useClasses();
+  const { slotTimes } = useSlotTimes();
+  // Her gün için slot listesi (7-gün model: gün-başına farklı sayı/saat).
+  const daySlotsMap = useMemo(() => {
+    const map = {};
+    for (const day of ALL_DAYS) map[day.index] = buildDaySlots(day.index, slotTimes.days?.[day.index]);
+    return map;
+  }, [slotTimes]);
   const [bookingSlot, setBookingSlot] = useState(null);
   const [searchQ, setSearchQ] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
@@ -273,18 +278,19 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
     }
     if (!grid) return ALL_DAYS;
     return ALL_DAYS.filter(day => {
-      const daySlots = slotsForDay(day.index);
-      return daySlots.some((_, slotIdx) => {
+      const slots = daySlotsMap[day.index] || [];
+      return slots.some((_, slotIdx) => {
         const sd = grid[day.index]?.[slotIdx];
         return sd && !sd.disabled;
       });
     });
-  }, [grid, program, hideEmptyDays]);
+  }, [grid, program, hideEmptyDays, daySlotsMap]);
 
   const handleCellClick = (dayIndex, slotIdx, slotData, isForceOpen = false) => {
     if (slotData.booked) return;
     if (slotData.disabled && !isForceOpen) return;
-    const slot = slotsForDay(dayIndex)[slotIdx];
+    const slot = (daySlotsMap[dayIndex] || [])[slotIdx];
+    if (!slot) return;
     const day = ALL_DAYS.find(d => d.index === dayIndex);
     setBookingSlot({ dayIndex, slotIdx, slotId: slot.id, slotLabel: slot.label, dayLabel: day.label, forceOpen: isForceOpen });
     setSearchQ('');
@@ -323,27 +329,19 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
           </thead>
           <tbody>
             {(() => {
-              const hasWeekday = visibleDays.some(d => !d.weekend);
-              const hasWeekend = visibleDays.some(d => d.weekend);
-              const maxRows = Math.max(
-                hasWeekday ? WEEKDAY_SLOTS.length : 0,
-                hasWeekend ? WEEKEND_SLOTS.length : 0,
-              );
+              // 7-gün model: her günün slot sayısı farklı olabilir. Satır sayısı = görünen
+              // günlerin en fazla slotu. Her hücre KENDİ gününün slotunu kullanır; label
+              // sütunu ilk görünen günün o satırdaki saatini referans gösterir (kaba).
+              const maxRows = Math.max(0, ...visibleDays.map(d => (daySlotsMap[d.index] || []).length));
               return Array.from({ length: maxRows }, (_, rowIdx) => {
-                const wdSlot = WEEKDAY_SLOTS[rowIdx];
-                const weSlot = WEEKEND_SLOTS[rowIdx];
-                const labelSlot = hasWeekday ? wdSlot : weSlot;
-                if (!labelSlot) return null;
+                const refSlot = visibleDays.map(d => (daySlotsMap[d.index] || [])[rowIdx]).find(Boolean);
                 return (
                   <tr key={rowIdx} className="border-t border-gray-50">
                     <td className="py-2 px-3 text-xs text-gray-500 font-500 whitespace-nowrap" style={{ fontWeight: 500 }}>
-                      {hasWeekday && wdSlot ? wdSlot.label : ''}
-                      {hasWeekday && hasWeekend && weSlot ? <span className="block text-[10px] text-indigo-400">{weSlot.label}</span> : ''}
-                      {!hasWeekday && weSlot ? weSlot.label : ''}
+                      {refSlot ? refSlot.label : ''}
                     </td>
                     {visibleDays.map(day => {
-                      const slots = slotsForDay(day.index);
-                      const slot = slots[rowIdx];
+                      const slot = (daySlotsMap[day.index] || [])[rowIdx];
                       if (!slot) return <td key={day.index} className="py-1 px-1"><div className="rounded-lg py-2 bg-gray-50 border border-gray-100 text-center text-gray-200 text-xs">—</div></td>;
                       const slotData = (grid && grid[day.index] && grid[day.index][rowIdx]) || { booked: false, disabled: true };
                       const progEntry = program?.[String(day.index)]?.[slot.id];
@@ -363,6 +361,7 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
           <MobileDayCard
             key={day.index}
             day={day}
+            slots={daySlotsMap[day.index] || []}
             grid={grid}
             program={program}
             teacher={teacher}
