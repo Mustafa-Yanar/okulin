@@ -394,6 +394,10 @@ def solve(payload):
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = TIME_LIMIT_SECONDS
     solver.parameters.num_search_workers = NUM_WORKERS
+    # Sabit seed: aynı girdi → aynı çözüm (tekrarlanabilirlik). Simetrik dersler
+    # (aynı pencereyi paylaşan Kimya/Fizik/TYT gibi) arasında "hangisi açıkta kalır"
+    # keyfiliğini azaltır — kullanıcı her Oluştur'da farklı ders açıkta görmesin.
+    solver.parameters.random_seed = 12345
     status = solver.Solve(model)
 
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):

@@ -669,18 +669,12 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
         return;
       }
 
-      // 1b) Normal solve → hangi ders(ler) açıkta kalıyor? O derslerin öğretmenleri
-      //     GERÇEK darboğaz adayıdır (solo-branş filtresinden çok daha isabetli).
-      const rNorm = await api('/api/program-solve', {
-        method: 'POST',
-        body: JSON.stringify(base),
-      });
-      const bottleneckCourses = new Set((rNorm.unplaced || []).map(u => u.course));
-
-      // 2) INFEASIBLE → darboğaz adaylarını dene. Aday = ders veren, tam-gün OLMAYAN
-      //    öğretmenler (müsaitliği sınıf pencerelerinden dar). Her birini tam-güne çıkar,
-      //    ilk çözeni öneri yap. En fazla birkaç aday denenir (çağrı maliyeti sınırlı).
-      // Tam-gün = her sınıf penceresinde geçen tüm (gün, slotIdx) birleşimi.
+      // 2) INFEASIBLE → darboğazı BELİRTİDEN değil YAPIDAN bul.
+      //    "Açıkta kalan ders" her solve'da simetrik dersler (Kimya/Fizik/TYT) arasında
+      //    keyfi değişir — ona GÜVENMEYİZ. Bunun yerine ders veren + genişletilebilir HER
+      //    öğretmeni sistematik test ederiz: tam-güne çıkarınca INFEASIBLE çözülüyor mu?
+      //    Çözenler = tek başına yeterli darboğaz noktaları. Hiçbiri çözmüyorsa darboğaz
+      //    ÇOKLU (tek öğretmenle açılamaz) — bunu açıkça söyleriz.
       const allWin = {};
       for (const c of classes) {
         const w = windowsOf(c);
@@ -692,53 +686,76 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
       const fullSlots = [];
       for (const [d, set] of Object.entries(allWin)) for (const s of set) fullSlots.push([Number(d), s]);
 
-      // Aday öğretmenler: en az bir ders veriyor + mevcut müsaitliği fullSlots'tan AZ.
-      // Ayrıca her branşın kaç öğretmeni olduğunu say — TEK öğretmenli branşlar (darboğaz
-      // adayı) öncelikli. Öneriyi darboğaza en yakın öğretmenden başlat: önce tek-öğretmenli
-      // branştakiler, sonra müsaitliği en dar olan → kullanıcıya en ANLAMLI öneri gelsin.
       const teachesSomething = new Set();
-      const branchTeacherCount = {}; // branş → kaç öğretmen
       for (const c of classes) {
         const key = colKeyOf(c), grp = groupOf(c);
         for (const course of coursesOfCol(key)) {
           if (!((load[key]?.[course]) > 0)) continue;
-          const elig = teachers.filter(t => (t.branches || []).includes(course) && teacherGroups(t).includes(grp));
-          branchTeacherCount[course] = Math.max(branchTeacherCount[course] || 0, elig.length);
-          for (const t of elig) teachesSomething.add(t.id);
+          for (const t of teachers) {
+            if ((t.branches || []).includes(course) && teacherGroups(t).includes(grp)) teachesSomething.add(t.id);
+          }
         }
       }
-      // Öğretmen darboğaz skoru: açıkta kalan bir dersi veriyorsa EN öncelikli (0),
-      // sonra tek-öğretmenli branşı olan (1), diğerleri (2). Eşitlikte müsaitliği dar olan.
-      const teachesBottleneck = (t) => (t.branches || []).some(b => bottleneckCourses.has(b));
-      const soloBranch = (t) => (t.branches || []).some(b => branchTeacherCount[b] === 1);
-      const score = (t) => teachesBottleneck(t) ? 0 : soloBranch(t) ? 1 : 2;
       const candidates = teachers.filter(t => {
         if (!teachesSomething.has(t.id)) return false;
-        const cur = (teacherSlots[t.id] || []).length;
-        return cur < fullSlots.length; // genişletilebilir
-      }).sort((a, b) => {
-        const sa = score(a), sb = score(b);
-        if (sa !== sb) return sa - sb;
-        return (teacherSlots[a.id] || []).length - (teacherSlots[b.id] || []).length;
+        return (teacherSlots[t.id] || []).length < fullSlots.length; // genişletilebilir
       });
 
-      const suggestions = [];
+      // Her adayı tam-güne çıkarıp TEST et — çözenlerin TAMAMINI topla (kısa devre yok,
+      // çünkü "en kısıtlayıcı" için hepsini bilmemiz gerek). Çözen aday için minimum kaç
+      // slot eklemek gerektiğini de ölç → en az genişletmeyle çözen = en verimli müdahale.
+      const solvers = []; // {teacherId, name, addedFull, minAdded}
       for (const t of candidates) {
+        const cur = teacherSlots[t.id] || [];
+        const curSet = new Set(cur.map(([d, s]) => `${d}:${s}`));
+        const missing = fullSlots.filter(([d, s]) => !curSet.has(`${d}:${s}`));
         const trySlots = { ...teacherSlots, [t.id]: fullSlots };
         const rt = await api('/api/program-solve', {
           method: 'POST',
           body: JSON.stringify({ ...buildPayload(trySlots), feasibilityTest: true }),
         });
         if (rt.feasible) {
-          suggestions.push({ teacherId: t.id, name: t.name });
-          if (suggestions.length >= 3) break; // ilk birkaç çözümü göster, yeter
+          solvers.push({ teacherId: t.id, name: t.name, addedFull: missing.length });
         }
       }
-      setFeasResult({ feasible: false, suggestions });
+
+      // "En kısıtlayıcı" = tam-güne çıktığında en AZ slot eklemesi gerekeni öne al
+      // (mevcut müsaitliğine en yakın çözüm = en gerçekçi/az emek). Sonra minimum
+      // genişletmeyi ikili aramayla daralt (opsiyonel, en iyi 1 aday için).
+      solvers.sort((a, b) => a.addedFull - b.addedFull);
+
+      // En iyi adayın minimum eklemesini bul: tam-gün yerine, eksik slotları AZALTA
+      // AZALTA en küçük yeterli kümeyi ikili aramayla yaklaşık bul (tek aday, birkaç çağrı).
+      let refined = null;
+      if (solvers.length) {
+        const best = teachers.find(t => t.id === solvers[0].teacherId);
+        const cur = teacherSlots[best.id] || [];
+        const curSet = new Set(cur.map(([d, s]) => `${d}:${s}`));
+        const missing = fullSlots.filter(([d, s]) => !curSet.has(`${d}:${s}`));
+        // kaç eklemenin yettiğini ikili arama: k slot ekle (missing'in ilk k'sı) → feasible mi
+        let lo = 1, hi = missing.length, minK = missing.length;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          const trySlots = { ...teacherSlots, [best.id]: [...cur, ...missing.slice(0, mid)] };
+          const rt = await api('/api/program-solve', {
+            method: 'POST',
+            body: JSON.stringify({ ...buildPayload(trySlots), feasibilityTest: true }),
+          });
+          if (rt.feasible) { minK = mid; hi = mid - 1; } else { lo = mid + 1; }
+        }
+        refined = { teacherId: best.id, name: best.name, minSlots: minK };
+      }
+
+      setFeasResult({
+        feasible: false,
+        suggestions: solvers.slice(0, 4),
+        refined,
+        multiBottleneck: solvers.length === 0, // hiçbir tek öğretmen çözmüyor → çoklu darboğaz
+      });
       showToast?.(
-        suggestions.length
-          ? 'Mevcut haliyle tüm dersler yerleşemez — öneriler hazır'
-          : 'Mevcut haliyle tüm dersler yerleşemez (tek öğretmen genişletmesi yetmiyor)',
+        solvers.length
+          ? 'Mevcut haliyle tüm dersler yerleşemez — çözüm önerileri hazır'
+          : 'Tüm dersler yerleşemez — tek bir öğretmeni genişletmek YETMİYOR (birden çok darboğaz)',
         'error'
       );
     } catch (e) {
@@ -893,22 +910,41 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
             </div>
             <p className="text-xs text-gray-600 mb-1">
               Toplam saatler yeterli olsa bile, ders bloklarının gün/saat ızgarasına çakışmadan
-              dizilmesi mümkün değil. Aşağıdakilerden <b>herhangi biri</b> sorunu çözer:
+              dizilmesi mümkün değil.
             </p>
-            {feasResult.suggestions.length ? (
-              <ul className="text-xs space-y-1 mt-1.5">
-                {feasResult.suggestions.map(s => (
-                  <li key={s.teacherId} style={{color:'#374151'}}>
-                    • <b>{s.name}</b> öğretmeninin uygunluğunu (müsait gün/saat) genişletin —
-                    tüm sınıf pencerelerinde müsait yapılınca program çözülüyor.
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-gray-500 mt-1">
-                Tek bir öğretmenin uygunluğunu genişletmek yetmiyor — ders yükünü azaltmayı,
-                sınıf penceresine gün eklemeyi veya darboğaz branşa ikinci öğretmen eklemeyi deneyin.
+            {feasResult.multiBottleneck ? (
+              <p className="text-xs text-gray-600 mt-1.5">
+                <b>Birden fazla darboğaz var</b> — tek bir öğretmeni genişletmek yetmiyor. Şunları
+                birlikte deneyin: ders yükünü azaltın, sınıf penceresine gün ekleyin, veya en dar
+                branşlara (tek öğretmenli dersler) ikinci öğretmen ekleyin.
               </p>
+            ) : (
+              <>
+                {feasResult.refined && (
+                  <div className="text-xs mt-1.5 mb-1 p-2 rounded-lg" style={{background:'#fff7ed', border:'1px solid #fed7aa'}}>
+                    <span style={{color:'#9a3412', fontWeight:700}}>En kısıtlayıcı nokta:</span>{' '}
+                    <b>{feasResult.refined.name}</b> — bu öğretmene yalnızca{' '}
+                    <b>{feasResult.refined.minSlots} ders saati</b> daha müsaitlik eklemek programı çözüyor
+                    (en az emekle çözen müdahale).
+                  </div>
+                )}
+                <p className="text-xs text-gray-600 mb-1">Aşağıdakilerden <b>herhangi biri</b> tek başına çözer (en azdan çoğa):</p>
+                <ul className="text-xs space-y-1 mt-1">
+                  {feasResult.suggestions.map(s => (
+                    <li key={s.teacherId} style={{color:'#374151'}}>
+                      • <b>{s.name}</b> — uygunluğunu genişletin
+                      <span className="text-gray-400"> ({s.addedFull} slota kadar açık olması yeterli)</span>
+                    </li>
+                  ))}
+                </ul>
+                {feasResult.suggestions.length > 1 && (
+                  <p className="text-[11px] text-gray-400 mt-1.5">
+                    Not: Birden fazla öğretmen listelendi — her biri <b>tek başına</b> çözüyor (bunlar
+                    alternatif; hepsini birden yapmanız gerekmez). Darboğaz birden fazla olsaydı bu liste
+                    boş kalır, yukarıda uyarılırdınız.
+                  </p>
+                )}
+              </>
             )}
           </div>
         )
