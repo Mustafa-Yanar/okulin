@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, canManage } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES, DEFAULT_ETUT_SURESI, DEFAULT_MOLA_SURESI } from '@/lib/constants';
 import { parseBody, z } from '@/lib/validate';
 import { tdb } from '@/lib/sqldb';
@@ -30,10 +30,7 @@ function toMinutes(t) {
   return hh * 60 + mm;
 }
 
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+export const GET = withAuth(async () => {
   const cfg = await tdb().tenantConfig.findFirst();
   const stored = cfg?.slotTimes;
   return NextResponse.json({
@@ -42,14 +39,9 @@ export async function GET() {
     etutSuresi: stored?.etutSuresi ?? DEFAULT_ETUT_SURESI,
     molaSuresi: stored?.molaSuresi ?? DEFAULT_MOLA_SURESI,
   });
-}
+});
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, SlotTimesSchema);
   if (!parsed.ok) return parsed.response;
   const { weekday, weekend, etutSuresi, molaSuresi } = parsed.data;
@@ -89,4 +81,4 @@ export async function POST(req) {
     await tdb().tenantConfig.create({ data: { slotTimes: newSlotTimes } });
   }
   return NextResponse.json({ ok: true });
-}
+});

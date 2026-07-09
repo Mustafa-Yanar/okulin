@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, canManage } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import {
   getWeekKey, getMondayOfWeek, initWeekForTeacher,
   getAllTeachers, getCurrentWeek, setCurrentWeek,
@@ -26,20 +26,12 @@ async function advanceWeek(currentWeek) {
   return nextWeek;
 }
 
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+export const GET = withAuth(async () => {
   const weekKey = (await getCurrentWeek()) || getWeekKey();
   return NextResponse.json({ weekKey });
-}
+});
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, WeekActionSchema);
   if (!parsed.ok) return parsed.response;
   const { action, weekKey } = parsed.data;
@@ -83,4 +75,4 @@ export async function POST(req) {
   }
 
   return NextResponse.json({ error: 'Geçersiz işlem' }, { status: 400 });
-}
+});

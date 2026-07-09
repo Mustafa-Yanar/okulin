@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { getSession, initialPassword, canManage } from '@/lib/auth';
+import { withAuth, initialPassword } from '@/lib/auth';
 import { getWeekKey, initWeekForTeacher } from '@/lib/slots';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
@@ -65,23 +65,16 @@ const TeacherUpdateSchema = z.union([
 ]);
 const TeacherDeleteSchema = z.object({ id: zId });
 
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+export const GET = withAuth(async () => {
   const rows = await tdb().teacher.findMany({ include: { presets: true } });
   return NextResponse.json(rows.map((t) => ({
     id: t.legacyId, name: t.name, username: t.username, branches: t.branches || [],
     allowedGroups: t.allowedGroups || [], photoUrl: t.photoUrl || '',
     offDays: t.offDays || [], phone: t.phone || '', presets: presetsOut(t.presets),
   })));
-}
+});
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
+export const POST = withAuth('manage', async (req) => {
 
   const parsed = await parseBody(req, TeacherCreateSchema);
   if (!parsed.ok) return parsed.response;
@@ -101,14 +94,9 @@ export async function POST(req) {
   } });
   await initWeekForTeacher(legacyId, getWeekKey());
   return NextResponse.json({ id: legacyId, name, username, branches, allowedGroups: allowedGroups || [], photoUrl: photoUrl || '' });
-}
+});
 
-export async function PUT(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const PUT = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, TeacherUpdateSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
@@ -156,14 +144,9 @@ export async function PUT(req) {
     await replacePresetsSql(t.id, clean);
   }
   return NextResponse.json({ ok: true });
-}
+});
 
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const DELETE = withAuth('manage', async (req, ctx, session) => {
   const parsed = await parseBody(req, TeacherDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
@@ -172,4 +155,4 @@ export async function DELETE(req) {
   if (t) await tdb().teacher.delete({ where: { id: t.id } }); // cascade: presets/etut/slot
   await logAudit({ ...actorFrom(session), action: 'teacher.delete', target: { type: 'teacher', id, name: t?.name || id }, detail: `Öğretmen silindi: ${t?.name || id}` });
   return NextResponse.json({ ok: true });
-}
+});

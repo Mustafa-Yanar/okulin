@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, canManage } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
 import {
   getClasses, defaultCoursesFor, seedClassesFromConstants,
@@ -24,13 +24,10 @@ function groupForKademe(kademe) {
 }
 
 // GET /api/classes — geçerli kurumun şube listesi + ders kataloğu (tüm roller okur).
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+export const GET = withAuth(async () => {
   const [classes, courses] = await Promise.all([getClasses(), getCourses()]);
   return NextResponse.json({ classes, courses });
-}
+});
 
 const CreateClassSchema = z.object({
   ad: z.string().min(1).max(60),
@@ -41,10 +38,7 @@ const CreateClassSchema = z.object({
 });
 
 // POST /api/classes — yeni şube oluştur (müdür/rehber).
-export async function POST(req) {
-  const session = await getSession();
-  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const POST = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, CreateClassSchema);
   if (!parsed.ok) return parsed.response;
   const { ad, kademe, duzey, dal, dersler } = parsed.data;
@@ -57,7 +51,7 @@ export async function POST(req) {
     seeded: true,
   } });
   return NextResponse.json({ ok: true, class: classOut(row) });
-}
+});
 
 const UpdateClassSchema = z.object({
   id: z.string().min(1).max(60),
@@ -67,10 +61,7 @@ const UpdateClassSchema = z.object({
 });
 
 // PATCH /api/classes — şube düzenle (ad / dal / ders ataması). id SABİT, asla değişmez.
-export async function PATCH(req) {
-  const session = await getSession();
-  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const PATCH = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, UpdateClassSchema);
   if (!parsed.ok) return parsed.response;
   const { id, ad, dal, dersler } = parsed.data;
@@ -83,13 +74,10 @@ export async function PATCH(req) {
   if (dersler !== undefined) patch.dersler = dersler;
   const row = await tdb().class.update({ where: { id: existing.id }, data: patch });
   return NextResponse.json({ ok: true, class: classOut(row) });
-}
+});
 
 // DELETE /api/classes — şube sil. Öğrenci atanmışsa engelle (önce taşınmalı).
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const DELETE = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, z.object({ id: z.string().min(1).max(60) }));
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
@@ -100,4 +88,4 @@ export async function DELETE(req) {
   if (cnt > 0) return NextResponse.json({ error: `Bu şubede ${cnt} öğrenci var. Önce taşıyın/silin.` }, { status: 409 });
   await tdb().class.delete({ where: { id: existing.id } });
   return NextResponse.json({ ok: true });
-}
+});
