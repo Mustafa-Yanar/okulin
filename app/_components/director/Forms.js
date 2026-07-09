@@ -3,12 +3,28 @@
 // Müdür paneli modal formları: öğretmen, öğrenci, Excel import, şifre sıfırlama.
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, Check, BookOpen } from 'lucide-react';
-import { branchesForGroups } from '@/lib/constants';
 import { classesForGroup } from '@/lib/classCatalog';
 import { isValidTurkishMobile, formatTurkishMobile } from '@/lib/phone';
 import { GROUPS, Modal, Label, FormField } from './shared';
+import { useClasses } from '../ClassesContext';
+
+// allowedGroups birleşimi → o gruplardaki şubelerin (registry) kullandığı gerçek dersler,
+// dedup + kataloğa göre sıralı. Sabit BRANCHES_BY_GROUP matrisi yerine — kurumun kendi
+// eklediği dersler (örn. "Paragraf") de böylece öğretmen branşlarında görünür.
+// Seçili grup(lar)da hiç şube/ders yoksa (örn. henüz mezun şubesi açılmamış) tüm kataloğa
+// düşülür — öğretmen düzenlerken "seçilecek branş yok" çıkmazına düşmesin diye.
+function branchesForGroups(groups, classes, courses) {
+  const gs = (groups && groups.length) ? groups : ['ortaokul', 'lise', 'mezun'];
+  const gset = new Set(gs);
+  const used = new Set();
+  for (const c of classes || []) if (gset.has(c.group)) for (const d of c.dersler || []) used.add(d);
+  const order = new Map((courses || []).map((c, i) => [c.ad, i]));
+  if (!used.size) return (courses || []).filter((c) => c.active !== false).map((c) => c.ad);
+  return [...used].sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999));
+}
 
 export function TeacherForm({ initial, onClose, onSave }) {
+  const { classes: registryClasses, courses } = useClasses();
   const [name, setName] = useState(initial?.name||'');
   const [password, setPassword] = useState('');
   const [branches, setBranches] = useState(initial?.branches||[]);
@@ -22,13 +38,16 @@ export function TeacherForm({ initial, onClose, onSave }) {
 
   const toggleGroup = g => setAllowedGroups(prev => {
     const next = prev.includes(g) ? prev.filter(x=>x!==g) : [...prev, g];
-    const allowed = branchesForGroups(next);
+    const allowed = branchesForGroups(next, registryClasses, courses);
     setBranches(bs => bs.filter(b => allowed.includes(b)));
     return next;
   });
   const toggleBranch = b => setBranches(prev => prev.includes(b)?prev.filter(x=>x!==b):[...prev,b]);
 
-  const visibleBranches = useMemo(() => branchesForGroups(allowedGroups), [allowedGroups]);
+  const visibleBranches = useMemo(
+    () => branchesForGroups(allowedGroups, registryClasses, courses),
+    [allowedGroups, registryClasses, courses]
+  );
 
   const handlePhoto = async e => {
     const file = e.target.files?.[0];
