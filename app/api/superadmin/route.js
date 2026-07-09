@@ -78,9 +78,11 @@ const CreateOrgSchema = z.object({
   directorUsername: zName,
   directorPassword: zPassword,
   directorName: z.string().max(200).optional(),
-  // multi-type için org_admin bilgileri
-  orgAdminUsername: zName.optional(),
-  orgAdminPassword: zPassword.optional(),
+  // multi-type için org_admin bilgileri. Tek şubeli kurumda form bu alanları boş
+  // string ('') olarak gönderir → zName/zPassword min(1) reddeder. Boş string'i de
+  // kabul et (multi zorunluluğu aşağıda ayrıca kontrol edilir).
+  orgAdminUsername: zName.or(z.literal('')).optional(),
+  orgAdminPassword: zPassword.or(z.literal('')).optional(),
   orgAdminName: z.string().max(200).optional(),
 });
 

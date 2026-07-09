@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import { headers } from 'next/headers';
 import bcrypt from 'bcryptjs';
 import { tenantRedis, currentOrg } from '@/lib/tenant';
+import { orgFromHost } from '@/lib/org';
 import { normalizeBranding } from '@/lib/branding';
 import { getSession, setSession, clearSession } from '@/lib/auth';
 import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait, safeLimit } from '@/lib/ratelimit';
@@ -155,6 +157,14 @@ export async function POST(req) {
     // Normal "Yönetim" girişi (role:'management' veya role yok) superadmin'i HİÇ kontrol
     // etmez → süper-admin varlığı kurum giriş ekranından sızmaz/denenmez.
     if (selectedRole === 'superadmin') {
+      // GÜVENLİK: süper-admin YALNIZ apex domain'den (okulin.com) girilebilir.
+      // Kurum subdomain'inde (testkurs.okulin.com) süper-admin girişi reddedilir —
+      // kurum-üstü rol, kurum bağlamından tamamen ayrı tutulur. orgFromHost apex/www'da
+      // null, subdomain'de kurum slug'ı döner.
+      const host = headers().get('host');
+      if (orgFromHost(host)) {
+        return NextResponse.json({ error: 'Süper yönetici girişi bu adresten yapılamaz.' }, { status: 403 });
+      }
       const superadmin = await tdb().superAdmin.findFirst({ where: { username } });
       if (superadmin && superadmin.username === username) {
         const ok = await bcrypt.compare(password, superadmin.passwordHash);
