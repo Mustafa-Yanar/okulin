@@ -598,6 +598,22 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
         group[c] = groupOf(c);
       });
 
+      // "Hayalet talep" temizliği: load, plan config'inde kalmış ama sınıfların artık
+      // dersler[] listesinde OLMAYAN dersleri içerebilir (örn. bir sütundan Türkçe
+      // çıkarıldığı halde eski saat kaydı config'te duruyor). Tablo bunları registry'den
+      // okuduğu için GÖSTERMİYOR (Σ 24), ama solver ham load'u alıp talep sayardı (26) →
+      // görünmez fazladan talep = yerleşemeyen ders. Solver'a yalnız registry'de gerçekten
+      // var olan dersleri gönder — ekran ile solver aynı ders kümesini görsün.
+      const cleanLoad = {};
+      for (const [ck, courses] of Object.entries(load)) {
+        const valid = new Set(coursesOfCol(ck));
+        const filtered = {};
+        for (const [course, saat] of Object.entries(courses || {})) {
+          if (valid.has(course)) filtered[course] = saat;
+        }
+        if (Object.keys(filtered).length) cleanLoad[ck] = filtered;
+      }
+
       // Gruplama desenleri: yalnız geçerli override'lar gönderilir; eksik hücrelerde
       // çözücü saatten varsayılanı (2'liler + tek kalan 1) türetir.
       const pieces = {};
@@ -616,7 +632,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
         (t.presets || []).map(p => ({ teacherId: t.id, cls: p.cls, course: p.course }))
       );
 
-      const payload = { classes, teachers, load, pieces, maxWeekly, windows, colKey, group, teacherSlots, presets };
+      const payload = { classes, teachers, load: cleanLoad, pieces, maxWeekly, windows, colKey, group, teacherSlots, presets };
       const data = await api('/api/program-solve', { method: 'POST', body: JSON.stringify(payload) });
 
       const assigned = data.assigned || [];
