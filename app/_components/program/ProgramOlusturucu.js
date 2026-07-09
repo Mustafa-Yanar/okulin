@@ -743,7 +743,16 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
           });
           if (rt.feasible) { minK = mid; hi = mid - 1; } else { lo = mid + 1; }
         }
-        refined = { teacherId: best.id, name: best.name, minSlots: minK };
+        // Hangi slotlar eklenecek — kullanıcıya "Perşembe 1., 2. ders" diye söyle.
+        // (missing sıralı; ikili arama ilk minK tanesini yeterli buldu.)
+        const needed = missing.slice(0, minK);
+        const byDay = {};
+        for (const [d, s] of needed) (byDay[d] = byDay[d] || []).push(s + 1); // slotNo = idx+1
+        const where = Object.entries(byDay)
+          .sort((a, b) => Number(a[0]) - Number(b[0]))
+          .map(([d, ss]) => `${DAYS[Number(d)]} ${ss.sort((x, y) => x - y).map(n => `${n}.`).join(' ve ')} ders`)
+          .join(', ');
+        refined = { teacherId: best.id, name: best.name, minSlots: minK, where };
       }
 
       setFeasResult({
@@ -926,6 +935,12 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
                     <b>{feasResult.refined.name}</b> — bu öğretmene yalnızca{' '}
                     <b>{feasResult.refined.minSlots} ders saati</b> daha müsaitlik eklemek programı çözüyor
                     (en az emekle çözen müdahale).
+                    {feasResult.refined.where && (
+                      <div className="mt-1" style={{color:'#7c2d12'}}>
+                        Nereye: <b>{feasResult.refined.where}</b> — bu öğretmenin program penceresinden
+                        işaretleyin.
+                      </div>
+                    )}
                   </div>
                 )}
                 <p className="text-xs text-gray-600 mb-1">Aşağıdakilerden <b>herhangi biri</b> tek başına çözer (en azdan çoğa):</p>
