@@ -701,69 +701,86 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
         return (teacherSlots[t.id] || []).length < fullSlots.length; // genişletilebilir
       });
 
-      // Her adayı tam-güne çıkarıp TEST et — çözenlerin TAMAMINI topla (kısa devre yok,
-      // çünkü "en kısıtlayıcı" için hepsini bilmemiz gerek). Çözen aday için minimum kaç
-      // slot eklemek gerektiğini de ölç → en az genişletmeyle çözen = en verimli müdahale.
-      const solvers = []; // {teacherId, name, addedFull, minAdded}
+      // ── Müdahaleleri GERÇEK maliyetle dene (slot sayısı ≠ maliyet) ──
+      // "2 slot" her zaman ucuz değil: öğretmenin HİÇ gelmediği bir güne 2 slot açmak
+      // ona YENİ BİR GÜN yükler (yol, tam gün blokaj). Zaten geldiği güne 2 slot eklemek
+      // ise "o gün 2 saat erken gel" demek — kıyaslanamaz ölçüde ucuz.
+      // Bu yüzden ucuzdan pahalıya iki tur:
+      //   Tur 1 (UCUZ): mevcut günü uzat — öğretmenin çalıştığı günlerde eksik slotlar.
+      //   Tur 2 (PAHALI): yeni gün aç — öğretmenin hiç gelmediği günler.
+      const dayOfSlots = (slots) => new Set(slots.map(([d]) => d));
+      const cheapFix = [];  // {teacherId,name,day,slots[],cost:'extend'}
+      const costlyFix = []; // {teacherId,name,day,slots[],cost:'newday'}
+
       for (const t of candidates) {
         const cur = teacherSlots[t.id] || [];
         const curSet = new Set(cur.map(([d, s]) => `${d}:${s}`));
-        const missing = fullSlots.filter(([d, s]) => !curSet.has(`${d}:${s}`));
-        const trySlots = { ...teacherSlots, [t.id]: fullSlots };
-        const rt = await api('/api/program-solve', {
-          method: 'POST',
-          body: JSON.stringify({ ...buildPayload(trySlots), feasibilityTest: true }),
-        });
-        if (rt.feasible) {
-          solvers.push({ teacherId: t.id, name: t.name, addedFull: missing.length });
+        const workDays = dayOfSlots(cur);
+
+        // Gün bazında eksik slotları grupla
+        const missingByDay = {};
+        for (const [d, s] of fullSlots) {
+          if (!curSet.has(`${d}:${s}`)) (missingByDay[d] = missingByDay[d] || []).push(s);
+        }
+
+        for (const [dStr, slotList] of Object.entries(missingByDay)) {
+          const d = Number(dStr);
+          const isNewDay = !workDays.has(d);
+          // 2 ARDIŞIK slot dene (dersler 2 saatlik bloklar; tek slot genelde yetmez).
+          // Hizalı çiftler (0-1, 2-3, 4-5) — solver blokları çift hizada yerleştiriyor.
+          const sorted = [...slotList].sort((a, b) => a - b);
+          for (let i = 0; i + 1 < sorted.length; i++) {
+            const pair = [sorted[i], sorted[i + 1]];
+            if (pair[1] - pair[0] !== 1) continue;   // ardışık değil
+            if (pair[0] % 2 !== 0) continue;         // hizasız çift (2-3, 4-5 gibi) — atla
+            const trySlots = { ...teacherSlots, [t.id]: [...cur, [d, pair[0]], [d, pair[1]]] };
+            const rt = await api('/api/program-solve', {
+              method: 'POST',
+              body: JSON.stringify({ ...buildPayload(trySlots), feasibilityTest: true }),
+            });
+            if (rt.feasible) {
+              const fix = {
+                teacherId: t.id, name: t.name, day: d,
+                slots: [pair[0] + 1, pair[1] + 1], // 1-tabanlı ders no
+                newDay: isNewDay,
+              };
+              (isNewDay ? costlyFix : cheapFix).push(fix);
+              break; // bu öğretmen+gün için ilk çözen çift yeter
+            }
+          }
         }
       }
 
-      // "En kısıtlayıcı" = tam-güne çıktığında en AZ slot eklemesi gerekeni öne al
-      // (mevcut müsaitliğine en yakın çözüm = en gerçekçi/az emek). Sonra minimum
-      // genişletmeyi ikili aramayla daralt (opsiyonel, en iyi 1 aday için).
-      solvers.sort((a, b) => a.addedFull - b.addedFull);
-
-      // En iyi adayın minimum eklemesini bul: tam-gün yerine, eksik slotları AZALTA
-      // AZALTA en küçük yeterli kümeyi ikili aramayla yaklaşık bul (tek aday, birkaç çağrı).
-      let refined = null;
-      if (solvers.length) {
-        const best = teachers.find(t => t.id === solvers[0].teacherId);
-        const cur = teacherSlots[best.id] || [];
-        const curSet = new Set(cur.map(([d, s]) => `${d}:${s}`));
-        const missing = fullSlots.filter(([d, s]) => !curSet.has(`${d}:${s}`));
-        // kaç eklemenin yettiğini ikili arama: k slot ekle (missing'in ilk k'sı) → feasible mi
-        let lo = 1, hi = missing.length, minK = missing.length;
-        while (lo <= hi) {
-          const mid = (lo + hi) >> 1;
-          const trySlots = { ...teacherSlots, [best.id]: [...cur, ...missing.slice(0, mid)] };
-          const rt = await api('/api/program-solve', {
-            method: 'POST',
-            body: JSON.stringify({ ...buildPayload(trySlots), feasibilityTest: true }),
-          });
-          if (rt.feasible) { minK = mid; hi = mid - 1; } else { lo = mid + 1; }
-        }
-        // Hangi slotlar eklenecek — kullanıcıya "Perşembe 1., 2. ders" diye söyle.
-        // (missing sıralı; ikili arama ilk minK tanesini yeterli buldu.)
-        const needed = missing.slice(0, minK);
-        const byDay = {};
-        for (const [d, s] of needed) (byDay[d] = byDay[d] || []).push(s + 1); // slotNo = idx+1
-        const where = Object.entries(byDay)
-          .sort((a, b) => Number(a[0]) - Number(b[0]))
-          .map(([d, ss]) => `${DAYS[Number(d)]} ${ss.sort((x, y) => x - y).map(n => `${n}.`).join(' ve ')} ders`)
-          .join(', ');
-        refined = { teacherId: best.id, name: best.name, minSlots: minK, where };
+      // Gün bazlı branş kıtlığı: her gün için, o gün ders verebilen öğretmenlerin
+      // kapsadığı branşlar vs sınıfların o gün ihtiyaç duyduğu branşlar.
+      // "Herkesin Pazartesi'si var" sayısal üstünlük değil — asıl mesele ÇEŞİTLİLİK.
+      const neededBranches = new Set();
+      for (const c of classes) {
+        const key = colKeyOf(c);
+        for (const course of coursesOfCol(key)) if ((load[key]?.[course]) > 0) neededBranches.add(course);
+      }
+      const dayGaps = [];
+      const windowDays = [...new Set(fullSlots.map(([d]) => d))].sort((a, b) => a - b);
+      for (const d of windowDays) {
+        const present = teachers.filter(t => (teacherSlots[t.id] || []).some(([dd]) => dd === d));
+        const covered = new Set();
+        for (const t of present) for (const b of (t.branches || [])) covered.add(b);
+        const missing = [...neededBranches].filter(b => !covered.has(b));
+        if (missing.length) dayGaps.push({ day: d, missing });
       }
 
+      const cheapest = cheapFix[0] || null;
       setFeasResult({
         feasible: false,
-        suggestions: solvers.slice(0, 4),
-        refined,
-        multiBottleneck: solvers.length === 0, // hiçbir tek öğretmen çözmüyor → çoklu darboğaz
+        cheapFix: cheapFix.slice(0, 4),
+        costlyFix: costlyFix.slice(0, 4),
+        cheapest,
+        dayGaps,
+        multiBottleneck: cheapFix.length === 0 && costlyFix.length === 0,
       });
       showToast?.(
-        solvers.length
-          ? 'Mevcut haliyle tüm dersler yerleşemez — çözüm önerileri hazır'
+        (cheapFix.length || costlyFix.length)
+          ? 'Tüm dersler yerleşemez — çözüm önerileri hazır'
           : 'Tüm dersler yerleşemez — tek bir öğretmeni genişletmek YETMİYOR (birden çok darboğaz)',
         'error'
       );
@@ -921,44 +938,78 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
               Toplam saatler yeterli olsa bile, ders bloklarının gün/saat ızgarasına çakışmadan
               dizilmesi mümkün değil.
             </p>
+            {/* Gün bazlı branş kıtlığı — kök neden çoğu zaman burada.
+                "Her öğretmenin Pazartesi'si var" sayısal üstünlük değil; o gün hangi
+                BRANŞLARIN öğretmeni yoksa o günün slotları doldurulamaz. */}
+            {feasResult.dayGaps?.length > 0 && (
+              <div className="text-xs mt-1.5 mb-1.5 p-2 rounded-lg" style={{background:'#eff6ff', border:'1px solid #bfdbfe'}}>
+                <div style={{color:'#1e40af', fontWeight:700}}>Gün bazlı öğretmen eksikliği (muhtemel kök neden):</div>
+                <ul className="mt-1 space-y-0.5" style={{color:'#1e3a8a'}}>
+                  {feasResult.dayGaps.map(g => (
+                    <li key={g.day}>
+                      • <b>{DAYS[g.day]}</b> günü şu branşların öğretmeni hiç müsait değil:{' '}
+                      <b>{g.missing.join(', ')}</b>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1" style={{color:'#1e40af'}}>
+                  O gün bu dersler işlenemediği için diğer günler tıkanıyor.
+                </p>
+              </div>
+            )}
+
             {feasResult.multiBottleneck ? (
               <p className="text-xs text-gray-600 mt-1.5">
-                <b>Birden fazla darboğaz var</b> — tek bir öğretmeni genişletmek yetmiyor. Şunları
+                <b>Birden fazla darboğaz var</b> — tek bir öğretmene 2 saat eklemek yetmiyor. Şunları
                 birlikte deneyin: ders yükünü azaltın, sınıf penceresine gün ekleyin, veya en dar
                 branşlara (tek öğretmenli dersler) ikinci öğretmen ekleyin.
               </p>
             ) : (
               <>
-                {feasResult.refined && (
-                  <div className="text-xs mt-1.5 mb-1 p-2 rounded-lg" style={{background:'#fff7ed', border:'1px solid #fed7aa'}}>
-                    <span style={{color:'#9a3412', fontWeight:700}}>En kısıtlayıcı nokta:</span>{' '}
-                    <b>{feasResult.refined.name}</b> — bu öğretmene yalnızca{' '}
-                    <b>{feasResult.refined.minSlots} ders saati</b> daha müsaitlik eklemek programı çözüyor
-                    (en az emekle çözen müdahale).
-                    {feasResult.refined.where && (
-                      <div className="mt-1" style={{color:'#7c2d12'}}>
-                        Nereye: <b>{feasResult.refined.where}</b> — bu öğretmenin program penceresinden
-                        işaretleyin.
-                      </div>
-                    )}
+                {feasResult.cheapest && (
+                  <div className="text-xs mt-1.5 mb-1 p-2 rounded-lg" style={{background:'#f0fdf4', border:'1px solid #bbf7d0'}}>
+                    <span style={{color:'#166534', fontWeight:700}}>En düşük maliyetli çözüm:</span>{' '}
+                    <b>{feasResult.cheapest.name}</b> — <b>{DAYS[feasResult.cheapest.day]}</b> günü zaten
+                    geliyor; yalnızca <b>{feasResult.cheapest.slots.join('. ve ')}. dersi</b> de müsait
+                    işaretleyin. Yeni gün açmaya gerek yok, sadece o gün erken/geç kalıyor.
                   </div>
                 )}
-                <p className="text-xs text-gray-600 mb-1">Aşağıdakilerden <b>herhangi biri</b> tek başına çözer (en azdan çoğa):</p>
-                <ul className="text-xs space-y-1 mt-1">
-                  {feasResult.suggestions.map(s => (
-                    <li key={s.teacherId} style={{color:'#374151'}}>
-                      • <b>{s.name}</b> — uygunluğunu genişletin
-                      <span className="text-gray-400"> ({s.addedFull} slota kadar açık olması yeterli)</span>
-                    </li>
-                  ))}
-                </ul>
-                {feasResult.suggestions.length > 1 && (
-                  <p className="text-[11px] text-gray-400 mt-1.5">
-                    Not: Birden fazla öğretmen listelendi — her biri <b>tek başına</b> çözüyor (bunlar
-                    alternatif; hepsini birden yapmanız gerekmez). Darboğaz birden fazla olsaydı bu liste
-                    boş kalır, yukarıda uyarılırdınız.
-                  </p>
+
+                {feasResult.cheapFix.length > 0 && (
+                  <>
+                    <p className="text-xs text-gray-600 mb-1 mt-1.5">
+                      <b>Ucuz çözümler</b> — öğretmen o gün <u>zaten geliyor</u>, sadece saat ekleniyor:
+                    </p>
+                    <ul className="text-xs space-y-1">
+                      {feasResult.cheapFix.map((s, i) => (
+                        <li key={i} style={{color:'#374151'}}>
+                          • <b>{s.name}</b> — {DAYS[s.day]} {s.slots.join('. ve ')}. ders
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 )}
+
+                {feasResult.costlyFix.length > 0 && (
+                  <>
+                    <p className="text-xs text-gray-500 mb-1 mt-2">
+                      <b>Maliyetli çözümler</b> — öğretmene <u>yeni bir gün</u> açmak gerekir (yol/tam gün):
+                    </p>
+                    <ul className="text-xs space-y-1" style={{color:'#6b7280'}}>
+                      {feasResult.costlyFix.map((s, i) => (
+                        <li key={i}>
+                          • <b>{s.name}</b> — {DAYS[s.day]} {s.slots.join('. ve ')}. ders
+                          <span className="text-gray-400"> (bu gün hiç gelmiyor)</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+
+                <p className="text-[11px] text-gray-400 mt-1.5">
+                  Her satır <b>tek başına</b> çözer — hepsini birden yapmanız gerekmez. Dersler 2 saatlik
+                  bloklar halinde yerleştiği için tek saat eklemek yetmez, 2 ardışık saat gerekir.
+                </p>
               </>
             )}
           </div>
