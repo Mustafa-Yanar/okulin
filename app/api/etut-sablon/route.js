@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, canManage } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
 import { slotStartTime, getProgramTemplate, setProgramTemplate } from '@/lib/slots';
 import { getWeekKey } from '@/lib/constants';
@@ -60,23 +60,16 @@ async function updateSablonlar(teacherId, mutFn) {
 }
 
 // GET /api/etut-sablon?teacherId=...
-export async function GET(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
+export const GET = withAuth(async (req) => {
   const teacherId = new URL(req.url).searchParams.get('teacherId');
   if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
 
   const fullTemplate = await getProgramTemplate(teacherId);
   return NextResponse.json({ sablonlar: fullTemplate.etutSablonlari || [] });
-}
+});
 
 // POST /api/etut-sablon → şablon ekle (id yoksa) veya güncelle (id varsa)
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, SaveSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, sablon, weekKey: wk } = parsed.data;
@@ -103,15 +96,10 @@ export async function POST(req) {
     }
   });
   return NextResponse.json({ ok: true, sablonlar });
-}
+});
 
 // PUT /api/etut-sablon → aktif/pasif değiştir
-export async function PUT(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const PUT = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, ToggleSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id, scope, weekKey, aktif } = parsed.data;
@@ -136,15 +124,10 @@ export async function PUT(req) {
     return updated;
   });
   return NextResponse.json({ ok: true, sablonlar });
-}
+});
 
 // PATCH /api/etut-sablon → şablona öğrenci ata / kaldır
-export async function PATCH(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const PATCH = withAuth('manage', async (req, ctx, session) => {
   const parsed = await parseBody(req, AssignSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id, student } = parsed.data;
@@ -166,19 +149,14 @@ export async function PATCH(req) {
     return updated;
   });
   return NextResponse.json({ ok: true, sablonlar });
-}
+});
 
 // DELETE /api/etut-sablon → şablon sil
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const DELETE = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, DeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id } = parsed.data;
 
   const sablonlar = await updateSablonlar(teacherId, (list) => list.filter(s => s.id !== id));
   return NextResponse.json({ ok: true, sablonlar });
-}
+});

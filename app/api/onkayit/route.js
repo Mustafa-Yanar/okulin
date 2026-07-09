@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, isManager, canManage } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
 import { tdb } from '@/lib/sqldb';
@@ -51,25 +51,18 @@ function pushHistory(rec, byName, text) {
 
 // ───────────────────────────────────────── GET ─────────────────────────────────────────
 // Müdür/rehber: tüm adaylar (history dahil, düşük hacim) + huni sayıları.
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+// GET okuma: müdür + rehber (isManager eşdeğeri; config'e bakmaz — okuma her zaman serbest).
+export const GET = withAuth(['director', 'counselor'], async () => {
   const rows = await tdb().lead.findMany();
   const leads = rows.map(r => r.data);
   const stats = emptyStats();
   leads.forEach(l => { if (stats[l.status] !== undefined) stats[l.status]++; });
   leads.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
   return NextResponse.json({ leadler: leads, stats });
-}
+});
 
 // ───────────────────────────────────────── POST ─────────────────────────────────────────
-export async function POST(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const POST = withAuth('manage', async (req, ctx, session) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -129,13 +122,10 @@ export async function POST(req) {
     });
   }
   return NextResponse.json({ ok: true, lead: rec });
-}
+});
 
 // ───────────────────────────────────────── DELETE ─────────────────────────────────────────
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const DELETE = withAuth('manage', async (req, ctx, session) => {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
@@ -149,4 +139,4 @@ export async function DELETE(req) {
     detail: `Aday öğrenci silindi: "${sqlRow.data?.studentName || ''}"`,
   });
   return NextResponse.json({ ok: true });
-}
+});
