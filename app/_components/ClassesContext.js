@@ -6,11 +6,15 @@
 // (kayıtsız kurumda davranış bit-bit aynı kalır). Tek kaynak — her panelde ayrı fetch yok.
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 
-const ClassesContext = createContext({ classes: [], courses: [], reloadClasses: () => {} });
+const ClassesContext = createContext({ classes: [], courses: [], loaded: false, reloadClasses: () => {} });
 
 export function ClassesProvider({ children }) {
   const [classes, setClasses] = useState([]);
   const [courses, setCourses] = useState([]);
+  // İlk fetch tamamlandı mı? Tüketiciler bunu "kayıt gerçekten boş" ile "henüz yüklenmedi"
+  // ayrımı için kullanır — aksi halde ilk render'da boş diziyi "kayıtsız kurum" sanıp
+  // sabit-kod fallback'ine düşebilirler.
+  const [loaded, setLoaded] = useState(false);
 
   const reloadClasses = useCallback(async () => {
     try {
@@ -21,13 +25,15 @@ export function ClassesProvider({ children }) {
       setCourses(Array.isArray(data.courses) ? data.courses : []);
     } catch {
       /* sessiz: ağ hatasında tüketiciler classLabel fallback'e düşer */
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
   useEffect(() => { reloadClasses(); }, [reloadClasses]);
 
   return (
-    <ClassesContext.Provider value={{ classes, courses, reloadClasses }}>
+    <ClassesContext.Provider value={{ classes, courses, loaded, reloadClasses }}>
       {children}
     </ClassesContext.Provider>
   );

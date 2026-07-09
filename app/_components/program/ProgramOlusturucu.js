@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Sparkles, AlertTriangle, Check, Download, Eye, Save } from 'lucide-react';
 import {
-  STUDENT_GROUPS, classToGroup, slotId as makeSlotId, slotNoOf,
+  classToGroup, slotId as makeSlotId, slotNoOf,
 } from '@/lib/constants';
 import TeacherPresets from '../director/TeacherPresets';
 import { useConfirm } from '../ConfirmProvider';
@@ -89,8 +89,6 @@ function colKeyFromRegistry(c) {
 
 // Çözücünün blok havuzu ürettiği köprü grupları — ilkokul kapsam dışı (Faz 2+).
 const SOLVER_GROUPS = ['ortaokul', 'lise', 'mezun'];
-
-const ALL_CLASSES = [...STUDENT_GROUPS.ortaokul.classes,...STUDENT_GROUPS.lise.classes,...STUDENT_GROUPS.mezun.classes];
 
 function teacherTeaches(t, course) {
   return (t.branches || []).includes(course);
@@ -283,9 +281,9 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
 }
 
 // ── Ana bileşen ──
-export default function ProgramOlusturucu({ api, showToast, activeClasses, branding }) {
+export default function ProgramOlusturucu({ api, showToast, branding }) {
   const confirm = useConfirm();
-  const { classes: registryClasses } = useClasses();
+  const { classes: registryClasses, loaded: registryLoaded } = useClasses();
   const [teachers, setTeachers] = useState(null);
   // Ders yükü BOŞ başlar (tüm değerler 0) — kaydedilmiş plan varsa config'ten yüklenir.
   const [load, setLoad]         = useState({});
@@ -308,17 +306,17 @@ export default function ProgramOlusturucu({ api, showToast, activeClasses, brand
     [registryClasses]
   );
 
-  // Sınıf listesi: kayıtlı şube registry'si varsa ONU kullan — içinde öğrenci olmayan
-  // şubeler de programa girer (boş/dolu olması engel değil). Registry yoksa (hata/eski
-  // kurum) öğrenci-türevli listeye, o da boşsa sabit listeye düşülür.
+  // Sınıf listesi: kayıtlı şube registry'si TEK kaynak — kurum ne açtıysa o kullanılır
+  // (boş/dolu olması engel değil). Registry henüz yüklenmediyse (ilk render) boş liste
+  // döner, sabit-kod/öğrenci-türevli fallback'e ASLA düşülmez — aksi halde kurum kendi
+  // şubelerini elle açmışken eski 34'lük sabit liste görünür.
   const classes = useMemo(() => {
+    if (!registryLoaded) return [];
     const fromRegistry = (registryClasses || [])
       .filter(c => SOLVER_GROUPS.includes(c.group))
       .map(c => c.id);
-    const base = fromRegistry.length ? fromRegistry
-      : (activeClasses?.length) ? activeClasses : ALL_CLASSES;
-    return [...new Set(base)].sort();
-  }, [registryClasses, activeClasses]);
+    return [...new Set(fromRegistry)].sort();
+  }, [registryLoaded, registryClasses]);
 
   // Registry-öncelikli köprüler: özel şubelerde (s_…) sabit-kod ayrıştırma çalışmaz.
   const groupOf = useCallback(
