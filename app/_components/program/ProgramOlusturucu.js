@@ -64,6 +64,32 @@ function colKeyFor(cls) {
 }
 function coursesForCol(key) { return COL_COURSES[key] || []; }
 
+// colKey → gerçekte kullanılan ders listesi (registry). Kurumun kendi eklediği dersler
+// (örn. "Paragraf") sabit COL_COURSES'ta hiç yoktur — bu yüzden ders yükü tablosu VE
+// analyzeLoad, önce registry sınıflarının dersler[] birleşimine bakar; sütunda henüz
+// hiç sınıf/ders yoksa (örn. mezun şubesi daha açılmamış) sabit listeye düşer, tablo
+// "hiç ders yok" görünmesin diye.
+function coursesForColFromRegistry(colKeyOf, registryClasses) {
+  const map = {}; // colKey -> Set<ders>
+  for (const c of registryClasses || []) {
+    const key = colKeyOf(c.id);
+    if (!key) continue;
+    const set = map[key] || (map[key] = new Set());
+    for (const d of c.dersler || []) set.add(d);
+  }
+  const result = {};
+  for (const key of Object.keys(COL_COURSES)) {
+    const used = map[key];
+    result[key] = used && used.size ? ORDER.filter(d => used.has(d)).concat([...used].filter(d => !ORDER.includes(d))) : COL_COURSES[key];
+  }
+  return result;
+}
+
+// Tüm derslerin görünüm sırası (tablo satırları) — bilinen sıradaki çekirdek dersler,
+// ardından kurumun eklediği özel dersler (kullanılış sırasına göre) sona eklenir.
+const ORDER = ['Türkçe','Matematik','TYT Matematik','AYT Matematik','Geometri','Fizik','Kimya','Biyoloji',
+               'Tarih','Coğrafya','Felsefe','Fen Bilgisi','Sosyal Bilgiler','İnkılap Tarihi','İngilizce'];
+
 // Registry şube kaydından (kademe/duzey/dal) sütun anahtarı türet. Özel şubeler
 // (s_…) sabit-kod colKeyFor ile çözülemez; kayıttaki metadata tek doğru kaynak.
 // Eşleşen sütun yoksa null → şube listede görünür ama ders talebi üretmez.
@@ -258,13 +284,14 @@ function maxDayMatching(feasibleSets) {
 // ayrıca sınıf-yerel KESİN kontroller (#3b K3 gün eşleme, #3c gün-kümesi kapasitesi)
 // çalışır. Hangi sınıfın hangi güne gideceği TAHMİN edilmez — yalnız hiçbir dağıtımla
 // çözülemeyecek durumlar hata olur (çapraz-sınıf çekişme yok sayılır → iyimser sınır).
-function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf, teacherSlots }) {
+function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf, teacherSlots, coursesForCol: coursesForColArg }) {
   const errors = [], warnings = [], infos = [];
+  const coursesOf = coursesForColArg || coursesForCol;
 
   // 0. Program penceresi işaretlenmemiş sınıflar → o sınıfa hiç ders yerleşmez (uyarı).
   for (const cls of classes) {
     const key = colKeyOf(cls);
-    const demand = coursesForCol(key).reduce((s, c) => s + ((load[key]?.[c]) || 0), 0);
+    const demand = coursesOf(key).reduce((s, c) => s + ((load[key]?.[c]) || 0), 0);
     if (demand <= 0) continue;
     const win = windowsOf(cls);
     if (!Object.keys(win).length) {
@@ -280,7 +307,7 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
     const win = windowsOf(cls);
     if (!Object.keys(win).length) continue; // #0'da raporlandı
     const dayLens = Object.values(win).map(a => a.length).sort((a, b) => b - a);
-    for (const course of coursesForCol(key)) {
+    for (const course of coursesOf(key)) {
       const pat = resolvePieces(load, grouping, key, course);
       if (!pat.length) continue;
       const sorted = [...pat].sort((a, b) => b - a);
@@ -294,7 +321,7 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
   // 2. Uygun öğretmen yok
   for (const cls of classes) {
     const key = colKeyOf(cls), grp = groupOf(cls);
-    for (const course of coursesForCol(key)) {
+    for (const course of coursesOf(key)) {
       const h = (load[key]?.[course]) || 0; if (h <= 0) continue;
       const eligible = teachers.filter(tt =>
         teacherTeaches(tt, course) && teacherGroups(tt).includes(grp)
@@ -310,7 +337,7 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
 
   for (const cls of classes) {
     const key = colKeyOf(cls), grp = groupOf(cls);
-    for (const course of coursesForCol(key)) {
+    for (const course of coursesOf(key)) {
       const h = (load[key]?.[course]) || 0; if (h <= 0) continue;
       const k = course + '|' + grp; // ders adı = branş
       branchHours[k] = (branchHours[k] || 0) + h;
@@ -342,7 +369,7 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
       const winDays = Object.keys(win).map(Number).sort((a, b) => a - b);
       if (!winDays.length) continue; // #0'da raporlandı
       const clsPieces = []; // {course, L, days:Set} — 3c için birikir
-      for (const course of coursesForCol(key)) {
+      for (const course of coursesOf(key)) {
         const pat = resolvePieces(load, grouping, key, course);
         if (!pat.length) continue;
         const elig = teachers.filter(tt => teacherTeaches(tt, course) && teacherGroups(tt).includes(grp));
@@ -387,7 +414,7 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
   // 5. Hiç talep yok kontrolü
   const totalHours = classes.reduce((s, cls) => {
     const key = colKeyOf(cls);
-    return s + coursesForCol(key).reduce((ss, c) => ss + ((load[key]?.[c]) || 0), 0);
+    return s + coursesOf(key).reduce((ss, c) => ss + ((load[key]?.[c]) || 0), 0);
   }, 0);
   if (totalHours === 0) {
     infos.push('Hiç ders saati girilmemiş — ders yükü tablosunu doldurun.');
@@ -454,6 +481,14 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
     [classMeta]
   );
 
+  // colKey → gerçek ders listesi (registry'den, kurumun özel dersleri dahil). Sabit
+  // COL_COURSES yalnız sütunda hiç sınıf/ders yoksa fallback olarak kullanılır.
+  const courseMap = useMemo(
+    () => coursesForColFromRegistry(colKeyOf, registryClasses),
+    [colKeyOf, registryClasses]
+  );
+  const coursesOfCol = useCallback(key => courseMap[key] || [], [courseMap]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -504,10 +539,10 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
     (async () => {
       const teacherSlots = await fetchTeacherSlots(teachers, api);
       if (cancelled) return;
-      setAnalysis(analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf, teacherSlots }));
+      setAnalysis(analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf, teacherSlots, coursesForCol: coursesOfCol }));
     })();
     return () => { cancelled = true; };
-  }, [teachers, load, grouping, classes, colKeyOf, groupOf, labelOf, windowsOf, api]);
+  }, [teachers, load, grouping, classes, colKeyOf, groupOf, labelOf, windowsOf, coursesOfCol, api]);
 
   // Ders yükü tablosu her zaman tüm sütunları gösterir
   const activeCols = LOAD_COLUMNS;
@@ -663,7 +698,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
   let totalDemand=0;
   classes.forEach(cls => {
     const key=colKeyOf(cls);
-    coursesForCol(key).forEach(course => { totalDemand+=(load[key]?.[course])||0; });
+    coursesOfCol(key).forEach(course => { totalDemand+=(load[key]?.[course])||0; });
   });
   const capByBranch={};
   teachers.forEach(t => {
@@ -722,7 +757,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
             <Save size={12}/> {savingPlan ? 'Kaydediliyor…' : planDirty ? 'Kaydet' : 'Kaydedildi'}
           </button>
         </div>
-        <LoadTable load={load} setLoad={updateLoad} grouping={grouping} setGrouping={updateGrouping} cols={activeCols} />
+        <LoadTable load={load} setLoad={updateLoad} grouping={grouping} setGrouping={updateGrouping} cols={activeCols} courseMap={courseMap} />
       </div>
 
       {/* Sınıf bazlı günlük ders limiti (K7) — boş bırakılan gün serbesttir */}
@@ -852,10 +887,16 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
 // ── Ders yükü tablosu: sütunlar dikey, satırlar dersler ──
 // Her hücre iki girişli: üstte toplam SAAT, altta gruplama deseni (örn "3-2-2").
 // Desen boşsa varsayılan 2'li bölme uygulanır. Desen girilince saat = desen toplamı.
-function LoadTable({ load, setLoad, grouping, setGrouping, cols }) {
-  const ORDER = ['Türkçe','Matematik','TYT Matematik','AYT Matematik','Geometri','Fizik','Kimya','Biyoloji',
-                 'Tarih','Coğrafya','Felsefe','Fen Bilgisi','Sosyal Bilgiler','İnkılap Tarihi','İngilizce'];
-  const allCourses = ORDER.filter(d => cols.some(c => COL_COURSES[c.key]?.includes(d)));
+function LoadTable({ load, setLoad, grouping, setGrouping, cols, courseMap }) {
+  // Bilinen sıradaki çekirdek dersler önce, kurumun özel dersleri (courseMap'te olup
+  // ORDER'da olmayan) sona eklenir — böylece "Paragraf" gibi dersler satırlardan düşmez.
+  const allCourses = useMemo(() => {
+    const used = new Set();
+    for (const c of cols) for (const d of (courseMap[c.key] || [])) used.add(d);
+    const known = ORDER.filter(d => used.has(d));
+    const extra = [...used].filter(d => !ORDER.includes(d));
+    return [...known, ...extra];
+  }, [cols, courseMap]);
   const [editing, setEditing] = useState({}); // "colKey|ders" → yazım halindeki ham desen
 
   const clearPattern = (key, d) => setGrouping(prev => {
@@ -884,7 +925,7 @@ function LoadTable({ load, setLoad, grouping, setGrouping, cols }) {
     setLoad(prev => ({...prev, [key]: {...(prev[key]||{}), [d]: sum}}));
   };
 
-  const sumFor = key => (COL_COURSES[key]||[]).reduce((s,d)=>s+((load[key]?.[d])||0),0);
+  const sumFor = key => (courseMap[key]||[]).reduce((s,d)=>s+((load[key]?.[d])||0),0);
 
   return (
     <div className="overflow-x-auto">
@@ -907,12 +948,12 @@ function LoadTable({ load, setLoad, grouping, setGrouping, cols }) {
             <tr key={d} className="border-t border-gray-50">
               <td className="px-2 py-1.5 sticky left-0 bg-white" style={{fontWeight:600}}>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{background:COURSE_COLOR[d]}} />
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{background:COURSE_COLOR[d] || '#94a3b8'}} />
                   {d}
                 </span>
               </td>
               {cols.map(c => {
-                if (!COL_COURSES[c.key]?.includes(d))
+                if (!courseMap[c.key]?.includes(d))
                   return <td key={c.key} className="text-center text-gray-100 px-1 py-1">–</td>;
                 const h = (load[c.key]?.[d]) || 0;
                 const ek = c.key + '|' + d;
