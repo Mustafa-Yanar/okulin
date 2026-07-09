@@ -57,8 +57,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     setTabInternal(key);
     onExternalTabChange?.(key);
   }, [setTabInternal, onExternalTabChange]);
-  const [slotWeekday, setSlotWeekday] = useState([]);
-  const [slotWeekend, setSlotWeekend] = useState([]);
+  const [slotDays, setSlotDays] = useState(null); // { 0:{count,times}, ..., 6:{...} } — 7-gün model
   const [slotEtutSuresi, setSlotEtutSuresi] = useState(60);
   const [slotMolaSuresi, setSlotMolaSuresi] = useState(10);
   const [slotTimesLoading, setSlotTimesLoading] = useState(false);
@@ -105,17 +104,16 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
   useEffect(() => { loadPendingGuidance(); }, [loadPendingGuidance]);
 
-  // Ders saatleri sekmesi açılınca yükle
+  // Ders saatleri sekmesi açılınca yükle (7-gün days modeli)
   useEffect(() => {
-    if (tab !== 'ders-saatleri' || slotWeekday.length > 0) return;
+    if (tab !== 'ders-saatleri' || slotDays) return;
     setSlotTimesLoading(true);
     api('/api/slot-times').then(data => {
-      setSlotWeekday(data.weekday || []);
-      setSlotWeekend(data.weekend || []);
+      setSlotDays(data.days || {});
       if (data.etutSuresi != null) setSlotEtutSuresi(data.etutSuresi);
       if (data.molaSuresi != null) setSlotMolaSuresi(data.molaSuresi);
     }).catch(() => {}).finally(() => setSlotTimesLoading(false));
-  }, [tab]);
+  }, [tab, slotDays]);
 
   const loadAll = useCallback(async (wk) => {
     setLoading(true);
@@ -513,26 +511,25 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       {tab === 'ders-saatleri' && (
         <div className="max-w-2xl">
           <SectionHeader icon={Clock} title="Ders Saatleri" subtitle="Haftalık ders slot başlangıç ve bitiş saatlerini ayarla" />
-          {slotTimesLoading ? (
+          {slotTimesLoading || !slotDays ? (
             <LoadingBox height="h-48" />
           ) : (
             <>
               <SlotTimeEditor
-                weekday={slotWeekday}
-                weekend={slotWeekend}
+                days={slotDays}
                 etutSuresi={slotEtutSuresi}
                 molaSuresi={slotMolaSuresi}
-                onChange={(type, slots) => type === 'weekday' ? setSlotWeekday(slots) : setSlotWeekend(slots)}
+                onDaysChange={setSlotDays}
                 onMetaChange={(key, val) => key === 'etutSuresi' ? setSlotEtutSuresi(val) : setSlotMolaSuresi(val)}
               />
               <div className="flex justify-end mt-4">
                 <button
                   className="btn-primary !px-6 !py-2.5"
-                  disabled={savingSlotTimes || slotWeekday.length !== 12 || slotWeekend.length !== 12}
+                  disabled={savingSlotTimes}
                   onClick={async () => {
                     setSavingSlotTimes(true);
                     try {
-                      const payload = { weekday: slotWeekday, weekend: slotWeekend, etutSuresi: slotEtutSuresi, molaSuresi: slotMolaSuresi };
+                      const payload = { days: slotDays, etutSuresi: slotEtutSuresi, molaSuresi: slotMolaSuresi };
                       await api('/api/slot-times', { method: 'POST', body: JSON.stringify(payload) });
                       updateSlotTimes(payload);
                       showToast('Saatler kaydedildi ve uygulandı');

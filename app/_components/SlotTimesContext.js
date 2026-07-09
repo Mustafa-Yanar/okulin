@@ -25,21 +25,32 @@ const SlotTimesContext = createContext(null);
 const DEFAULT_ETUT_SURESI = 60;
 const DEFAULT_MOLA_SURESI = 10;
 
+// 7-gün days objesinden varsayılan üret (config gelmeden önceki state).
+function defaultDays() {
+  const days = {};
+  for (let d = 0; d < 5; d++) days[d] = { count: 12, times: DEFAULT_WEEKDAY_TIMES };
+  for (let d = 5; d < 7; d++) days[d] = { count: 12, times: DEFAULT_WEEKEND_TIMES };
+  return days;
+}
+
+// GET yanıtı (yeni: {days}) → context state. Geriye uyum: weekday/weekend'i
+// gün0/gün5'ten türet, böylece henüz göç etmemiş tüketiciler (TeacherPanel vb.) kırılmaz.
+function buildState(src = {}) {
+  const days = src.days || defaultDays();
+  return {
+    days,
+    weekday: days[0]?.times || DEFAULT_WEEKDAY_TIMES,   // deprecated geriye uyum
+    weekend: days[5]?.times || DEFAULT_WEEKEND_TIMES,    // deprecated geriye uyum
+    etutSuresi: src.etutSuresi ?? DEFAULT_ETUT_SURESI,
+    molaSuresi: src.molaSuresi ?? DEFAULT_MOLA_SURESI,
+  };
+}
+
 export function SlotTimesProvider({ children }) {
-  const [slotTimes, setSlotTimesState] = useState({
-    weekday: DEFAULT_WEEKDAY_TIMES,
-    weekend: DEFAULT_WEEKEND_TIMES,
-    etutSuresi: DEFAULT_ETUT_SURESI,
-    molaSuresi: DEFAULT_MOLA_SURESI,
-  });
+  const [slotTimes, setSlotTimesState] = useState(() => buildState());
 
   const updateSlotTimes = (times) => {
-    setSlotTimesState({
-      weekday: times.weekday || DEFAULT_WEEKDAY_TIMES,
-      weekend: times.weekend || DEFAULT_WEEKEND_TIMES,
-      etutSuresi: times.etutSuresi ?? DEFAULT_ETUT_SURESI,
-      molaSuresi: times.molaSuresi ?? DEFAULT_MOLA_SURESI,
-    });
+    setSlotTimesState(buildState(times));
   };
 
   return (
