@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { ALL_DAYS, slotsForDay } from '@/lib/constants';
-import { getWeekKey, getAllTeachers, getTeacherWeekSlots } from '@/lib/slots';
+import { ALL_DAYS, daySlots } from '@/lib/constants';
+import { getWeekKey, getAllTeachers, getTeacherWeekSlots, getDaySlotTimes } from '@/lib/slots';
 
 // GET /api/class-schedule?cls=701&week=2026-W20
 // Bir sınıfın o haftadaki ders programını döner — öğretmen slot grid'lerinden okur.
@@ -28,11 +28,12 @@ export async function GET(req) {
 
   const schedule = {};
   for (const day of ALL_DAYS) schedule[day.index] = [];
+  const slotTimes = await getDaySlotTimes(); // 7-gün model
 
   for (const t of teachers) {
     const grid = await getTeacherWeekSlots(t.id, weekKey); // SQL-aware grid {[day]:[cell]}
     for (const day of ALL_DAYS) {
-      const slots = slotsForDay(day.index);
+      const slots = daySlots(day.index, slotTimes.days[day.index]);
       (grid[day.index] || []).forEach((sd, slotIdx) => {
         if (!sd || sd.lessonType !== 'ders' || sd.cls !== cls) return;
         const slot = slots[slotIdx];

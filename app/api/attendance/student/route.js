@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { slotsForDay } from '@/lib/constants';
-import { getWeekKey, getSlotTimes, getProgramTemplate } from '@/lib/slots';
+import { daySlots as buildDaySlots } from '@/lib/constants';
+import { getWeekKey, getDaySlotTimes, getProgramTemplate } from '@/lib/slots';
 import { tdb } from '@/lib/sqldb';
 
 // GET /api/attendance/student?studentId=...
@@ -23,7 +23,7 @@ export async function GET(req) {
   {
     // Tüm yoklama kayıtlarını öğretmen dahil çek, JS'te filtrele
     const allRecs = await tdb().attendance.findMany({ include: { teacher: true } });
-    const slotTimes = await getSlotTimes();
+    const slotTimes = await getDaySlotTimes();
 
     const matched = [];
     for (const rec of allRecs) {
@@ -64,8 +64,7 @@ export async function GET(req) {
         const jsDay = d.getDay();
         const dayIndex = jsDay === 0 ? 6 : jsDay - 1;
         const weekKey = getWeekKey(new Date(m.rec.date));
-        const isWeekend = dayIndex >= 5;
-        const daySlots = slotsForDay(dayIndex, isWeekend ? slotTimes.weekend : slotTimes.weekday);
+        const dayS = buildDaySlots(dayIndex, slotTimes.days[dayIndex]);
 
         const slotBookings = await tdb().slotBooking.findMany({
           where: { weekKey, teacherId: teacher.id, dayIndex },
@@ -74,7 +73,7 @@ export async function GET(req) {
         for (const sb of slotBookings) cellMap[sb.slotId] = sb.data || {};
 
         let counter = 0, matchedSlot = null, matchedCell = null;
-        for (const slot of daySlots) {
+        for (const slot of dayS) {
           const cell = cellMap[slot.id] || {};
           if (cell.lessonType === 'ders') {
             counter++;

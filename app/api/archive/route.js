@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { tdb } from '@/lib/sqldb';
-import { ALL_DAYS, slotsForDay } from '@/lib/constants';
+import { ALL_DAYS, daySlots } from '@/lib/constants';
+import { getDaySlotTimes } from '@/lib/slots';
 
 // GET /api/archive?type=teacher&id=xxx  veya  ?type=student&id=xxx
 export async function GET(req) {
@@ -31,10 +32,11 @@ export async function GET(req) {
     });
   }
 
+  const slotTimes = await getDaySlotTimes(); // 7-gün model
   const weeksMap = {}; // weekKey -> entries[]
   bookings.forEach(b => {
     const day = ALL_DAYS.find(d => d.index === b.dayIndex);
-    const slotList = slotsForDay(b.dayIndex);
+    const slotList = daySlots(b.dayIndex, slotTimes.days[b.dayIndex]);
     const slot = slotList.find(s => s.id === b.slotId);
     const entry = {
       day: b.dayIndex,

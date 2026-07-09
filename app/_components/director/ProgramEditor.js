@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import LoadingBox from '../Loading';
 import { Save, Plus } from 'lucide-react';
 import {
-  ALL_DAYS, slotsForDay, getWeekKey,
+  ALL_DAYS, daySlots, getWeekKey,
 } from '@/lib/constants';
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal, getAdjacentWeek, isSlotPast } from './shared';
@@ -222,7 +222,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     if (isSlotPast(weekKey, dayIndex, slotLabel)) return;
     const entry = getEntry(dayIndex, slotId);
     if (entry?.type === 'available') { clearEntry(dayIndex, slotId); return; }
-    const slots = slotsForDay(dayIndex, dayIndex >= 5 ? slotTimes.weekend : slotTimes.weekday);
+    const slots = daySlots(dayIndex, slotTimes.days?.[dayIndex]);
     const slot = slots.find(x => x.id === slotId);
     if (slot) {
       const c = cakisanAktifEtut(dayIndex, slot.start, slot.end);
@@ -285,10 +285,10 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
         }
         renderDayContent={(day) => {
           const blocks = [];
-          // 1) Ders slotları — 12'sinin hepsi çizilir. Aktif (available) mavi dolu,
-          //    pasif soluk/boş. Tıkla → aç/kapat toggle. Geçmiş slot düzenlenemez.
-          // slotsForDay 2. arg DİZİ bekler (slotTimes objesi değil) → gün tipine göre seç.
-          const slots = slotsForDay(day.index, day.index >= 5 ? slotTimes.weekend : slotTimes.weekday);
+          // 1) Ders slotları — o günün ders SAYISI kadar çizilir (7-gün model, her gün
+          //    kendi count/saatleri). Aktif (available) mavi dolu, pasif soluk/boş.
+          //    Tıkla → aç/kapat toggle. Geçmiş slot düzenlenemez.
+          const slots = daySlots(day.index, slotTimes.days?.[day.index]);
           for (const slot of slots) {
             const entry = getEntry(day.index, slot.id);
             const aktif = entry?.type === 'available';
@@ -385,7 +385,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
             // O günün meşgul aralıkları: SADECE aktif (available) ders slotları + etüt şablonları.
             // Pasif/boş ders slotları meşgul değil → o saatlere etüt eklenebilir.
             const ranges = [];
-            const slots = slotsForDay(dayIndex, dayIndex >= 5 ? slotTimes.weekend : slotTimes.weekday);
+            const slots = daySlots(dayIndex, slotTimes.days?.[dayIndex]);
             for (const slot of slots) {
               const entry = getEntry(dayIndex, slot.id);
               if (entry?.type === 'available') ranges.push({ start: slot.start, end: slot.end, label: 'ders' });

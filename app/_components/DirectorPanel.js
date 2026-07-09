@@ -8,7 +8,7 @@ import { useSlotTimes } from './SlotTimesContext';
 import ProgramOlusturucu from './program/ProgramOlusturucu';
 import { TeacherBookingsList } from './TeacherPanel';
 
-import { ALL_DAYS, getWeekKey, slotsForDay, allBranches } from '@/lib/constants';
+import { ALL_DAYS, getWeekKey, daySlots as buildDaySlots, allBranches } from '@/lib/constants';
 import { GROUPS, api, Modal, getAdjacentWeek, WeekNav, SectionHeader } from './director/shared';
 import { TeacherForm, StudentForm, ImportModal } from './director/Forms';
 import DirectorMuhasebeTab from './director/MuhasebeTab';
@@ -271,7 +271,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                         bookedList={(() => {
                           const items = [];
                           ALL_DAYS.forEach(day => {
-                            slotsForDay(day.index, slotTimes).forEach((slot, slotIdx) => {
+                            buildDaySlots(day.index, slotTimes.days?.[day.index]).forEach((slot, slotIdx) => {
                               const sd = teacherSlots[day.index]?.[slotIdx];
                               if (sd?.booked) items.push({
                                 dayIndex: day.index, dayLabel: day.label,
@@ -310,7 +310,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                         if (selectedTeacherForSlots?.id !== t.id || !teacherSlots) return [];
                         const items = [];
                         ALL_DAYS.forEach(day => {
-                          slotsForDay(day.index, slotTimes).forEach((slot, slotIdx) => {
+                          buildDaySlots(day.index, slotTimes.days?.[day.index]).forEach((slot, slotIdx) => {
                             const sd = teacherSlots[day.index]?.[slotIdx];
                             if (sd?.booked) items.push({
                               day: day.index, dayLabel: day.label,

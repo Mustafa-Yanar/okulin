@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
-import { slotsForDay, MEZUN_ONLY_LESSON_SLOTS, STUDENT_GROUPS } from '@/lib/constants';
-import { getWeekKey, isEditableWeek, initWeekForTeacher, slotStartTime, getSlotTimes, getProgramTemplate, setProgramTemplate, deleteProgramTemplate } from '@/lib/slots';
+import { daySlots as buildDaySlots, MEZUN_ONLY_LESSON_SLOTS, STUDENT_GROUPS } from '@/lib/constants';
+import { getWeekKey, isEditableWeek, initWeekForTeacher, slotStartTime, getDaySlotTimes, getProgramTemplate, setProgramTemplate, deleteProgramTemplate } from '@/lib/slots';
 import { parseBody, z, zId } from '@/lib/validate';
 import { tdb } from '@/lib/sqldb';
+
+// Slot id'sinden slot NUMARASINI çıkar (1-tabanlı). Yeni: d{gün}s{n} · eski: w{n}/e{n}.
+function slotNoFromId(slotId) {
+  const m = /(?:^[we]|s)(\d+)$/.exec(slotId);
+  return m ? parseInt(m[1], 10) : null;
+}
 
 // Derin iç içe grid — üst seviye şekil doğrulanır, hücre mantığı aşağıda işlenir.
 const ProgramPostSchema = z.object({ teacherId: zId, weekKey: z.string().min(1).max(40), program: z.record(z.unknown()) });
@@ -76,10 +82,10 @@ export const POST = withAuth('manage', async (req) => {
   // Geçmiş slotları diff'ten sessizce kaldır
   const templateForGuard = await getProgramTemplate(legacyTeacherId);
   const { etutSablonlari: _ets, ...gridTemplateForGuard } = templateForGuard;
-  const postSlotTimes = await getSlotTimes();
+  const postSlotTimes = await getDaySlotTimes();
   for (const dayIdx of Object.keys(program)) {
     const di = parseInt(dayIdx);
-    const slots = slotsForDay(di, di >= 5 ? postSlotTimes.weekend : postSlotTimes.weekday);
+    const slots = buildDaySlots(di, postSlotTimes.days[di]);
     for (const slotId of Object.keys(program[dayIdx] || {})) {
       const entry = program[dayIdx][slotId];
       if (entry?.type === 'available') continue;
@@ -106,14 +112,17 @@ export const POST = withAuth('manage', async (req) => {
     }
   }
 
-  // Hafta içi w1–w6 ders slotlarına sadece mezun sınıfı atanabilir
+  // Hafta içi ilk 6 slot ders'e sadece mezun sınıfı atanabilir (slot NUMARASINA göre —
+  // güne özgü id'lerde d{gün}s1..s6; eski w1-w6 da slotNoFromId ile yakalanır).
   const mezunClasses = new Set(STUDENT_GROUPS.mezun?.classes || []);
-  for (const [dayIdx, daySlots] of Object.entries(program)) {
+  const mezunOnlyCount = MEZUN_ONLY_LESSON_SLOTS.length; // 6
+  for (const [dayIdx, daySlotEntries] of Object.entries(program)) {
     if (parseInt(dayIdx) >= 5) continue;
-    for (const [slotId, entry] of Object.entries(daySlots || {})) {
-      if (entry?.type === 'ders' && MEZUN_ONLY_LESSON_SLOTS.includes(slotId)) {
+    for (const [slotId, entry] of Object.entries(daySlotEntries || {})) {
+      const slotNo = slotNoFromId(slotId);
+      if (entry?.type === 'ders' && slotNo != null && slotNo <= mezunOnlyCount) {
         if (entry.cls && !mezunClasses.has(entry.cls)) {
-          return NextResponse.json({ error: `${slotId} slotu (hafta içi ilk 6) sadece mezun sınıflarına ders eklenebilir` }, { status: 400 });
+          return NextResponse.json({ error: `${slotNo}. slot (hafta içi ilk 6) sadece mezun sınıflarına ders eklenebilir` }, { status: 400 });
         }
       }
     }

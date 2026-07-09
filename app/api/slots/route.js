@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession, canReadStudent } from '@/lib/auth';
-import { getWeekKey, getTeacherWeekSlots, getAllTeachers, slotStartTime, getSlotTimes, getProgramTemplate } from '@/lib/slots';
-import { ALL_DAYS, slotsForDay, MEZUN_FORBIDDEN_ETUT_SLOT, MATH_FAMILY, allowedBranchesForClass } from '@/lib/constants';
+import { getWeekKey, getTeacherWeekSlots, getAllTeachers, slotStartTime, getDaySlotTimes, getProgramTemplate } from '@/lib/slots';
+import { ALL_DAYS, daySlots, MEZUN_FORBIDDEN_ETUT_SLOT_NO, slotNoOf, MATH_FAMILY, allowedBranchesForClass } from '@/lib/constants';
 import { parseBody, z, zId } from '@/lib/validate';
 import { tdb } from '@/lib/sqldb';
 import { currentOrg, currentBranch } from '@/lib/tenant';
@@ -33,13 +33,13 @@ export async function GET(req) {
   }
 
   const teachers = await getAllTeachers(); // id=legacyId
-  const slotTimes = await getSlotTimes();
+  const slotTimes = await getDaySlotTimes();
   const allSlots = [];
 
   for (const teacher of teachers) {
     const grid = await getTeacherWeekSlots(teacher.id, weekKey);
     for (const day of ALL_DAYS) {
-      const slots = slotsForDay(day.index, day.index >= 5 ? slotTimes.weekend : slotTimes.weekday);
+      const slots = daySlots(day.index, slotTimes.days[day.index]);
       for (let s = 0; s < slots.length; s++) {
         const slotData = grid[day.index][s] || { booked: false, disabled: true };
         allSlots.push({
@@ -130,8 +130,8 @@ export async function POST(req) {
   }
 
   // Geçmiş slot kontrolü
-  const slotTimes = await getSlotTimes();
-  const slotDef = slotsForDay(day, day >= 5 ? slotTimes.weekend : slotTimes.weekday).find(s => s.id === slotId);
+  const slotTimes = await getDaySlotTimes();
+  const slotDef = daySlots(day, slotTimes.days[day]).find(s => s.id === slotId);
   if (slotDef) {
     const slotStart = slotStartTime(weekKey, day, slotDef.label);
     if (slotStart.getTime() <= Date.now()) {
@@ -166,9 +166,9 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Bu öğrenci bu öğretmenin etütlerine kayıt olamaz' }, { status: 400 });
   }
 
-  // Mezun öğrenciler hafta içi 16:30–17:05 etüdüne kayıt olamaz
-  if (studentGroup === 'mezun' && slotId === MEZUN_FORBIDDEN_ETUT_SLOT && day < 5) {
-    return NextResponse.json({ error: 'Mezun öğrenciler hafta içi 16:30–17:05 saatindeki etüde kayıt olamaz' }, { status: 400 });
+  // Mezun öğrenciler hafta içi 9. slot etüdüne kayıt olamaz (slot NUMARASINA göre)
+  if (studentGroup === 'mezun' && slotNoOf(slotId) === MEZUN_FORBIDDEN_ETUT_SLOT_NO && day < 5) {
+    return NextResponse.json({ error: 'Mezun öğrenciler hafta içi 9. slottaki etüde kayıt olamaz' }, { status: 400 });
   }
 
   // Branş doğrulaması
@@ -268,8 +268,8 @@ export async function DELETE(req) {
     const etut = await getOrgConfig('etut');
     const lockH = parseInt(etut?.cancelLockHours) || 0;
     if (lockH > 0) {
-      const slotTimes = await getSlotTimes();
-      const slotDef = slotsForDay(day, day >= 5 ? slotTimes.weekend : slotTimes.weekday).find(s => s.id === slotId);
+      const slotTimes = await getDaySlotTimes();
+      const slotDef = daySlots(day, slotTimes.days[day]).find(s => s.id === slotId);
       if (slotDef) {
         const slotStart = slotStartTime(weekKey, day, slotDef.label);
         if (slotStart.getTime() - Date.now() < lockH * 3600 * 1000) {

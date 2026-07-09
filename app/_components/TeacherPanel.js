@@ -10,7 +10,7 @@ import {
   ALL_DAYS,
   getWeekKey,
   classLabel,
-  slotsForDay
+  daySlots as buildDaySlots
 } from '@/lib/constants';
 import { subjectMatchesBranch } from '@/lib/deneme/branch';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
@@ -305,7 +305,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
     if (!program) return [];
     return ALL_DAYS.map(day => {
       const dayProg = program[String(day.index)] || {};
-      const slots = slotsForDay(day.index, day.index >= 5 ? slotTimes.weekend : slotTimes.weekday);
+      const slots = buildDaySlots(day.index, slotTimes.days?.[day.index]);
       const lessons = [];
       let lessonNo = 0;
       for (const slot of slots) {
@@ -769,7 +769,7 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
     if (!slots) return [];
     const items = [];
     ALL_DAYS.forEach(day => {
-      const daySlots = slotsForDay(day.index, day.index >= 5 ? slotTimes.weekend : slotTimes.weekday);
+      const daySlots = buildDaySlots(day.index, slotTimes.days?.[day.index]);
       daySlots.forEach((slot, slotIdx) => {
         const slotData = slots[day.index]?.[slotIdx];
         if (slotData?.booked) {

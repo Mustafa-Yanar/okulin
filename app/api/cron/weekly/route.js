@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/db';
 import {
   getWeekKey, getMondayOfWeek, initWeekForTeacher,
-  getAllTeachers, getCurrentWeek, setCurrentWeek, getTeacherWeekSlots,
+  getAllTeachers, getCurrentWeek, setCurrentWeek, getTeacherWeekSlots, getDaySlotTimes,
 } from '@/lib/slots';
-import { ALL_DAYS, slotsForDay } from '@/lib/constants';
+import { ALL_DAYS, daySlots } from '@/lib/constants';
 
 // Pazar 11:00 UTC+3 = 08:00 UTC → "0 8 * * 0"
 // Öğretmen listesi / current_week / slot okuma / hafta init SQL'den.
@@ -39,11 +39,12 @@ export async function GET(req) {
   // 1. Her öğretmenin bu haftaki booked slotlarını SQL grid'inden topla (arşiv için)
   const teacherArchiveMap = {}; // teacherId -> entries[]
   const studentArchiveMap = {}; // studentId -> entries[]
+  const slotTimes = await getDaySlotTimes(); // 7-gün model
 
   for (const t of teachers) {
     const grid = await getTeacherWeekSlots(t.id, currentWeek); // SQL-aware
     for (const day of ALL_DAYS) {
-      const slots = slotsForDay(day.index);
+      const slots = daySlots(day.index, slotTimes.days[day.index]);
       (grid[day.index] || []).forEach((sd, slotIdx) => {
         if (!sd || !sd.booked) return;
         const slot = slots[slotIdx];
