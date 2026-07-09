@@ -19,6 +19,7 @@ import LoadingBox from '../Loading';
 import EmptyState from '../EmptyState';
 import { useUrlParam } from '../useUrlParam';
 import { useConfirm } from '../ConfirmProvider';
+import { useClasses } from '../ClassesContext';
 
 export default function SinifOgrenci({
   students = [], allSlots, weekKey,
@@ -28,6 +29,9 @@ export default function SinifOgrenci({
   onClassesChanged, showToast, sektor = 'dershane', classes: classesProp = [],
 }) {
   const confirm = useConfirm();
+  // Paylaşılan sınıf/ders context'i: bu ekranda şube/ders düzenlenince program sekmesi
+  // (useClasses ile besleniyor) bayat kalmasın diye her yerel yenilemede context de yenilenir.
+  const { reloadClasses } = useClasses();
   const [classes, setClasses] = useState(classesProp);
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,9 +50,13 @@ export default function SinifOgrenci({
       const data = await api('/api/classes');
       setClasses(data.classes || []);
       setCourses(data.courses || []);
+      // Paylaşılan context'i de tazele — program sekmesi (haftalık ders yükü tablosu)
+      // aynı /api/classes'ı useClasses üzerinden okuyor; yenilenmezse şube/ders
+      // değişikliği orada ancak sayfa elle yenilenince görünürdü.
+      reloadClasses?.();
     } catch (err) { showToast?.(err.message, 'error'); }
     finally { setLoading(false); }
-  }, [showToast]);
+  }, [showToast, reloadClasses]);
 
   useEffect(() => { load(); }, [load]);
 
