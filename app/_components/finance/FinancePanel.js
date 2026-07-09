@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import useSWR from 'swr';
 import LoadingBox from '../Loading';
 import {
@@ -35,12 +36,20 @@ function isOverdue(dueDate) {
 function ReceiptPrintArea({ data, onClose }) {
   const { studentName, studentCls, payment, dershane } = data;
 
+  // Portal + mount guard: #print-preview body'nin doğrudan çocuğu olsun (print CSS
+  // "body > *:not(#print-preview) gizle" kuralı derin modal DOM'unda çalışmaz).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   useEffect(() => {
+    if (!mounted) return;
     const timer = setTimeout(() => window.print(), 200);
     return () => clearTimeout(timer);
-  }, []);
+  }, [mounted]);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 print:bg-transparent print:static print:p-0">
       <div role="dialog" aria-modal="true" aria-label="Makbuz önizlemesi" className="modal w-full max-w-md print:shadow-none print:max-w-none print:w-full print:border-none">
         <div className="flex items-center justify-between p-4 border-b border-gray-100 no-print">
@@ -94,7 +103,8 @@ function ReceiptPrintArea({ data, onClose }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

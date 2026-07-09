@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Sparkles, AlertTriangle, Check, Download, Eye, Save } from 'lucide-react';
 import {
   classToGroup, slotId as makeSlotId, slotNoOf,
@@ -1203,7 +1204,15 @@ function PrintPreview({ type, id, result, teachers, classes, labelOf, brandName,
 
   const filteredPages = id ? pages.filter(p => p.key === id) : pages;
 
-  return (
+  // Önizlemeyi PORTAL ile doğrudan document.body'ye render et. Böylece #print-preview
+  // body'nin DOĞRUDAN çocuğu olur → print CSS'i "body > *:not(#print-preview) gizle"
+  // basit ve güvenilir kuralıyla çalışır (derin DOM'da :has()/visibility desenleri boş
+  // sayfa/sidebar sızması üretiyordu). SSR-safe: mount olana dek null döner.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null;
+
+  const content = (
     <div className="fixed inset-0 bg-white z-50 overflow-auto print:static" id="print-preview">
       <div className="no-print p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
         <span className="font-700 text-sm" style={{fontWeight:700}}>
@@ -1222,6 +1231,8 @@ function PrintPreview({ type, id, result, teachers, classes, labelOf, brandName,
       ))}
     </div>
   );
+
+  return createPortal(content, document.body);
 }
 
 function SchedulePage({ title, lessons, labelOf, brandName }) {

@@ -759,34 +759,34 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
     print-color-adjust: exact !important;
   }
 
-  /* Yazdırma önizlemesi (#print-preview) açıkken SADECE onu bas.
-     :has() zincirine güvenmek yerine (DOM derinliği kırıyordu — sidebar/panel
-     yazdırmaya sızıyordu) visibility deseni: body altındaki her şeyi gizle,
-     sonra yalnız #print-preview ağacını görünür yap. Bu, önizlemenin ağaçta
-     kaç sarmalayıcı içinde olduğundan BAĞIMSIZ çalışır. */
-  body:has(#print-preview) * {
-    visibility: hidden !important;
-  }
-  #print-preview,
-  #print-preview * {
-    visibility: visible !important;
+  /* Yazdırma önizlemesi (#print-preview) PORTAL ile body'nin DOĞRUDAN çocuğu olarak
+     render edilir (bkz ProgramOlusturucu PrintPreview). Bu yüzden basit ve güvenilir:
+     body'nin #print-preview DIŞINDAKİ tüm doğrudan çocuklarını gizle. Derin DOM'da
+     :has()/visibility desenleri boş renkli sayfa + sidebar sızması üretiyordu. */
+  body:has(> #print-preview) > *:not(#print-preview) {
+    display: none !important;
   }
 
-  /* Görünür kılınan önizlemeyi sol-üste sabitle ve tüm sayfaya yay. */
+  /* Önizlemeyi normal akışa al ve tüm sayfaya yay (fixed/overflow yazdırmayı bozar). */
   #print-preview {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    position: static !important;
     overflow: visible !important;
     display: block !important;
     width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
     padding: 0 !important;
     margin: 0 !important;
     background: white !important;
     box-shadow: none !important;
   }
 
-  /* Önizleme içindeki no-print (üst bar: PDF/Yazdır + Kapat) yine gizli kalsın. */
+  /* Her sayfa bloğunun min-height:100vh'ı print'te boş alan üretir — kaldır. */
+  #print-preview .print-page {
+    min-height: 0 !important;
+  }
+
+  /* Önizleme içindeki no-print (üst bar: PDF/Yazdır + Kapat) gizli kalsın. */
   #print-preview .no-print {
     display: none !important;
   }
