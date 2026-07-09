@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, canManage } from '@/lib/auth';
+import { withAuth, canManage } from '@/lib/auth';
 import { getAllConfigs, patchConfigs, CONFIG_KEYS } from '@/lib/config';
 import { parseBody, z } from '@/lib/validate';
 import { logAudit, actorFrom } from '@/lib/audit';
@@ -26,21 +26,13 @@ const PatchSchema = z.object({
 });
 
 // Okuma: müdür + muhasebeci (gider kategorileri) + rehber (programPlan).
-export async function GET() {
-  const session = await getSession();
-  const allowed = ['director', 'accountant', 'counselor'];
-  if (!session || !allowed.includes(session.role)) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
+export const GET = withAuth(['director', 'accountant', 'counselor'], async () => {
   const config = await getAllConfigs();
   return NextResponse.json(config);
-}
+});
 
-export async function PATCH(req) {
-  const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
+// Yazma: müdür + rehber (rehber yalnız programPlan, aşağıda kısıtlanır).
+export const PATCH = withAuth(['director', 'counselor'], async (req, ctx, session) => {
   const parsed = await parseBody(req, PatchSchema);
   if (!parsed.ok) return parsed.response;
 
@@ -58,4 +50,4 @@ export async function PATCH(req) {
     detail: `Konfigürasyon güncellendi: ${keys.join(', ')}`,
   });
   return NextResponse.json(config);
-}
+});

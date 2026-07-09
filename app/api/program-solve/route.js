@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, canManage } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 
 // CP-SAT Python çözücüsüne (api/solve.py → /solve) auth'lu proxy.
 // Auth tek kaynakta (lib/auth.js) kalsın diye Python JWT görmez; burada director
@@ -14,12 +14,7 @@ function solverUrl() {
   return `${base}/solve`;
 }
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth('manage', async (req) => {
   const secret = process.env.SOLVER_SHARED_SECRET;
   if (!secret) {
     return NextResponse.json({ error: 'Çözücü yapılandırılmamış (SOLVER_SHARED_SECRET eksik)' }, { status: 500 });
@@ -43,4 +38,4 @@ export async function POST(req) {
   } catch (e) {
     return NextResponse.json({ error: `Çözücüye ulaşılamadı: ${e.message}` }, { status: 502 });
   }
-}
+});

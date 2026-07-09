@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, isManager, canManage } from '@/lib/auth';
+import { withAuth, isManager, canManage } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
@@ -115,10 +115,7 @@ function missingRequired(questions, answers) {
 }
 
 // ───────────────────────────────────────── GET ─────────────────────────────────────────
-export async function GET(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+export const GET = withAuth(async (req, ctx, session) => {
   const detailId = new URL(req.url).searchParams.get('id');
 
   // ── Yönetici: sonuç detayı ──
@@ -190,13 +187,10 @@ export async function GET(req) {
   }));
   list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   return NextResponse.json({ formlar: list });
-}
+});
 
 // ───────────────────────────────────────── POST ─────────────────────────────────────────
-export async function POST(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+export const POST = withAuth(async (req, ctx, session) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -269,13 +263,10 @@ export async function POST(req) {
   }
 
   return NextResponse.json({ error: 'Geçersiz işlem' }, { status: 400 });
-}
+});
 
 // ───────────────────────────────────────── DELETE ─────────────────────────────────────────
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const DELETE = withAuth('manage', async (req, ctx, session) => {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
@@ -289,4 +280,4 @@ export async function DELETE(req) {
     detail: `Form/anket silindi: "${f.data?.title || ''}"`,
   });
   return NextResponse.json({ ok: true });
-}
+});

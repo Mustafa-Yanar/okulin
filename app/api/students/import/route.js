@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import * as XLSX from 'xlsx';
-import { getSession, initialPassword, canManage } from '@/lib/auth';
+import { withAuth, initialPassword } from '@/lib/auth';
 import { getClasses } from '@/lib/classes';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { tdb } from '@/lib/sqldb';
@@ -19,12 +19,7 @@ function formatName(raw) {
   return [...firstNames, surname].join(' ');
 }
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth('manage', async (req) => {
   const form = await req.formData();
   const file = form.get('file');
   if (!file) return NextResponse.json({ error: 'Dosya bulunamadı' }, { status: 400 });
@@ -107,4 +102,4 @@ export async function POST(req) {
   }
 
   return NextResponse.json(results);
-}
+});

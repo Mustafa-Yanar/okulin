@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { del } from '@vercel/blob';
-import { getSession, canManage } from '@/lib/auth';
+import { withAuth, canManage } from '@/lib/auth';
+
+// Kaynak yazma yetkisi: öğretmen her zaman (kendi kaynağı), müdür/rehber canManage'e tabi.
+const canWriteResource = async (s) => s.role === 'teacher' || (await canManage(s));
 import { parseBody, z } from '@/lib/validate';
 import { tdb } from '@/lib/sqldb';
 
@@ -19,10 +22,7 @@ const CreateSchema = z.object({
 });
 
 // GET /api/resources — role'e göre filtreli kaynak listesi
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Yetkisiz' }, { status: 401 });
-
+export const GET = withAuth(async (req, ctx, session) => {
   const rows = await tdb().resource.findMany();
   let resources = rows.map(r => r.data);
   if (session.role === 'student') {
@@ -32,16 +32,10 @@ export async function GET() {
   }
   resources.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   return NextResponse.json({ resources });
-}
+});
 
 // POST /api/resources — kaynak ekle (director/teacher; rehber yalnız salt-okunur DEĞİLse)
-export async function POST(req) {
-  const session = await getSession();
-  // teacher her zaman ekler; director/rehber canManage'e tabi (salt-okunur rehber giremez).
-  if (!session || !(session.role === 'teacher' || await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth(canWriteResource, async (req, ctx, session) => {
   const parsed = await parseBody(req, CreateSchema);
   if (!parsed.ok) return parsed.response;
   const { title, type, url, branch, topic, classes } = parsed.data;
@@ -62,16 +56,10 @@ export async function POST(req) {
   };
   await tdb().resource.create({ data: { legacyId: id, title, url, data: rec } });
   return NextResponse.json({ ok: true, resource: rec });
-}
+});
 
 // DELETE /api/resources?id=xxx — kaynak sil (director hepsini, teacher kendininkini)
-export async function DELETE(req) {
-  const session = await getSession();
-  // teacher her zaman (kendininkini) siler; director/rehber canManage'e tabi.
-  if (!session || !(session.role === 'teacher' || await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const DELETE = withAuth(canWriteResource, async (req, ctx, session) => {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
@@ -84,4 +72,4 @@ export async function DELETE(req) {
   if (rec.type === 'pdf' && rec.url) { try { await del(rec.url); } catch { /* yoksay */ } }
   await tdb().resource.delete({ where: { id: existing.id } });
   return NextResponse.json({ ok: true });
-}
+});

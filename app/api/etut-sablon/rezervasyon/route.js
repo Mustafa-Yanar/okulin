@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, canManage } from '@/lib/auth';
+import { withAuth, canManage } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
 import { getAllTeachers, getAllStudents, slotStartTime, getProgramTemplate, setProgramTemplate } from '@/lib/slots';
 import {
@@ -53,10 +53,7 @@ async function studentBookedEtuts(studentId, weekKey) {
 }
 
 // POST — rezerve et
-export async function POST(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+export const POST = withAuth(async (req, ctx, session) => {
   const parsed = await parseBody(req, PostSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, etutId, branch, weekKey: wk, studentId } = parsed.data;
@@ -169,13 +166,10 @@ export async function POST(req) {
   await setProgramTemplate(teacherId, template); // SQL-aware
 
   return NextResponse.json({ ok: true, etut: sb });
-}
+});
 
 // DELETE — rezervasyonu iptal et
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+export const DELETE = withAuth(async (req, ctx, session) => {
   const parsed = await parseBody(req, DeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, etutId } = parsed.data;
@@ -213,4 +207,4 @@ export async function DELETE(req) {
   await setProgramTemplate(teacherId, template); // SQL-aware
 
   return NextResponse.json({ ok: true });
-}
+});

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, canManage } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { slotsForDay, MEZUN_ONLY_LESSON_SLOTS, STUDENT_GROUPS } from '@/lib/constants';
 import { getWeekKey, isEditableWeek, initWeekForTeacher, slotStartTime, getSlotTimes, getProgramTemplate, setProgramTemplate, deleteProgramTemplate } from '@/lib/slots';
 import { parseBody, z, zId } from '@/lib/validate';
@@ -16,10 +16,7 @@ const ProgramDeleteSchema = z.object({ teacherId: zId });
 // Geçici (fixed: false) ders/etüt'ler burada yaşar, sadece o haftaya özel.
 
 // GET /api/program?teacherId=...&week=...
-export async function GET(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+export const GET = withAuth(async (req) => {
   const { searchParams } = new URL(req.url);
   const legacyTeacherId = searchParams.get('teacherId');
   const weekKey = searchParams.get('week') || getWeekKey();
@@ -64,15 +61,10 @@ export async function GET(req) {
   }
 
   return NextResponse.json({ weekKey, program: effective });
-}
+});
 
 // POST /api/program
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, ProgramPostSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId: legacyTeacherId, weekKey, program } = parsed.data;
@@ -210,19 +202,14 @@ export async function POST(req) {
   }
 
   return NextResponse.json({ ok: true });
-}
+});
 
 // DELETE /api/program — bir öğretmenin şablon programını tamamen siler
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const DELETE = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, ProgramDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId: legacyTeacherId } = parsed.data;
 
   await deleteProgramTemplate(legacyTeacherId); // SQL-aware (grid'i siler, etutSablonlari'nı da temizler)
   return NextResponse.json({ ok: true });
-}
+});
