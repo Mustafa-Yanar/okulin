@@ -759,20 +759,24 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
     print-color-adjust: exact !important;
   }
 
-  header {
-    display: none !important;
+  /* Yazdırma önizlemesi (#print-preview) açıkken SADECE onu bas.
+     :has() zincirine güvenmek yerine (DOM derinliği kırıyordu — sidebar/panel
+     yazdırmaya sızıyordu) visibility deseni: body altındaki her şeyi gizle,
+     sonra yalnız #print-preview ağacını görünür yap. Bu, önizlemenin ağaçta
+     kaç sarmalayıcı içinde olduğundan BAĞIMSIZ çalışır. */
+  body:has(#print-preview) * {
+    visibility: hidden !important;
+  }
+  #print-preview,
+  #print-preview * {
+    visibility: visible !important;
   }
 
-  body:has(#print-preview) > *:not(:has(#print-preview)) {
-    display: none !important;
-  }
-
-  main:has(#print-preview) > *:not(:has(#print-preview)) {
-    display: none !important;
-  }
-
+  /* Görünür kılınan önizlemeyi sol-üste sabitle ve tüm sayfaya yay. */
   #print-preview {
-    position: static !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
     overflow: visible !important;
     display: block !important;
     width: 100% !important;
@@ -780,6 +784,11 @@ html.dark option { background: var(--bg-surface); color: var(--text-primary); }
     margin: 0 !important;
     background: white !important;
     box-shadow: none !important;
+  }
+
+  /* Önizleme içindeki no-print (üst bar: PDF/Yazdır + Kapat) yine gizli kalsın. */
+  #print-preview .no-print {
+    display: none !important;
   }
 }
 
