@@ -402,6 +402,39 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
     }
   }
 
+  // 3d: ön eşleştirme (preset) FİZİBİLİTE — tek imkansız preset TÜM programı çökertir
+  // (solver'da model.Add(y==1) HARD kısıt; sağlanamazsa INFEASIBLE → 0 yerleşti).
+  // Burada her preset için: o öğretmen, o sınıf-dersin EN AZ BİR parçasını kendi
+  // uygun (available) slotlarına + sınıf penceresine yerleştirebiliyor mu? Yoksa hata.
+  if (teacherSlots) {
+    for (const t of teachers) {
+      for (const pr of (t.presets || [])) {
+        const cls = pr.cls, course = pr.course;
+        // Ders gerçekten bu sınıfın yükünde mi? (değilse solver zaten atlar, sessiz)
+        const key = colKeyOf(cls), grp = groupOf(cls);
+        if (!key) continue;
+        const pat = resolvePieces(load, grouping, key, course);
+        if (!pat.length) continue; // bu sınıf-derse saat girilmemiş → preset etkisiz
+        // Öğretmen bu derse branş+grup olarak uygun mu?
+        if (!(teacherTeaches(t, course) && teacherGroups(t).includes(grp))) {
+          errors.push(`Ön eşleştirme — ${t.name} → ${labelOf(cls)} ${course}: öğretmen bu derse uygun değil (branş/grup uyuşmuyor) → program oluşturulamaz`);
+          continue;
+        }
+        const win = windowsOf(cls);
+        if (!Object.keys(win).length) {
+          errors.push(`Ön eşleştirme — ${t.name} → ${labelOf(cls)} ${course}: sınıfın program penceresi işaretlenmemiş → preset yerleştirilemez, program oluşturulamaz`);
+          continue;
+        }
+        // En uzun parçayı bu öğretmen tek başına bir güne yerleştirebiliyor mu?
+        const longest = Math.max(...pat);
+        const days = pieceFeasibleDays(win, longest, [t], teacherSlots);
+        if (!days.length) {
+          errors.push(`Ön eşleştirme — ${t.name} → ${labelOf(cls)} ${course}: bu öğretmenin uygun günü/saati sınıf penceresine sığmıyor (${longest} saatlik ardışık blok yok) → preset yerleştirilemez, program oluşturulamaz. Preseti kaldırın veya öğretmen uygunluğunu genişletin.`);
+        }
+      }
+    }
+  }
+
   // 4. İzin günü olan öğretmenler
   const offTeachers = teachers.filter(t => (t.offDays||[]).length > 0);
   if (offTeachers.length > 0) {

@@ -35,7 +35,12 @@ from ortools.sat.python import cp_model
 
 from solver.domain import eligible_teachers
 
-# Objective ağırlıkları: önce her şeyi yerleştir (saat ağırlıklı), sonra aşımı kıs, sonra dengele
+# Objective ağırlıkları: önce preset'lere uy, sonra her şeyi yerleştir (saat ağırlıklı),
+# sonra aşımı kıs, sonra dengele.
+# W_PRESET > W_UNPLACED: preset kullanıcının AÇIK isteği — mümkünse mutlaka uygulanır.
+# Ama SOFT (hard değil): imkansız bir preset artık tüm modeli INFEASIBLE yapıp "0 yerleşti"
+# ile programı çökertmez; yalnız o preset gevşetilir (ceza ödenir) + presetWarnings'e düşer.
+W_PRESET = 10000000
 W_UNPLACED = 100000
 W_OVER = 100
 W_BALANCE = 1
@@ -215,7 +220,15 @@ def solve(payload):
             # öğretmen seçilmediyse (sum_y=0) bu cc'nin hiçbir parçası yerleşemez
             model.Add(placed[u] <= sum_y)
 
-    # ── Özellik 2: ön eşleştirme kilitleri (HARD) ──
+    # ── Özellik 2: ön eşleştirme kilitleri (SOFT — yüksek öncelikli) ──
+    # Eskiden model.Add(y[cc][tid]==1) HARD idi: imkansız TEK bir preset (öğretmenin
+    # uygun günü sınıf penceresine sığmıyor vb.) tüm modeli INFEASIBLE yapıp "0 yerleşti"
+    # ile programı çökertiyordu. Artık her preset için bir "kaçırma" (miss) değişkeni:
+    #   y[cc][tid] + miss >= 1  → ya öğretmen atanır (miss=0) ya preset gevşer (miss=1).
+    # Objective miss'i W_PRESET (> W_UNPLACED) ile cezalar → solver mümkünse mutlaka uyar,
+    # imkansızsa yalnız o preset'i bırakır, program çökmez. Gevşeyen preset raporlanır.
+    preset_miss = []          # objective için (BoolVar listesi)
+    preset_miss_info = []      # (miss_var, "insan-okur etiket") — sonradan uyarı üretir
     for pr in presets:
         cc = (pr.get('cls'), pr.get('course'))
         tid = pr.get('teacherId')
@@ -225,7 +238,10 @@ def solve(payload):
         if tid not in y[cc]:
             preset_warnings.append('%s %s: seçilen öğretmen bu derse uygun değil (atlandı)' % (cc[0], cc[1]))
             continue
-        model.Add(y[cc][tid] == 1)
+        miss = model.NewBoolVar('preset_miss_%s_%s_%s' % (cc[0], cc[1], tid))
+        model.Add(y[cc][tid] + miss >= 1)
+        preset_miss.append(miss)
+        preset_miss_info.append((miss, cc, tid))
 
     # ── HARD: K3 — aynı sınıf+ders aynı günde en fazla 1 parça ──
     for cc, idxs in units_of_cc.items():
@@ -344,7 +360,8 @@ def solve(payload):
     for u, (_cls, _course, length) in enumerate(units):
         unplaced_terms.append(length * (1 - placed[u]))
     model.Minimize(
-        W_UNPLACED * sum(unplaced_terms)
+        W_PRESET * sum(preset_miss)
+        + W_UNPLACED * sum(unplaced_terms)
         + W_OVER * sum(over_vars.values())
         + W_BALANCE * peak
     )
@@ -364,6 +381,16 @@ def solve(payload):
                 'tLoad': {t['id']: 0 for t in teachers},
                 'presetWarnings': preset_warnings,
                 'ms': int((time.time() - t0) * 1000)}
+
+    # ── Gevşeyen (uygulanamayan) preset'leri raporla ──
+    # miss=1 → solver o preset'i sağlayamadı (imkansızdı) ama HARD olmadığı için
+    # program çökmedi; kullanıcıya hangi presetin atlandığını bildir.
+    for miss, cc, tid in preset_miss_info:
+        if solver.Value(miss) == 1:
+            tname = teacher_by_id[tid]['name'] if tid in teacher_by_id else tid
+            preset_warnings.append(
+                '%s → %s %s: uygun gün/saat bulunamadığından ön eşleştirme uygulanamadı'
+                % (tname, cc[0], cc[1]))
 
     # ── Çözümü oku ──
     # (cls,course) -> seçilen öğretmen
