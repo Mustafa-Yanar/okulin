@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { getSession, initialPassword, canManage } from '@/lib/auth';
+import { withAuth, initialPassword } from '@/lib/auth';
 import { getClass } from '@/lib/classes';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
@@ -60,20 +60,12 @@ const StudentDeleteSchema = z.object({
   ids: z.array(zId).max(2000).optional(),
 }).refine(d => d.id || (d.ids && d.ids.length), { message: 'id veya ids gerekli' });
 
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+export const GET = withAuth(async () => {
   const rows = await tdb().student.findMany({ include: { class: true } });
   return NextResponse.json(rows.map(studentOut));
-}
+});
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, StudentCreateSchema);
   if (!parsed.ok) return parsed.response;
   const { name, password, cls, phone, parentPhone, parentName, birthDate, diplomaNotu,
@@ -131,14 +123,9 @@ export async function POST(req) {
     birthDate: birthDate || '', diplomaNotu: (diploma === '' ? null : diploma), mustChangePassword: true,
   } });
   return NextResponse.json({ id: legacyId, name, username, cls, group });
-}
+});
 
-export async function PUT(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const PUT = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, StudentUpdateSchema);
   if (!parsed.ok) return parsed.response;
   const { id, name, password, cls, phone, parentPhone, parentName, birthDate, diplomaNotu,
@@ -177,14 +164,9 @@ export async function PUT(req) {
   if (password) data.passwordHash = await bcrypt.hash(password, 10);
   await tdb().student.update({ where: { id: s.id }, data });
   return NextResponse.json({ ok: true });
-}
+});
 
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!session || !(await canManage(session))) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const DELETE = withAuth('manage', async (req, ctx, session) => {
   const parsed = await parseBody(req, StudentDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { id, ids } = parsed.data;
@@ -198,4 +180,4 @@ export async function DELETE(req) {
   if (s) await tdb().student.delete({ where: { id: s.id } });
   await logAudit({ ...actorFrom(session), action: 'student.delete', target: { type: 'student', id, name: s?.name || id }, detail: `Öğrenci silindi: ${s?.name || id}${s?.class?.legacyId ? ` (${s.class.legacyId})` : ''}` });
   return NextResponse.json({ ok: true });
-}
+});
