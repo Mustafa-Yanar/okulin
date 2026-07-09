@@ -197,21 +197,26 @@ function groupSlotUnion(grp, classes, windowsOf, groupOf) {
 }
 
 // Öğretmenin bir grupta çalışabileceği toplam SAAT kapasitesi (izin günleri hariç).
-function teacherHourCap(t, grp, classes, windowsOf, groupOf) {
+// teacherSlots verilmişse (gerçek available işaretleri) kapasite onunla kesiştirilir —
+// verilmemişse (henüz yüklenmedi) sınıf pencerelerinin üst sınırına geri düşülür.
+function teacherHourCap(t, grp, classes, windowsOf, groupOf, teacherSlots) {
   const offDays = new Set(t.offDays || []);
+  const availSet = teacherSlots ? new Set((teacherSlots[t.id] || []).map(([d, idx]) => `${d}:${idx}`)) : null;
   let cap = 0;
   for (const key of groupSlotUnion(grp, classes, windowsOf, groupOf)) {
     const d = parseInt(key.split(':')[0]);
-    if (!offDays.has(d)) cap++;
+    if (offDays.has(d)) continue;
+    if (availSet && !availSet.has(key)) continue;
+    cap++;
   }
   return cap;
 }
 
 // Ön analiz: oluşturmadan önce kapasite/çakışma sorunlarını hesapla. teacherSlots
-// varsa (Oluştur ile aynı kaynak — /api/program available işaretleri) günlük "kanal"
-// kısıtı da kontrol edilir: bir günde aynı derse ihtiyacı olan sınıf sayısı, o gün o
-// dersi verebilecek uygun öğretmen sayısını aşarsa SAAT toplamı yeterli olsa bile
-// bazı sınıflar açıkta kalır (pigeonhole) — saat bazlı #3 kontrolü bunu yakalayamaz.
+// varsa (Oluştur ile aynı kaynak — /api/program available işaretleri) SAAT bazlı
+// kapasite kontrolü (#3) öğretmenin gerçekte uygun olduğu slotlarla sınırlandırılır.
+// NOT: hangi sınıfın hangi güne denk geleceğini TAHMİN etmiyoruz — bu solver'ın kendi
+// optimizasyonu; bu yüzden gün-bazlı bir "kanal" kontrolü YOK, yalnız toplam saat kapasitesi.
 function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf, teacherSlots }) {
   const errors = [], warnings = [], infos = [];
 
@@ -278,52 +283,13 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
       teacherTeaches(tt, branch) && teacherGroups(tt).includes(grp)
     );
     if (eligible.length === 0) continue; // zaten hata var yukarıda
-    const totalCap = eligible.reduce((s, t) => s + teacherHourCap(t, grp, classes, windowsOf, groupOf), 0);
+    const totalCap = eligible.reduce((s, t) => s + teacherHourCap(t, grp, classes, windowsOf, groupOf, teacherSlots), 0);
     if (demand > totalCap) {
       const grpLabel = grp === 'mezun' ? 'Mezun' : grp === 'lise' ? 'Lise' : 'Ortaokul';
       errors.push(`${branch} (${grpLabel}): ${demand} saat talep, ${totalCap} saat kapasite — ${demand - totalCap} saat sığmaz`);
     } else if (demand > totalCap * 0.85) {
       const grpLabel = grp === 'mezun' ? 'Mezun' : grp === 'lise' ? 'Lise' : 'Ortaokul';
       warnings.push(`${branch} (${grpLabel}): kapasite %${Math.round(demand/totalCap*100)} dolu — yerleştirme zorlaşabilir`);
-    }
-  }
-
-  // 3b. Günlük kanal kısıtı: aynı gün aynı derse ihtiyacı olan sınıf sayısı, o gün o
-  // dersi verebilecek (uygun+available+izinsiz) öğretmen sayısını aşarsa, saat toplamı
-  // yeterli görünse bile bazı sınıflar açıkta kalır (K3: aynı gün aynı derse 1 grup →
-  // her sınıf kendi parçası için ayrı bir öğretmen-gün ister). teacherSlots yoksa atlanır.
-  if (teacherSlots) {
-    const need = {}; // "course|grp|day" → [labelOf(cls), ...]
-    for (const cls of classes) {
-      const key = colKeyOf(cls), grp = groupOf(cls);
-      const win = windowsOf(cls);
-      for (const course of coursesForCol(key)) {
-        const pat = resolvePieces(load, grouping, key, course);
-        if (!pat.length) continue;
-        // K3: en uzun parça en geniş güne — #1'deki eşlemeyle aynı sırayla günleri belirle.
-        const days = Object.entries(win)
-          .map(([d, slots]) => [parseInt(d), slots])
-          .sort((a, b) => b[1].length - a[1].length)
-          .slice(0, pat.length)
-          .map(([d]) => d);
-        for (const d of days) {
-          const k = `${course}|${grp}|${d}`;
-          (need[k] = need[k] || []).push(labelOf(cls));
-        }
-      }
-    }
-    for (const [k, clsLabels] of Object.entries(need)) {
-      const [course, grp, dayStr] = k.split('|');
-      const day = parseInt(dayStr);
-      const availableCount = teachers.filter(tt => {
-        if (!teacherTeaches(tt, course) || !teacherGroups(tt).includes(grp)) return false;
-        if ((tt.offDays || []).includes(day)) return false;
-        return (teacherSlots[tt.id] || []).some(([d]) => d === day);
-      }).length;
-      if (clsLabels.length > availableCount) {
-        const grpLabel = grp === 'mezun' ? 'Mezun' : grp === 'lise' ? 'Lise' : 'Ortaokul';
-        errors.push(`${course} (${grpLabel}, ${DAYS[day]}): ${clsLabels.join(', ')} aynı gün istiyor ama o gün yalnız ${availableCount} uygun öğretmen var — en az ${clsLabels.length - availableCount} sınıf açıkta kalır`);
-      }
     }
   }
 
