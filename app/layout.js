@@ -1,18 +1,21 @@
 import './globals.css';
 import { cache } from 'react';
 import { headers } from 'next/headers';
-import redis from '@/lib/redis';
-import { DEFAULT_ORG, isApexHost, PLATFORM_BRANDING } from '@/lib/org';
+import { resolveOrg, isApexHost, PLATFORM_BRANDING } from '@/lib/org';
 import { normalizeBranding } from '@/lib/branding';
+import { tdb } from '@/lib/sqldb';
 import Providers from './_components/Providers';
 
 // İstek başına bir kez okunur (React cache dedupe) — metadata + viewport aynı çağrıyı paylaşır.
+// NOT: middleware yalnız /api/:path* eşleşir → sayfa isteklerinde x-org header'ı YOK.
+// Bu yüzden host'tan doğrudan resolveOrg() ile kurum çözülür (middleware'e bağımlı değil).
 const getBranding = cache(async () => {
   try {
+    const host = headers().get('host');
     // Apex (okulin.com) → platform markası (kurum değil → tanıtım sayfası).
-    if (isApexHost(headers().get('host'))) return PLATFORM_BRANDING;
-    const org = headers().get('x-org') || DEFAULT_ORG;
-    const rec = await redis.get(`org:${org}`);
+    if (isApexHost(host)) return PLATFORM_BRANDING;
+    const org = resolveOrg(host);
+    const rec = await tdb().org.findFirst({ where: { slug: org } });
     return normalizeBranding(rec);
   } catch {
     return normalizeBranding(null);

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
 import {
-  getClasses, defaultCoursesFor, seedClassesFromConstants,
+  getClasses, defaultCoursesFor,
 } from '@/lib/classes';
 import { getCourses } from '@/lib/courses';
 import { tdb } from '@/lib/sqldb';
@@ -43,12 +43,11 @@ export const POST = withAuth('manage', async (req) => {
   if (!parsed.ok) return parsed.response;
   const { ad, kademe, duzey, dal, dersler } = parsed.data;
 
-  await seedClassesFromConstants(); // Class boşsa constants'ı materialize et (yeni kurumda 34 şube kaybolmasın)
   const row = await tdb().class.create({ data: {
     legacyId: newClassId(), ad: ad.trim(), kademe, duzey: duzey || null, dal: dal || null,
     group: groupForKademe(kademe),
     dersler: (dersler && dersler.length) ? dersler : defaultCoursesFor(kademe, duzey, dal),
-    seeded: true,
+    seeded: false,
   } });
   return NextResponse.json({ ok: true, class: classOut(row) });
 });
