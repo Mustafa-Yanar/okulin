@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Sparkles, AlertTriangle, Check, Download, Eye, Save, ShieldCheck } from 'lucide-react';
+import { Sparkles, AlertTriangle, Check, Download, Eye, Save, ShieldCheck, Pencil } from 'lucide-react';
 import {
   classToGroup, slotId as makeSlotId, slotNoOf,
 } from '@/lib/constants';
@@ -167,6 +167,28 @@ function slotIdFor(day, slotIdx) {
 function slotLabel(day, slotIdx) {
   return slotIdx == null ? '' : `${slotIdx + 1}. ders`;
 }
+// Kesin Kontrol "sistem önerisi": nicel bir "en ucuz" iddiası DEĞİL. Maliyetin gerçek
+// kurları (saat ücreti mi maaş mı, öğretmenin başka kurumda işi var mı) sistemce
+// bilinemez — o yüzden kategoriler eşdeğer sunulur, burada yalnızca "en küçük ve en
+// güvenli değişiklik" varsayılan olarak işaretlenir: mevcut günü uzatmak monotondur
+// (hiçbir mevcut düzeni bozmaz), takas gün düzenini değiştirir, yeni gün en büyüğüdür.
+function feasSuggestion(fr) {
+  if (fr.cheapest) return {
+    text: `${fr.cheapest.name} — ${DAYS[fr.cheapest.day]} günü ${fr.cheapest.slots.join('. ve ')}. ders saatini müsait işaretleyin`,
+    why: 'öğretmen o gün zaten geliyor; en küçük değişiklik, mevcut hiçbir düzeni bozmaz',
+  };
+  if (fr.swapFix?.length) return {
+    text: `${fr.swapFix[0].name} — ${DAYS[fr.swapFix[0].fromDay]} yerine ${DAYS[fr.swapFix[0].toDay]} gelsin`,
+    why: 'ek ders saati gerektirmez; ancak öğretmenin gün düzenini değiştirir',
+  };
+  if (fr.costlyFix?.length) return {
+    text: `${fr.costlyFix[0].name} — ${DAYS[fr.costlyFix[0].day]} ${fr.costlyFix[0].slots.join('. ve ')}. ders`,
+    why: 'bulunan tek çözüm sınıfı yeni gün açmak',
+  };
+  return null;
+}
+// Manuel düzenlemede blok üyeliği: sınıf aynı slotta tek ders işler (K5) → benzersiz.
+const entryKeyOf = a => `${a.day}|${a.slot}|${a.cls}`;
 function shortCourse(c) {
   return ({'TYT Matematik':'TYT Mat','AYT Matematik':'AYT Mat','Geometri':'Geo','Matematik':'Mat','Fen Bilgisi':'Fen','Sosyal Bilgiler':'Sos','İnkılap Tarihi':'İnk','İngilizce':'İng'})[c] || c.slice(0,5);
 }
@@ -479,6 +501,9 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
   const [presetTeacherId, setPresetTeacherId] = useState(''); // ön eşleştirme paneli (madde 11)
   const [feasChecking, setFeasChecking] = useState(false);   // Kesin Kontrol çalışıyor
   const [feasResult, setFeasResult] = useState(null);        // {feasible, suggestions:[...]}
+  // Oluştur anındaki öğretmen müsaitlikleri — manuel blok taşıma denetimi bunu kullanır
+  // (solver'ın gördüğü kaynakla aynı; taşıma kuralları solver kurallarının kopyası).
+  const [lastTeacherSlots, setLastTeacherSlots] = useState(null);
 
   const classMeta = useMemo(
     () => new Map((registryClasses || []).map(c => [c.id, c])),
@@ -626,6 +651,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
     try {
       // KATI mod: her öğretmenin işaretlediği (gün, slotIndex) çiftleri — ön analizle aynı kaynak.
       const teacherSlots = await fetchTeacherSlots(teachers, api);
+      setLastTeacherSlots(teacherSlots);
       const payload = buildPayload(teacherSlots);
       const data = await api('/api/program-solve', { method: 'POST', body: JSON.stringify(payload) });
 
@@ -1026,65 +1052,79 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
               </p>
             ) : (
               <>
-                {feasResult.swapFix?.length > 0 && (
-                  <>
-                    <p className="text-xs mb-1 mt-1.5" style={{color:'#166534'}}>
-                      <b>Saat eklemeden çözümler (gün değişikliği)</b> — öğretmenin toplam yükü
-                      değişmez, sadece hangi gün geldiği değişir:
+                {/* NİTEL sunum: kategoriler EŞDEĞER çözüm sınıfları — hangisinin gerçekte
+                    "ucuz" olduğunu (saat ücreti mi maaş mı, öğretmenin başka kurumdaki işi)
+                    sistem bilemez, kurum bilir. Sıralama dayatılmaz; sistem yalnızca
+                    gerekçeli bir öneri işaretler, karar kullanıcıda. */}
+                <p className="text-xs text-gray-600 mt-1.5">
+                  Aşağıdaki her seçenek <b>tek başına</b> çözer — hepsini birden yapmanız gerekmez.
+                  Hangisinin kurumunuz için daha uygun olduğunu siz değerlendirin; ücretlendirme
+                  biçimi ve öğretmenlerin kurum dışı taahhütleri sistemin bilemeyeceği etkenlerdir.
+                </p>
+
+                {(() => { const sg = feasSuggestion(feasResult); return sg ? (
+                  <div className="text-xs mt-1.5 p-2 rounded-lg" style={{background:'#eef2ff', border:'1px solid #c7d2fe'}}>
+                    <span style={{color:'#4338ca', fontWeight:700}}>Sistem önerisi:</span>{' '}
+                    <b style={{color:'#3730a3'}}>{sg.text}</b>
+                    <span className="text-gray-500"> — {sg.why}. Bu yalnızca bir öneridir; aşağıdaki diğer seçenekler de programı çözer.</span>
+                  </div>
+                ) : null; })()}
+
+                {feasResult.cheapFix.length > 0 && (
+                  <div className="text-xs mt-1.5 p-2 rounded-lg border border-gray-200" style={{background:'#fff'}}>
+                    <div style={{fontWeight:700, color:'#374151'}}>Mevcut günü uzatma</div>
+                    <p className="text-gray-500 mt-0.5">
+                      Öğretmen o gün zaten geliyor; yalnızca erken gelir veya geç çıkar. Mevcut hiçbir
+                      düzeni bozmaz; ders saati başına ücret ödeyen kurumda ek saat maliyetidir.
                     </p>
-                    <ul className="text-xs space-y-1">
+                    <ul className="mt-1 space-y-1">
+                      {feasResult.cheapFix.map((s, i) => (
+                        <li key={i} style={{color:'#374151'}}>
+                          • <b>{s.name}</b> — {DAYS[s.day]} {s.slots.join('. ve ')}. dersi müsait işaretleyin
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {feasResult.swapFix?.length > 0 && (
+                  <div className="text-xs mt-1.5 p-2 rounded-lg border border-gray-200" style={{background:'#fff'}}>
+                    <div style={{fontWeight:700, color:'#374151'}}>Gün değişikliği (takas)</div>
+                    <p className="text-gray-500 mt-0.5">
+                      Ek ders saati gerektirmez — toplam yük aynı kalır. Ancak öğretmenin haftalık
+                      düzeni değişir ve eski gününden kapasite eksilir; öğretmenin o gün başka bir
+                      kurumda işi ya da özel bir engeli varsa uygulanamaz.
+                    </p>
+                    <ul className="mt-1 space-y-1">
                       {feasResult.swapFix.map((s, i) => (
-                        <li key={i} style={{color:'#166534'}}>
+                        <li key={i} style={{color:'#374151'}}>
                           • <b>{s.name}</b> — <b>{DAYS[s.fromDay]}</b> yerine <b>{DAYS[s.toDay]}</b> gelsin
                         </li>
                       ))}
                     </ul>
-                  </>
-                )}
-
-                {feasResult.cheapest && (
-                  <div className="text-xs mt-1.5 mb-1 p-2 rounded-lg" style={{background:'#f0fdf4', border:'1px solid #bbf7d0'}}>
-                    <span style={{color:'#166534', fontWeight:700}}>Düşük maliyetli saat ekleme:</span>{' '}
-                    <b>{feasResult.cheapest.name}</b> — <b>{DAYS[feasResult.cheapest.day]}</b> günü zaten
-                    geliyor; yalnızca <b>{feasResult.cheapest.slots.join('. ve ')}. dersi</b> de müsait
-                    işaretleyin. Yeni gün açmaya gerek yok, sadece o gün erken/geç kalıyor.
                   </div>
                 )}
 
-                {feasResult.cheapFix.length > 0 && (
-                  <>
-                    <p className="text-xs text-gray-600 mb-1 mt-1.5">
-                      <b>Ucuz çözümler</b> — öğretmen o gün <u>zaten geliyor</u>, sadece saat ekleniyor:
+                {feasResult.costlyFix.length > 0 && (
+                  <div className="text-xs mt-1.5 p-2 rounded-lg border border-gray-200" style={{background:'#fff'}}>
+                    <div style={{fontWeight:700, color:'#374151'}}>Yeni gün açma</div>
+                    <p className="text-gray-500 mt-0.5">
+                      Öğretmenin hiç gelmediği bir gün açılır — yol ve tam gün maliyetiyle en büyük
+                      değişikliktir; buna karşılık kapasiteyi kalıcı olarak genişletir.
                     </p>
-                    <ul className="text-xs space-y-1">
-                      {feasResult.cheapFix.map((s, i) => (
+                    <ul className="mt-1 space-y-1">
+                      {feasResult.costlyFix.map((s, i) => (
                         <li key={i} style={{color:'#374151'}}>
                           • <b>{s.name}</b> — {DAYS[s.day]} {s.slots.join('. ve ')}. ders
                         </li>
                       ))}
                     </ul>
-                  </>
-                )}
-
-                {feasResult.costlyFix.length > 0 && (
-                  <>
-                    <p className="text-xs text-gray-500 mb-1 mt-2">
-                      <b>Maliyetli çözümler</b> — öğretmene <u>yeni bir gün</u> açmak gerekir (yol/tam gün):
-                    </p>
-                    <ul className="text-xs space-y-1" style={{color:'#6b7280'}}>
-                      {feasResult.costlyFix.map((s, i) => (
-                        <li key={i}>
-                          • <b>{s.name}</b> — {DAYS[s.day]} {s.slots.join('. ve ')}. ders
-                          <span className="text-gray-400"> (bu gün hiç gelmiyor)</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
+                  </div>
                 )}
 
                 <p className="text-[11px] text-gray-400 mt-1.5">
-                  Her satır <b>tek başına</b> çözer — hepsini birden yapmanız gerekmez. Dersler 2 saatlik
-                  bloklar halinde yerleştiği için tek saat eklemek yetmez, 2 ardışık saat gerekir.
+                  Dersler 2 saatlik bloklar halinde yerleştiği için tek saat eklemek yetmez,
+                  2 ardışık saat gerekir.
                   {feasResult.budgetExhausted && ' (Analiz süre sınırına ulaştı — listelenmeyen başka çözümler de olabilir.)'}
                 </p>
               </>
@@ -1235,6 +1275,13 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
           onCheckConflicts={checkConflicts}
           onPrintTeacher={id => printSchedule('teacher',id)}
           onPrintClass={cls => printSchedule('class',cls)}
+          windowsOf={windowsOf} teacherSlots={lastTeacherSlots}
+          onMove={next => {
+            // Manuel taşıma: sonuç değişti → çakışma onayı bayatladı, Uygula öncesi
+            // yeniden kontrol zorunlu (Uygula akışı zaten checked ister).
+            setResult(r => ({ ...r, assigned: next }));
+            setConflicts(null);
+          }}
         />
       )}
 
@@ -1357,11 +1404,134 @@ function LoadTable({ load, setLoad, grouping, setGrouping, cols, courseMap }) {
 }
 
 // ── Sonuç görünümü ──
-function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, conflictsChecked, onApply, onCheckConflicts, onPrintTeacher, onPrintClass }) {
+function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, conflictsChecked, onApply, onCheckConflicts, onPrintTeacher, onPrintClass, windowsOf, teacherSlots, onMove }) {
   const [viewMode, setViewMode] = useState('class');
   const [viewDay, setViewDay]   = useState('all');
+  const [editMode, setEditMode] = useState(false); // manuel blok taşıma (sınıf görünümünde)
+  const [sel, setSel]           = useState(null);  // seçili blok id
 
-  const usedDays = [...new Set(result.assigned.map(a=>a.day))].sort();
+  // ── Manuel düzenleme: assigned → bloklar (aynı gün+sınıf+ders+öğretmen ardışık koşusu) ──
+  const { blocks, blockOfEntry } = useMemo(() => {
+    const groupsMap = new Map();
+    for (const a of result.assigned) {
+      const k = `${a.day}|${a.cls}|${a.course}|${a.teacherId}`;
+      if (!groupsMap.has(k)) groupsMap.set(k, []);
+      groupsMap.get(k).push(a);
+    }
+    const blocks = [], blockOfEntry = new Map();
+    for (const arr of groupsMap.values()) {
+      arr.sort((x, y) => x.slot - y.slot);
+      let run = [arr[0]];
+      const flush = () => {
+        const b = {
+          id: `${run[0].day}-${run[0].slot}-${run[0].cls}-${run[0].course}`,
+          day: run[0].day, start: run[0].slot, len: run.length,
+          cls: run[0].cls, course: run[0].course, teacherId: run[0].teacherId,
+        };
+        blocks.push(b);
+        run.forEach(a => blockOfEntry.set(entryKeyOf(a), b.id));
+      };
+      for (let i = 1; i < arr.length; i++) {
+        if (arr[i].slot === run[run.length - 1].slot + 1) run.push(arr[i]);
+        else { flush(); run = [arr[i]]; }
+      }
+      flush();
+    }
+    return { blocks, blockOfEntry };
+  }, [result.assigned]);
+
+  // Blok (day,start)'a taşınabilir mi? Solver'ın SERT kurallarının birebir kopyası:
+  // sınıf penceresi + öğretmen available + K3 (aynı sınıf-ders aynı güne tek blok) +
+  // K5 (sınıf çakışması) + K4 (öğretmen çakışması). Hizalama (çift-ofset) solver'ın
+  // paketleme tekniğidir, iş kuralı değildir — manuelde dayatılmaz. ignoreIds:
+  // taşınan/takas edilen blokların mevcut yerleri yok sayılır.
+  const canPlace = useCallback((b, day, start, ignoreIds) => {
+    const win = windowsOf ? windowsOf(b.cls) : null;
+    const winSet = new Set(win?.[day] || []);
+    const av = new Set((teacherSlots?.[b.teacherId] || []).filter(([d]) => d === day).map(([, s]) => s));
+    for (let i = 0; i < b.len; i++) {
+      if (!winSet.has(start + i) || !av.has(start + i)) return false;
+    }
+    const end = start + b.len - 1;
+    for (const a of result.assigned) {
+      if (ignoreIds.has(blockOfEntry.get(entryKeyOf(a)))) continue;
+      if (a.day !== day) continue;
+      if (a.cls === b.cls && a.course === b.course) return false; // K3
+      if (a.slot < start || a.slot > end) continue;
+      if (a.cls === b.cls) return false;                          // K5
+      if (a.teacherId === b.teacherId) return false;              // K4
+    }
+    return true;
+  }, [windowsOf, teacherSlots, result.assigned, blockOfEntry]);
+
+  const selBlock = sel ? blocks.find(b => b.id === sel) : null;
+
+  // Seçili bloğun taşınabileceği boş başlangıçlar ("gün:slot")
+  const validTargets = useMemo(() => {
+    if (!selBlock) return new Set();
+    const out = new Set();
+    const ig = new Set([selBlock.id]);
+    const win = windowsOf ? windowsOf(selBlock.cls) : {};
+    for (const [dStr, slots] of Object.entries(win || {})) {
+      const d = parseInt(dStr);
+      for (const s of slots) {
+        if (d === selBlock.day && s === selBlock.start) continue;
+        if (canPlace(selBlock, d, s, ig)) out.add(`${d}:${s}`);
+      }
+    }
+    return out;
+  }, [selBlock, canPlace, windowsOf]);
+
+  // Takas: aynı sınıfın başka bloğuyla yer değiştirme — iki yön de kurallara uyuyorsa.
+  const swapTargets = useMemo(() => {
+    if (!selBlock) return new Set();
+    const out = new Set();
+    for (const b2 of blocks) {
+      if (b2.id === selBlock.id || b2.cls !== selBlock.cls) continue;
+      const ig = new Set([selBlock.id, b2.id]);
+      if (canPlace(selBlock, b2.day, b2.start, ig) && canPlace(b2, selBlock.day, selBlock.start, ig)) out.add(b2.id);
+    }
+    return out;
+  }, [selBlock, blocks, canPlace]);
+
+  function moveSel(day, start) {
+    if (!selBlock) return;
+    const next = result.assigned.map(a =>
+      blockOfEntry.get(entryKeyOf(a)) !== selBlock.id ? a
+        : { ...a, day, slot: start + (a.slot - selBlock.start) });
+    onMove?.(next);
+    setSel(null);
+  }
+  function swapSel(b2) {
+    if (!selBlock) return;
+    const next = result.assigned.map(a => {
+      const bid = blockOfEntry.get(entryKeyOf(a));
+      if (bid === selBlock.id) return { ...a, day: b2.day, slot: b2.start + (a.slot - selBlock.start) };
+      if (bid === b2.id)       return { ...a, day: selBlock.day, slot: selBlock.start + (a.slot - b2.start) };
+      return a;
+    });
+    onMove?.(next);
+    setSel(null);
+  }
+
+  // Tuval: normalde yalnız dolu slotlar; düzenleme modunda sınıf pencerelerinin
+  // birleşimi de eklenir ki boş hedef hücreler tıklanabilir olsun.
+  const dayCanvas = useMemo(() => {
+    const m = new Map();
+    const add = (d, s) => { if (!m.has(d)) m.set(d, new Set()); m.get(d).add(s); };
+    for (const a of result.assigned) add(a.day, a.slot);
+    if (editMode && windowsOf) {
+      for (const cls of classes) {
+        const win = windowsOf(cls) || {};
+        for (const [dStr, slots] of Object.entries(win)) slots.forEach(s => add(parseInt(dStr), s));
+      }
+    }
+    return m;
+  }, [result.assigned, editMode, windowsOf, classes]);
+  const slotsOfDay = d => [...(dayCanvas.get(d) || [])].sort((a, b) => a - b);
+
+  const canEdit = !!(onMove && windowsOf && teacherSlots);
+  const usedDays = [...dayCanvas.keys()].sort((a,b)=>a-b);
   const days = viewDay==='all' ? usedDays : [parseInt(viewDay)];
   const teacherById={}; teachers.forEach(t=>teacherById[t.id]=t);
   const loadRows = teachers.map(t=>({name:t.name,n:result.tLoad[t.id]||0,branch:(t.branches||[])[0],id:t.id})).sort((a,b)=>b.n-a.n);
@@ -1387,7 +1557,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
           <span className="badge bg-gray-100 text-gray-500" style={{padding:'6px 12px',fontSize:12}}>{result.ms}ms</span>
         </div>
         <div className="flex gap-2 items-center flex-wrap">
-          <select value={viewMode} onChange={e=>setViewMode(e.target.value)} className="input !w-auto !py-1.5 text-xs">
+          <select value={viewMode} onChange={e=>setViewMode(e.target.value)} disabled={editMode} className="input !w-auto !py-1.5 text-xs disabled:opacity-50">
             <option value="class">Sınıf bazlı</option>
             <option value="teacher">Öğretmen bazlı</option>
           </select>
@@ -1395,6 +1565,21 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
             <option value="all">Tüm günler</option>
             {usedDays.map(d=><option key={d} value={d}>{DAYS[d]}</option>)}
           </select>
+          {canEdit && (
+            <button
+              onClick={() => setEditMode(e => {
+                const n = !e;
+                if (n) { setViewMode('class'); setViewDay('all'); }
+                setSel(null);
+                return n;
+              })}
+              className="!px-3 !py-1.5 flex items-center gap-1.5 text-xs rounded-lg border"
+              style={editMode
+                ? {background:'#4f46e5', color:'#fff', borderColor:'#4f46e5', fontWeight:600}
+                : {background:'#fff', color:'#4f46e5', borderColor:'#c7d2fe', fontWeight:600}}>
+              <Pencil size={13}/> {editMode ? 'Düzenleme Açık' : 'Düzenle'}
+            </button>
+          )}
           {conflictsChecked
             ? (
               <button onClick={onApply} disabled={applying||result.unplaced.length>0}
@@ -1411,6 +1596,25 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
           }
         </div>
       </div>
+
+      {/* Düzenleme modu bilgi bandı */}
+      {editMode && (
+        <div className="text-[11px] p-2 rounded-lg" style={{background:'#eef2ff', border:'1px solid #c7d2fe', color:'#4338ca'}}>
+          {selBlock ? (
+            <>
+              Seçili: <b>{selBlock.course}</b> — {labelOf(selBlock.cls)}, {DAYS[selBlock.day]} ({selBlock.len} saat).{' '}
+              <span style={{color:'#166534', fontWeight:600}}>Yeşil hücreler</span> geçerli hedefler
+              {swapTargets.size > 0 && <>, <span style={{color:'#b45309', fontWeight:600}}>turuncu çerçeveli dersler</span> takas edilebilir</>}.
+              {validTargets.size === 0 && swapTargets.size === 0 && <b> Bu blok için kurallara uyan başka konum yok.</b>}
+              {' '}Vazgeçmek için bloğa tekrar tıklayın.
+            </>
+          ) : (
+            <>Taşımak istediğiniz derse tıklayın. Kurallar (öğretmen müsaitliği, sınıf/öğretmen çakışması,
+            aynı dersin günde tek blok olması) otomatik denetlenir — yalnızca geçerli hedefler açılır.
+            Değişiklikler ekranda kalır; öğretmen programlarına işlenmesi için <b>Uygula</b> gerekir.</>
+          )}
+        </div>
+      )}
 
       {/* Yerleşemeyen dersler */}
       {result.unplaced.length>0 && (
@@ -1466,7 +1670,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
                 {viewMode==='class'?'Sınıf':viewMode==='teacher'?'Öğretmen':'Derslik'}
               </th>
               {days.map(d => {
-                const slotsInDay = [...new Set(result.assigned.filter(a=>a.day===d).map(a=>a.slot))].sort((a,b)=>a-b);
+                const slotsInDay = slotsOfDay(d);
                 return (
                   <th key={d} colSpan={slotsInDay.length || 1}
                     style={{minWidth:72,border:'1px solid #eef0f5',borderLeft:'3px solid #c7d2fe',background:'#eef2ff',textAlign:'center',padding:'4px 6px',fontWeight:700,color:'#4338ca',fontSize:11}}>
@@ -1478,11 +1682,10 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
             {/* Ders sırası numaraları */}
             <tr>
               {days.map(d => {
-                const slotsInDay = [...new Set(result.assigned.filter(a=>a.day===d).map(a=>a.slot))].sort((a,b)=>a-b);
-                return slotsInDay.map((s,si) => (
+                return slotsOfDay(d).map((s,si) => (
                   <th key={d+'-'+s} className="p-1 text-gray-400"
                     style={{minWidth:64,border:'1px solid #eef0f5',borderLeft:si===0?'3px solid #c7d2fe':'1px solid #eef0f5',background:'#f5f6fb',fontWeight:500,textAlign:'center'}}>
-                    {si+1}
+                    {s+1}
                   </th>
                 ));
               })}
@@ -1495,14 +1698,42 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
                   {viewMode==='class'?labelOf(rk):viewMode==='room'?`D${rk} (${rk<=5?'1.k':rk<=8?'2.k':'3.k'})`:rk}
                 </td>
                 {days.map(d => {
-                  const slotsInDay = [...new Set(result.assigned.filter(a=>a.day===d).map(a=>a.slot))].sort((a,b)=>a-b);
-                  return slotsInDay.map((s,si) => {
+                  return slotsOfDay(d).map((s,si) => {
                     const a=find(rk,d,s);
                     const leftBorder = si===0 ? '3px solid #c7d2fe' : '1px solid #eef0f5';
-                    if (!a) return <td key={d+'-'+s} style={{minWidth:64,border:'1px solid #eef0f5',borderLeft:leftBorder}}/>;
+                    if (!a) {
+                      // Boş hücre: düzenleme modunda, seçili bloğun SATIRINDA ve kurallara
+                      // uyan başlangıçsa yeşil tıklanabilir hedef olur.
+                      const isTarget = editMode && viewMode==='class' && selBlock
+                        && rk === selBlock.cls && validTargets.has(`${d}:${s}`);
+                      return (
+                        <td key={d+'-'+s}
+                          onClick={isTarget ? () => moveSel(d, s) : undefined}
+                          title={isTarget ? `Buraya taşı (${s+1}. dersten başlar)` : undefined}
+                          style={{minWidth:64,
+                            border: isTarget ? '1px dashed #16a34a' : '1px solid #eef0f5',
+                            borderLeft: isTarget ? '1px dashed #16a34a' : leftBorder,
+                            background: isTarget ? '#dcfce7' : undefined,
+                            cursor: isTarget ? 'pointer' : undefined}}/>
+                      );
+                    }
                     const col=COURSE_COLOR[a.course]||'#6366f1';
+                    const bid = blockOfEntry.get(entryKeyOf(a));
+                    const isSel = editMode && sel === bid;
+                    const isSwap = editMode && selBlock && swapTargets.has(bid);
+                    const clickable = editMode && viewMode==='class';
                     return (
-                      <td key={d+'-'+s} className="p-1 text-center" style={{minWidth:64,border:`1px solid ${col}30`,borderLeft:si===0?`3px solid ${col}60`:undefined,background:`${col}14`,color:col}}>
+                      <td key={d+'-'+s} className="p-1 text-center"
+                        onClick={clickable ? () => {
+                          if (isSwap) swapSel(blocks.find(b => b.id === bid));
+                          else setSel(isSel ? null : bid);
+                        } : undefined}
+                        title={clickable ? (isSwap ? 'Takas et' : isSel ? 'Seçimi bırak' : 'Taşımak için seç') : undefined}
+                        style={{minWidth:64,border:`1px solid ${col}30`,borderLeft:si===0?`3px solid ${col}60`:undefined,
+                          background:`${col}14`,color:col,
+                          cursor: clickable ? 'pointer' : undefined,
+                          outline: isSel ? '2px solid #4f46e5' : isSwap ? '2px dashed #f59e0b' : undefined,
+                          outlineOffset: -2}}>
                         <b>{viewMode==='class'?shortCourse(a.course):labelOf(a.cls)}</b><br/>
                         <span style={{opacity:.6,fontSize:10}}>{viewMode==='class'?a.teacherName.split(' ')[0]:shortCourse(a.course)}</span>
                       </td>
