@@ -7,14 +7,15 @@ import {
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
 import { api } from '../shared';
+import type { LeadDTO, ShowToast } from '../types';
 
 
-const SOURCE_LABEL = {
+const SOURCE_LABEL: Record<string, string> = {
   tavsiye: 'Tavsiye', sosyal: 'Sosyal medya', web: 'Web', afis: 'Afiş/broşür',
   telefon: 'Telefon', ziyaret: 'Ziyaret', diger: 'Diğer',
 };
 const STATUSES = ['yeni', 'arandi', 'gorusme', 'kayit', 'kayip'];
-const STATUS = {
+const STATUS: Record<string, { label: string; badge: string }> = {
   yeni: { label: 'Yeni', badge: 'badge-info' },
   arandi: { label: 'Arandı', badge: 'badge-warning' },
   gorusme: { label: 'Görüşme', badge: 'badge' },
@@ -22,17 +23,28 @@ const STATUS = {
   kayip: { label: 'Kaybedildi', badge: 'badge-danger' },
 };
 
-function fmtDateTime(iso) {
+function fmtDateTime(iso: string | undefined): string {
   if (!iso) return '';
   return new Date(iso).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+// GET /api/onkayit yanıtı.
+interface OnKayitResponse {
+  leadler: LeadDTO[];
+  stats: Record<string, number>;
+}
+
+interface OnKayitManagerProps {
+  showToast?: ShowToast;
+  onCreateStudent?: (lead: LeadDTO) => void;
 }
 
 // ════════════════════ YÖNETİCİ (müdür / rehber / muhasebeci) ════════════════════
 // onCreateStudent(lead): opsiyonel köprü — "kayıt oldu" adayında "Öğrenci kaydı"
 // butonu çıkar; tıklayınca öğrenci formu aday bilgileriyle önceden dolu açılır.
-export function OnKayitManager({ showToast, onCreateStudent }) {
+export function OnKayitManager({ showToast, onCreateStudent }: OnKayitManagerProps) {
   const confirm = useConfirm();
-  const { data, isLoading, mutate } = useSWR('/api/onkayit');
+  const { data, isLoading, mutate } = useSWR<OnKayitResponse>('/api/onkayit');
   const list = data?.leadler || [];
   const stats = data?.stats || {};
   const [adding, setAdding] = useState(false);
@@ -40,13 +52,13 @@ export function OnKayitManager({ showToast, onCreateStudent }) {
 
   const filtered = filter === 'hepsi' ? list : list.filter(l => l.status === filter);
 
-  async function remove(l) {
+  async function remove(l: LeadDTO) {
     if (!(await confirm(`"${l.studentName}" aday kaydı silinsin mi?`))) return;
     try {
       await api(`/api/onkayit?id=${encodeURIComponent(l.id)}`, { method: 'DELETE' });
       mutate();
       showToast?.('Aday silindi');
-    } catch (e) { showToast?.(e.message, 'error'); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); }
   }
 
   return (
@@ -82,7 +94,15 @@ export function OnKayitManager({ showToast, onCreateStudent }) {
   );
 }
 
-function FilterChip({ active, onClick, label, count, badge }) {
+interface FilterChipProps {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+  badge?: string;
+}
+
+function FilterChip({ active, onClick, label, count }: FilterChipProps) {
   return (
     <button onClick={onClick} className="text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1.5"
       style={active
@@ -94,8 +114,14 @@ function FilterChip({ active, onClick, label, count, badge }) {
   );
 }
 
+interface LeadFormProps {
+  showToast?: ShowToast;
+  onDone?: () => void;
+  onCancel?: () => void;
+}
+
 // ── Yeni aday formu ──
-function LeadForm({ showToast, onDone, onCancel }) {
+function LeadForm({ showToast, onDone, onCancel }: LeadFormProps) {
   const [studentName, setStudentName] = useState('');
   const [parentName, setParentName] = useState('');
   const [phone, setPhone] = useState('');
@@ -114,7 +140,7 @@ function LeadForm({ showToast, onDone, onCancel }) {
       });
       showToast?.('Aday eklendi');
       onDone?.();
-    } catch (e) { showToast?.(e.message, 'error'); } finally { setBusy(false); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); } finally { setBusy(false); }
   }
 
   return (
@@ -148,20 +174,28 @@ function LeadForm({ showToast, onDone, onCancel }) {
   );
 }
 
+interface LeadCardProps {
+  lead: LeadDTO;
+  showToast?: ShowToast;
+  onChange?: () => void;
+  onRemove: () => void;
+  onCreateStudent?: (lead: LeadDTO) => void;
+}
+
 // ── Aday kartı ──
-function LeadCard({ lead, showToast, onChange, onRemove, onCreateStudent }) {
+function LeadCard({ lead, showToast, onChange, onRemove, onCreateStudent }: LeadCardProps) {
   const [open, setOpen] = useState(false);
   const [followUp, setFollowUp] = useState('');
   const [busy, setBusy] = useState(false);
   const st = STATUS[lead.status] || STATUS.yeni;
 
-  async function patch(body, okMsg) {
+  async function patch(body: Record<string, unknown>, okMsg?: string) {
     setBusy(true);
     try {
       await api('/api/onkayit', { method: 'POST', body: JSON.stringify({ action: 'update', id: lead.id, ...body }) });
       if (okMsg) showToast?.(okMsg);
       onChange?.();
-    } catch (e) { showToast?.(e.message, 'error'); } finally { setBusy(false); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); } finally { setBusy(false); }
   }
   async function addFollowUp() {
     if (!followUp.trim()) return;
@@ -187,7 +221,7 @@ function LeadCard({ lead, showToast, onChange, onRemove, onCreateStudent }) {
                 <Phone size={12} /> {lead.phone}
               </a>
             )}
-            <span className="badge">{SOURCE_LABEL[lead.source] || 'Diğer'}</span>
+            <span className="badge">{SOURCE_LABEL[lead.source || ''] || 'Diğer'}</span>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">

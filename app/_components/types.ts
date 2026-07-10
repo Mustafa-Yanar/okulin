@@ -8,9 +8,14 @@
 // NOT: import type satırları derlemede silinir; sunucu modüllerinden tip almak
 // client bileşenlerde güvenlidir.
 
+import type { ReactNode } from 'react';
 import type { Session } from '@/lib/auth';
 import type { Branding } from '@/lib/branding';
 import type { ConfigValue } from '@/lib/config';
+
+// AppContent.showToast imzası — tüm panellere prop olarak iner.
+// msg ReactNode: Toast bileşeni düğüm render eder (çoğu çağrı düz string geçer).
+export type ShowToast = (msg: ReactNode, type?: string) => void;
 
 // GET /api/students — studentOut mapper çıktısı.
 export interface StudentDTO {
@@ -49,6 +54,22 @@ export interface TeacherDTO {
   offDays: string[];
   phone: string;
   presets: TeacherPresetDTO[];
+}
+
+// Ön kayıt (CRM) adayı — app/api/onkayit/route.ts LeadData ile birebir.
+export interface LeadDTO {
+  id: string;
+  studentName: string;
+  parentName?: string;
+  phone?: string;
+  level?: string;
+  source?: string;
+  status: string;
+  history?: { at: string; byName: string; text: string }[];
+  createdBy?: string;
+  createdByName?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // GET /api/auth — oturum + kurum durumu (whoami).
