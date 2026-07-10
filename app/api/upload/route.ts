@@ -4,9 +4,9 @@ import { withAuth } from '@/lib/auth';
 export const POST = withAuth('manage', async (req) => {
   const form = await req.formData();
   const file = form.get('file');
-  if (!file) return NextResponse.json({ error: 'Dosya bulunamadı' }, { status: 400 });
+  if (!file || typeof file === 'string') return NextResponse.json({ error: 'Dosya bulunamadı' }, { status: 400 });
 
-  const ext = file.name.split('.').pop().toLowerCase();
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
   if (!['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
     return NextResponse.json({ error: 'Sadece jpg, png, webp desteklenir' }, { status: 400 });
   }

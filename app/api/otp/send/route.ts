@@ -4,7 +4,8 @@ import { parseBody, z } from '@/lib/validate';
 
 const Schema = z.object({ phone: z.string().min(10).max(20) });
 
-export async function POST(req) {
+// Bilinçli withAuth istisnası: OTP login akışının parçası — oturum henüz yok.
+export async function POST(req: Request) {
   const parsed = await parseBody(req, Schema);
   if (!parsed.ok) return parsed.response;
   const { phone } = parsed.data;
@@ -12,6 +13,6 @@ export async function POST(req) {
     await sendOtp(phone);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    return NextResponse.json({ error: err.message || 'SMS gönderilemedi' }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error && err.message ? err.message : 'SMS gönderilemedi' }, { status: 500 });
   }
 }

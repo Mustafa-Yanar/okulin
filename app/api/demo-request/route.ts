@@ -4,15 +4,17 @@ import { demoRatelimit, getClientIp, formatResetWait, safeLimit } from '@/lib/ra
 import { sendEmail } from '@/lib/email';
 import { prisma } from '@/lib/prisma';
 
-function esc(s) {
+function esc(s: unknown): string {
   return String(s ?? '').replace(/[&<>"]/g, (c) => (
-    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] ?? c)
   ));
 }
 
 // Yeni demo talebini platform sahibine e-posta ile bildirir (lead kaçmasın).
 // Hata fırlatmaz — talep zaten Redis'e yazıldı; mail sadece "haber ver" katmanı.
-async function notifyOwner(rec) {
+interface DemoRecord { id: string; name: string; org: string; phone: string; email: string; note: string; ts: number; ip: string }
+
+async function notifyOwner(rec: DemoRecord) {
   const to = process.env.DEMO_NOTIFY_TO || 'mustafayanar54@gmail.com';
   const when = new Date(rec.ts).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' });
   const rows = [
@@ -42,11 +44,12 @@ async function notifyOwner(rec) {
 // Kurum-bağımsız (apex/landing'den çağrılır). Talepler global DemoRequest
 // tablosunda (en yeni başta), süper-admin görür.
 
-function clean(v, max) {
+function clean(v: unknown, max: number): string {
   return String(v ?? '').trim().slice(0, max);
 }
 
-export async function POST(req) {
+// Bilinçli withAuth istisnası: landing formu herkese açık, oturum kavramı yok.
+export async function POST(req: Request) {
   // Spam koruması (IP başına)
   const ip = getClientIp(req);
   const { success, reset } = await safeLimit(demoRatelimit, ip);
@@ -57,7 +60,7 @@ export async function POST(req) {
     );
   }
 
-  let body;
+  let body: Record<string, unknown>;
   try { body = await req.json(); } catch { body = {}; }
 
   // Honeypot: gizli alan dolmuşsa bot kabul et → sessizce başarı dön (bilgi sızdırma).

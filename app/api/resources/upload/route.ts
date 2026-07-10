@@ -1,18 +1,13 @@
 import { NextResponse } from 'next/server';
-import { handleUpload } from '@vercel/blob/client';
-import { getSession } from '@/lib/auth';
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
+import { withAuth } from '@/lib/auth';
 
 // Vercel Blob client-side upload token üretici.
 // PDF dosyaları doğrudan tarayıcıdan Blob'a yüklenir (4.5MB serverless gövde
 // sınırına takılmamak için). Bu route sadece imzalı token üretir + yetki denetler.
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'teacher')) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
-  const body = await req.json();
+export const POST = withAuth(['director', 'teacher'], async (req) => {
+  const body = (await req.json()) as HandleUploadBody;
   try {
     const jsonResponse = await handleUpload({
       body,
@@ -27,6 +22,6 @@ export async function POST(req) {
     });
     return NextResponse.json(jsonResponse);
   } catch (err) {
-    return NextResponse.json({ error: err.message || 'Yükleme başlatılamadı' }, { status: 400 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Yükleme başlatılamadı' }, { status: 400 });
   }
-}
+});

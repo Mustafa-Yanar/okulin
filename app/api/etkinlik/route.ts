@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getSession, isManager } from '@/lib/auth';
+import { withAuth, isManager, type Session } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
 import { getClass } from '@/lib/classes';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
+import type { ParentChild } from '@/lib/parents';
 
 // Etkinlik / Okul Takvimi — kurum geneli bilgilendirme takvimi (tatil, sınav, toplantı, gezi…).
 // Müdür/rehber oluşturur/düzenler/siler. Öğrenci/veli/öğretmen görür (rol+sınıf filtreli).
@@ -14,8 +15,8 @@ export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
 import { newId as genId } from '@/lib/id';
 
-const TYPES = ['tatil', 'sinav', 'toplanti', 'gezi', 'etkinlik', 'diger'];
-const TYPE_LABEL = {
+const TYPES = ['tatil', 'sinav', 'toplanti', 'gezi', 'etkinlik', 'diger'] as const;
+const TYPE_LABEL: Record<string, string> = {
   tatil: 'Tatil', sinav: 'Sınav', toplanti: 'Toplantı', gezi: 'Gezi', etkinlik: 'Etkinlik', diger: 'Diğer',
 };
 
@@ -31,9 +32,25 @@ const CreateSchema = z.object({ action: z.literal('create'), ...baseFields });
 const UpdateSchema = z.object({ action: z.literal('update'), id: zId, ...baseFields });
 const BodySchema = z.discriminatedUnion('action', [CreateSchema, UpdateSchema]);
 
-async function loadAll() {
+// Etkinlik.data Json şekli.
+interface EtkinlikData {
+  id: string;
+  title: string;
+  desc?: string;
+  type: string;
+  startDate: string;
+  endDate?: string;
+  classes?: string[];
+  createdBy?: string;
+  createdByName?: string;
+  createdByRole?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+async function loadAll(): Promise<EtkinlikData[]> {
   const rows = await tdb().etkinlik.findMany({ orderBy: { startDate: 'asc' } });
-  return rows.map(r => r.data);
+  return rows.map(r => r.data as unknown as EtkinlikData);
 }
 
 async function loadStudents() {
@@ -43,44 +60,38 @@ async function loadStudents() {
 
 async function loadParents() {
   const rows = await tdb().parent.findMany();
-  return rows.map(p => ({ id: p.phone, children: p.children || [] }));
+  return rows.map(p => ({ id: p.phone, children: ((p.children as unknown as ParentChild[] | null) || []) }));
 }
 
 // Bir etkinlik bu kullanıcıya görünür mü? (sınıf hedefi boşsa herkese)
-function visibleToStudent(ev, cls) {
+function visibleToStudent(ev: EtkinlikData, cls: string): boolean {
   const cl = Array.isArray(ev.classes) ? ev.classes : [];
   return cl.length === 0 || cl.includes(cls);
 }
-function visibleToChildren(ev, childClasses) {
+function visibleToChildren(ev: EtkinlikData, childClasses: Set<string | undefined>): boolean {
   const cl = Array.isArray(ev.classes) ? ev.classes : [];
   return cl.length === 0 || cl.some(c => childClasses.has(c));
 }
 
 // ───────────────────────────────────────── GET ─────────────────────────────────────────
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+// Bilinçli inline rol dallanması: öğrenci/veli sınıf filtreli, personel tümünü görür.
+export const GET = withAuth(async (_req, _ctx, session) => {
   let list = await loadAll();
 
   if (session.role === 'student') {
-    list = list.filter(ev => visibleToStudent(ev, session.cls));
+    list = list.filter(ev => visibleToStudent(ev, session.cls as string));
   } else if (session.role === 'parent') {
-    const childClasses = new Set((session.children || []).map(c => c.cls).filter(Boolean));
+    const childClasses = new Set((session.children || []).map(c => (typeof c === 'string' ? undefined : c.cls)).filter(Boolean));
     list = list.filter(ev => visibleToChildren(ev, childClasses));
   }
   // müdür/rehber/öğretmen → hepsi
 
   list.sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
   return NextResponse.json({ etkinlikler: list, canManage: isManager(session) });
-}
+});
 
 // ───────────────────────────────────────── POST ─────────────────────────────────────────
-export async function POST(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const POST = withAuth((s: Session) => isManager(s), async (req, _ctx, session) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -88,7 +99,7 @@ export async function POST(req) {
   const { title, desc, type, startDate, endDate, classes } = data;
 
   // Geçerli şube id'leri (registry-aware). Boş → herkes.
-  let valid = [];
+  const valid: string[] = [];
   if (Array.isArray(classes) && classes.length > 0) {
     for (const c of classes) { if (await getClass(c)) valid.push(c); }
   }
@@ -100,7 +111,7 @@ export async function POST(req) {
     const existing = await tdb().etkinlik.findFirst({ where: { legacyId: data.id } });
     if (!existing) return NextResponse.json({ error: 'Etkinlik bulunamadı' }, { status: 404 });
     const updated = {
-      ...existing.data,
+      ...(existing.data as object),
       title, desc: desc || '', type, startDate, endDate: end, classes: valid,
       updatedAt: new Date().toISOString(),
     };
@@ -121,11 +132,11 @@ export async function POST(req) {
     createdBy: session.id, createdByName: session.name || '', createdByRole: session.role,
     createdAt: new Date().toISOString(),
   };
-  await tdb().etkinlik.create({ data: { legacyId: id, title, type, startDate, endDate: end || null, data: rec } });
+  await tdb().etkinlik.create({ data: withScope({ legacyId: id, title, type, startDate, endDate: end || null, data: rec }) });
 
   // Hedef kitleye push (sınıf boşsa herkes). Hata toleranslı.
   const payload = { title: `📅 ${TYPE_LABEL[type] || 'Takvim'}`, body: title.slice(0, 120), url: '/?tab=takvim', tag: `etkinlik-${id}` };
-  const targets = [];
+  const targets: [string, string][] = [];
   const students = await loadStudents();
   const sRoster = valid.length === 0 ? students : students.filter(s => valid.includes(s.cls));
   sRoster.forEach(s => targets.push(['student', s.id]));
@@ -141,24 +152,22 @@ export async function POST(req) {
     detail: `Takvim etkinliği eklendi: "${title}" (${TYPE_LABEL[type]}) → ${valid.length === 0 ? 'herkes' : valid.length + ' sınıf'}`,
   });
   return NextResponse.json({ ok: true, id, notified: targets.length });
-}
+});
 
 // ───────────────────────────────────────── DELETE ─────────────────────────────────────────
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const DELETE = withAuth((s: Session) => isManager(s), async (req, _ctx, session) => {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
   const existing = await tdb().etkinlik.findFirst({ where: { legacyId: id } });
   if (!existing) return NextResponse.json({ error: 'Etkinlik bulunamadı' }, { status: 404 });
+  const d = existing.data as unknown as EtkinlikData | null;
   await tdb().etkinlik.delete({ where: { id: existing.id } });
   await logAudit({
     ...actorFrom(session),
     action: 'etkinlik.delete',
-    target: { type: 'etkinlik', id, name: existing.data?.title || '' },
-    detail: `Takvim etkinliği silindi: "${existing.data?.title || ''}"`,
+    target: { type: 'etkinlik', id, name: d?.title || '' },
+    detail: `Takvim etkinliği silindi: "${d?.title || ''}"`,
   });
   return NextResponse.json({ ok: true });
-}
+});

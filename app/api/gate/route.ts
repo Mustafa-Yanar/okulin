@@ -5,7 +5,8 @@ import { tdb } from '@/lib/sqldb';
 
 // Landing kurum kodu kapısı: kod → hedef subdomain çözer.
 // Kurum-bağımsız (apex/landing'den çağrılır). Kod yoksa/pasifse 404.
-export async function POST(req) {
+// Bilinçli withAuth istisnası: landing herkese açık, oturum kavramı yok.
+export async function POST(req: Request) {
   // Brute-force koruması (IP başına)
   const ip = getClientIp(req);
   const { success, reset } = await safeLimit(gateRatelimit, ip);
@@ -16,7 +17,7 @@ export async function POST(req) {
     );
   }
 
-  let body;
+  let body: { code?: unknown };
   try { body = await req.json(); } catch { body = {}; }
   const code = normalizeCode(body.code);
   if (!code || code.length < 4) {

@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { tdb } from '@/lib/sqldb';
+import type { PaymentEntry } from '@/lib/finance';
 
-function canAccess(session) {
-  return session && ['director', 'counselor', 'accountant'].includes(session.role);
-}
-
-export async function GET() {
-  const session = await getSession();
-  if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const GET = withAuth(['director', 'counselor', 'accountant'], async (_req, _ctx, session) => {
   try {
     const [studentCount, teacherCount] = await Promise.all([tdb().student.count(), tdb().teacher.count()]);
     let thisMonthCollection = 0;
@@ -19,11 +13,11 @@ export async function GET() {
       const monthPrefix = today.slice(0, 7);
       const finances = await tdb().finance.findMany({ include: { installments: true } });
       for (const f of finances) {
-        for (const p of (f.payments || [])) {
-          if (p.date && p.date.startsWith(monthPrefix)) thisMonthCollection += parseFloat(p.amount) || 0;
+        for (const p of ((f.payments as unknown as PaymentEntry[] | null) || [])) { // payments: Json ledger
+          if (p.date && p.date.startsWith(monthPrefix)) thisMonthCollection += parseFloat(String(p.amount)) || 0;
         }
         for (const inst of f.installments) {
-          if (!inst.paid && inst.dueDate && inst.dueDate < today) pendingAmount += parseFloat(inst.amount) || 0;
+          if (!inst.paid && inst.dueDate && inst.dueDate < today) pendingAmount += parseFloat(String(inst.amount)) || 0;
         }
       }
     }
@@ -33,6 +27,6 @@ export async function GET() {
       pendingAmount: Math.round(pendingAmount * 100) / 100,
     });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'İşlem başarısız' }, { status: 500 });
   }
-}
+});

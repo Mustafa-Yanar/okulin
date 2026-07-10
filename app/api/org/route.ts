@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server';
 import { currentOrg } from '@/lib/tenant';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { normalizeBranding, isValidHex } from '@/lib/branding';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z } from '@/lib/validate';
 import { tdb } from '@/lib/sqldb';
+import type { Prisma } from '@prisma/client';
 
 // Kurum (org) markası — SQL: Org modeli (name/shortName/logoUrl/themeColor).
 // GET: mevcut kurumun markasını döner (giriş gerekmez — login ekranı da okur).
 // POST: yalnız müdür kendi kurumunun adı/kısa adı/logosu/tema rengini günceller.
 
+// Bilinçli withAuth istisnası: login ekranı da okur — herkese açık.
 export async function GET() {
   const org = currentOrg();
   const rec = await tdb().org.findFirst({ where: { slug: org } });
@@ -17,7 +19,7 @@ export async function GET() {
 }
 
 // logoUrl güvenliği: yalnız kök-göreli (/...) veya http(s) — javascript: vb. şema engellenir.
-function isSafeLogo(u) {
+function isSafeLogo(u: string): boolean {
   if (!u) return true; // boş = sıfırla
   return u.startsWith('/') || /^https?:\/\//i.test(u);
 }
@@ -29,12 +31,7 @@ const OrgUpdateSchema = z.object({
   themeColor: z.string().max(20).optional(),
 });
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || session.role !== 'director') {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth(['director'], async (req, _ctx, session) => {
   const parsed = await parseBody(req, OrgUpdateSchema);
   if (!parsed.ok) return parsed.response;
   const { name, shortName, logoUrl, themeColor } = parsed.data;
@@ -48,7 +45,7 @@ export async function POST(req) {
 
   const org = currentOrg();
 
-  const data = {};
+  const data: Prisma.OrgUpdateInput = {};
   if (name !== undefined) data.name = name.trim();
   if (shortName !== undefined) data.shortName = shortName.trim() || null;
   if (logoUrl !== undefined) data.logoUrl = logoUrl.trim() || null;
@@ -56,7 +53,7 @@ export async function POST(req) {
   const existing = await tdb().org.findFirst({ where: { slug: org } });
   const nextBranding = existing
     ? await tdb().org.update({ where: { slug: org }, data })
-    : await tdb().org.create({ data: { slug: org, name: data.name || org, ...data, active: true } });
+    : await tdb().org.create({ data: { slug: org, name: (data.name as string) || org, ...data, active: true } as Prisma.OrgCreateInput });
 
   await logAudit({
     ...actorFrom(session),
@@ -66,4 +63,4 @@ export async function POST(req) {
   });
 
   return NextResponse.json({ ok: true, branding: normalizeBranding(nextBranding) });
-}
+});

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getSession, withAuth, type Session } from '@/lib/auth';
 import { logError, getErrors } from '@/lib/errlog';
 import { errorLogRatelimit, getClientIp, safeLimit } from '@/lib/ratelimit';
 import { parseBody, z } from '@/lib/validate';
@@ -14,17 +14,18 @@ const ErrorReportSchema = z.object({
 });
 
 // POST /api/log — istemci hatası kaydet.
-// Auth ZORUNLU DEĞİL: hata giriş öncesi de olabilir. IP başına rate limit + boyut sınırı korur.
-export async function POST(req) {
+// Bilinçli withAuth istisnası: auth ZORUNLU DEĞİL — hata giriş öncesi de olabilir.
+// IP başına rate limit + boyut sınırı korur.
+export async function POST(req: Request) {
   const ip = getClientIp(req);
   const { success } = await safeLimit(errorLogRatelimit, ip);
-  if (!success) return NextResponse.json({ ok: false }, { status: 429 });
+  if (!success) return NextResponse.json({ error: 'Çok fazla istek' }, { status: 429 });
 
   const parsed = await parseBody(req, ErrorReportSchema);
   if (!parsed.ok) return parsed.response;
 
   // Varsa oturum bilgisini ekle (kim yaşadı) — yoksa anonim.
-  let session = null;
+  let session: Session | null = null;
   try { session = await getSession(); } catch {}
 
   await logError({
@@ -39,11 +40,7 @@ export async function POST(req) {
 }
 
 // GET /api/log — son hata kayıtları (sadece müdür).
-export async function GET() {
-  const session = await getSession();
-  if (!session || session.role !== 'director') {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
+export const GET = withAuth(['director'], async () => {
   const errors = await getErrors();
   return NextResponse.json(errors);
-}
+});

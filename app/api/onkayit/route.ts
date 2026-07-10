@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
 
 // Ön kayıt / CRM — aday öğrenci (lead) yönetimi.
 // Veli arar/gelir → müdür/rehber aday kaydı açar → durum hunisinde ilerletir
@@ -12,9 +12,9 @@ import { tdb } from '@/lib/sqldb';
 
 import { newId as genId } from '@/lib/id';
 
-const SOURCES = ['tavsiye', 'sosyal', 'web', 'afis', 'telefon', 'ziyaret', 'diger'];
-const STATUSES = ['yeni', 'arandi', 'gorusme', 'kayit', 'kayip'];
-const STATUS_LABEL = {
+const SOURCES = ['tavsiye', 'sosyal', 'web', 'afis', 'telefon', 'ziyaret', 'diger'] as const;
+const STATUSES = ['yeni', 'arandi', 'gorusme', 'kayit', 'kayip'] as const;
+const STATUS_LABEL: Record<string, string> = {
   yeni: 'Yeni', arandi: 'Arandı', gorusme: 'Görüşme', kayit: 'Kayıt oldu', kayip: 'Kaybedildi',
 };
 const HISTORY_CAP = 100;
@@ -42,10 +42,26 @@ const UpdateSchema = z.object({
 });
 const BodySchema = z.discriminatedUnion('action', [CreateSchema, UpdateSchema]);
 
-function emptyStats() {
-  return STATUSES.reduce((acc, s) => { acc[s] = 0; return acc; }, {});
+// Lead.data Json şekli.
+interface LeadData {
+  id: string;
+  studentName: string;
+  parentName?: string;
+  phone?: string;
+  level?: string;
+  source?: string;
+  status: string;
+  history?: { at: string; byName: string; text: string }[];
+  createdBy?: string;
+  createdByName?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
-function pushHistory(rec, byName, text) {
+
+function emptyStats(): Record<string, number> {
+  return STATUSES.reduce((acc, s) => { acc[s] = 0; return acc; }, {} as Record<string, number>);
+}
+function pushHistory(rec: LeadData, byName: string | undefined, text: string): void {
   rec.history = [...(rec.history || []), { at: new Date().toISOString(), byName: byName || '', text }].slice(-HISTORY_CAP);
 }
 
@@ -55,7 +71,7 @@ function pushHistory(rec, byName, text) {
 // dahil: kayıt masası ön kaydı görür (yazması 'intake' iznine tabi).
 export const GET = withAuth(['director', 'counselor', 'accountant'], async () => {
   const rows = await tdb().lead.findMany();
-  const leads = rows.map(r => r.data);
+  const leads = rows.map(r => r.data as unknown as LeadData);
   const stats = emptyStats();
   leads.forEach(l => { if (stats[l.status] !== undefined) stats[l.status]++; });
   leads.sort((a, b) => (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || ''));
@@ -72,7 +88,7 @@ export const POST = withAuth('intake', async (req, ctx, session) => {
   // ── Oluştur ──
   if (data.action === 'create') {
     const id = genId();
-    const rec = {
+    const rec: LeadData = {
       id,
       studentName: data.studentName.trim(),
       parentName: (data.parentName || '').trim(),
@@ -85,7 +101,7 @@ export const POST = withAuth('intake', async (req, ctx, session) => {
     };
     pushHistory(rec, session.name, 'Ön kayıt oluşturuldu');
     if (data.note?.trim()) pushHistory(rec, session.name, data.note.trim());
-    await tdb().lead.create({ data: { legacyId: id, name: rec.studentName, stage: rec.status, data: rec } });
+    await tdb().lead.create({ data: withScope({ legacyId: id, name: rec.studentName, stage: rec.status, data: rec as unknown as object }) });
 
     await logAudit({
       ...actorFrom(session),
@@ -98,10 +114,10 @@ export const POST = withAuth('intake', async (req, ctx, session) => {
 
   // ── Güncelle (alan + durum + takip notu) ──
   const sqlRow = await tdb().lead.findFirst({ where: { legacyId: data.id } });
-  const rec = sqlRow?.data;
-  if (!rec) return NextResponse.json({ error: 'Aday bulunamadı' }, { status: 404 });
+  const rec = sqlRow?.data as unknown as LeadData | undefined;
+  if (!rec || !sqlRow) return NextResponse.json({ error: 'Aday bulunamadı' }, { status: 404 });
 
-  for (const f of ['studentName', 'parentName', 'phone', 'level', 'source']) {
+  for (const f of ['studentName', 'parentName', 'phone', 'level', 'source'] as const) {
     if (data[f] !== undefined) rec[f] = typeof data[f] === 'string' ? data[f].trim() : data[f];
   }
   let statusChanged = false;
@@ -112,7 +128,7 @@ export const POST = withAuth('intake', async (req, ctx, session) => {
   }
   if (data.followUp?.trim()) pushHistory(rec, session.name, data.followUp.trim());
   rec.updatedAt = now;
-  await tdb().lead.update({ where: { id: sqlRow.id }, data: { name: rec.studentName, stage: rec.status, data: rec } });
+  await tdb().lead.update({ where: { id: sqlRow.id }, data: { name: rec.studentName, stage: rec.status, data: rec as unknown as object } });
 
   if (statusChanged) {
     await logAudit({
@@ -134,12 +150,13 @@ export const DELETE = withAuth('intake', async (req, ctx, session) => {
 
   const sqlRow = await tdb().lead.findFirst({ where: { legacyId: id } });
   if (!sqlRow) return NextResponse.json({ error: 'Aday bulunamadı' }, { status: 404 });
+  const d = sqlRow.data as unknown as LeadData | null;
   await tdb().lead.delete({ where: { id: sqlRow.id } });
   await logAudit({
     ...actorFrom(session),
     action: 'lead.delete',
-    target: { type: 'lead', id, name: sqlRow.data?.studentName || '' },
-    detail: `Aday öğrenci silindi: "${sqlRow.data?.studentName || ''}"`,
+    target: { type: 'lead', id, name: d?.studentName || '' },
+    detail: `Aday öğrenci silindi: "${d?.studentName || ''}"`,
   });
   return NextResponse.json({ ok: true });
 });

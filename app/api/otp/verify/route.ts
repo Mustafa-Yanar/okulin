@@ -17,10 +17,11 @@ const THIRTY_DAYS = 60 * 60 * 24 * 30;
 
 // Kullanıcı adı + rol kategorisinden gerçek telefon numarasını bul.
 // login action ile aynı arama mantığını kullanır.
-async function getPhoneForUser(username, roleCategory) {
+async function getPhoneForUser(username: string, roleCategory: string): Promise<string | null> {
   if (roleCategory === 'management') {
     const dir = await tdb().director.findFirst({ where: { username } });
-    if (dir) return dir.phone || null; // NOT: Director modelinde phone yoksa null
+    // NOT: Director modelinde phone kolonu yok — eski davranış: daima null'a düşer.
+    if (dir) return (dir as typeof dir & { phone?: string | null }).phone || null;
     const acc = await tdb().accountant.findFirst({ where: { username } });
     if (acc) return acc.phone || null;
     const cou = await tdb().counselor.findFirst({ where: { username } });
@@ -38,7 +39,8 @@ async function getPhoneForUser(username, roleCategory) {
   return rec ? (rec.phone || null) : null;
 }
 
-export async function POST(req) {
+// Bilinçli withAuth istisnası: OTP login akışının parçası — oturum henüz yok.
+export async function POST(req: Request) {
   const parsed = await parseBody(req, Schema);
   if (!parsed.ok) return parsed.response;
   const { code, username, role } = parsed.data;
@@ -48,10 +50,10 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Bu hesap için kayıtlı telefon bulunamadı' }, { status: 400 });
   }
 
-  let approved;
+  let approved: boolean;
   try {
     approved = await verifyOtp(phone, code);
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: 'Doğrulama servisi hatası' }, { status: 500 });
   }
 
