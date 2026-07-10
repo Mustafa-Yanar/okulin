@@ -7,7 +7,40 @@ import crypto from 'node:crypto';
 const GET_TOKEN_URL = 'https://www.paytr.com/odeme/api/get-token';
 const IFRAME_BASE = 'https://www.paytr.com/odeme/guzel';
 
-function hmacB64(data, key) {
+export interface PaytrConfig {
+  merchantId: string;
+  key: string;
+  salt: string;
+  testMode?: boolean;
+}
+
+export interface PaytrOrder {
+  merchantOid: string;
+  amountKurus: number;
+  basketName?: string;
+}
+
+export interface PaytrBuyer {
+  email?: string;
+  name?: string;
+  address?: string;
+  phone?: string;
+}
+
+export interface CreateTokenArgs {
+  config: PaytrConfig;
+  order: PaytrOrder;
+  buyer: PaytrBuyer;
+  reqIp?: string;
+  okUrl: string;
+  failUrl: string;
+}
+
+export type CreateTokenResult =
+  | { ok: true; token: string; iframeUrl: string }
+  | { ok: false; reason: string };
+
+function hmacB64(data: string, key: string): string {
   return crypto.createHmac('sha256', key).update(data).digest('base64');
 }
 
@@ -17,7 +50,7 @@ function hmacB64(data, key) {
 // order:  { merchantOid, amountKurus, basketName }
 // buyer:  { email, name, address, phone }
 // okUrl/failUrl: tarayıcı yönlendirme hedefleri (iframe içinde)
-export async function createToken({ config, order, buyer, reqIp, okUrl, failUrl }) {
+export async function createToken({ config, order, buyer, reqIp, okUrl, failUrl }: CreateTokenArgs): Promise<CreateTokenResult> {
   const { merchantId, key, salt, testMode } = config;
   const test = testMode ? '1' : '0';
   const currency = 'TL';
@@ -56,7 +89,7 @@ export async function createToken({ config, order, buyer, reqIp, okUrl, failUrl 
     test_mode: test,
   });
 
-  let res, data;
+  let res: Response, data: { status?: string; token?: string; reason?: string } | undefined;
   try {
     res = await fetch(GET_TOKEN_URL, {
       method: 'POST',
@@ -65,7 +98,7 @@ export async function createToken({ config, order, buyer, reqIp, okUrl, failUrl 
     });
     data = await res.json();
   } catch (e) {
-    return { ok: false, reason: 'PayTR bağlantı hatası: ' + (e?.message || 'bilinmiyor') };
+    return { ok: false, reason: 'PayTR bağlantı hatası: ' + (e instanceof Error ? e.message : 'bilinmiyor') };
   }
 
   if (data?.status === 'success' && data.token) {
@@ -74,10 +107,24 @@ export async function createToken({ config, order, buyer, reqIp, okUrl, failUrl 
   return { ok: false, reason: data?.reason || 'PayTR token alınamadı' };
 }
 
+export interface CallbackForm {
+  merchant_oid?: string;
+  status?: string;
+  total_amount?: string;
+  hash?: string;
+}
+
+export interface VerifyCallbackResult {
+  valid: boolean;
+  status: string;
+  merchantOid: string;
+  amount: string;
+}
+
 // Adım 2 — callback hash doğrula. form: { merchant_oid, status, total_amount, hash }
 // config: { key, salt }
 // Döner: { valid, status, merchantOid, amount }
-export function verifyCallback({ config, form }) {
+export function verifyCallback({ config, form }: { config: Pick<PaytrConfig, 'key' | 'salt'>; form: CallbackForm }): VerifyCallbackResult {
   const merchantOid = form.merchant_oid || '';
   const status = form.status || '';
   const totalAmount = form.total_amount || '';

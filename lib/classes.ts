@@ -1,8 +1,22 @@
 import { colKeyForClass, COL_COURSES } from '@/lib/constants';
 import { tdb } from '@/lib/sqldb';
+import type { Class } from '@prisma/client';
+
+// Şube kaydının dışa dönük sözleşme şekli (id = legacyId).
+export interface ClassRecord {
+  id: string;
+  ad: string;
+  group: string;
+  kademe: string;
+  duzey: string | null;
+  dal: string | null;
+  dersler: string[];
+  seeded: boolean;
+  slotTemplate: unknown;
+}
 
 // SQL satırı → mevcut sözleşme şekli (id = legacyId; student.cls === class.id korunur).
-function classFromRow(c) {
+function classFromRow(c: Class): ClassRecord {
   return { id: c.legacyId, ad: c.ad, group: c.group, kademe: c.kademe, duzey: c.duzey, dal: c.dal, dersler: c.dersler || [], seeded: c.seeded, slotTemplate: c.slotTemplate || null };
 }
 
@@ -14,14 +28,14 @@ function classFromRow(c) {
 // `group` alanı köprüdür: mevcut çözücü/etüt/constants 'ortaokul|lise|mezun' bekler.
 
 // Sınıf kodundan düzey (grade) türet — fallback/seed metadata'sı için.
-export function duzeyOf(cls) {
+export function duzeyOf(cls: string): string {
   if (cls.startsWith('m')) return 'mezun';
   const g = Math.floor(parseInt(cls) / 100);
-  return ({ 7: '7', 8: '8', 1: '9', 2: '10', 3: '11', 4: '12' })[g] || String(g);
+  return ({ 7: '7', 8: '8', 1: '9', 2: '10', 3: '11', 4: '12' } as Record<number, string>)[g] || String(g);
 }
 
 // Sınıf kodundan dal (sayisal/ea) — colKeyForClass üzerinden, yoksa null.
-export function dalOf(cls) {
+export function dalOf(cls: string): string | null {
   const ck = colKeyForClass(cls);
   if (ck.includes('Sayısal')) return 'sayisal';
   if (ck.includes('Eşit')) return 'ea';
@@ -30,7 +44,7 @@ export function dalOf(cls) {
 
 // Yeni şube için varsayılan ders kümesi (düzey/dal şablonundan prefill). Kurum sonra
 // per-şube ekler/çıkarır. COL_COURSES çekirdek anahtarlarını döner (= ders kataloğu key'leri).
-export function defaultCoursesFor(kademe, duzey, dal) {
+export function defaultCoursesFor(kademe: string, duzey: string | null | undefined, dal: string | null | undefined): string[] {
   if (kademe === 'mezun') return COL_COURSES[dal === 'ea' ? 'Mezun Eşit Ağırlık' : 'Mezun Sayısal'] || [];
   if (kademe === 'ortaokul') return COL_COURSES[duzey === '8' ? 'Ortaokul_8' : 'Ortaokul_7'] || [];
   if (kademe === 'lise') {
@@ -42,13 +56,13 @@ export function defaultCoursesFor(kademe, duzey, dal) {
 }
 
 // Tüm şubeler — kurum kendi oluşturmadıysa boş liste döner (auto-seed yok).
-export async function getClasses() {
+export async function getClasses(): Promise<ClassRecord[]> {
   const rows = await tdb().class.findMany();
   return rows.map(classFromRow);
 }
 
 // Tek şube.
-export async function getClass(id) {
+export async function getClass(id: string): Promise<ClassRecord | null> {
   const row = await tdb().class.findFirst({ where: { legacyId: id } });
   return row ? classFromRow(row) : null;
 }

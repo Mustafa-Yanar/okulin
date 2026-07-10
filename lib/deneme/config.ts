@@ -1,8 +1,20 @@
 // Deneme analizi — sınav yapısı (TYT/AYT dersler, soru sayıları).
 // Tek doğruluk kaynağı. denemeanalizi projesinden JS'e taşındı.
 
+export interface ConfigSubject {
+  key: string;
+  label: string;
+  questionCount: number;
+}
+
+export interface ConfigGroup {
+  key: string;
+  label: string;
+  subjects: ConfigSubject[];
+}
+
 // ---------------- TYT ----------------
-export const TYT_GROUPS = [
+export const TYT_GROUPS: ConfigGroup[] = [
   {
     key: 'turkce',
     label: 'Türkçe',
@@ -41,7 +53,7 @@ export const TYT_GROUPS = [
 ];
 
 // ---------------- AYT (öğrenci paneli için hazır; yükleme sonra) ----------------
-const AYT_MATEMATIK = {
+const AYT_MATEMATIK: ConfigGroup = {
   key: 'matematik',
   label: 'Matematik',
   subjects: [
@@ -49,7 +61,7 @@ const AYT_MATEMATIK = {
     { key: 'geometri', label: 'Geometri', questionCount: 10 },
   ],
 };
-const AYT_FEN = {
+const AYT_FEN: ConfigGroup = {
   key: 'fen',
   label: 'Fen Bilimleri',
   subjects: [
@@ -58,7 +70,7 @@ const AYT_FEN = {
     { key: 'biyoloji', label: 'Biyoloji', questionCount: 13 },
   ],
 };
-const AYT_EDEB_1 = {
+const AYT_EDEB_1: ConfigGroup = {
   key: 'edeb_sosyal_1',
   label: 'Edebiyat - Sosyal 1',
   subjects: [
@@ -67,7 +79,7 @@ const AYT_EDEB_1 = {
     { key: 'cografya_1', label: 'Coğrafya-1', questionCount: 6 },
   ],
 };
-const AYT_SOSYAL_2 = {
+const AYT_SOSYAL_2: ConfigGroup = {
   key: 'sosyal_2',
   label: 'Sosyal Bilimler 2',
   subjects: [
@@ -78,21 +90,21 @@ const AYT_SOSYAL_2 = {
   ],
 };
 
-export const AYT_CATEGORIES = {
+export const AYT_CATEGORIES: Record<string, { label: string; groups: ConfigGroup[] }> = {
   SAYISAL: { label: 'Sayısal', groups: [AYT_MATEMATIK, AYT_FEN] },
   ESIT_AGIRLIK: { label: 'Eşit Ağırlık', groups: [AYT_EDEB_1, AYT_MATEMATIK] },
   SOZEL: { label: 'Sözel', groups: [AYT_EDEB_1, AYT_SOSYAL_2] },
 };
 
 // Alternatif ders çiftleri: [birincil, alternatif]. Yüksek neti toplama girer.
-export const ALTERNATIVE_PAIRS = [['din', 'felsefe_secmeli']];
+export const ALTERNATIVE_PAIRS: [string, string][] = [['din', 'felsefe_secmeli']];
 
-export function getGroupsFor(examType, category) {
+export function getGroupsFor(examType: string, category?: string | null): ConfigGroup[] {
   if (examType === 'TYT') return TYT_GROUPS;
   if (!category) return [];
   return AYT_CATEGORIES[category] ? AYT_CATEGORIES[category].groups : [];
 }
 
-export function calcNet(dogru, yanlis) {
+export function calcNet(dogru: number, yanlis: number): number {
   return Math.round((dogru - yanlis / 4) * 100) / 100;
 }

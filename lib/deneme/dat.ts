@@ -14,8 +14,16 @@
 //   alt-kırılımı (din/felsefe seçmeli) gerçek .dat ile test sırasında doğrulanmalı.
 // LGS/ortaokul .dat şablonu HENÜZ yok (farklı satır uzunlukları) → Faz 4.
 
+export interface DatMap {
+  lineLen: number;
+  bookletCol: number;
+  nameRange: [number, number];
+  blocks: [number, number][];
+  total: number;
+}
+
 // Kolon haritası = veri (sabit gömme mantık yerine tablo). Yeni şablon = yeni kayıt.
-export const DAT_MAPS = {
+export const DAT_MAPS: Record<string, DatMap> = {
   TYT: {
     lineLen: 222,
     bookletCol: 55,
@@ -39,11 +47,26 @@ export const DAT_MAPS = {
   },
 };
 
-export function datSupports(examType) {
+export interface DatStudent {
+  name: string;
+  kitapcik: string;
+  answers: (string | null)[];
+  answered: number;
+}
+
+export interface ParseDatResult {
+  ok: boolean;
+  error?: string;
+  students: DatStudent[];
+  warnings: string[];
+  total: number;
+}
+
+export function datSupports(examType: string): boolean {
   return !!DAT_MAPS[examType];
 }
 
-function splitLines(text) {
+function splitLines(text: unknown): string[] {
   return String(text ?? '')
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
@@ -51,13 +74,13 @@ function splitLines(text) {
     .filter((l) => l.replace(/\x00/g, '').trim() !== '');
 }
 
-function letterCount(s) {
+function letterCount(s: string): number {
   return (s.match(/[A-Za-zÇĞİıÖŞÜçğöşü]/g) || []).length;
 }
 
 // İsim = meta bölgesindeki (2+ boşlukla ayrılmış) en çok harf içeren parça.
 // Böylece sayısal öğrenci no / sınıf kodu (ör. "12S", "3 M") ismi ezmez.
-function extractName(line, [a, b]) {
+function extractName(line: string, [a, b]: [number, number]): string {
   const meta = line.slice(a, b);
   const runs = meta
     .split(/\s{2,}/)
@@ -68,13 +91,13 @@ function extractName(line, [a, b]) {
   return runs[0];
 }
 
-function bookletAt(line, col) {
+function bookletAt(line: string, col: number): string {
   const ch = (col < line.length ? line[col] : ' ').toUpperCase();
   return ch === 'B' ? 'B' : 'A'; // varsayılan A
 }
 
 // Tek hücre: 'A'..'E' ya da null (boş/işaretsiz). İptal işareti '*' korunur.
-function cellAt(line, i) {
+function cellAt(line: string, i: number): string | null {
   const ch = i < line.length ? line[i] : ' ';
   const u = ch.toUpperCase();
   if (u === 'A' || u === 'B' || u === 'C' || u === 'D' || u === 'E') return u;
@@ -84,7 +107,7 @@ function cellAt(line, i) {
 
 // .dat metnini ayrıştır. examType: 'TYT' | 'AYT'. Döner:
 // { ok, error?, students:[{name,kitapcik,answers,answered}], warnings:[], total }
-export function parseDat(text, examType) {
+export function parseDat(text: string, examType: string): ParseDatResult {
   const map = DAT_MAPS[examType];
   if (!map) {
     return { ok: false, error: `${examType} için .dat şablonu yok (yalnız TYT/AYT).`, students: [], warnings: [], total: 0 };
@@ -95,7 +118,7 @@ export function parseDat(text, examType) {
     return { ok: false, error: 'Dosyada okunacak satır yok (boş ya da bozuk).', students: [], warnings: [], total: 0 };
   }
 
-  const warnings = [];
+  const warnings: string[] = [];
   // Satır uzunluğu denetimi — şablon uyumsuzsa uyar
   const offLen = lines.filter((l) => Math.abs(l.length - map.lineLen) > 6).length;
   if (offLen > lines.length / 2) {
@@ -107,7 +130,7 @@ export function parseDat(text, examType) {
   const students = lines.map((line) => {
     const name = extractName(line, map.nameRange) || 'İsimsiz';
     const kitapcik = bookletAt(line, map.bookletCol);
-    const answers = [];
+    const answers: (string | null)[] = [];
     for (const [start, len] of map.blocks) {
       for (let i = 0; i < len; i++) answers.push(cellAt(line, start + i));
     }

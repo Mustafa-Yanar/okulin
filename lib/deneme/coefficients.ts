@@ -11,10 +11,12 @@
 // Formül lineer: puan = taban + Σ(dersGrubuNeti × katsayı).
 // AYT'de geometri matematiğe dahildir (matematik grubu = matematik + geometri).
 
+export type AytTuru = 'SAY' | 'EA' | 'SOZ';
+
 // TYT katsayı keys → hangi şablon ders key'leri o gruba toplanır.
 // Sosyal grubu 5 dersi de içerir; din ↔ felsefe_secmeli alternatif çiftinde
 // NET'i düşük olan score.js'de (altExcluded) puana girmeden elenir.
-export const TYT_COEF_GROUPS = {
+export const TYT_COEF_GROUPS: Record<string, string[]> = {
   turkce: ['turkce'],
   sosyal: ['tarih', 'cografya', 'felsefe', 'din', 'felsefe_secmeli'],
   matematik: ['matematik', 'geometri'],
@@ -22,7 +24,7 @@ export const TYT_COEF_GROUPS = {
 };
 
 // AYT katsayı keys → şablon ders key'leri.
-export const AYT_COEF_GROUPS = {
+export const AYT_COEF_GROUPS: Record<string, string[]> = {
   matematik: ['matematik', 'geometri'],
   fizik: ['fizik'],
   kimya: ['kimya'],
@@ -36,7 +38,30 @@ export const AYT_COEF_GROUPS = {
   din: ['din'],
 };
 
-export const DEFAULT_COEFFICIENTS = {
+export interface TytCoef {
+  base: number;
+  perSubject: Record<string, number>;
+}
+
+export interface AytCoef {
+  base: number;
+  SAY: Record<string, number>;
+  EA: Record<string, number>;
+  SOZ: Record<string, number>;
+}
+
+export interface MergeCoef {
+  tytWeight: number;
+  aytWeight: number;
+}
+
+export interface Coefficients {
+  TYT: TytCoef;
+  AYT: AytCoef;
+  merge: MergeCoef;
+}
+
+export const DEFAULT_COEFFICIENTS: Coefficients = {
   TYT: {
     base: 100,
     perSubject: { turkce: 1.32, sosyal: 1.36, matematik: 1.32, fen: 1.36 },
@@ -66,7 +91,7 @@ export const DEFAULT_COEFFICIENTS = {
 
 // LGS ders ağırlıkları (ağırlıklı net, kurum-içi sıralama için).
 // Türkçe/Matematik/Fen ×4; İnkılap/Din/Yabancı Dil ×1.
-export const LGS_WEIGHTS = {
+export const LGS_WEIGHTS: Record<string, number> = {
   turkce: 4,
   matematik: 4,
   fen: 4,

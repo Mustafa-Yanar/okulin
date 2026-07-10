@@ -3,31 +3,55 @@
 //   TYT → [TYT]; AYT → [SAY, EA, SOZ]; LGS → [LGS]. Her liste tüm öğrencileri
 //   o türün puanına (yoksa o türün ders netleri toplamına) göre sıralar + Okul Ortalaması.
 
-import { getTemplate, flatSubjects, AYT_PUAN_TURU } from './template.js';
-import { computePuanlar, mergeYks } from './score.js';
+import { getTemplate, flatSubjects, AYT_PUAN_TURU } from './template';
+import { computePuanlar, mergeYks } from './score';
+import type { DenemeExam } from './types';
 
-const LIST_LABELS = { TYT: 'TYT', SAY: 'Sayısal', EA: 'Eşit Ağırlık', SOZ: 'Sözel', LGS: 'LGS' };
+const LIST_LABELS: Record<string, string> = { TYT: 'TYT', SAY: 'Sayısal', EA: 'Eşit Ağırlık', SOZ: 'Sözel', LGS: 'LGS' };
 
-function round2(n) {
+// Rapor satırındaki tek ders hücresi.
+interface ReportSubjectCell {
+  dogru: number;
+  yanlis: number;
+  bos: number;
+  net: number;
+}
+
+interface ReportRow {
+  name: string;
+  cls: string;
+  matched: boolean;
+  source: string;
+  subjects: Record<string, ReportSubjectCell>;
+  toplamNet: number;
+  puan: number | null;
+  rank?: number;
+}
+
+export interface StudentInfoById {
+  [studentId: string]: { name?: string; cls?: string } | undefined;
+}
+
+function round2(n: number | undefined | null): number {
   return Math.round((n || 0) * 100) / 100;
 }
 
-function subjectLabels(examType) {
-  const map = {};
+function subjectLabels(examType: string): Record<string, string> {
+  const map: Record<string, string> = {};
   for (const s of flatSubjects(examType)) map[s.key] = s.label;
   return map;
 }
 
 // Bir listedeki ders kolonları (key sırası).
-function listSubjectKeys(examType, listKey) {
-  if (examType === 'AYT') return AYT_PUAN_TURU[listKey] || [];
+function listSubjectKeys(examType: string, listKey: string): string[] {
+  if (examType === 'AYT') return AYT_PUAN_TURU[listKey as keyof typeof AYT_PUAN_TURU] || [];
   return flatSubjects(examType).map((s) => s.key);
 }
 
 // exam → { exam, lists[] }. opts.studentInfoById: { [studentId]: { name, cls } } (opsiyonel).
-export function buildReports(exam, opts = {}) {
+export function buildReports(exam: DenemeExam | null | undefined, opts: { studentInfoById?: StudentInfoById } = {}) {
   const t = getTemplate(exam?.examType);
-  if (!t) return { exam: null, lists: [] };
+  if (!t || !exam) return { exam: null, lists: [] };
   const labels = subjectLabels(exam.examType);
   const infoById = opts.studentInfoById || {};
   const rows = Array.isArray(exam.rows) ? exam.rows : [];
@@ -39,12 +63,12 @@ export function buildReports(exam, opts = {}) {
     const subjKeys = listSubjectKeys(exam.examType, listKey);
     const subjects = subjKeys.map((k) => ({ key: k, label: labels[k] || k }));
 
-    const built = rows.map((r) => {
+    const built: ReportRow[] = rows.map((r) => {
       const puanObj = r.puan || computePuanlar(exam.examType, r.results || {});
       const info = r.studentId ? infoById[r.studentId] : null;
-      const subj = {};
+      const subj: Record<string, ReportSubjectCell> = {};
       for (const k of subjKeys) {
-        const rr = r.results?.[k] || {};
+        const rr = r.results?.[k] || { dogru: 0, yanlis: 0, bos: 0, net: 0 };
         subj[k] = { dogru: rr.dogru || 0, yanlis: rr.yanlis || 0, bos: rr.bos || 0, net: round2(rr.net) };
       }
       return {
@@ -67,12 +91,12 @@ export function buildReports(exam, opts = {}) {
     built.forEach((row, i) => { row.rank = i + 1; });
 
     const n = built.length || 1;
-    const avgSubjects = {};
+    const avgSubjects: Record<string, number> = {};
     for (const k of subjKeys) {
       avgSubjects[k] = round2(built.reduce((s, r) => s + (r.subjects[k]?.net || 0), 0) / n);
     }
     const avgToplam = round2(built.reduce((s, r) => s + (r.toplamNet || 0), 0) / n);
-    const puanVals = built.map((r) => r.puan).filter((p) => p != null);
+    const puanVals = built.map((r) => r.puan).filter((p): p is number => p != null);
     const avgPuan = puanVals.length ? round2(puanVals.reduce((s, p) => s + p, 0) / puanVals.length) : null;
 
     return {
@@ -90,26 +114,35 @@ export function buildReports(exam, opts = {}) {
   };
 }
 
+interface MergeRow {
+  name: string;
+  cls: string;
+  tytPuan: number;
+  aytPuan: number | null;
+  yerlestirme: number | null;
+  rank?: number;
+}
+
 // TYT + AYT sınavını öğrenci bazında birleştir → yerleştirme puanı (3 tür: SAY/EA/SÖZ).
 // Yerleştirme = 0.4×TYT + 0.6×AYT(tür) (mergeYks, OBP hariç — OBP ertelendi).
 // Yalnız HER İKİ sınavda da eşleşmiş (studentId atanmış) öğrenciler listeye girer.
 // opts.studentInfoById: { [studentId]: { name, cls } }.
-export function buildMergeReport(tytExam, aytExam, opts = {}) {
+export function buildMergeReport(tytExam: DenemeExam, aytExam: DenemeExam, opts: { studentInfoById?: StudentInfoById } = {}) {
   const infoById = opts.studentInfoById || {};
   const tytRows = Array.isArray(tytExam?.rows) ? tytExam.rows : [];
   const aytRows = Array.isArray(aytExam?.rows) ? aytExam.rows : [];
 
   // studentId → row (yalnız eşleşmiş satırlar)
-  const tytById = new Map();
+  const tytById = new Map<string, (typeof tytRows)[number]>();
   for (const r of tytRows) if (r.studentId) tytById.set(r.studentId, r);
-  const aytById = new Map();
+  const aytById = new Map<string, (typeof aytRows)[number]>();
   for (const r of aytRows) if (r.studentId) aytById.set(r.studentId, r);
 
   const commonIds = [...tytById.keys()].filter((id) => aytById.has(id));
 
   const students = commonIds.map((id) => {
-    const tr = tytById.get(id);
-    const ar = aytById.get(id);
+    const tr = tytById.get(id)!;
+    const ar = aytById.get(id)!;
     const tytPuan =
       tr.puan && tr.puan.TYT != null ? tr.puan.TYT : computePuanlar('TYT', tr.results || {}).TYT;
     const aytPuan =
@@ -126,7 +159,7 @@ export function buildMergeReport(tytExam, aytExam, opts = {}) {
   });
 
   const lists = ['SAY', 'EA', 'SOZ'].map((turu) => {
-    const built = students.map((s) => {
+    const built: MergeRow[] = students.map((s) => {
       const aytP = s.aytPuan?.[turu] ?? null;
       return {
         name: s.name,
@@ -139,8 +172,8 @@ export function buildMergeReport(tytExam, aytExam, opts = {}) {
     built.sort((a, b) => (b.yerlestirme ?? -Infinity) - (a.yerlestirme ?? -Infinity));
     built.forEach((row, i) => { row.rank = i + 1; });
 
-    const avg = (sel) => {
-      const vals = built.map(sel).filter((v) => v != null);
+    const avg = (sel: (r: MergeRow) => number | null) => {
+      const vals = built.map(sel).filter((v): v is number => v != null);
       return vals.length ? round2(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
     };
 

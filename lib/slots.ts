@@ -4,7 +4,7 @@ import { ALL_DAYS, daySlots, DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES,
 // getWeekKey tek kaynak constants.js'te — buradan re-export (mevcut '@/lib/slots' importları kırılmasın)
 export { getWeekKey };
 import { tdb } from './sqldb';
-import type { SlotBooking } from '@prisma/client';
+import { Prisma, type SlotBooking } from '@prisma/client';
 
 // ── SLOT SAATLERİ (7-gün model) ───────────────────────────────────────────────
 // Depolama şekli (TenantConfig.slotTimes):
@@ -342,9 +342,10 @@ export async function setProgramTemplate(legacyTeacherId: string, data: object):
   await tdb().teacher.update({ where: { id: teacher.id }, data: { programTemplate: data } });
 }
 
-// program şablonunu sil (null yap)
+// program şablonunu sil (null yap). Prisma Json alanında DB NULL için DbNull kullanılır
+// (eski koddaki düz null'ın çalışma zamanı karşılığı — DB etkisi birebir aynı).
 export async function deleteProgramTemplate(legacyTeacherId: string): Promise<void> {
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
   if (!teacher) return;
-  await tdb().teacher.update({ where: { id: teacher.id }, data: { programTemplate: null } });
+  await tdb().teacher.update({ where: { id: teacher.id }, data: { programTemplate: Prisma.DbNull } });
 }

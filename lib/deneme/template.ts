@@ -13,7 +13,27 @@ export const CHOICES = ['A', 'B', 'C', 'D', 'E'];
 export const BLANK_CHARS = ['', ' ', '-', '.', '_']; // boş bırakılmış soru
 export const CANCEL_CHAR = '*';                       // iptal edilen soru (anahtarda)
 
-export const TEMPLATES = {
+export interface TemplateSubject {
+  key: string;
+  label: string;
+  count: number;
+}
+
+export interface TemplateBox {
+  key: string;
+  label: string;
+  subjects: TemplateSubject[];
+}
+
+export interface ExamTemplate {
+  label: string;
+  totalQuestions: number;
+  wrongDivisor: number;
+  alternativePairs?: [string, string][];
+  boxes: TemplateBox[];
+}
+
+export const TEMPLATES: Record<string, ExamTemplate> = {
   TYT: {
     label: 'TYT',
     totalQuestions: 125, // fiziksel 125 soru basılı; öğrenci 120'den sorumlu (sosyal alternatif)
@@ -132,23 +152,23 @@ export const TEMPLATES = {
 
 // AYT puan türü → katkıda bulunan ders key'leri (geometri matematiğe dahil).
 // Öğrenci hepsini çözmese de 3 türün hepsi hesaplanır; çözmediği ders neti 0 olur.
-export const AYT_PUAN_TURU = {
+export const AYT_PUAN_TURU: Record<'SAY' | 'EA' | 'SOZ', string[]> = {
   SAY: ['matematik', 'geometri', 'fizik', 'kimya', 'biyoloji'],
   EA: ['edebiyat_1', 'tarih_1', 'cografya_1', 'matematik', 'geometri'],
   SOZ: ['edebiyat_1', 'tarih_1', 'cografya_1', 'tarih_2', 'cografya_2', 'felsefe', 'din'],
 };
 
-export function getTemplate(examType) {
-  return TEMPLATES[examType] || null;
+export function getTemplate(examType: string | null | undefined): ExamTemplate | null {
+  return TEMPLATES[examType as string] || null;
 }
 
 // Bir kutunun toplam soru sayısı (anahtar/cevap string uzunluğu beklentisi).
-export function boxLength(box) {
+export function boxLength(box: TemplateBox): number {
   return box.subjects.reduce((n, s) => n + s.count, 0);
 }
 
 // Sınav türündeki tüm dersleri (sıralı) düz liste olarak ver.
-export function flatSubjects(examType) {
+export function flatSubjects(examType: string): TemplateSubject[] {
   const t = getTemplate(examType);
   if (!t) return [];
   return t.boxes.flatMap((b) => b.subjects);
@@ -156,7 +176,7 @@ export function flatSubjects(examType) {
 
 // Ham string'i normalize et: büyük harf, sadece A–E + iptal işareti; boşluk = boş.
 // Geriye karakter dizisi döner (her eleman tek soru).
-export function normalizeRaw(raw) {
+export function normalizeRaw(raw: unknown): string[] {
   return String(raw ?? '')
     .toLocaleUpperCase('tr')
     .replace(/İ/g, 'I')
@@ -166,9 +186,9 @@ export function normalizeRaw(raw) {
 
 // Bir kutudaki boşluksuz string'i ders ders diz: { dersKey: ['A','B', ...] }.
 // Eksik karakterler boş ( ' ' ) sayılır; fazlası kırpılır.
-export function sliceBox(box, raw) {
+export function sliceBox(box: TemplateBox, raw: unknown): Record<string, string[]> {
   const chars = normalizeRaw(raw);
-  const out = {};
+  const out: Record<string, string[]> = {};
   let i = 0;
   for (const s of box.subjects) {
     const arr = chars.slice(i, i + s.count);
@@ -182,13 +202,13 @@ export function sliceBox(box, raw) {
 // Düz cevap dizisini (kitapçık/booklet sırası, soru 1..N) derslere dilimle.
 // Optik/.dat çıktısı için: flatArr A–E (veya null/boş) elemanlı, flatSubjects sırasında.
 // Eksik kuyruk boş ( ' ' ), fazlası kırpılır. Döner: { dersKey: ['A', ...] }.
-export function sliceFlat(examType, flatArr) {
+export function sliceFlat(examType: string, flatArr: (string | null)[] | null | undefined): Record<string, string[]> {
   const subs = flatSubjects(examType);
   const norm = (Array.isArray(flatArr) ? flatArr : []).map((c) => {
     const u = String(c ?? '').toLocaleUpperCase('tr');
     return CHOICES.includes(u) || u === CANCEL_CHAR ? u : ' ';
   });
-  const out = {};
+  const out: Record<string, string[]> = {};
   let i = 0;
   for (const s of subs) {
     const arr = norm.slice(i, i + s.count);
@@ -200,22 +220,30 @@ export function sliceFlat(examType, flatArr) {
 }
 
 // Tüm kutuları birleştir → { dersKey: cevapDizisi }. boxesRaw: { [box.key]: rawString }.
-export function sliceExam(examType, boxesRaw) {
+export function sliceExam(examType: string, boxesRaw: Record<string, string> | null | undefined): Record<string, string[]> {
   const t = getTemplate(examType);
   if (!t) return {};
-  const out = {};
+  const out: Record<string, string[]> = {};
   for (const box of t.boxes) {
     Object.assign(out, sliceBox(box, boxesRaw?.[box.key] ?? ''));
   }
   return out;
 }
 
+export interface BoxValidationError {
+  box: string;
+  label: string;
+  expected?: number;
+  got?: number;
+  message?: string;
+}
+
 // Cevap anahtarı kutularını doğrula: her kutu beklenen uzunlukta mı?
 // Boşlukları yok sayar; A–E ve iptal işareti (*) sayılır. Döner: { ok, errors[] }.
-export function validateBoxes(examType, boxesRaw) {
+export function validateBoxes(examType: string, boxesRaw: Record<string, string> | null | undefined): { ok: boolean; errors: BoxValidationError[] } {
   const t = getTemplate(examType);
   if (!t) return { ok: false, errors: [{ box: '-', label: '-', message: 'Geçersiz sınav türü' }] };
-  const errors = [];
+  const errors: BoxValidationError[] = [];
   for (const box of t.boxes) {
     const raw = String(boxesRaw?.[box.key] ?? '');
     const len = raw.replace(/\s/g, '').length;

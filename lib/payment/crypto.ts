@@ -10,7 +10,7 @@ import crypto from 'node:crypto';
 // Saklama biçimi:  v1:<iv-b64>:<tag-b64>:<ciphertext-b64>
 // GCM auth tag, kurcalamayı yakalar → decrypt bozuk veride hata fırlatır.
 
-function masterKey() {
+function masterKey(): Buffer {
   const raw = process.env.PAYMENT_ENC_KEY;
   if (!raw) throw new Error('PAYMENT_ENC_KEY tanımlı değil');
   if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, 'hex');
@@ -18,7 +18,7 @@ function masterKey() {
 }
 
 // Düz metni şifreler. Boş/undefined ise null döner (alan girilmemiş demektir).
-export function encryptSecret(plain) {
+export function encryptSecret(plain: string | null | undefined): string | null {
   if (plain === undefined || plain === null || plain === '') return null;
   const key = masterKey();
   const iv = crypto.randomBytes(12);
@@ -29,7 +29,7 @@ export function encryptSecret(plain) {
 }
 
 // Şifreli değeri çözer. Boş ise null. Biçim/anahtar bozuksa hata fırlatır.
-export function decryptSecret(enc) {
+export function decryptSecret(enc: string | null | undefined): string | null {
   if (!enc) return null;
   const parts = String(enc).split(':');
   if (parts.length !== 4 || parts[0] !== 'v1') throw new Error('Geçersiz şifreli biçim');

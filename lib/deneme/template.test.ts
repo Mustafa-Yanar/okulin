@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   TEMPLATES, getTemplate, boxLength, flatSubjects,
   normalizeRaw, sliceBox, sliceFlat, sliceExam, validateBoxes,
-} from './template.js';
-import { TYT_COEF_GROUPS, AYT_COEF_GROUPS, LGS_WEIGHTS } from './coefficients.js';
+} from './template';
+import { TYT_COEF_GROUPS, AYT_COEF_GROUPS, LGS_WEIGHTS } from './coefficients';
 
 // Şablon değişmezleri: kutudaki ders sırası/sayısı kayarsa netler SESSİZCE yanlış
 // derse gider (template.js'deki uyarı). Bu testler o kaymayı gürültüye çevirir.
@@ -16,7 +16,7 @@ describe('şablon bütünlüğü (soru sayıları)', () => {
   ])('%s: flatSubjects toplamı = totalQuestions (%i)', (type, total) => {
     const sum = flatSubjects(type).reduce((n, s) => n + s.count, 0);
     expect(sum).toBe(total);
-    expect(getTemplate(type).totalQuestions).toBe(total);
+    expect(getTemplate(type)!.totalQuestions).toBe(total);
   });
 
   it('her kutunun uzunluğu ders sayılarının toplamı', () => {
@@ -28,9 +28,9 @@ describe('şablon bütünlüğü (soru sayıları)', () => {
   });
 
   it('LGS yanlış bölücüsü 3, YKS 4', () => {
-    expect(getTemplate('LGS').wrongDivisor).toBe(3);
-    expect(getTemplate('TYT').wrongDivisor).toBe(4);
-    expect(getTemplate('AYT').wrongDivisor).toBe(4);
+    expect(getTemplate('LGS')!.wrongDivisor).toBe(3);
+    expect(getTemplate('TYT')!.wrongDivisor).toBe(4);
+    expect(getTemplate('AYT')!.wrongDivisor).toBe(4);
   });
 });
 
@@ -66,7 +66,7 @@ describe('normalizeRaw', () => {
 });
 
 describe('sliceBox / sliceExam', () => {
-  const sosyal = getTemplate('TYT').boxes.find((b) => b.key === 'sosyal');
+  const sosyal = getTemplate('TYT')!.boxes.find((b) => b.key === 'sosyal')!;
 
   it('ders sınırları doğru dilimlenir (TYT sosyal 5×5)', () => {
     const out = sliceBox(sosyal, 'AAAAABBBBBCCCCCDDDDDEEEEE');

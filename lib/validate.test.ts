@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { parseBody, zName, zPassword, zNewPassword, zId, zMoney, zStringArray, z } from './validate';
 
-// Sahte Request — .json() davranışını taklit eder.
-const reqOf = (body) => ({ json: async () => body });
-const reqThrows = () => ({ json: async () => { throw new SyntaxError('bad json'); } });
+// Sahte Request — .json() davranışını taklit eder (test sınırı: cast kaçınılmaz).
+const reqOf = (body: unknown) => ({ json: async () => body }) as unknown as Request;
+const reqThrows = () => ({ json: async () => { throw new SyntaxError('bad json'); } }) as unknown as Request;
 
 describe('parseBody', () => {
   const Schema = z.object({ name: zName, fee: zMoney });
@@ -11,19 +11,19 @@ describe('parseBody', () => {
   it('geçerli gövdeyi parse eder', async () => {
     const r = await parseBody(reqOf({ name: 'Ali', fee: '1500' }), Schema);
     expect(r.ok).toBe(true);
-    expect(r.data).toEqual({ name: 'Ali', fee: 1500 }); // fee coerce edildi
+    if (r.ok) expect(r.data).toEqual({ name: 'Ali', fee: 1500 }); // fee coerce edildi
   });
 
   it('bozuk JSON → 400 (500 değil)', async () => {
     const r = await parseBody(reqThrows(), Schema);
     expect(r.ok).toBe(false);
-    expect(r.response.status).toBe(400);
+    if (!r.ok) expect(r.response.status).toBe(400);
   });
 
   it('şema ihlali → 400', async () => {
     const r = await parseBody(reqOf({ name: 123, fee: 10 }), Schema);
     expect(r.ok).toBe(false);
-    expect(r.response.status).toBe(400);
+    if (!r.ok) expect(r.response.status).toBe(400);
   });
 });
 

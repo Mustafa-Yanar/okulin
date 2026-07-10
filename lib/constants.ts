@@ -260,7 +260,7 @@ export function getWeekKey(date: Date | string | number = new Date()): string {
 // Hafta anahtarından okunabilir tarih aralığı: { startStr:'25 Mayıs', endStr:'31 Mayıs', yearStr:2026 }
 // DirectorPanel ve StudentPanel tek kaynak olarak buradan alır.
 const TR_MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
-export function weekRangeLabel(weekKey: string): { startStr: string; endStr: string; yearStr: string | number } {
+export function weekRangeLabel(weekKey: string | null | undefined): { startStr: string; endStr: string; yearStr: string | number } {
   try {
     const [year, wStr] = String(weekKey).split('-W');
     const week = parseInt(wStr);

@@ -20,18 +20,18 @@ const ALL_SUBJECTS = [
   'Din Kültürü',
 ];
 
-function placeholderTopics() {
+function placeholderTopics(): string[] {
   return Array.from({ length: 10 }, (_, i) => `Konu ${i + 1}`);
 }
 
 // ders adı -> konu adları dizisi
-export const SUBJECT_TOPICS = (() => {
-  const map = {};
+export const SUBJECT_TOPICS: Record<string, string[]> = (() => {
+  const map: Record<string, string[]> = {};
   for (const s of ALL_SUBJECTS) map[s] = placeholderTopics();
   return map;
 })();
 
 // Bir dersin konu listesi (tanımsızsa boş)
-export function topicsFor(subject) {
+export function topicsFor(subject: string): string[] {
   return SUBJECT_TOPICS[subject] || [];
 }

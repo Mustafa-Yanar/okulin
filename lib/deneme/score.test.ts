@@ -3,8 +3,8 @@ import {
   gradeOne, gradeSubject, gradeExam,
   tytPuan, aytHam, aytPuanlari, mergeYks, lgsAgirlikliNet,
   toplamNet, computePuanlar,
-} from './score.js';
-import { sliceExam, sliceFlat, flatSubjects } from './template.js';
+} from './score';
+import { sliceExam, sliceFlat, flatSubjects } from './template';
 
 // Golden-case testler: öğrenciye/veliye gösterilen net ve puanı kilitler.
 // Beklenen değerler eldeki lineer modelden ELLE hesaplandı (katsayılar
@@ -142,7 +142,7 @@ describe('alternatif çift (din ↔ felsefe seçmeli) dışlama kuralı', () => 
   });
 });
 
-function round2(n) { return Math.round(n * 100) / 100; }
+function round2(n: number) { return Math.round(n * 100) / 100; }
 
 // ─── AYT golden ─────────────────────────────────────────────────────────────
 
@@ -150,7 +150,7 @@ describe('AYT puanları', () => {
   it('tamamı doğru (sliceFlat ile uçtan uca): SAY 339.72, EA 339.98, SÖZ 337.46', () => {
     // Düz anahtar: flatSubjects sırasında her derse tek harf
     const letters = ['A', 'B', 'C', 'D', 'E'];
-    const flat = [];
+    const flat: string[] = [];
     flatSubjects('AYT').forEach((s, si) => {
       for (let i = 0; i < s.count; i++) flat.push(letters[si % 5]);
     });

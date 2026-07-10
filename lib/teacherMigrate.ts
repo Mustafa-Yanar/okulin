@@ -5,13 +5,21 @@
 
 const MATH_EXPANSION = ['TYT Matematik', 'AYT Matematik', 'Geometri'];
 
-export function normalizeTeacher(t) {
+// Eski şema (branch/extraBranches) veya yeni şema (branches[]) taşıyan öğretmen kaydı.
+export interface LegacyTeacherLike {
+  branch?: string;
+  extraBranches?: string[];
+  branches?: string[];
+  [key: string]: unknown; // kaydın kalan alanları olduğu gibi taşınır
+}
+
+export function normalizeTeacher<T extends LegacyTeacherLike | null | undefined>(t: T): T | (Omit<NonNullable<T>, 'branch' | 'extraBranches'> & { branches: string[] }) {
   if (!t) return t;
   if (Array.isArray(t.branches)) return t; // zaten yeni şema
 
-  const merged = [];
-  const seen = new Set();
-  const add = (b) => { if (b && !seen.has(b)) { seen.add(b); merged.push(b); } };
+  const merged: string[] = [];
+  const seen = new Set<string>();
+  const add = (b: string | undefined) => { if (b && !seen.has(b)) { seen.add(b); merged.push(b); } };
 
   add(t.branch);
   (t.extraBranches || []).forEach(add);

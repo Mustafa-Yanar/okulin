@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DAT_MAPS, datSupports, parseDat } from './dat.js';
+import { DAT_MAPS, datSupports, parseDat } from './dat';
 
 // 222-krk Okulizyon optik şablonuna uygun sentetik satır üreticileri.
 // Kolon yerleşimi DAT_MAPS ile birebir: meta [3:54], ayraç 54, kitapçık 55,
