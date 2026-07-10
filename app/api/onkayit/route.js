@@ -50,9 +50,10 @@ function pushHistory(rec, byName, text) {
 }
 
 // ───────────────────────────────────────── GET ─────────────────────────────────────────
-// Müdür/rehber: tüm adaylar (history dahil, düşük hacim) + huni sayıları.
-// GET okuma: müdür + rehber (isManager eşdeğeri; config'e bakmaz — okuma her zaman serbest).
-export const GET = withAuth(['director', 'counselor'], async () => {
+// Müdür/rehber/muhasebeci: tüm adaylar (history dahil, düşük hacim) + huni sayıları.
+// GET okuma: rol listesi, config'e bakmaz — okuma her zaman serbest. Muhasebeci
+// dahil: kayıt masası ön kaydı görür (yazması 'intake' iznine tabi).
+export const GET = withAuth(['director', 'counselor', 'accountant'], async () => {
   const rows = await tdb().lead.findMany();
   const leads = rows.map(r => r.data);
   const stats = emptyStats();
@@ -62,7 +63,7 @@ export const GET = withAuth(['director', 'counselor'], async () => {
 });
 
 // ───────────────────────────────────────── POST ─────────────────────────────────────────
-export const POST = withAuth('manage', async (req, ctx, session) => {
+export const POST = withAuth('intake', async (req, ctx, session) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -125,7 +126,9 @@ export const POST = withAuth('manage', async (req, ctx, session) => {
 });
 
 // ───────────────────────────────────────── DELETE ─────────────────────────────────────────
-export const DELETE = withAuth('manage', async (req, ctx, session) => {
+// Aday silme de 'intake': lead silmek CRM akışının parçası (öğrenci silmenin
+// aksine finans/akademik geçmişi yok — muhasebeciye açılması güvenli).
+export const DELETE = withAuth('intake', async (req, ctx, session) => {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 

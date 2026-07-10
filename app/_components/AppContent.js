@@ -184,6 +184,8 @@ export default function AppContent() {
   const isDirectorRole = session.role === 'director' || session.role === 'counselor';
   // Salt-okunur rehber: yönetim butonlarını gizle (API ayrıca 403 döner — bu yalnız UI temizliği).
   const counselorReadOnly = session.role === 'counselor' && permissions?.counselor?.readOnly === true;
+  // Muhasebeci kayıt yetkisi (ön kayıt + öğrenci ekleme) — varsayılan açık, kurum kapatabilir.
+  const accountantIntake = permissions?.accountant?.intake !== false;
   // Müdür yardımcısı da kendi şifresini değiştirebilmeli (ilk girişte zorunlu değişim).
   const canChangePassword = ['teacher', 'student', 'parent', 'counselor', 'accountant'].includes(session.role) || isAssistant;
 
@@ -195,6 +197,7 @@ export default function AppContent() {
         branding={branding}
         modules={modules}
         counselorReadOnly={counselorReadOnly}
+        accountantIntake={accountantIntake}
         activeTab={activeTab}
         onTabChange={handleTabChange}
         collapsed={sidebarCollapsed}
@@ -269,7 +272,8 @@ export default function AppContent() {
             </>
           )}
           {session.role === 'accountant' && (
-            <AccountantPanel session={session} showToast={showToast} externalTab={activeTab} />
+            <AccountantPanel session={session} showToast={showToast} externalTab={activeTab}
+              onExternalTabChange={handleTabChange} intakeAllowed={accountantIntake} />
           )}
           {session.role === 'teacher' && (
             <TeacherPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />

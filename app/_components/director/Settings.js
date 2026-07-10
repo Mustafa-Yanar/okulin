@@ -421,10 +421,13 @@ function ConfigurationSection({ showToast }) {
     saveKey('etut', next, prev);
   }
 
-  // Rol yetki bayrağını aç/kapa (permissions.<role>.<flag>). Şimdilik counselor.readOnly.
-  function togglePermission(role, flag) {
+  // Rol yetki bayrağını aç/kapa (permissions.<role>.<flag>). current: bayrağın
+  // EKRANDA görünen değeri — varsayılanı true olan bayraklarda (accountant.intake)
+  // "değer hiç yazılmamış" durumunda !undefined yanlış yöne çevirirdi.
+  function togglePermission(role, flag, current) {
     const prev = config.permissions;
-    const next = { ...prev, [role]: { ...(prev?.[role] || {}), [flag]: !prev?.[role]?.[flag] } };
+    const cur = current !== undefined ? current : !!prev?.[role]?.[flag];
+    const next = { ...prev, [role]: { ...(prev?.[role] || {}), [flag]: !cur } };
     setConfig(c => ({ ...c, permissions: next }));
     saveKey('permissions', next, prev);
   }
@@ -636,6 +639,19 @@ function ConfigurationSection({ showToast }) {
               <span className="min-w-0">
                 <span className="block text-sm font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Rehber salt-okunur</span>
                 <span className="block text-caption">Açıkken rehber öğrenci/öğretmen/program/sınıf yönetimi yapamaz — yalnız görüntüler. Rehberlik notu, deneme, davranış, ödev, duyuru, takvim açık kalır.</span>
+              </span>
+            </label>
+            <label className="flex items-center gap-2.5 rounded-lg px-3 py-2 mt-2 cursor-pointer border transition-colors"
+              style={{
+                background: config.permissions?.accountant?.intake !== false ? 'color-mix(in srgb, var(--brand,#6366f1) 8%, transparent)' : 'var(--surface-2, #f9fafb)',
+                borderColor: config.permissions?.accountant?.intake !== false ? 'color-mix(in srgb, var(--brand,#6366f1) 30%, transparent)' : 'transparent',
+                opacity: savingKey === 'permissions' ? 0.6 : 1,
+              }}>
+              <input type="checkbox" checked={config.permissions?.accountant?.intake !== false} disabled={savingKey === 'permissions'}
+                onChange={() => togglePermission('accountant', 'intake', config.permissions?.accountant?.intake !== false)} className="accent-indigo-600 shrink-0" />
+              <span className="min-w-0">
+                <span className="block text-sm font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Muhasebeci kayıt yapabilir</span>
+                <span className="block text-caption">Açıkken muhasebeci ön kayıt (aday takibi) ve öğrenci ekleme/düzenleme yapabilir — veliyi kayıt masasında tek başına karşılar. Öğrenci silme her durumda kapalıdır. Kapatınca muhasebecide yalnız finans ekranları kalır.</span>
               </span>
             </label>
           </div>

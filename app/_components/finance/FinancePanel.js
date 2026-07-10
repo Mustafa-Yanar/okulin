@@ -696,10 +696,12 @@ function FilterDropdown({ value, onChange }) {
 }
 
 // ── Ana panel ────────────────────────────────────────────────────────────────
-export default function FinancePanel({ session, showToast }) {
+// initialSearch: kayıt akışı kısayolu — yeni kaydedilen öğrencinin adı aramaya
+// önceden yazılır (mount'ta bir kez okunur; kullanıcı serbestçe değiştirir).
+export default function FinancePanel({ session, showToast, initialSearch }) {
   const { data: financeData, isLoading: loading, mutate: load } = useSWR('/api/finance');
   const list = Array.isArray(financeData) ? financeData : [];
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch || '');
   const [filterStatus, setFilterStatus] = useState('all');
 
   // Özet istatistikler

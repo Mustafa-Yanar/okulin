@@ -36,8 +36,10 @@ function fmtDateTime(iso) {
   return new Date(iso).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-// ════════════════════ YÖNETİCİ (müdür / rehber) ════════════════════
-export function OnKayitManager({ showToast }) {
+// ════════════════════ YÖNETİCİ (müdür / rehber / muhasebeci) ════════════════════
+// onCreateStudent(lead): opsiyonel köprü — "kayıt oldu" adayında "Öğrenci kaydı"
+// butonu çıkar; tıklayınca öğrenci formu aday bilgileriyle önceden dolu açılır.
+export function OnKayitManager({ showToast, onCreateStudent }) {
   const confirm = useConfirm();
   const { data, isLoading, mutate } = useSWR('/api/onkayit');
   const list = data?.leadler || [];
@@ -82,7 +84,7 @@ export function OnKayitManager({ showToast }) {
         <p className="text-caption py-6 text-center">Bu durumda aday yok.</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {filtered.map(l => <LeadCard key={l.id} lead={l} showToast={showToast} onChange={mutate} onRemove={() => remove(l)} />)}
+          {filtered.map(l => <LeadCard key={l.id} lead={l} showToast={showToast} onChange={mutate} onRemove={() => remove(l)} onCreateStudent={onCreateStudent} />)}
         </div>
       )}
     </div>
@@ -156,7 +158,7 @@ function LeadForm({ showToast, onDone, onCancel }) {
 }
 
 // ── Aday kartı ──
-function LeadCard({ lead, showToast, onChange, onRemove }) {
+function LeadCard({ lead, showToast, onChange, onRemove, onCreateStudent }) {
   const [open, setOpen] = useState(false);
   const [followUp, setFollowUp] = useState('');
   const [busy, setBusy] = useState(false);
@@ -198,6 +200,13 @@ function LeadCard({ lead, showToast, onChange, onRemove }) {
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {lead.status === 'kayit' && onCreateStudent && (
+            <button onClick={() => onCreateStudent(lead)}
+              className="btn-primary !px-2.5 !py-1.5 !text-xs flex items-center gap-1"
+              title="Öğrenci formunu aday bilgileriyle aç">
+              <UserPlus size={13} /> Öğrenci kaydı
+            </button>
+          )}
           <button onClick={() => setOpen(o => !o)} className="hover:text-indigo-600 flex items-center gap-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
             Takip {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>

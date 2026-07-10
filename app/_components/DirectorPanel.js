@@ -77,6 +77,8 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [showImport, setShowImport] = useState(false);
   const [editTeacher, setEditTeacher] = useState(null);
   const [editStudent, setEditStudent] = useState(null);
+  // Ön Kayıt köprüsü: "kayıt oldu" adayından öğrenci formu önceden dolu açılır (id yok → yeni kayıt).
+  const [studentPrefill, setStudentPrefill] = useState(null);
   const [selectedTeacherForSlots, setSelectedTeacherForSlots] = useState(null);
   const [teacherSlots, setTeacherSlots] = useState(null);
   const [expandedTeacherId, setExpandedTeacherId] = useUrlParam('ogretmen'); // inline detay → URL'de görünür
@@ -504,7 +506,12 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       )}
 
       {tab === 'onkayit' && (
-        <OnKayitManager showToast={showToast} />
+        <OnKayitManager showToast={showToast}
+          onCreateStudent={lead => {
+            setEditStudent(null);
+            setStudentPrefill({ name: lead.studentName || '', parentName: lead.parentName || '', parentPhone: lead.phone || '' });
+            setShowStudentForm(true);
+          }} />
       )}
 
       {/* Ders Saatleri sekmesi */}
@@ -567,13 +574,13 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
         </Modal>
       )}
       {showStudentForm && (
-        <StudentForm initial={editStudent} classes={classes} onClose={() => { setShowStudentForm(false); setEditStudent(null); }}
-          onSwitchToImport={() => { setShowStudentForm(false); setEditStudent(null); setShowImport(true); }}
+        <StudentForm initial={editStudent || studentPrefill} classes={classes} onClose={() => { setShowStudentForm(false); setEditStudent(null); setStudentPrefill(null); }}
+          onSwitchToImport={() => { setShowStudentForm(false); setEditStudent(null); setStudentPrefill(null); setShowImport(true); }}
           onSave={async data => {
             try {
               if (editStudent) { await api('/api/students',{method:'PUT',body:JSON.stringify({id:editStudent.id,...data})}); showToast('Öğrenci güncellendi'); }
               else { await api('/api/students',{method:'POST',body:JSON.stringify(data)}); showToast('Öğrenci eklendi'); }
-              setShowStudentForm(false); setEditStudent(null); loadAll(weekKey);
+              setShowStudentForm(false); setEditStudent(null); setStudentPrefill(null); loadAll(weekKey);
             } catch(err){showToast(err.message,'error');}
           }} />
       )}

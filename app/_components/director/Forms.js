@@ -135,6 +135,9 @@ export function TeacherForm({ initial, onClose, onSave }) {
 }
 
 export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchToImport }) {
+  // Düzenleme/yeni ayrımı initial'ın VARLIĞI değil id'si: ön kayıttan gelen prefill
+  // (ad + veli bilgisi, id yok) YENİ kayıt modunda açılır — alanlar dolu, kural yeni.
+  const isEdit = !!initial?.id;
   const [name, setName] = useState(initial?.name||'');
   const [password, setPassword] = useState('');
   const [selectedGroup, setSelectedGroup] = useState(initial?.group||'ortaokul');
@@ -148,12 +151,12 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
   const [diplomaNotu, setDiplomaNotu] = useState(initial?.diplomaNotu != null ? String(initial.diplomaNotu) : '');
   const [loading, setLoading] = useState(false);
   // Yeni öğrenci: grup (ya da şube listesi) değişince ilk şubeyi seç. Düzenlemede cls korunur.
-  useEffect(() => { if (!initial) setCls(groupClasses[0]?.id || ''); }, [selectedGroup, groupClasses, initial]);
+  useEffect(() => { if (!isEdit) setCls(groupClasses[0]?.id || ''); }, [selectedGroup, groupClasses, isEdit]);
 
   const phoneInvalid = phone.trim() !== '' && !isValidTurkishMobile(phone);
   const parentPhoneInvalid = parentPhone.trim() !== '' && !isValidTurkishMobile(parentPhone);
   // Veli zorunlu. Şifre boşsa öğrenci telefonu ilk şifre olur; telefon da yoksa "12345678".
-  const parentMissing = !initial && (parentName.trim() === '' || parentPhone.trim() === '');
+  const parentMissing = !isEdit && (parentName.trim() === '' || parentPhone.trim() === '');
 
   // OBP (yalnız mezun): diploma notu 50-100 girilir, OBP = not × 5 (250-500).
   const isMezun = selectedGroup === 'mezun';
@@ -174,8 +177,8 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
     setLoading(false);
   };
   return (
-    <Modal title={initial?'Öğrenci Düzenle':'Yeni Öğrenci'} onClose={onClose}>
-      {!initial && onSwitchToImport && (
+    <Modal title={isEdit?'Öğrenci Düzenle':'Yeni Öğrenci'} onClose={onClose}>
+      {!isEdit && onSwitchToImport && (
         <div className="mb-4 -mt-1 flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-100">
           <span className="text-xs text-indigo-600">Toplu öğrenci yüklemek ister misin?</span>
           <button type="button" onClick={onSwitchToImport}
@@ -186,12 +189,12 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
       )}
       <form onSubmit={submit} className="space-y-4">
         <FormField label="Ad Soyad"><input className="input" value={name} onChange={e=>setName(e.target.value)} required /></FormField>
-        <FormField label={initial?'Şifre (boş bırakırsan değişmez)':'Şifre (boş bırakırsan telefon)'}>
-          <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={initial?'':'Boş = öğrenci telefonu (yoksa 12345678)'} />
-          {!initial && <p className="text-caption mt-1">Boş bırakırsan ilk şifre öğrencinin telefonu olur; telefon da yoksa <b>12345678</b>. İlk girişte değiştirmesi istenir.</p>}
+        <FormField label={isEdit?'Şifre (boş bırakırsan değişmez)':'Şifre (boş bırakırsan telefon)'}>
+          <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder={isEdit?'':'Boş = öğrenci telefonu (yoksa 12345678)'} />
+          {!isEdit && <p className="text-caption mt-1">Boş bırakırsan ilk şifre öğrencinin telefonu olur; telefon da yoksa <b>12345678</b>. İlk girişte değiştirmesi istenir.</p>}
         </FormField>
         <FormField label="Grup">
-          <select className="input" value={selectedGroup} onChange={e=>setSelectedGroup(e.target.value)} disabled={!!initial}>
+          <select className="input" value={selectedGroup} onChange={e=>setSelectedGroup(e.target.value)} disabled={isEdit}>
             {Object.entries(GROUPS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
           </select>
         </FormField>
@@ -220,14 +223,14 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
           {phoneInvalid && <p className="input-hint input-hint--error">Geçersiz numara. Örnek: 0532 123 45 67</p>}
         </FormField>
         <FormField label="Veli Adı Soyadı *">
-          <input className="input" type="text" placeholder="Örn. Ayşe Yılmaz" value={parentName} onChange={e=>setParentName(e.target.value)} required={!initial} />
-          {!initial && parentName.trim()==='' && <p className="text-xs text-gray-400 mt-1">Veli adı zorunlu.</p>}
+          <input className="input" type="text" placeholder="Örn. Ayşe Yılmaz" value={parentName} onChange={e=>setParentName(e.target.value)} required={!isEdit} />
+          {!isEdit && parentName.trim()==='' && <p className="text-xs text-gray-400 mt-1">Veli adı zorunlu.</p>}
         </FormField>
         <FormField label="Veli Telefonu *">
-          <input className={`input ${parentPhoneInvalid ? 'input-error' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={parentPhone} onChange={e=>setParentPhone(e.target.value)} required={!initial} aria-invalid={parentPhoneInvalid || undefined} />
+          <input className={`input ${parentPhoneInvalid ? 'input-error' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={parentPhone} onChange={e=>setParentPhone(e.target.value)} required={!isEdit} aria-invalid={parentPhoneInvalid || undefined} />
           {parentPhoneInvalid
             ? <p className="input-hint input-hint--error">Geçersiz numara. Örnek: 0532 123 45 67</p>
-            : (!initial && parentPhone.trim()==='' && <p className="input-hint">Veli telefonu zorunlu (veli paneli girişi bu numarayla).</p>)}
+            : (!isEdit && parentPhone.trim()==='' && <p className="input-hint">Veli telefonu zorunlu (veli paneli girişi bu numarayla).</p>)}
         </FormField>
         <FormField label="Doğum Tarihi">
           <input className="input" type="date" value={birthDate} onChange={e=>setBirthDate(e.target.value)}

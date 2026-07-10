@@ -65,7 +65,10 @@ export const GET = withAuth(async () => {
   return NextResponse.json(rows.map(studentOut));
 });
 
-export const POST = withAuth('manage', async (req) => {
+// POST/PUT 'intake': kayıt akışı — müdür/rehber (manage kuralı) + muhasebeci
+// (config permissions.accountant.intake). Silme 'manage'de kalır (kayıt geri
+// alınabilir, silme finans geçmişini de götürür — muhasebeciye verilmez).
+export const POST = withAuth('intake', async (req, ctx, session) => {
   const parsed = await parseBody(req, StudentCreateSchema);
   if (!parsed.ok) return parsed.response;
   const { name, password, cls, phone, parentPhone, parentName, birthDate, diplomaNotu,
@@ -122,10 +125,16 @@ export const POST = withAuth('manage', async (req) => {
     parent2Name: (parent2Name || '').trim(), parent2Phone: normParent2Phone, parent2Relation: (parent2Relation || '').trim(),
     birthDate: birthDate || '', diplomaNotu: (diploma === '' ? null : diploma), mustChangePassword: true,
   } });
+  await logAudit({
+    ...actorFrom(session),
+    action: 'student.create',
+    target: { type: 'student', id: legacyId, name },
+    detail: `Öğrenci eklendi: ${name} (${cls})`,
+  });
   return NextResponse.json({ id: legacyId, name, username, cls, group });
 });
 
-export const PUT = withAuth('manage', async (req) => {
+export const PUT = withAuth('intake', async (req) => {
   const parsed = await parseBody(req, StudentUpdateSchema);
   if (!parsed.ok) return parsed.response;
   const { id, name, password, cls, phone, parentPhone, parentName, birthDate, diplomaNotu,

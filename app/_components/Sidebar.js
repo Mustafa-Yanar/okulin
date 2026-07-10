@@ -40,6 +40,10 @@ const ITEMS_BY_ROLE = {
     { group: 'Sistem',   key: 'ders-programi', label: 'Ders Programı Oluştur', icon: LayoutGrid },
   ],
   accountant: [
+    // Kayıt grubu: kayıt masası akışı (ön kayıt → öğrenci kaydı). Kurum config
+    // permissions.accountant.intake kapalıysa buildItems'ta gizlenir.
+    { group: 'Kayıt',    key: 'onkayit',     label: 'Ön Kayıt',          icon: UserPlus },
+    { group: 'Kayıt',    key: 'ogrenciler',  label: 'Öğrenciler',        icon: GraduationCap },
     { group: 'Finans',   key: 'finance',     label: 'Öğrenci Ödemeleri', icon: CreditCard },
     { group: 'Finans',   key: 'expenses',    label: 'Giderler',          icon: TrendingDown },
   ],
@@ -96,14 +100,18 @@ const READONLY_HIDDEN_TABS = ['ders-programi', 'onkayit'];
 
 // modules: { finance:true, ... } | null (henüz yüklenmedi → hepsi açık varsay).
 // Kapalı modüle ait sekmeler gizlenir. counselorReadOnly: salt-okunur rehberde üretim
-// sekmelerini (program oluştur, ön kayıt) ayrıca gizle.
-function buildItems(role, modules, counselorReadOnly) {
+// sekmelerini (program oluştur, ön kayıt) ayrıca gizle. accountantIntake=false:
+// muhasebecinin Kayıt grubu (ön kayıt + öğrenciler) gizlenir — yalnız finans kalır.
+function buildItems(role, modules, counselorReadOnly, accountantIntake) {
   const items = ITEMS_BY_ROLE[role] || [];
-  const afterReadOnly = counselorReadOnly
+  let filtered = counselorReadOnly
     ? items.filter((it) => !READONLY_HIDDEN_TABS.includes(it.key))
     : items;
-  if (!modules) return afterReadOnly; // yüklenmeden hepsini göster (titreme önler)
-  return afterReadOnly.filter((it) => {
+  if (role === 'accountant' && accountantIntake === false) {
+    filtered = filtered.filter((it) => it.group !== 'Kayıt');
+  }
+  if (!modules) return filtered; // yüklenmeden hepsini göster (titreme önler)
+  return filtered.filter((it) => {
     const mod = TAB_TO_MODULE[it.key];
     return !mod || modules[mod] !== false;
   });
@@ -138,6 +146,7 @@ export default function Sidebar({
   branding,
   modules,
   counselorReadOnly,
+  accountantIntake,
   activeTab,
   onTabChange,
   collapsed,
@@ -147,7 +156,7 @@ export default function Sidebar({
   showToast,
   onSettings,
 }) {
-  const items = buildItems(session?.role, modules, counselorReadOnly);
+  const items = buildItems(session?.role, modules, counselorReadOnly, accountantIntake);
 
   // Grup akordeon durumu (yalnız gruplu roller: müdür/rehber). Varsayılan: hepsi açık.
   // false = kapalı; absent/true = açık. localStorage'da kalıcı, oturumlar arası korunur.
