@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { currentOrg, currentBranch } from '@/lib/tenant';
-import { getSession, canReadStudent } from '@/lib/auth';
+import { withAuth, canReadStudent } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
 import { decryptSecret } from '@/lib/payment/crypto';
-import { getProvider } from '@/lib/payment';
+import { getProvider, type PaymentConfigData } from '@/lib/payment';
 import { tdb } from '@/lib/sqldb';
 import { prisma } from '@/lib/prisma';
 
@@ -18,23 +18,23 @@ const StartSchema = z.object({
   installmentIdx: z.coerce.number().int().min(0).max(1000),
 });
 
-function newMerchantOid() {
+function newMerchantOid(): string {
   return 'et' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-export async function POST(req) {
-  const session = await getSession();
+// Bilinçli inline yetki: veli yalnız kendi çocuğu için başlatır (isteğe bağlı kontrol).
+export const POST = withAuth(async (req, _ctx, session) => {
   const parsed = await parseBody(req, StartSchema);
   if (!parsed.ok) return parsed.response;
   const { studentId, installmentIdx } = parsed.data;
 
   // Yetki: veli yalnız kendi çocuğu için ödeme başlatabilir.
-  if (!session || session.role !== 'parent' || !canReadStudent(session, studentId)) {
+  if (session.role !== 'parent' || !canReadStudent(session, studentId)) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
   // Tenant ödeme yapılandırması
-  const cfg = (await tdb().tenantConfig.findFirst())?.paymentConfig;
+  const cfg = (await tdb().tenantConfig.findFirst())?.paymentConfig as PaymentConfigData | null | undefined;
   if (!cfg || !cfg.active || !cfg.merchantId || !cfg.keyEnc || !cfg.saltEnc) {
     return NextResponse.json({ error: 'Online ödeme bu kurumda aktif değil' }, { status: 400 });
   }
@@ -48,12 +48,12 @@ export async function POST(req) {
   const inst = stu?.finance?.installments?.find((i) => i.idx === installmentIdx);
   if (!inst) return NextResponse.json({ error: 'Taksit bulunamadı' }, { status: 404 });
   if (inst.paid) return NextResponse.json({ error: 'Bu taksit zaten ödenmiş' }, { status: 400 });
-  const amountTL = parseFloat(inst.amount) || 0;
+  const amountTL = parseFloat(String(inst.amount)) || 0;
   if (amountTL <= 0) return NextResponse.json({ error: 'Geçersiz taksit tutarı' }, { status: 400 });
   const amountKurus = Math.round(amountTL * 100);
 
   // Gizli anahtarları çöz
-  let key, salt;
+  let key: string | null, salt: string | null;
   try {
     key = decryptSecret(cfg.keyEnc);
     salt = decryptSecret(cfg.saltEnc);
@@ -64,13 +64,14 @@ export async function POST(req) {
   const org = currentOrg();
   const branch = currentBranch();
   const merchantOid = newMerchantOid();
-  const childName = (session.children || []).find(c => (c.id || c) === studentId)?.name || studentName || 'Öğrenci';
+  const childName = (session.children || []).find(c => ((typeof c === 'string' ? c : c.id)) === studentId);
+  const childNameStr = (typeof childName === 'object' && childName?.name) || studentName || 'Öğrenci';
 
   // Global order kaydı — callback bunu okuyup doğru kuruma yazar (host'a güvenmez).
   await prisma.payOrder.create({ data: {
     oid: merchantOid, orgSlug: org, branch, studentId,
     amount: amountKurus, status: 'pending',
-    data: { installmentIdx, amountTL, amountKurus, studentName: childName, createdAt: new Date().toISOString() },
+    data: { installmentIdx, amountTL, amountKurus, studentName: childNameStr, createdAt: new Date().toISOString() },
   } });
 
   const origin = new URL(req.url).origin;
@@ -78,8 +79,8 @@ export async function POST(req) {
 
   const provider = getProvider(cfg.provider || 'paytr');
   const result = await provider.createToken({
-    config: { merchantId: cfg.merchantId, key, salt, testMode: cfg.testMode ?? true },
-    order: { merchantOid, amountKurus, basketName: `${childName} - taksit ödemesi` },
+    config: { merchantId: cfg.merchantId, key: key || '', salt: salt || '', testMode: cfg.testMode ?? true },
+    order: { merchantOid, amountKurus, basketName: `${childNameStr} - taksit ödemesi` },
     buyer: { name: session.name || 'Veli', phone: session.id || '', email: '', address: '-' },
     reqIp,
     okUrl: `${origin}/odeme/sonuc?status=ok`,
@@ -91,4 +92,4 @@ export async function POST(req) {
   }
 
   return NextResponse.json({ ok: true, iframeUrl: result.iframeUrl, merchantOid });
-}
+});

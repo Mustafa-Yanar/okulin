@@ -1,4 +1,5 @@
 import { logAudit } from '@/lib/audit';
+import type { PaymentConfigData } from '@/lib/payment';
 import { decryptSecret } from '@/lib/payment/crypto';
 import { getProvider } from '@/lib/payment';
 import { applyInstallmentPaymentSql } from '@/lib/finance';
@@ -8,6 +9,8 @@ import { prisma } from '@/lib/prisma';
 export const runtime = 'nodejs'; // HMAC + crypto
 
 // PayTR Bildirim (callback) URL'i. Server-to-server, form-urlencoded POST.
+// Bilinçli withAuth istisnası + düz metin yanıt: PayTR sözleşmesi HMAC doğrulama
+// ve gövdede literal "OK" bekler — { error } JSON formatı bu uca uygulanmaz.
 // Kimlik doğrulama: HMAC hash (oturum/cookie YOK). Middleware'de CSRF'ten MUAF.
 // Para kredilendiren KRİTİK uç → idempotent olmalı; her durumda düz metin "OK".
 // payorder = PayOrder modeli; finans = applyInstallmentPaymentSql.
@@ -16,30 +19,36 @@ export const runtime = 'nodejs'; // HMAC + crypto
 function ok() {
   return new Response('OK', { status: 200, headers: { 'Content-Type': 'text/plain' } });
 }
-function fail(msg) {
+function fail(msg: string) {
   return new Response(`FAIL: ${msg}`, { status: 400, headers: { 'Content-Type': 'text/plain' } });
 }
 
 // PayOrder okuma — ortak şekle normalize eder.
-async function readOrder(oid) {
+interface OrderView {
+  org: string; branch: string; studentId: string; status: string;
+  installmentIdx?: number; studentName?: string; data: Record<string, unknown>;
+}
+
+async function readOrder(oid: string): Promise<OrderView | null> {
   const po = await prisma.payOrder.findUnique({ where: { oid } });
   if (!po) return null;
+  const d = (po.data as Record<string, unknown> | null) || {}; // data: Json
   return {
     org: po.orgSlug, branch: po.branch, studentId: po.studentId, status: po.status,
-    installmentIdx: po.data?.installmentIdx, studentName: po.data?.studentName, data: po.data || {},
+    installmentIdx: d.installmentIdx as number | undefined, studentName: d.studentName as string | undefined, data: d,
   };
 }
 // PayOrder durum güncelle (idempotency kaydı).
-async function patchOrder(oid, order, patch) {
+async function patchOrder(oid: string, order: OrderView, patch: { status: string; [key: string]: unknown }) {
   const { status, ...rest } = patch;
-  await prisma.payOrder.update({ where: { oid }, data: { status, data: { ...(order.data || {}), ...rest } } });
+  await prisma.payOrder.update({ where: { oid }, data: { status, data: { ...(order.data || {}), ...rest } as object } });
 }
 
-export async function POST(req) {
-  let form;
+export async function POST(req: Request) {
+  let form: Record<string, string>;
   try {
     const fd = await req.formData();
-    form = Object.fromEntries(fd.entries());
+    form = Object.fromEntries(fd.entries()) as Record<string, string>;
   } catch {
     return fail('gövde okunamadı');
   }
@@ -53,10 +62,10 @@ export async function POST(req) {
   if (order.status === 'paid') return ok(); // idempotency
 
   // İlgili kurumun config'ini AÇIKÇA order'ın tenant'ından yükle.
-  const cfg = (await tdb(order.org, order.branch).tenantConfig.findFirst())?.paymentConfig;
+  const cfg = (await tdb(order.org, order.branch).tenantConfig.findFirst())?.paymentConfig as PaymentConfigData | null | undefined;
   if (!cfg || !cfg.keyEnc || !cfg.saltEnc) return fail('config yok');
 
-  let key, salt;
+  let key: string | null, salt: string | null;
   try {
     key = decryptSecret(cfg.keyEnc);
     salt = decryptSecret(cfg.saltEnc);
@@ -65,7 +74,7 @@ export async function POST(req) {
   }
 
   const provider = getProvider(cfg.provider || 'paytr');
-  const { valid, status } = provider.verifyCallback({ config: { key, salt }, form });
+  const { valid, status } = provider.verifyCallback({ config: { key: key || '', salt: salt || '' }, form });
   if (!valid) return fail('hash uyuşmuyor'); // sahte/bozuk bildirim — kredilendirme yok
 
   // Başarısız ödeme → işaretle, OK dön (tekrar deneme istemeyiz).
@@ -114,7 +123,7 @@ export async function POST(req) {
     }, { org: order.org, branch: order.branch });
 
     return ok();
-  } catch (e) {
+  } catch {
     // Claim'i geri al (yoksa sipariş kalıcı kilitlenir), tekrar deneme işleyebilsin.
     try {
       await prisma.payOrder.updateMany({

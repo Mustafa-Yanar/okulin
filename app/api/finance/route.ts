@@ -1,25 +1,31 @@
 import { NextResponse } from 'next/server';
-import { getSession, canReadStudent } from '@/lib/auth';
+import { withAuth, canReadStudent } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId, zMoney } from '@/lib/validate';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
+import type { Finance, Installment } from '@prisma/client';
+import type { PaymentEntry } from '@/lib/finance';
 
-function canAccess(session) {
-  return session && (session.role === 'director' || session.role === 'accountant');
+type FinanceWithInst = Finance & { installments?: Installment[] };
+// financeOut'a giren öğrenci görünümü (tam Student veya POST'un kurduğu kısmi nesne).
+interface StudentLike {
+  legacyId?: string;
+  name?: string;
+  class?: { legacyId?: string } | null;
 }
 
 // SQL Finance(+installments) + Student → mevcut sözleşme şekli (balance türetilir).
-const financeOut = (f, stu) => f ? ({
+const financeOut = (f: FinanceWithInst | null | undefined, stu: StudentLike | null) => f ? ({
   studentId: stu?.legacyId, studentName: stu?.name, studentCls: stu?.class?.legacyId || '',
   registrationDate: f.registrationDate, totalFee: f.totalFee, discount: f.discount, netFee: f.netFee,
   paymentPlan: f.paymentPlan,
   installments: (f.installments || []).map((i) => ({ idx: i.idx, dueDate: i.dueDate, amount: i.amount, paid: i.paid, paidDate: i.paidDate, paidAmount: i.paidAmount, method: i.method, receiptNo: i.receiptNo })),
-  payments: f.payments || [],
-  balance: f.netFee - (f.payments || []).reduce((s, p) => s + (p.amount || 0), 0),
+  payments: ((f.payments as unknown as PaymentEntry[] | null) || []),
+  balance: f.netFee - ((f.payments as unknown as PaymentEntry[] | null) || []).reduce((s, p) => s + (p.amount || 0), 0),
 }) : null;
 // Bir öğrencinin finans kaydını SQL'den çek (legacyId ile).
-async function financeByLegacySql(studentId) {
-  const stu = await tdb().student.findFirst({ where: { legacyId: studentId }, include: { class: true } });
+async function financeByLegacySql(studentId: string | null) {
+  const stu = await tdb().student.findFirst({ where: { legacyId: studentId || '' }, include: { class: true } });
   if (!stu) return { stu: null, f: null };
   const f = await tdb().finance.findFirst({ where: { studentId: stu.id }, include: { installments: { orderBy: { idx: 'asc' } } } });
   return { stu, f };
@@ -38,13 +44,13 @@ const FinanceSchema = z.object({
 });
 const FinanceDeleteSchema = z.object({ studentId: zId });
 
-export async function GET(req) {
-  const session = await getSession();
+// Bilinçli inline rol dallanması: veli kendi çocuğunu okur, müdür/muhasebeci tümünü.
+export const GET = withAuth(async (req, _ctx, session) => {
   const { searchParams } = new URL(req.url);
   const studentId = searchParams.get('studentId');
 
   // Veli: yalnız kendi çocuğunun finansal kaydını görür (salt-okunur).
-  if (session && session.role === 'parent') {
+  if (session.role === 'parent') {
     if (!canReadStudent(session, studentId)) {
       return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     }
@@ -52,7 +58,9 @@ export async function GET(req) {
     return NextResponse.json(financeOut(f, stu));
   }
 
-  if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  if (session.role !== 'director' && session.role !== 'accountant') {
+    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  }
 
   if (studentId) {
     // Tek öğrenci finansal kaydı
@@ -64,12 +72,9 @@ export async function GET(req) {
   const list = studs.map((s) => ({ studentId: s.legacyId, studentName: s.name, studentCls: s.class?.legacyId || '', finance: financeOut(s.finance, s) }));
   list.sort((a, b) => a.studentName.localeCompare(b.studentName, 'tr'));
   return NextResponse.json(list);
-}
+});
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const POST = withAuth(['director', 'accountant'], async (req, _ctx, session) => {
   const parsed = await parseBody(req, FinanceSchema);
   if (!parsed.ok) return parsed.response;
   const { studentId, studentName, studentCls, totalFee, discount, paymentPlan, installments } = parsed.data;
@@ -77,32 +82,27 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Öğrenci ve ücret zorunlu' }, { status: 400 });
   }
 
-  const netFee = Math.max(0, (parseFloat(totalFee) || 0) - (parseFloat(discount) || 0));
+  const netFee = Math.max(0, (parseFloat(String(totalFee)) || 0) - (parseFloat(String(discount)) || 0));
 
   const stu = await tdb().student.findFirst({ where: { legacyId: studentId } });
   if (!stu) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
   const existing = await tdb().finance.findFirst({ where: { studentId: stu.id }, include: { installments: { orderBy: { idx: 'asc' } } } });
-  const prevByIdx = {}; for (const i of (existing?.installments || [])) prevByIdx[i.idx] = i;
-  let instData = [];
+  const prevByIdx: Record<number, Installment> = {}; for (const i of (existing?.installments || [])) prevByIdx[i.idx] = i;
+  let instData: { idx: number; dueDate: string; amount: number; paid: boolean; paidDate: string | null; paidAmount: number | null; method: string | null; receiptNo: string | null }[] = [];
   if (paymentPlan === 'taksitli' && installments && installments.length > 0) {
-    instData = installments.map((inst, idx) => { const prev = prevByIdx[idx]; return { idx, dueDate: inst.dueDate, amount: parseFloat(inst.amount) || 0, paid: prev?.paid || false, paidDate: prev?.paidDate || null, paidAmount: prev?.paidAmount ?? null, method: prev?.method || null, receiptNo: prev?.receiptNo || null }; });
+    instData = installments.map((inst, idx) => { const prev = prevByIdx[idx]; return { idx, dueDate: inst.dueDate || '', amount: parseFloat(String(inst.amount)) || 0, paid: prev?.paid || false, paidDate: prev?.paidDate || null, paidAmount: prev?.paidAmount ?? null, method: prev?.method || null, receiptNo: prev?.receiptNo || null }; });
   }
-  const data = { registrationDate: existing?.registrationDate || new Date().toISOString().slice(0, 10), totalFee: parseFloat(totalFee) || 0, discount: parseFloat(discount) || 0, netFee, paymentPlan: paymentPlan || 'pesin', payments: existing?.payments || [] };
-  let finRow;
+  const data = { registrationDate: existing?.registrationDate || new Date().toISOString().slice(0, 10), totalFee: parseFloat(String(totalFee)) || 0, discount: parseFloat(String(discount)) || 0, netFee, paymentPlan: paymentPlan || 'pesin', payments: ((existing?.payments as unknown as PaymentEntry[] | null) || []) as unknown as object };
+  let finRow: Finance;
   if (existing) { await tdb().installment.deleteMany({ where: { financeId: existing.id } }); finRow = await tdb().finance.update({ where: { id: existing.id }, data }); }
-  else finRow = await tdb().finance.create({ data: { ...data, studentId: stu.id } });
+  else finRow = await tdb().finance.create({ data: withScope({ ...data, studentId: stu.id }) });
   for (const i of instData) await tdb().installment.create({ data: { financeId: finRow.id, ...i } });
   await logAudit({ ...actorFrom(session), action: existing ? 'finance.update' : 'finance.create', target: { type: 'student', id: studentId, name: studentName || studentId }, detail: `Finansal kayıt ${existing ? 'güncellendi' : 'oluşturuldu'}: ${studentName || studentId} — net ücret ${netFee} TL, ${data.paymentPlan}${instData.length ? ` (${instData.length} taksit)` : ''}` });
   const full = await tdb().finance.findFirst({ where: { id: finRow.id }, include: { installments: { orderBy: { idx: 'asc' } } } });
   return NextResponse.json({ ok: true, record: financeOut(full, { legacyId: studentId, name: studentName, class: { legacyId: studentCls } }) });
-}
+});
 
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!session || session.role !== 'director') {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const DELETE = withAuth(['director'], async (req, _ctx, session) => {
   const parsed = await parseBody(req, FinanceDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { studentId } = parsed.data;
@@ -112,4 +112,4 @@ export async function DELETE(req) {
   if (f) await tdb().finance.delete({ where: { id: f.id } }); // cascade: installments
   await logAudit({ ...actorFrom(session), action: 'finance.delete', target: { type: 'student', id: studentId, name: stu?.name || studentId }, detail: `Finansal kayıt silindi: ${stu?.name || studentId}` });
   return NextResponse.json({ ok: true });
-}
+});

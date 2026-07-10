@@ -1,19 +1,20 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z } from '@/lib/validate';
 import { encryptSecret } from '@/lib/payment/crypto';
-import { tdb } from '@/lib/sqldb';
+import type { PaymentConfigData } from '@/lib/payment';
+import { tdb, withScope } from '@/lib/sqldb';
 
 // payment:config okuma/yazma (TenantConfig.paymentConfig).
-async function readPaymentConfig() {
+async function readPaymentConfig(): Promise<PaymentConfigData | null> {
   const tc = await tdb().tenantConfig.findFirst();
-  return tc?.paymentConfig || null;
+  return (tc?.paymentConfig as PaymentConfigData | null) || null;
 }
-async function writePaymentConfig(cfg) {
+async function writePaymentConfig(cfg: PaymentConfigData): Promise<void> {
   const tc = await tdb().tenantConfig.findFirst();
-  if (tc) await tdb().tenantConfig.update({ where: { orgSlug_branch: { orgSlug: tc.orgSlug, branch: tc.branch } }, data: { paymentConfig: cfg } });
-  else await tdb().tenantConfig.create({ data: { paymentConfig: cfg } });
+  if (tc) await tdb().tenantConfig.update({ where: { orgSlug_branch: { orgSlug: tc.orgSlug, branch: tc.branch } }, data: { paymentConfig: cfg as object } });
+  else await tdb().tenantConfig.create({ data: withScope({ paymentConfig: cfg as object }) });
 }
 
 export const runtime = 'nodejs'; // crypto
@@ -21,7 +22,7 @@ export const runtime = 'nodejs'; // crypto
 // Kurumun (şubenin) online ödeme yapılandırması — tenant-scoped `payment:config`.
 // Gizli anahtarlar (key/salt) ŞİFRELİ saklanır; GET ASLA düz secret döndürmez.
 
-function isEnabled(cfg) {
+function isEnabled(cfg: PaymentConfigData | null | undefined): boolean {
   return !!(cfg && cfg.active && cfg.merchantId && cfg.keyEnc && cfg.saltEnc);
 }
 
@@ -33,10 +34,8 @@ const ConfigSchema = z.object({
   active: z.coerce.boolean().optional(),
 });
 
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+// Bilinçli inline rol dallanması: müdür maskeli config, diğer roller yalnız enabled bayrağı.
+export const GET = withAuth(async (_req, _ctx, session) => {
   const cfg = await readPaymentConfig();
 
   // Müdür dışındaki roller (veli vb.) yalnız "açık mı" bilgisini görür.
@@ -54,20 +53,15 @@ export async function GET() {
     active: !!cfg?.active,
     enabled: isEnabled(cfg),
   });
-}
+});
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || session.role !== 'director') {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth(['director'], async (req, _ctx, session) => {
   const parsed = await parseBody(req, ConfigSchema);
   if (!parsed.ok) return parsed.response;
   const { merchantId, merchantKey, merchantSalt, testMode, active } = parsed.data;
 
   const existing = (await readPaymentConfig()) || { provider: 'paytr' };
-  const next = { ...existing, provider: 'paytr' };
+  const next: PaymentConfigData = { ...existing, provider: 'paytr' };
 
   if (merchantId !== undefined) next.merchantId = merchantId.trim();
   // Secret yalnız DOLU gelince güncellenir → düzenlemede boş bırakınca eskisi korunur.
@@ -98,4 +92,4 @@ export async function POST(req) {
       enabled: isEnabled(next),
     },
   });
-}
+});

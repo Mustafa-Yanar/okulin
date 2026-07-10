@@ -11,9 +11,10 @@ import { tdb } from '@/lib/sqldb';
 export const runtime = 'nodejs'; // web-push Node crypto gerektirir
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
-function fmt(n) { return (n || 0).toLocaleString('tr-TR'); }
+function fmt(n: number) { return (n || 0).toLocaleString('tr-TR'); }
 
-export async function GET(req) {
+// Bilinçli withAuth istisnası: cron ucu — oturum yok, CRON_SECRET Bearer doğrulanır.
+export async function GET(req: Request) {
   const auth = req.headers.get('authorization');
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -26,12 +27,12 @@ export async function GET(req) {
 
   const today = todayISO();
   // Vadesi gelmiş ödenmemiş taksitleri veliye (telefon) göre grupla — bir veliye tek push
-  const byParent = {}; // phone -> [{name, amount}]
+  const byParent: Record<string, { name: string; amount: number }[]> = {}; // phone -> [{name, amount}]
   for (const r of rows) {
     if (!r.parentPhone || !Array.isArray(r.installments)) continue;
     const overdue = r.installments.filter(inst => !inst.paid && inst.dueDate && inst.dueDate <= today);
     if (overdue.length === 0) continue;
-    const amount = overdue.reduce((sum, inst) => sum + (parseFloat(inst.amount) || 0), 0);
+    const amount = overdue.reduce((sum, inst) => sum + (parseFloat(String(inst.amount)) || 0), 0);
     if (amount <= 0) continue;
     if (!byParent[r.parentPhone]) byParent[r.parentPhone] = [];
     byParent[r.parentPhone].push({ name: r.name, amount });

@@ -7,10 +7,11 @@ import {
 import { ALL_DAYS, daySlots } from '@/lib/constants';
 
 // Pazar 11:00 UTC+3 = 08:00 UTC → "0 8 * * 0"
+// Bilinçli withAuth istisnası: cron ucu — oturum yok, CRON_SECRET Bearer doğrulanır.
 // Öğretmen listesi / current_week / slot okuma / hafta init SQL'den.
 // NOT: haftalık arşiv (archive:teacher|student) hâlâ Redis — arşiv alt-sistemi SQL'e
 // taşınmadı (okuyan /api/archive de Redis). Tutarlı; ayrı bir göç işi.
-export async function GET(req) {
+export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -37,8 +38,8 @@ export async function GET(req) {
   const nextWeek = getWeekKey(nextMonday);
 
   // 1. Her öğretmenin bu haftaki booked slotlarını SQL grid'inden topla (arşiv için)
-  const teacherArchiveMap = {}; // teacherId -> entries[]
-  const studentArchiveMap = {}; // studentId -> entries[]
+  const teacherArchiveMap: Record<string, object[]> = {}; // teacherId -> entries[]
+  const studentArchiveMap: Record<string, object[]> = {}; // studentId -> entries[]
   const slotTimes = await getDaySlotTimes(); // 7-gün model
 
   for (const t of teachers) {

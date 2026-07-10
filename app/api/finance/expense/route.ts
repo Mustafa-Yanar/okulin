@@ -1,18 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth, type Session } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId, zMoney } from '@/lib/validate';
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
 import { getOrgConfig } from '@/lib/config';
 
 // Kurum giderleri — personel ödemeleri (maaş + ek ödemeler) ve kategorili
 // harcama kalemleri. Tenant-scoped (@/lib/db). Yetki: director + accountant.
 // Anahtar: `expenses` (set) → `expense:<id>`.
-
-function canAccess(session) {
-  return session && (session.role === 'director' || session.role === 'accountant');
-}
 
 import { newId as genId } from '@/lib/id';
 
@@ -33,16 +29,46 @@ const ExpenseSchema = z.object({
   category: z.string().max(80).optional(),
   amount: zMoney.optional(),
 });
+type ExpenseInput = z.infer<typeof ExpenseSchema>;
 
 const ExpenseDeleteSchema = z.object({ id: zId });
 
+// Expense.data Json şekli.
+interface ExpenseData {
+  id: string;
+  type: 'personnel' | 'general';
+  date: string;
+  description: string;
+  amount: number;
+  personnelId?: string | null;
+  personnelName?: string;
+  period?: string;
+  salary?: number;
+  extras?: { label: string; amount: number }[];
+  category?: string;
+  createdBy?: string;
+  createdByRole?: string;
+  createdAt?: string;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+interface ExpenseBase {
+  id: string;
+  createdBy?: string;
+  createdByRole?: string;
+  createdAt?: string;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
 // Gelen veriyi normalize edip kalıcı kayıt nesnesi üret (POST + PUT ortak).
-function buildRecord(data, base, session, validCategories) {
+function buildRecord(data: ExpenseInput, base: ExpenseBase, session: Session, validCategories?: string[]): ExpenseData {
   const date = data.date || new Date().toISOString().slice(0, 10);
   if (data.type === 'personnel') {
-    const salary = parseFloat(data.salary) || 0;
+    const salary = parseFloat(String(data.salary)) || 0;
     const extras = (data.extras || [])
-      .map(e => ({ label: (e.label || '').trim(), amount: parseFloat(e.amount) || 0 }))
+      .map(e => ({ label: (e.label || '').trim(), amount: parseFloat(String(e.amount)) || 0 }))
       .filter(e => e.amount > 0 || e.label);
     const extrasTotal = extras.reduce((s, e) => s + e.amount, 0);
     return {
@@ -61,40 +87,34 @@ function buildRecord(data, base, session, validCategories) {
   // general — kurum kategorisi geçerliyse onu, değilse "Diğer". validCategories
   // verilmezse sabit listeye düş (geriye uyumluluk).
   const cats = validCategories || EXPENSE_CATEGORIES;
-  const category = cats.includes(data.category) ? data.category : 'Diğer';
+  const category = cats.includes(data.category || '') ? (data.category as string) : 'Diğer';
   return {
     ...base,
     type: 'general',
     date,
     category,
-    amount: parseFloat(data.amount) || 0,
+    amount: parseFloat(String(data.amount)) || 0,
     description: (data.description || '').trim(),
   };
 }
 
-export async function GET(req) {
-  const session = await getSession();
-  if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const GET = withAuth(['director', 'accountant'], async (req) => {
   const { searchParams } = new URL(req.url);
   const type = searchParams.get('type');
   const period = searchParams.get('period');
   const from = searchParams.get('from');
   const to = searchParams.get('to');
 
-  let list = (await tdb().expense.findMany()).map((r) => r.data);
+  let list = (await tdb().expense.findMany()).map((r) => r.data as unknown as ExpenseData);
   if (type) list = list.filter(e => e.type === type);
   if (period) list = list.filter(e => (e.period || e.date?.slice(0, 7)) === period);
   if (from) list = list.filter(e => (e.date || '') >= from);
   if (to) list = list.filter(e => (e.date || '') <= to);
   list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   return NextResponse.json(list);
-}
+});
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const POST = withAuth(['director', 'accountant'], async (req, _ctx, session) => {
   const parsed = await parseBody(req, ExpenseSchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -116,15 +136,12 @@ export async function POST(req) {
     return NextResponse.json({ error: 'Tutar sıfırdan büyük olmalı' }, { status: 400 });
   }
 
-  await tdb().expense.create({ data: { legacyId: id, type: record.type, amount: record.amount, date: record.date, data: record } });
+  await tdb().expense.create({ data: withScope({ legacyId: id, type: record.type, amount: record.amount, date: record.date, data: record as unknown as object }) });
   await logAudit({ ...actorFrom(session), action: 'finance.expense.create', target: { type: 'expense', id, name: record.type === 'personnel' ? record.personnelName : record.category }, detail: `Gider eklendi (${record.type === 'personnel' ? 'personel: ' + record.personnelName : record.category}) — ${record.amount} TL` });
   return NextResponse.json({ ok: true, record });
-}
+});
 
-export async function PUT(req) {
-  const session = await getSession();
-  if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const PUT = withAuth(['director', 'accountant'], async (req, _ctx, session) => {
   const parsed = await parseBody(req, ExpenseSchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -133,19 +150,16 @@ export async function PUT(req) {
 
   const ex = await tdb().expense.findFirst({ where: { legacyId: data.id } });
   if (!ex) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
-  const old = ex.data || {};
+  const old = ((ex.data as unknown as ExpenseData | null) || {}) as Partial<ExpenseData>;
   const record = buildRecord(data, { id: old.id || data.id, createdBy: old.createdBy, createdByRole: old.createdByRole, createdAt: old.createdAt, updatedBy: session.name, updatedAt: new Date().toISOString() }, session, validCategories);
   if (record.type === 'personnel' && !record.personnelName) return NextResponse.json({ error: 'Personel adı gerekli' }, { status: 400 });
   if (record.amount <= 0) return NextResponse.json({ error: 'Tutar sıfırdan büyük olmalı' }, { status: 400 });
-  await tdb().expense.update({ where: { id: ex.id }, data: { type: record.type, amount: record.amount, date: record.date, data: record } });
+  await tdb().expense.update({ where: { id: ex.id }, data: { type: record.type, amount: record.amount, date: record.date, data: record as unknown as object } });
   await logAudit({ ...actorFrom(session), action: 'finance.expense.update', target: { type: 'expense', id: data.id, name: record.type === 'personnel' ? record.personnelName : record.category }, detail: `Gider güncellendi — ${record.amount} TL` });
   return NextResponse.json({ ok: true, record });
-}
+});
 
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!canAccess(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const DELETE = withAuth(['director', 'accountant'], async (req, _ctx, session) => {
   const parsed = await parseBody(req, ExpenseDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
@@ -153,7 +167,7 @@ export async function DELETE(req) {
   const ex = await tdb().expense.findFirst({ where: { legacyId: id } });
   if (!ex) return NextResponse.json({ error: 'Gider bulunamadı' }, { status: 404 });
   await tdb().expense.delete({ where: { id: ex.id } });
-  const old = ex.data || {};
+  const old = ((ex.data as unknown as ExpenseData | null) || {}) as Partial<ExpenseData>;
   await logAudit({ ...actorFrom(session), action: 'finance.expense.delete', target: { type: 'expense', id, name: old.type === 'personnel' ? old.personnelName : old.category }, detail: `Gider silindi — ${old.amount} TL` });
   return NextResponse.json({ ok: true });
-}
+});
