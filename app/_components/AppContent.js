@@ -108,8 +108,15 @@ export default function AppContent() {
     // URL'e yaz — DirectorPanel'in useUrlTab ile senkron kalır
     const params = new URLSearchParams(window.location.search);
     params.set('sekme', key);
+    // Sidebar'dan sekmeye gitmek KÖK görünüme döner: açık inline detay
+    // parametreleri temizlenir — yoksa "Öğretmenler"e tıklanınca son açık
+    // öğretmenin detayı yüklenmeye devam eder (aynısı ?ogrenci için geçerli).
+    params.delete('ogretmen');
+    params.delete('ogrenci');
     window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
-    // popstate tetiklemez (pushState), DirectorPanel mount'ta URL'i okur
+    // pushState popstate tetiklemez; useUrlTab/useUrlParam sekme + detay
+    // state'ini URL'den yeniden okusun diye elle yayınla.
+    window.dispatchEvent(new PopStateEvent('popstate'));
   }, []);
 
   const handleCollapse = useCallback(() => {
