@@ -8,18 +8,35 @@ import {
   BookOpen, FileText, Youtube, Link2, Plus, Trash2, X, Upload,
   ExternalLink, Play, Filter, GraduationCap, ChevronDown,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useClasses } from '../ClassesContext';
 import { groupedClasses, classShort } from '@/lib/classCatalog';
 import { MEBI_LINKS } from '@/lib/mebi-links';
+import type { ShowToast } from '../types';
 
-const TYPE_META = {
+const TYPE_META: Record<string, { label: string; icon: LucideIcon; color: string; bg: string }> = {
   pdf:   { label: 'PDF Föy', icon: FileText, color: 'text-rose-600',   bg: 'bg-rose-50' },
   video: { label: 'Video',   icon: Youtube,  color: 'text-red-600',    bg: 'bg-red-50' },
   link:  { label: 'Link',    icon: Link2,    color: 'text-sky-600',    bg: 'bg-sky-50' },
 };
 
+// app/api/resources/route.ts ResourceData ile birebir.
+interface ResourceDTO {
+  id: string;
+  title: string;
+  type: string;
+  url: string;
+  branch: string;
+  topic?: string;
+  classes: string[];
+  uploadedBy?: string;
+  uploadedByName?: string;
+  uploadedByRole?: string;
+  createdAt?: string;
+}
+
 // YouTube / Vimeo linkini gömülebilir (embed) URL'e çevir; değilse null.
-function embedUrl(url) {
+function embedUrl(url: string): string | null {
   let m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
   if (m) return `https://www.youtube.com/embed/${m[1]}`;
   m = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
@@ -27,15 +44,23 @@ function embedUrl(url) {
   return null;
 }
 
-export default function ResourceLibrary({ canManage, branches = [], userRole, userId, showToast }) {
+interface ResourceLibraryProps {
+  canManage?: boolean;
+  branches?: string[];
+  userRole?: string;
+  userId?: string;
+  showToast?: ShowToast;
+}
+
+export default function ResourceLibrary({ canManage, branches = [], userRole, userId, showToast }: ResourceLibraryProps) {
   const confirm = useConfirm();
   const { classes: regClasses } = useClasses();
-  const { data, isLoading: loading, mutate } = useSWR('/api/resources');
+  const { data, isLoading: loading, mutate } = useSWR<{ resources?: ResourceDTO[] }>('/api/resources');
   const resources = data?.resources || [];
   const [filterBranch, setFilterBranch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [video, setVideo] = useState(null); // {url, title} embed modal
+  const [video, setVideo] = useState<{ url: string; title: string } | null>(null); // embed modal
 
   const filtered = useMemo(() => resources.filter(r =>
     (!filterBranch || r.branch === filterBranch) &&
@@ -47,20 +72,20 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
     return [...set].sort();
   }, [resources]);
 
-  async function handleDelete(id) {
+  async function handleDelete(id: string) {
     if (!(await confirm('Bu kaynak silinsin mi?'))) return;
     try {
       const res = await fetch(`/api/resources?id=${encodeURIComponent(id)}`, {
         method: 'DELETE', credentials: 'same-origin',
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(data.error || 'Silinemedi');
       mutate({ resources: resources.filter(r => r.id !== id) }, { revalidate: false });
       showToast?.('Kaynak silindi');
-    } catch (err) { showToast?.(err.message, 'error'); }
+    } catch (err) { showToast?.((err as Error).message, 'error'); }
   }
 
-  function canDelete(r) {
+  function canDelete(r: ResourceDTO) {
     if (userRole === 'director') return true;
     if (userRole === 'teacher') return r.uploadedBy === userId;
     return false;
@@ -144,7 +169,7 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
                 <div className="flex items-center justify-between mt-1">
                   <span className="text-caption truncate">{r.uploadedByName}</span>
                   {r.type === 'video' && embedUrl(r.url) ? (
-                    <button onClick={() => setVideo({ url: embedUrl(r.url), title: r.title })}
+                    <button onClick={() => setVideo({ url: embedUrl(r.url)!, title: r.title })}
                       className="flex items-center gap-1 text-xs text-indigo-600 hover:underline shrink-0">
                       <Play size={13} /> İzle
                     </button>
@@ -211,8 +236,14 @@ function FreeResourcesShelf() {
   );
 }
 
+interface VideoModalProps {
+  url: string;
+  title: string;
+  onClose: () => void;
+}
+
 // ----- Video embed modal -----
-function VideoModal({ url, title, onClose }) {
+function VideoModal({ url, title, onClose }: VideoModalProps) {
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
       <div role="dialog" aria-modal="true" className="modal overflow-hidden w-full max-w-3xl" onClick={e => e.stopPropagation()}>
@@ -230,27 +261,34 @@ function VideoModal({ url, title, onClose }) {
   );
 }
 
+interface ResourceFormProps {
+  branches: string[];
+  onClose: () => void;
+  onSaved: (rec: ResourceDTO) => void;
+  showToast?: ShowToast;
+}
+
 // ----- Ekleme formu -----
-function ResourceForm({ branches, onClose, onSaved, showToast }) {
+function ResourceForm({ branches, onClose, onSaved, showToast }: ResourceFormProps) {
   const { classes: regClasses } = useClasses();
   const [title, setTitle] = useState('');
   const [type, setType] = useState('pdf');
   const [branch, setBranch] = useState(branches[0] || '');
   const [topic, setTopic] = useState('');
   const [url, setUrl] = useState('');
-  const [classes, setClasses] = useState(() => new Set());
-  const [file, setFile] = useState(null);
+  const [classes, setClasses] = useState<Set<string>>(() => new Set());
+  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
-  const fileRef = useRef(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  function toggleClass(c) {
+  function toggleClass(c: string) {
     setClasses(prev => {
       const next = new Set(prev);
       next.has(c) ? next.delete(c) : next.add(c);
       return next;
     });
   }
-  function toggleGroup(groupClasses) {
+  function toggleGroup(groupClasses: string[]) {
     setClasses(prev => {
       const next = new Set(prev);
       const allIn = groupClasses.every(c => next.has(c));
@@ -291,11 +329,12 @@ function ResourceForm({ branches, onClose, onSaved, showToast }) {
           topic: topic.trim() || undefined, classes: [...classes],
         }),
       });
-      const data = await res.json().catch(() => ({}));
+      // Başarı sözleşmesi { ok, resource } — hata gövdesi { error } (route.ts POST).
+      const data = (await res.json().catch(() => ({}))) as { error?: string; resource: ResourceDTO };
       if (!res.ok) throw new Error(data.error || 'Kaydedilemedi');
       onSaved(data.resource);
     } catch (err) {
-      showToast?.(err.message, 'error');
+      showToast?.((err as Error).message, 'error');
     } finally {
       setBusy(false);
     }
