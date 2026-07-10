@@ -12,27 +12,36 @@
 import { useState, useEffect } from 'react';
 import useSWR from 'swr';
 import { Search, UserPlus, Edit3, Wallet, GraduationCap, X } from 'lucide-react';
-import { StudentForm } from '../director/Forms';
+import { StudentForm, type StudentFormPayload } from '../director/Forms';
 import EmptyState from '../EmptyState';
 import LoadingBox from '../Loading';
 import { api } from '../client-api';
+import type { ClassRecord } from '@/lib/classes';
+import type { ShowToast, StudentDTO } from '../types';
 
-export default function AccountantStudents({ showToast, prefill, onPrefillConsumed, onGoFinance }) {
-  const { data: students, isLoading, mutate } = useSWR('/api/students');
-  const { data: classData } = useSWR('/api/classes');
+interface AccountantStudentsProps {
+  showToast?: ShowToast;
+  prefill?: Partial<StudentDTO> | null;
+  onPrefillConsumed?: () => void;
+  onGoFinance?: (name: string) => void;
+}
+
+export default function AccountantStudents({ showToast, prefill, onPrefillConsumed, onGoFinance }: AccountantStudentsProps) {
+  const { data: students, isLoading, mutate } = useSWR<StudentDTO[]>('/api/students');
+  const { data: classData } = useSWR<{ classes?: ClassRecord[] }>('/api/classes');
   const classes = classData?.classes || [];
 
   const [search, setSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [lastRegistered, setLastRegistered] = useState(null);
+  const [editing, setEditing] = useState<StudentDTO | null>(null);
+  const [lastRegistered, setLastRegistered] = useState<{ name?: string } | null>(null);
 
   // Ön Kayıt köprüsü: prefill gelince formu yeni-kayıt modunda aç.
   useEffect(() => {
     if (prefill) { setEditing(null); setFormOpen(true); }
   }, [prefill]);
 
-  const labelOf = (cls) => classes.find((c) => c.id === cls)?.ad || cls || '—';
+  const labelOf = (cls: string) => classes.find((c) => c.id === cls)?.ad || cls || '—';
 
   const list = Array.isArray(students) ? students : [];
   const q = search.trim().toLowerCase();
@@ -48,7 +57,7 @@ export default function AccountantStudents({ showToast, prefill, onPrefillConsum
     if (prefill) onPrefillConsumed?.();
   }
 
-  async function save(data) {
+  async function save(data: StudentFormPayload) {
     try {
       if (editing) {
         await api('/api/students', { method: 'PUT', body: JSON.stringify({ id: editing.id, ...data }) });
@@ -60,7 +69,7 @@ export default function AccountantStudents({ showToast, prefill, onPrefillConsum
       }
       closeForm();
       mutate();
-    } catch (e) { showToast?.(e.message, 'error'); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); }
   }
 
   if (isLoading) return <LoadingBox height="h-64" />;
@@ -76,7 +85,7 @@ export default function AccountantStudents({ showToast, prefill, onPrefillConsum
           </span>
           <div className="flex items-center gap-2 shrink-0">
             {onGoFinance && (
-              <button onClick={() => { onGoFinance(lastRegistered.name); setLastRegistered(null); }}
+              <button onClick={() => { onGoFinance(lastRegistered.name || ''); setLastRegistered(null); }}
                 className="btn-primary !px-3 !py-1.5 text-xs flex items-center gap-1.5">
                 <Wallet size={13} /> Ödeme planına git
               </button>

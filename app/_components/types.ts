@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 import type { Session } from '@/lib/auth';
 import type { Branding } from '@/lib/branding';
 import type { ConfigValue } from '@/lib/config';
+import type { PaymentEntry } from '@/lib/finance';
 
 // AppContent.showToast imzası — tüm panellere prop olarak iner.
 // msg ReactNode: Toast bileşeni düğüm render eder (çoğu çağrı düz string geçer).
@@ -51,7 +52,7 @@ export interface TeacherDTO {
   branches: string[];
   allowedGroups: string[];
   photoUrl: string;
-  offDays: string[];
+  offDays: number[]; // gün indeksi 0-6 (Prisma: Int[]) — string değil
   phone: string;
   presets: TeacherPresetDTO[];
 }
@@ -70,6 +71,38 @@ export interface LeadDTO {
   createdByName?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+// GET /api/finance — financeOut mapper çıktısı (app/api/finance/route.ts).
+export interface InstallmentDTO {
+  idx: number;
+  dueDate: string;
+  amount: number;
+  paid: boolean;
+  paidDate: string | null;
+  paidAmount: number | null;
+  method: string | null;
+  receiptNo: string | null;
+}
+export interface FinanceDTO {
+  studentId?: string;
+  studentName?: string;
+  studentCls: string;
+  registrationDate: string;
+  totalFee: number;
+  discount: number;
+  netFee: number;
+  paymentPlan: string;
+  installments: InstallmentDTO[];
+  payments: PaymentEntry[];
+  balance: number;
+}
+// GET /api/finance liste elemanı (öğrenci + finans kaydı; kayıtsızsa finance null).
+export interface FinanceListItemDTO {
+  studentId: string;
+  studentName: string;
+  studentCls: string;
+  finance: FinanceDTO | null;
 }
 
 // GET /api/auth — oturum + kurum durumu (whoami).
