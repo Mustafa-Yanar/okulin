@@ -50,7 +50,10 @@ function ReceiptPrintArea({ data, onClose }) {
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 print:bg-transparent print:static print:p-0">
+    // id="print-preview" PORTAL KÖKÜNDE olmalı: print CSS'in "body > *:not(#print-preview)
+    // gizle" kuralı doğrudan-çocukluk şartı arar; id içeride kalırsa kural hiç eşleşmez
+    // ve makbuzun arkasındaki tüm uygulama da yazdırılır.
+    <div id="print-preview" className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 print:bg-transparent print:static print:p-0">
       <div role="dialog" aria-modal="true" aria-label="Makbuz önizlemesi" className="modal w-full max-w-md print:shadow-none print:max-w-none print:w-full print:border-none">
         <div className="flex items-center justify-between p-4 border-b border-gray-100 no-print">
           <span className="font-700 text-gray-800" style={{ fontWeight: 700 }}>Makbuz Önizlemesi</span>
@@ -68,7 +71,7 @@ function ReceiptPrintArea({ data, onClose }) {
           </div>
         </div>
 
-        <div id="print-preview" className="p-6">
+        <div className="p-6">
           {/* Makbuz içeriği */}
           <div className="text-center border-b border-gray-200 pb-4 mb-4">
             <div className="font-800 text-lg text-gray-900" style={{ fontWeight: 800 }}>{dershane.name}</div>
