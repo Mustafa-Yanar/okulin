@@ -1275,11 +1275,16 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
           onCheckConflicts={checkConflicts}
           onPrintTeacher={id => printSchedule('teacher',id)}
           onPrintClass={cls => printSchedule('class',cls)}
-          windowsOf={windowsOf} teacherSlots={lastTeacherSlots}
-          onMove={next => {
-            // Manuel taşıma: sonuç değişti → çakışma onayı bayatladı, Uygula öncesi
-            // yeniden kontrol zorunlu (Uygula akışı zaten checked ister).
-            setResult(r => ({ ...r, assigned: next }));
+          windowsOf={windowsOf} teacherSlots={lastTeacherSlots} groupOf={groupOf}
+          onEdit={patch => {
+            // Manuel düzenleme (taşıma/takas/yerleştirme/açığa alma): sonuç değişti →
+            // total yeniden sayılır, çakışma onayı bayatladı → Uygula öncesi yeniden
+            // kontrol zorunlu (Uygula akışı zaten checked ister).
+            setResult(r => {
+              const next = { ...r, ...patch };
+              next.total = next.assigned.length;
+              return next;
+            });
             setConflicts(null);
           }}
         />
@@ -1404,11 +1409,21 @@ function LoadTable({ load, setLoad, grouping, setGrouping, cols, courseMap }) {
 }
 
 // ── Sonuç görünümü ──
-function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, conflictsChecked, onApply, onCheckConflicts, onPrintTeacher, onPrintClass, windowsOf, teacherSlots, onMove }) {
+function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, conflictsChecked, onApply, onCheckConflicts, onPrintTeacher, onPrintClass, windowsOf, teacherSlots, groupOf, onEdit }) {
   const [viewMode, setViewMode] = useState('class');
   const [viewDay, setViewDay]   = useState('all');
   const [editMode, setEditMode] = useState(false); // manuel blok taşıma (sınıf görünümünde)
   const [sel, setSel]           = useState(null);  // seçili blok id
+  const [selUnplaced, setSelUnplaced] = useState(null); // {idx, teacherId|null} — açıkta parça seçimi
+
+  const teacherById = useMemo(() => {
+    const m = {}; teachers.forEach(t => { m[t.id] = t; }); return m;
+  }, [teachers]);
+
+  // Sonuç değişince (yeni Oluştur / manuel düzenleme) seçimler bayatlar — temizle.
+  // Blok id'leri konum-türevli olduğundan eski seçim yeni sonuçta yanlış bloğa,
+  // eski unplaced index'i yanlış parçaya işaret edebilir.
+  useEffect(() => { setSel(null); setSelUnplaced(null); }, [result]);
 
   // ── Manuel düzenleme: assigned → bloklar (aynı gün+sınıf+ders+öğretmen ardışık koşusu) ──
   const { blocks, blockOfEntry } = useMemo(() => {
@@ -1446,6 +1461,9 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
   // paketleme tekniğidir, iş kuralı değildir — manuelde dayatılmaz. ignoreIds:
   // taşınan/takas edilen blokların mevcut yerleri yok sayılır.
   const canPlace = useCallback((b, day, start, ignoreIds) => {
+    // K6: izin günü — available işareti kalmış olsa bile izin günü kesin yasak
+    // (solver da offDays'i availability'den AYRI, hard denetler).
+    if (new Set(teacherById[b.teacherId]?.offDays || []).has(day)) return false;
     const win = windowsOf ? windowsOf(b.cls) : null;
     const winSet = new Set(win?.[day] || []);
     const av = new Set((teacherSlots?.[b.teacherId] || []).filter(([d]) => d === day).map(([, s]) => s));
@@ -1462,25 +1480,65 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
       if (a.teacherId === b.teacherId) return false;              // K4
     }
     return true;
-  }, [windowsOf, teacherSlots, result.assigned, blockOfEntry]);
+  }, [windowsOf, teacherSlots, teacherById, result.assigned, blockOfEntry]);
 
   const selBlock = sel ? blocks.find(b => b.id === sel) : null;
 
-  // Seçili bloğun taşınabileceği boş başlangıçlar ("gün:slot")
+  // ── Açıkta kalan parça yerleştirme meta'sı ──
+  // - fixedTeacherId: aynı sınıf-dersin yerleşmiş bloğu varsa öğretmen SABİT
+  //   (solver'ın tek-öğretmen kuralı: bir sınıf-dersi tek öğretmen verir)
+  // - eligibleIds: solver'ın eligible_teachers kuralının birebir kopyası (branş + grup)
+  // - presetTeacherId: kurumun ön eşleştirmesi — varsayılan seçim, değiştirilebilir
+  const unplacedMeta = useMemo(() => (result.unplaced || []).map(u => {
+    const sibling = blocks.find(b => b.cls === u.cls && b.course === u.course);
+    const grp = groupOf ? groupOf(u.cls) : null;
+    const eligible = teachers.filter(t =>
+      (t.branches || []).includes(u.course) && teacherGroups(t).includes(grp));
+    const preset = eligible.find(t =>
+      (t.presets || []).some(p => p.cls === u.cls && p.course === u.course));
+    return {
+      hours: u.hours || 2, // eski solver yanıtı emniyeti; yeni solver hours gönderir
+      fixedTeacherId: sibling ? sibling.teacherId : null,
+      eligibleIds: eligible.map(t => t.id),
+      presetTeacherId: preset?.id || null,
+    };
+  }), [result.unplaced, blocks, teachers, groupOf]);
+
+  const upSel  = selUnplaced ? result.unplaced[selUnplaced.idx] : null;
+  const upMeta = selUnplaced ? unplacedMeta[selUnplaced.idx] : null;
+  // Öğretmen çözünürlüğü: sabit (sibling) > kullanıcının seçtiği > tek aday > ön eşleştirme
+  const upTeacherId = upMeta
+    ? (upMeta.fixedTeacherId
+        || selUnplaced.teacherId
+        || (upMeta.eligibleIds.length === 1 ? upMeta.eligibleIds[0] : null)
+        || upMeta.presetTeacherId)
+    : null;
+
+  // Aktif parça: taşınan mevcut blok VEYA yerleştirilen açıkta parça (sanal blok).
+  // Sanal blokta day/start -1 → "kendi konumunu atla" koşulu hiç tetiklenmez,
+  // ignore kümesi gridde hiçbir girdiyle eşleşmez (yerleşik değil).
+  const activePiece = useMemo(() => {
+    if (selBlock) return selBlock;
+    if (!upSel || !upMeta || !upTeacherId) return null;
+    return { id: '__unplaced__', day: -1, start: -1, len: upMeta.hours,
+             cls: upSel.cls, course: upSel.course, teacherId: upTeacherId };
+  }, [selBlock, upSel, upMeta, upTeacherId]);
+
+  // Aktif parçanın gidebileceği boş başlangıçlar ("gün:slot")
   const validTargets = useMemo(() => {
-    if (!selBlock) return new Set();
+    if (!activePiece) return new Set();
     const out = new Set();
-    const ig = new Set([selBlock.id]);
-    const win = windowsOf ? windowsOf(selBlock.cls) : {};
+    const ig = new Set([activePiece.id]);
+    const win = windowsOf ? windowsOf(activePiece.cls) : {};
     for (const [dStr, slots] of Object.entries(win || {})) {
       const d = parseInt(dStr);
       for (const s of slots) {
-        if (d === selBlock.day && s === selBlock.start) continue;
-        if (canPlace(selBlock, d, s, ig)) out.add(`${d}:${s}`);
+        if (d === activePiece.day && s === activePiece.start) continue;
+        if (canPlace(activePiece, d, s, ig)) out.add(`${d}:${s}`);
       }
     }
     return out;
-  }, [selBlock, canPlace, windowsOf]);
+  }, [activePiece, canPlace, windowsOf]);
 
   // Takas: aynı sınıfın başka bloğuyla yer değiştirme — iki yön de kurallara uyuyorsa.
   const swapTargets = useMemo(() => {
@@ -1499,7 +1557,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
     const next = result.assigned.map(a =>
       blockOfEntry.get(entryKeyOf(a)) !== selBlock.id ? a
         : { ...a, day, slot: start + (a.slot - selBlock.start) });
-    onMove?.(next);
+    onEdit?.({ assigned: next });
     setSel(null);
   }
   function swapSel(b2) {
@@ -1510,7 +1568,36 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
       if (bid === b2.id)       return { ...a, day: selBlock.day, slot: selBlock.start + (a.slot - b2.start) };
       return a;
     });
-    onMove?.(next);
+    onEdit?.({ assigned: next });
+    setSel(null);
+  }
+  // Açıkta parçayı gride yerleştir: L saat satırı ekle, unplaced'dan düş, tLoad güncelle.
+  function placeSel(day, start) {
+    if (!upSel || !upMeta || !upTeacherId) return;
+    const tname = teacherById[upTeacherId]?.name || '';
+    const added = [];
+    for (let i = 0; i < upMeta.hours; i++) {
+      added.push({ cls: upSel.cls, course: upSel.course, teacherId: upTeacherId,
+                   teacherName: tname, day, slot: start + i });
+    }
+    onEdit?.({
+      assigned: [...result.assigned, ...added],
+      unplaced: result.unplaced.filter((_, i) => i !== selUnplaced.idx),
+      tLoad: { ...result.tLoad, [upTeacherId]: (result.tLoad[upTeacherId] || 0) + upMeta.hours },
+    });
+    setSelUnplaced(null);
+  }
+  // Seçili bloğu açığa al: gridden çıkar, unplaced'a ekle, tLoad düş. Yer açmak ya da
+  // dersi elle başka öğretmene/başka düzene taşımak için ara adım.
+  function unassignSel() {
+    if (!selBlock) return;
+    onEdit?.({
+      assigned: result.assigned.filter(a => blockOfEntry.get(entryKeyOf(a)) !== selBlock.id),
+      unplaced: [...result.unplaced, { cls: selBlock.cls, course: selBlock.course,
+        hours: selBlock.len, reason: 'elle açığa alındı' }],
+      tLoad: { ...result.tLoad,
+        [selBlock.teacherId]: Math.max(0, (result.tLoad[selBlock.teacherId] || 0) - selBlock.len) },
+    });
     setSel(null);
   }
 
@@ -1530,10 +1617,9 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
   }, [result.assigned, editMode, windowsOf, classes]);
   const slotsOfDay = d => [...(dayCanvas.get(d) || [])].sort((a, b) => a - b);
 
-  const canEdit = !!(onMove && windowsOf && teacherSlots);
+  const canEdit = !!(onEdit && windowsOf && teacherSlots);
   const usedDays = [...dayCanvas.keys()].sort((a,b)=>a-b);
   const days = viewDay==='all' ? usedDays : [parseInt(viewDay)];
-  const teacherById={}; teachers.forEach(t=>teacherById[t.id]=t);
   const loadRows = teachers.map(t=>({name:t.name,n:result.tLoad[t.id]||0,branch:(t.branches||[])[0],id:t.id})).sort((a,b)=>b.n-a.n);
   const maxN = Math.max(1,...loadRows.map(r=>r.n));
 
@@ -1571,6 +1657,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
                 const n = !e;
                 if (n) { setViewMode('class'); setViewDay('all'); }
                 setSel(null);
+                setSelUnplaced(null);
                 return n;
               })}
               className="!px-3 !py-1.5 flex items-center gap-1.5 text-xs rounded-lg border"
@@ -1607,26 +1694,85 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
               {swapTargets.size > 0 && <>, <span style={{color:'#b45309', fontWeight:600}}>turuncu çerçeveli dersler</span> takas edilebilir</>}.
               {validTargets.size === 0 && swapTargets.size === 0 && <b> Bu blok için kurallara uyan başka konum yok.</b>}
               {' '}Vazgeçmek için bloğa tekrar tıklayın.
+              <button onClick={unassignSel}
+                className="ml-2 px-1.5 py-0.5 rounded border text-[10px]"
+                style={{background:'#fff', color:'#b91c1c', borderColor:'#fecaca', fontWeight:600}}
+                title="Bloğu gridden çıkarıp Yerleşemeyen listesine taşır — yer açmak veya öğretmen değiştirmek için">
+                Açığa al
+              </button>
+            </>
+          ) : upSel && upMeta ? (
+            <>
+              Yerleştirilecek: <b>{upSel.course}</b> — {labelOf(upSel.cls)} ({upMeta.hours} saat ardışık blok).
+              {upMeta.fixedTeacherId ? (
+                <> Öğretmen: <b>{teacherById[upMeta.fixedTeacherId]?.name}</b>
+                <span className="text-gray-500"> (bu sınıf-dersin diğer blokları onda — bir sınıf-dersi tek öğretmen verir)</span>.</>
+              ) : upMeta.eligibleIds.length === 0 ? (
+                <b> Bu derse uygun (branş + grup) öğretmen tanımlı değil — önce Öğretmenler sekmesinden branş/grup ekleyin.</b>
+              ) : (
+                <>
+                  {' '}Öğretmen:
+                  {upMeta.eligibleIds.map(tid => {
+                    const cur = upTeacherId === tid;
+                    return (
+                      <button key={tid}
+                        onClick={() => setSelUnplaced(su => ({ ...su, teacherId: tid }))}
+                        className="ml-1 px-1.5 py-0.5 rounded border text-[10px]"
+                        style={cur
+                          ? {background:'#4f46e5', color:'#fff', borderColor:'#4f46e5', fontWeight:600}
+                          : {background:'#fff', color:'#4338ca', borderColor:'#c7d2fe'}}>
+                        {teacherById[tid]?.name} ({result.tLoad[tid] || 0} saat{upMeta.presetTeacherId === tid ? ' · ön eşleştirme' : ''})
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+              {upTeacherId && (validTargets.size > 0
+                ? <> <span style={{color:'#166534', fontWeight:600}}>Yeşil hücreler</span> geçerli hedefler — tıklayınca yerleşir.</>
+                : <b> Bu öğretmenle kurallara uyan boş yer yok — {upMeta.fixedTeacherId
+                    ? 'bir bloğu taşıyıp/açığa alıp yer açın (öğretmeni değiştirmek için önce bu sınıf-dersin diğer bloklarını açığa alın)'
+                    : 'başka öğretmen seçin ya da bir bloğu taşıyıp/açığa alıp yer açın'}.</b>)}
             </>
           ) : (
-            <>Taşımak istediğiniz derse tıklayın. Kurallar (öğretmen müsaitliği, sınıf/öğretmen çakışması,
+            <>Taşımak istediğiniz derse tıklayın{result.unplaced.length > 0 && <>; açıkta dersleri aşağıdaki <b>Yerleşemeyen</b> listesinden seçip yerleştirebilirsiniz</>}.
+            {' '}Kurallar (öğretmen müsaitliği ve izin günü, sınıf/öğretmen çakışması,
             aynı dersin günde tek blok olması) otomatik denetlenir — yalnızca geçerli hedefler açılır.
             Değişiklikler ekranda kalır; öğretmen programlarına işlenmesi için <b>Uygula</b> gerekir.</>
           )}
         </div>
       )}
 
-      {/* Yerleşemeyen dersler */}
+      {/* Yerleşemeyen dersler — düzenleme modunda parça parça seçilebilir (elle yerleştirme) */}
       {result.unplaced.length>0 && (
-        <details className="rounded-xl border border-red-100 p-3 text-xs" style={{background:'#fef2f2aa'}}>
+        <details className="rounded-xl border border-red-100 p-3 text-xs" style={{background:'#fef2f2aa'}} open={editMode || undefined}>
           <summary className="cursor-pointer text-red-600 flex items-center gap-1.5" style={{fontWeight:700}}>
             <AlertTriangle size={13}/> Yerleşemeyen ({result.unplaced.length})
+            {editMode && <span className="text-[10px] text-gray-400" style={{fontWeight:400}}>— yerleştirmek için parçaya tıklayın</span>}
           </summary>
-          <ul className="mt-2 space-y-1 text-gray-600">
-            {Object.entries(unplacedGrouped).map(([k,v])=>(
-              <li key={k}>• <b>{k}</b> ×{v.n} <span className="text-gray-400">({[...v.cls].map(c=>labelOf(c)).join(', ')})</span></li>
-            ))}
-          </ul>
+          {editMode ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {result.unplaced.map((u, i) => {
+                const active = selUnplaced?.idx === i;
+                return (
+                  <button key={i}
+                    onClick={() => { setSel(null); setSelUnplaced(active ? null : { idx: i, teacherId: null }); }}
+                    className="px-2 py-1 rounded-lg border text-[11px]"
+                    title={u.reason}
+                    style={active
+                      ? {background:'#4f46e5', color:'#fff', borderColor:'#4f46e5', fontWeight:600}
+                      : {background:'#fff', color:'#b91c1c', borderColor:'#fecaca'}}>
+                    {labelOf(u.cls)} — {u.course} ({unplacedMeta[i]?.hours || 2} saat)
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <ul className="mt-2 space-y-1 text-gray-600">
+              {Object.entries(unplacedGrouped).map(([k,v])=>(
+                <li key={k}>• <b>{k}</b> ×{v.n} <span className="text-gray-400">({[...v.cls].map(c=>labelOf(c)).join(', ')})</span></li>
+              ))}
+            </ul>
+          )}
         </details>
       )}
 
@@ -1702,14 +1848,15 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
                     const a=find(rk,d,s);
                     const leftBorder = si===0 ? '3px solid #c7d2fe' : '1px solid #eef0f5';
                     if (!a) {
-                      // Boş hücre: düzenleme modunda, seçili bloğun SATIRINDA ve kurallara
-                      // uyan başlangıçsa yeşil tıklanabilir hedef olur.
-                      const isTarget = editMode && viewMode==='class' && selBlock
-                        && rk === selBlock.cls && validTargets.has(`${d}:${s}`);
+                      // Boş hücre: düzenleme modunda, aktif parçanın (taşınan blok VEYA
+                      // yerleştirilen açıkta parça) SATIRINDA ve kurallara uyan başlangıçsa
+                      // yeşil tıklanabilir hedef olur.
+                      const isTarget = editMode && viewMode==='class' && activePiece
+                        && rk === activePiece.cls && validTargets.has(`${d}:${s}`);
                       return (
                         <td key={d+'-'+s}
-                          onClick={isTarget ? () => moveSel(d, s) : undefined}
-                          title={isTarget ? `Buraya taşı (${s+1}. dersten başlar)` : undefined}
+                          onClick={isTarget ? () => (selBlock ? moveSel(d, s) : placeSel(d, s)) : undefined}
+                          title={isTarget ? `${selBlock ? 'Buraya taşı' : 'Buraya yerleştir'} (${s+1}. dersten başlar)` : undefined}
                           style={{minWidth:64,
                             border: isTarget ? '1px dashed #16a34a' : '1px solid #eef0f5',
                             borderLeft: isTarget ? '1px dashed #16a34a' : leftBorder,
@@ -1726,7 +1873,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
                       <td key={d+'-'+s} className="p-1 text-center"
                         onClick={clickable ? () => {
                           if (isSwap) swapSel(blocks.find(b => b.id === bid));
-                          else setSel(isSel ? null : bid);
+                          else { setSel(isSel ? null : bid); setSelUnplaced(null); }
                         } : undefined}
                         title={clickable ? (isSwap ? 'Takas et' : isSel ? 'Seçimi bırak' : 'Taşımak için seç') : undefined}
                         style={{minWidth:64,border:`1px solid ${col}30`,borderLeft:si===0?`3px solid ${col}60`:undefined,

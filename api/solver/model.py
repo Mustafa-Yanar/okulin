@@ -19,7 +19,7 @@ Girdi payload:
 Çıktı:
 {
   assigned: [{cls, course, teacherId, teacherName, day, slot}, ...],  # her SAAT ayrı satır
-  unplaced: [{cls, course, reason}, ...],      # her grup (parça) için bir satır
+  unplaced: [{cls, course, hours, reason}, ...],  # her grup (parça) için bir satır; hours = parça boyu
   tLoad:    {teacherId: saat},                 # NOT: 2026-07-08'e dek blok sayısıydı, artık saat
   ms:       int,
 }
@@ -161,9 +161,9 @@ def solve(payload):
                 continue
             elig = eligible_teachers(teachers, course, grp)
             if not elig:
-                # her parça için bir unplaced satırı
-                for _ in pat:
-                    unplaced.append({'cls': cls, 'course': course,
+                # her parça için bir unplaced satırı (hours: manuel yerleştirme parça boyunu bilsin)
+                for length in pat:
+                    unplaced.append({'cls': cls, 'course': course, 'hours': length,
                                      'reason': 'uygun öğretmen yok (ders: %s)' % course})
                 continue
             cc = (cls, course)
@@ -404,7 +404,8 @@ def solve(payload):
         # çözüm yok: tüm units unplaced
         for cc, idxs in units_of_cc.items():
             for _u in idxs:
-                unplaced.append({'cls': cc[0], 'course': cc[1], 'reason': 'çözüm bulunamadı'})
+                unplaced.append({'cls': cc[0], 'course': cc[1],
+                                 'hours': units[_u][2], 'reason': 'çözüm bulunamadı'})
         return {'assigned': [], 'unplaced': unplaced,
                 'tLoad': {t['id']: 0 for t in teachers},
                 'presetWarnings': preset_warnings,
@@ -465,7 +466,7 @@ def solve(payload):
                           % (n_pieces, len(fdays)))
             else:
                 reason = 'yerleştirilemedi (çakışma/kapasite)'
-            unplaced.append({'cls': cls, 'course': course, 'reason': reason})
+            unplaced.append({'cls': cls, 'course': course, 'hours': length, 'reason': reason})
             continue
         chosen = None
         for p in range(len(pool_of_unit[u])):
@@ -473,7 +474,8 @@ def solve(payload):
                 chosen = pool_of_unit[u][p]
                 break
         if chosen is None:
-            unplaced.append({'cls': cls, 'course': course, 'reason': 'yerleştirilemedi'})
+            unplaced.append({'cls': cls, 'course': course, 'hours': length,
+                             'reason': 'yerleştirilemedi'})
             continue
         day, seg = chosen
         tid = chosen_teacher.get((cls, course))
