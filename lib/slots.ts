@@ -285,7 +285,13 @@ export async function initWeekForTeacher(legacyTeacherId: string, weekKey: strin
       } else if (isMezunOnlySlot) {
         const groups = teacher.allowedGroups || [];
         const onlyMezun = groups.length > 0 && groups.every(g => g === 'mezun');
-        if (!onlyMezun) {
+        // Route paritesi (program/route.ts): müdür bu slota DERS yazdıysa (mezun
+        // sınıfı veya sınıf-penceresi istisnası orada doğrulanır) şablon girdisi
+        // karma-gruplu öğretmende de materyalize olmalı. Aksi hâlde ders öğretmen
+        // panelinde (şablon) görünürken grid'e hiç düşmez → müdür yoklama özeti
+        // ve devamsızlık slot etiketi dersi göremez. Etüt/boş slotlar karma
+        // öğretmen için kapalı kalmaya devam eder (kural amacı korunur).
+        if (!onlyMezun && entry?.type !== 'ders') {
           cell = { booked: false, disabled: true };
         } else {
           cell = computeCellFromEntry(entry, existing);
