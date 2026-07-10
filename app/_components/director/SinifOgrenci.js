@@ -314,7 +314,7 @@ function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, 
         {dersler.length === 0 ? (
           <span className="text-caption" style={{ color: 'var(--text-muted)' }}>Ders atanmadı</span>
         ) : dersler.slice(0, 8).map((k) => (
-          <span key={k} className="badge-info text-[11px]">{courseLabel(k)}</span>
+          <span key={k} className="badge badge-info">{courseLabel(k)}</span>
         ))}
         {dersler.length > 8 && <span className="text-caption">+{dersler.length - 8}</span>}
       </div>

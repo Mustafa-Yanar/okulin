@@ -169,7 +169,7 @@ function ClassCard({ c, courses, onEdit, onDelete, busy }) {
         {dersler.length === 0 ? (
           <span className="text-caption" style={{ color: 'var(--text-muted)' }}>Ders atanmadı</span>
         ) : dersler.slice(0, 8).map((k) => (
-          <span key={k} className="badge-info text-[11px]">{courseLabel(k)}</span>
+          <span key={k} className="badge badge-info">{courseLabel(k)}</span>
         ))}
         {dersler.length > 8 && <span className="text-caption">+{dersler.length - 8}</span>}
       </div>
@@ -378,7 +378,7 @@ export function CourseCatalog({ courses, onChanged, showToast }) {
               <div className="flex items-center gap-2 min-w-0">
                 <span className="truncate" style={{ fontWeight: 600 }}>{c.ad}</span>
                 {c.core && <span className="badge text-[10px]">çekirdek</span>}
-                {c.family === 'matematik' && <span className="badge-info text-[10px]">mat. ailesi</span>}
+                {c.family === 'matematik' && <span className="badge badge-info text-[10px]">mat. ailesi</span>}
                 {inactive && <span className="text-caption">pasif</span>}
               </div>
               <button className="btn-ghost !px-3 !py-1.5 text-sm flex items-center gap-1"
