@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getSession, isManager } from '@/lib/auth';
+import { withAuth, isManager, type Session } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z } from '@/lib/validate';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
+import type { BehaviorEntry } from '@prisma/client';
 
 // Davranış puanlama — olumlu/olumsuz davranış kaydı (artı/eksi puan).
 // Öğretmen + müdür/rehber öğrenciye puan verir (sebep + opsiyonel not). Öğrenci kendi
@@ -12,14 +13,14 @@ import { tdb } from '@/lib/sqldb';
 export const runtime = 'nodejs'; // push (web-push Node crypto)
 
 // SQL BehaviorEntry satırı → mevcut sözleşme şekli (at = createdAt ISO).
-const behEntryOut = (e) => ({
+const behEntryOut = (e: BehaviorEntry) => ({
   id: e.id, points: e.points, reason: e.reason || '', note: e.note || '',
   byName: e.byName || '', byRole: e.byRole || '', by: e.by || '',
   at: e.createdAt instanceof Date ? e.createdAt.toISOString() : e.createdAt,
 });
 
 // Bir öğrencinin (legacyId) davranış kaydını SQL'den getirir (entries dahil).
-async function behaviorByLegacySql(studentId) {
+async function behaviorByLegacySql(studentId: string) {
   const beh = await tdb().behavior.findFirst({
     where: { student: { legacyId: studentId } },
     include: { entries: { orderBy: { createdAt: 'asc' } } },
@@ -36,15 +37,14 @@ const AddSchema = z.object({
 });
 const BodySchema = z.discriminatedUnion('action', [AddSchema]);
 
-function canGive(session) {
+function canGive(session: Session | null | undefined): boolean {
   return isManager(session) || session?.role === 'teacher';
 }
 
 // ───────────────────────────────────────── GET ─────────────────────────────────────────
-export async function GET(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+// Bilinçli inline rol dallanması: aynı uç rolüne göre farklı kapsam döner
+// (öğrenci kendi kaydı, veli çocuğu, yönetici/öğretmen roster).
+export const GET = withAuth(async (req, _ctx, session) => {
   const studentId = new URL(req.url).searchParams.get('studentId');
 
   // ── Tek öğrenci detayı (toplam + geçmiş) ──
@@ -53,7 +53,7 @@ export async function GET(req) {
     if (session.role === 'student' && session.id !== studentId) {
       return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     }
-    if (session.role === 'parent' && !(session.children || []).some(c => c.id === studentId)) {
+    if (session.role === 'parent' && !(session.children || []).some(c => (typeof c === 'string' ? c : c.id) === studentId)) {
       return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     }
     const beh = await behaviorByLegacySql(studentId);
@@ -63,7 +63,7 @@ export async function GET(req) {
 
   // ── Öğrenci: kendi kaydı ──
   if (session.role === 'student') {
-    const beh = await behaviorByLegacySql(session.id);
+    const beh = await behaviorByLegacySql(session.id || '');
     return NextResponse.json({ studentId: session.id, total: beh?.total || 0, entries: (beh?.entries || []).map(behEntryOut).reverse() });
   }
 
@@ -86,14 +86,10 @@ export async function GET(req) {
   }));
   roster.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'tr'));
   return NextResponse.json({ roster });
-}
+});
 
 // ───────────────────────────────────────── POST (ekle) ─────────────────────────────────────────
-export async function POST(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-  if (!canGive(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const POST = withAuth((s: Session) => canGive(s), async (req, _ctx, session) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
   const { studentId, points, reason, note } = parsed.data;
@@ -103,7 +99,7 @@ export async function POST(req) {
   if (!student) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
 
   let beh = await tdb().behavior.findFirst({ where: { studentId: student.id } });
-  if (!beh) beh = await tdb().behavior.create({ data: { studentId: student.id, total: 0 } });
+  if (!beh) beh = await tdb().behavior.create({ data: withScope({ studentId: student.id, total: 0 }) });
   await tdb().behaviorEntry.create({ data: {
     behaviorId: beh.id, points, reason: reason.trim(), note: (note || '').trim(),
     byName: session.name || '', byRole: session.role, by: session.id,
@@ -122,13 +118,10 @@ export async function POST(req) {
     detail: `Davranış puanı: ${sign}${points} — ${reason.trim()}`,
   });
   return NextResponse.json({ ok: true, total: updated.total });
-}
+});
 
 // ───────────────────────────────────────── DELETE (kayıt sil) ─────────────────────────────────────────
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!canGive(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const DELETE = withAuth((s: Session) => canGive(s), async (req, _ctx, session) => {
   const url = new URL(req.url);
   const studentId = url.searchParams.get('studentId');
   const entryId = url.searchParams.get('entryId');
@@ -153,4 +146,4 @@ export async function DELETE(req) {
     detail: `Davranış puanı silindi: ${entry.points > 0 ? '+' : ''}${entry.points} — ${entry.reason}`,
   });
   return NextResponse.json({ ok: true, total: updated.total });
-}
+});

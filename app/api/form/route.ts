@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { withAuth, isManager, canManage } from '@/lib/auth';
+import { withAuth, isManager, canManage, type Session } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
+import type { ParentChild } from '@/lib/parents';
 
 // Form / Anket — müdür/rehber form oluşturur, hedef rollere (öğrenci/veli/öğretmen) dağıtır,
 // yanıtları toplar ve soru bazında özet görür. Soru tipleri: text/single/multi/rating.
@@ -13,7 +14,7 @@ export const runtime = 'nodejs'; // push web-push (Node crypto)
 
 import { newId as genId } from '@/lib/id';
 
-const QTYPES = ['text', 'single', 'multi', 'rating'];
+const QTYPES = ['text', 'single', 'multi', 'rating'] as const;
 
 const QuestionSchema = z.object({
   id: z.string().min(1).max(40),
@@ -22,10 +23,13 @@ const QuestionSchema = z.object({
   options: z.array(z.string().min(1).max(200)).max(20).optional(),
   required: z.boolean().optional(),
 });
+type Question = z.infer<typeof QuestionSchema>;
+
 const AudienceSchema = z.object({
   roles: z.array(z.enum(['student', 'parent', 'teacher'])).min(1).max(3),
   classes: z.array(z.string().min(1).max(60)).max(60).optional(), // boş = ilgili rolün tamamı
 });
+type FormAudience = z.infer<typeof AudienceSchema>;
 
 const CreateSchema = z.object({
   action: z.literal('create'),
@@ -48,23 +52,47 @@ const CloseSchema = z.object({
 });
 const BodySchema = z.discriminatedUnion('action', [CreateSchema, SubmitSchema, CloseSchema]);
 
+// Form.data Json şekli.
+interface FormData {
+  id: string;
+  title: string;
+  desc?: string;
+  audience?: FormAudience;
+  questions?: Question[];
+  anonymous?: boolean;
+  closeDate?: string;
+  closed?: boolean;
+  createdBy?: string;
+  createdByName?: string;
+  createdByRole?: string;
+  createdAt?: string;
+}
+
+// FormResponse.data Json şekli.
+interface ResponseData {
+  answers?: Record<string, unknown>;
+  role?: string;
+  name?: string;
+  submittedAt?: string;
+}
+
 // Oturum sahibi bu formu yanıtlayabilir mi? (rol + sınıf hedefi)
-function eligible(form, session) {
-  const a = form.audience || {};
-  const roles = a.roles || [];
+function eligible(form: FormData, session: Session): boolean {
+  const a = form.audience || ({} as FormAudience);
+  const roles: string[] = a.roles || [];
   if (!roles.includes(session.role)) return false;
   const cls = Array.isArray(a.classes) ? a.classes : [];
   if (cls.length === 0) return true;
-  if (session.role === 'student') return cls.includes(session.cls);
-  if (session.role === 'parent') return (session.children || []).some(c => cls.includes(c.cls));
+  if (session.role === 'student') return cls.includes(session.cls as string);
+  if (session.role === 'parent') return (session.children || []).some(c => typeof c !== 'string' && cls.includes(c.cls || ''));
   return true; // teacher sınıf hedefinden etkilenmez
 }
 
 // Hedef kitleyi çöz → [{role,id,name}] (eligibleCount + push için)
-async function resolveAudience(audience) {
-  const roles = audience.roles || [];
-  const cls = Array.isArray(audience.classes) ? audience.classes : [];
-  const out = [];
+async function resolveAudience(audience: FormAudience | Record<string, never>) {
+  const roles: string[] = ('roles' in audience && audience.roles) || [];
+  const cls = ('classes' in audience && Array.isArray(audience.classes)) ? audience.classes : [];
+  const out: { role: string; id: string; name: string }[] = [];
 
   if (roles.includes('student')) {
     const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
@@ -74,7 +102,7 @@ async function resolveAudience(audience) {
   }
   if (roles.includes('parent')) {
     const rows = await tdb().parent.findMany();
-    let recs = rows.map(p => ({ id: p.phone, children: p.children || [] }));
+    let recs = rows.map(p => ({ id: p.phone, children: ((p.children as unknown as ParentChild[] | null) || []) })); // children: Json
     if (cls.length) recs = recs.filter(p => (p.children || []).some(c => cls.includes(c.cls)));
     recs.forEach(p => out.push({ role: 'parent', id: p.id, name: (p.children || []).map(c => c.name).join(', ') + ' (Veli)' }));
   }
@@ -86,8 +114,8 @@ async function resolveAudience(audience) {
 }
 
 // Yanıtları soru tanımına göre temizle/doğrula.
-function cleanAnswers(questions, raw) {
-  const out = {};
+function cleanAnswers(questions: Question[], raw: Record<string, unknown> | undefined): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
   for (const q of questions) {
     const v = raw?.[q.id];
     if (q.type === 'text') {
@@ -97,11 +125,11 @@ function cleanAnswers(questions, raw) {
       if (typeof v === 'string' && (q.options || []).includes(v)) out[q.id] = v;
     } else if (q.type === 'multi') {
       if (Array.isArray(v)) {
-        const picked = v.filter(x => (q.options || []).includes(x)).slice(0, 20);
+        const picked = v.filter((x): x is string => (q.options || []).includes(x)).slice(0, 20);
         if (picked.length) out[q.id] = picked;
       }
     } else if (q.type === 'rating') {
-      const n = parseInt(v);
+      const n = parseInt(String(v));
       if (Number.isFinite(n) && n >= 1 && n <= 5) out[q.id] = n;
     }
   }
@@ -109,12 +137,13 @@ function cleanAnswers(questions, raw) {
 }
 
 // Eksik zorunlu soru var mı?
-function missingRequired(questions, answers) {
+function missingRequired(questions: Question[], answers: Record<string, unknown>): boolean {
   return questions.some(q => q.required && (answers[q.id] === undefined || answers[q.id] === '' ||
-    (Array.isArray(answers[q.id]) && answers[q.id].length === 0)));
+    (Array.isArray(answers[q.id]) && (answers[q.id] as unknown[]).length === 0)));
 }
 
 // ───────────────────────────────────────── GET ─────────────────────────────────────────
+// Bilinçli inline rol dallanması: yönetici sonuç/liste, yanıtlayan kendi formlarını görür.
 export const GET = withAuth(async (req, ctx, session) => {
   const detailId = new URL(req.url).searchParams.get('id');
 
@@ -122,22 +151,22 @@ export const GET = withAuth(async (req, ctx, session) => {
   if (detailId && isManager(session)) {
     const f = await tdb().form.findFirst({ where: { legacyId: detailId }, include: { responses: true } });
     if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
-    const form = f.data;
-    const responses = f.responses.map(r => r.data);
+    const form = f.data as unknown as FormData;
+    const responses = f.responses.map(r => r.data as unknown as ResponseData);
     const results = (form.questions || []).map(q => {
       if (q.type === 'single' || q.type === 'multi') {
-        const counts = {};
+        const counts: Record<string, number> = {};
         (q.options || []).forEach(o => { counts[o] = 0; });
         responses.forEach(r => {
           const a = r.answers?.[q.id];
-          if (q.type === 'single') { if (a != null && counts[a] !== undefined) counts[a]++; }
-          else if (Array.isArray(a)) a.forEach(x => { if (counts[x] !== undefined) counts[x]++; });
+          if (q.type === 'single') { if (a != null && counts[a as string] !== undefined) counts[a as string]++; }
+          else if (Array.isArray(a)) a.forEach(x => { if (counts[x as string] !== undefined) counts[x as string]++; });
         });
         return { id: q.id, label: q.label, type: q.type, counts };
       }
       if (q.type === 'rating') {
-        const vals = responses.map(r => r.answers?.[q.id]).filter(n => Number.isFinite(n));
-        const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+        const vals = responses.map(r => r.answers?.[q.id]).filter((n): n is number => Number.isFinite(n as number));
+        const dist: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
         vals.forEach(n => { dist[n] = (dist[n] || 0) + 1; });
         const avg = vals.length ? (vals.reduce((s, n) => s + n, 0) / vals.length) : 0;
         return { id: q.id, label: q.label, type: q.type, avg: Math.round(avg * 100) / 100, count: vals.length, dist };
@@ -154,12 +183,15 @@ export const GET = withAuth(async (req, ctx, session) => {
   // ── Yönetici: form listesi ──
   if (isManager(session)) {
     const rows = await tdb().form.findMany({ include: { _count: { select: { responses: true } } } });
-    const list = rows.map(r => ({
-      id: r.data.id, title: r.data.title, desc: r.data.desc, audience: r.data.audience,
-      questionCount: (r.data.questions || []).length, anonymous: !!r.data.anonymous,
-      closed: !!r.data.closed, closeDate: r.data.closeDate || '', createdAt: r.data.createdAt,
-      responseCount: r._count.responses,
-    }));
+    const list = rows.map(r => {
+      const d = r.data as unknown as FormData;
+      return {
+        id: d.id, title: d.title, desc: d.desc, audience: d.audience,
+        questionCount: (d.questions || []).length, anonymous: !!d.anonymous,
+        closed: !!d.closed, closeDate: d.closeDate || '', createdAt: d.createdAt,
+        responseCount: r._count.responses,
+      };
+    });
     list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     return NextResponse.json({ formlar: list });
   }
@@ -167,29 +199,33 @@ export const GET = withAuth(async (req, ctx, session) => {
   // ── Yanıtlayan: kendi cevabı (doldurma için) ──
   if (detailId) {
     const f = await tdb().form.findFirst({ where: { legacyId: detailId } });
-    if (!f || !eligible(f.data, session)) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
+    if (!f || !eligible(f.data as unknown as FormData, session)) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
     const mine = await tdb().formResponse.findFirst({ where: { formId: f.id, respondent: session.id } });
     return NextResponse.json({ form: f.data, mine: mine?.data || null });
   }
 
   // ── Yanıtlayan: uygun formlar + kendi durumu ──
   const rows = await tdb().form.findMany();
-  const eligForms = rows.filter(r => eligible(r.data, session));
+  const eligForms = rows.filter(r => eligible(r.data as unknown as FormData, session));
   if (eligForms.length === 0) return NextResponse.json({ formlar: [] });
   const formIds = eligForms.map(r => r.id);
   const myResp = await tdb().formResponse.findMany({ where: { formId: { in: formIds }, respondent: session.id }, select: { formId: true } });
   const answeredSet = new Set(myResp.map(r => r.formId));
-  const list = eligForms.map(r => ({
-    id: r.data.id, title: r.data.title, desc: r.data.desc,
-    questionCount: (r.data.questions || []).length, anonymous: !!r.data.anonymous,
-    closed: !!r.data.closed, closeDate: r.data.closeDate || '', createdAt: r.data.createdAt,
-    answered: answeredSet.has(r.id),
-  }));
+  const list = eligForms.map(r => {
+    const d = r.data as unknown as FormData;
+    return {
+      id: d.id, title: d.title, desc: d.desc,
+      questionCount: (d.questions || []).length, anonymous: !!d.anonymous,
+      closed: !!d.closed, closeDate: d.closeDate || '', createdAt: d.createdAt,
+      answered: answeredSet.has(r.id),
+    };
+  });
   list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   return NextResponse.json({ formlar: list });
 });
 
 // ───────────────────────────────────────── POST ─────────────────────────────────────────
+// Bilinçli inline yetki dallanması: create/close yönetici (canManage), submit uygun roldeki yanıtlayan.
 export const POST = withAuth(async (req, ctx, session) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
@@ -213,7 +249,7 @@ export const POST = withAuth(async (req, ctx, session) => {
       createdBy: session.id, createdByName: session.name || '', createdByRole: session.role,
       createdAt: new Date().toISOString(),
     };
-    await tdb().form.create({ data: { legacyId: id, data: rec } });
+    await tdb().form.create({ data: withScope({ legacyId: id, data: rec }) });
 
     // Hedef kitleye push (hata toleranslı)
     const targets = await resolveAudience(rec.audience);
@@ -232,8 +268,8 @@ export const POST = withAuth(async (req, ctx, session) => {
   // ── Yanıtla (uygun rol) ──
   if (data.action === 'submit') {
     const f = await tdb().form.findFirst({ where: { legacyId: data.id } });
-    if (!f || !eligible(f.data, session)) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
-    const form = f.data;
+    if (!f || !eligible(f.data as unknown as FormData, session)) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
+    const form = f.data as unknown as FormData;
     if (form.closed) return NextResponse.json({ error: 'Bu form kapatıldı' }, { status: 400 });
     if (form.closeDate && form.closeDate < new Date().toISOString().slice(0, 10)) {
       return NextResponse.json({ error: 'Bu formun süresi doldu' }, { status: 400 });
@@ -249,7 +285,7 @@ export const POST = withAuth(async (req, ctx, session) => {
     };
     const existing = await tdb().formResponse.findFirst({ where: { formId: f.id, respondent: session.id } });
     if (existing) await tdb().formResponse.update({ where: { id: existing.id }, data: { data: rec } });
-    else await tdb().formResponse.create({ data: { formId: f.id, respondent: session.id, data: rec } });
+    else await tdb().formResponse.create({ data: { formId: f.id, respondent: session.id || '', data: rec } });
     return NextResponse.json({ ok: true });
   }
 
@@ -258,7 +294,7 @@ export const POST = withAuth(async (req, ctx, session) => {
     if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     const f = await tdb().form.findFirst({ where: { legacyId: data.id } });
     if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
-    await tdb().form.update({ where: { id: f.id }, data: { data: { ...f.data, closed: data.closed } } });
+    await tdb().form.update({ where: { id: f.id }, data: { data: { ...(f.data as object), closed: data.closed } } });
     return NextResponse.json({ ok: true, closed: data.closed });
   }
 
@@ -272,12 +308,13 @@ export const DELETE = withAuth('manage', async (req, ctx, session) => {
 
   const f = await tdb().form.findFirst({ where: { legacyId: id } });
   if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
+  const d = f.data as unknown as FormData | null;
   await tdb().form.delete({ where: { id: f.id } }); // yanıtlar cascade ile gider
   await logAudit({
     ...actorFrom(session),
     action: 'form.delete',
-    target: { type: 'form', id, name: f.data?.title || '' },
-    detail: `Form/anket silindi: "${f.data?.title || ''}"`,
+    target: { type: 'form', id, name: d?.title || '' },
+    detail: `Form/anket silindi: "${d?.title || ''}"`,
   });
   return NextResponse.json({ ok: true });
 });
