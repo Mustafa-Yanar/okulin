@@ -9,7 +9,9 @@ export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 const AttendancePostSchema = z.object({
   date: z.string().min(1).max(40),
   cls: z.string().min(1).max(40),
-  lessonNo: z.union([z.string().max(20), z.number()]),
+  // Etüt yoklamasında lessonNo = 'e' + şablon id'si; id'ler UUID göçünden beri
+  // 36 karakter ('e'+36=37) — eski max(20) etüt yoklamasını 400 ile kesiyordu.
+  lessonNo: z.union([z.string().max(60), z.number()]),
   attendance: z.record(z.enum(['var', 'gec', 'yok'])),
 });
 

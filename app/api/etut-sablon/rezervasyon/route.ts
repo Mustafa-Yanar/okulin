@@ -17,7 +17,10 @@ import {
 
 const PostSchema = z.object({
   teacherId: zId,
-  etutId: z.string().max(20),
+  // Şablon id'leri makeId→crypto.randomUUID göçünden beri 36 karakter — eski
+  // max(20) YENİ şablonların rezervasyonunu 400 ile kesiyordu (UI'da 'etutId:
+  // String must contain at most 20 character(s)'). zId (max 100) ile hizalandı.
+  etutId: zId,
   branch: z.string().max(60).optional(),
   studentId: zId.optional(), // müdür/öğretmen başka öğrenci için yazarsa
   weekKey: z.string().max(40).optional(),
@@ -25,7 +28,7 @@ const PostSchema = z.object({
 
 const DeleteSchema = z.object({
   teacherId: zId,
-  etutId: z.string().max(20),
+  etutId: zId,
 });
 
 // Bir şablon verilen haftada efektif aktif mi?
