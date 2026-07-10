@@ -24,6 +24,8 @@ module.exports = defineConfig({
     { name: 'setup', testMatch: /auth\.setup\.js/ },
     { name: 'sql', testMatch: /sql-.*\.spec\.js/, dependencies: ['setup'] },
     { name: 'ui', testMatch: /ui-.*\.spec\.js/, dependencies: ['setup'] },
+    // Entegrasyon testleri: ödeme callback'i, slot kuralları, çözücü, kiracı izolasyonu.
+    { name: 'int', testMatch: /int-.*\.spec\.js/, dependencies: ['setup'] },
     { name: 'smoke', testMatch: /smoke\.spec\.js/ },
   ],
 });
