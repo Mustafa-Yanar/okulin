@@ -9,19 +9,94 @@ import {
 import TeacherPresets from '../director/TeacherPresets';
 import { useConfirm } from '../ConfirmProvider';
 import { useClasses } from '../ClassesContext';
+import type { ClassRecord } from '@/lib/classes';
+import type { Branding } from '@/lib/branding';
+import type { ShowToast, TeacherDTO, TeacherPresetDTO } from '../types';
 
 // Ders adı = branş adı; otomatik eşleme yok (çoklu branş modeli).
 
+// ── Tip sözlüğü ──
+// colKeyOf/groupOf eşleşmeyen özel şubede (s_…) null döndürür; null anahtarla
+// load/grouping erişimi çalışma anında zararsızdır (undefined döner, boş kurs
+// listesiyle döngüler hiç koşmaz). Bu bilinçli durumlar aşağıda tekil tip
+// iddialarıyla (as string / !) işaretlendi — davranış birebir JS ile aynı.
+type ApiFn = <T = unknown>(path: string, opts?: RequestInit) => Promise<T>;
+type Load = Record<string, Record<string, number>>;          // colKey → ders → saat
+type Grouping = Record<string, Record<string, string>>;      // colKey → ders → "3-2-2"
+type Windows = Record<number, number[]>;                     // gün → [slotIdx]
+type TeacherSlots = Record<string, [number, number][]>;      // teacherId → [gün, slotIdx][]
+
+// Solver çıktısı satırı (assigned) — /api/program-solve sözleşmesi.
+interface Assigned {
+  cls: string;
+  course: string;
+  teacherId: string;
+  teacherName: string;
+  day: number;
+  slot: number;
+}
+interface Unplaced {
+  cls: string;
+  course: string;
+  hours?: number;
+  reason: string;
+}
+interface SolveResult {
+  assigned: Assigned[];
+  unplaced: Unplaced[];
+  tLoad: Record<string, number>;
+  total: number;
+  ms: number;
+}
+interface SolveResponse {
+  assigned?: Assigned[];
+  unplaced?: Unplaced[];
+  tLoad?: Record<string, number>;
+  ms?: number;
+  presetWarnings?: string[];
+  feasible?: boolean;
+}
+
+// /api/program yanıtındaki ızgara: gün → slotId → hücre.
+interface ProgramCell { type?: string; cls?: string; branch?: string; fixed?: boolean }
+type ProgramGrid = Record<string, Record<string, ProgramCell>>;
+
+// Manuel düzenleme bloğu (aynı gün+sınıf+ders+öğretmen ardışık koşusu).
+interface Block {
+  id: string;
+  day: number;
+  start: number;
+  len: number;
+  cls: string;
+  course: string;
+  teacherId: string;
+}
+
+interface FeasFix { teacherId: string; name: string; day: number; slots: number[] }
+interface SwapFix { teacherId: string; name: string; fromDay: number; toDay: number }
+interface DayGap { day: number; missing: string[] }
+interface FeasInfeasible {
+  feasible: false;
+  swapFix: SwapFix[];
+  cheapFix: FeasFix[];
+  costlyFix: FeasFix[];
+  cheapest: FeasFix | null;
+  dayGaps: DayGap[];
+  budgetExhausted: boolean;
+  multiBottleneck: boolean;
+}
+type FeasResult = { feasible: true; suggestions: never[] } | FeasInfeasible;
+
 const DAYS = ['Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi','Pazar'];
 
-const COURSE_COLOR = {
+const COURSE_COLOR: Record<string, string> = {
   'Türkçe':'#ec4899','TYT Matematik':'#6366f1','AYT Matematik':'#4f46e5','Geometri':'#818cf8','Matematik':'#6366f1',
   'Fizik':'#0ea5e9','Kimya':'#14b8a6','Biyoloji':'#22c55e','Tarih':'#f59e0b','Coğrafya':'#84cc16','Felsefe':'#a855f7',
   'Fen Bilgisi':'#06b6d4','Sosyal Bilgiler':'#f97316','İnkılap Tarihi':'#f97316','İngilizce':'#8b5cf6',
 };
 
 // Sütun tanımları — tam isim ve kısa etiket
-const LOAD_COLUMNS = [
+const LOAD_COLUMNS: { key: string; label: string; short: string }[] = [
   { key:'Ortaokul_7',    label:'7. Sınıf',        short:'7.Sınıf'   },
   { key:'Ortaokul_8',    label:'8. Sınıf',        short:'8.Sınıf'   },
   { key:'Lise Ortak_9',  label:'9. Sınıf',        short:'9.Sınıf'   },
@@ -35,7 +110,7 @@ const LOAD_COLUMNS = [
 ];
 
 // Hangi dersler hangi sütuna ait
-const COL_COURSES = {
+const COL_COURSES: Record<string, string[]> = {
   'Ortaokul_7':              ['Türkçe','Matematik','Fen Bilgisi','Sosyal Bilgiler','İngilizce'],
   'Ortaokul_8':              ['Türkçe','Matematik','Fen Bilgisi','İnkılap Tarihi','İngilizce'],
   'Lise Ortak_9':            ['Türkçe','Matematik','Fizik','Kimya','Biyoloji','Tarih','Coğrafya','Felsefe'],
@@ -49,7 +124,7 @@ const COL_COURSES = {
 };
 
 // Sınıf → sütun anahtarı
-function colKeyFor(cls) {
+function colKeyFor(cls: string): string {
   if (cls.startsWith('m')) {
     const n = parseInt(cls.slice(1));
     return n <= 5 ? 'Mezun Sayısal' : 'Mezun Eşit Ağırlık';
@@ -63,22 +138,22 @@ function colKeyFor(cls) {
   if (grade === 4) return sec <= 5 ? 'Lise Sayısal_12' : 'Lise Eşit Ağırlık_12';
   return 'Lise Ortak_9';
 }
-function coursesForCol(key) { return COL_COURSES[key] || []; }
+function coursesForCol(key: string | null): string[] { return COL_COURSES[key as string] || []; }
 
 // colKey → gerçekte kullanılan ders listesi (registry). Kurumun kendi eklediği dersler
 // (örn. "Paragraf") sabit COL_COURSES'ta hiç yoktur — bu yüzden ders yükü tablosu VE
 // analyzeLoad, önce registry sınıflarının dersler[] birleşimine bakar; sütunda henüz
 // hiç sınıf/ders yoksa (örn. mezun şubesi daha açılmamış) sabit listeye düşer, tablo
 // "hiç ders yok" görünmesin diye.
-function coursesForColFromRegistry(colKeyOf, registryClasses) {
-  const map = {}; // colKey -> Set<ders>
+function coursesForColFromRegistry(colKeyOf: (cls: string) => string | null, registryClasses: ClassRecord[] | null): Record<string, string[]> {
+  const map: Record<string, Set<string>> = {}; // colKey -> Set<ders>
   for (const c of registryClasses || []) {
     const key = colKeyOf(c.id);
     if (!key) continue;
     const set = map[key] || (map[key] = new Set());
     for (const d of c.dersler || []) set.add(d);
   }
-  const result = {};
+  const result: Record<string, string[]> = {};
   for (const key of Object.keys(COL_COURSES)) {
     const used = map[key];
     result[key] = used && used.size ? ORDER.filter(d => used.has(d)).concat([...used].filter(d => !ORDER.includes(d))) : COL_COURSES[key];
@@ -94,7 +169,7 @@ const ORDER = ['Türkçe','Matematik','TYT Matematik','AYT Matematik','Geometri'
 // Registry şube kaydından (kademe/duzey/dal) sütun anahtarı türet. Özel şubeler
 // (s_…) sabit-kod colKeyFor ile çözülemez; kayıttaki metadata tek doğru kaynak.
 // Eşleşen sütun yoksa null → şube listede görünür ama ders talebi üretmez.
-function colKeyFromRegistry(c) {
+function colKeyFromRegistry(c: ClassRecord | undefined): string | null {
   if (!c) return null;
   if (c.group === 'mezun') {
     if (c.dal === 'ea') return 'Mezun Eşit Ağırlık';
@@ -117,17 +192,18 @@ function colKeyFromRegistry(c) {
 // Çözücünün blok havuzu ürettiği köprü grupları — ilkokul kapsam dışı (Faz 2+).
 const SOLVER_GROUPS = ['ortaokul', 'lise', 'mezun'];
 
-function teacherTeaches(t, course) {
+function teacherTeaches(t: TeacherDTO, course: string): boolean {
   return (t.branches || []).includes(course);
 }
 
 // Sınıfın KATI ders penceresi: slotTemplate {gün: [slotNo, ...]} → {gün: [slotIdx, ...]}.
 // slotNo 1-tabanlı (kullanıcı görünümü), solver 0-tabanlı slotIdx bekler → slotNo-1.
 // Şablon yoksa/boşsa boş pencere → o sınıfa hiç ders yerleşmez (yalnız işaretli slotlar).
-function windowsFromTemplate(slotTemplate) {
-  const win = {};
+function windowsFromTemplate(slotTemplate: unknown): Windows {
+  const win: Windows = {};
   if (!slotTemplate) return win;
-  for (const [dStr, nos] of Object.entries(slotTemplate)) {
+  // ClassRecord.slotTemplate Json (unknown) — kayıtlı sözleşme {gün: [slotNo...]}.
+  for (const [dStr, nos] of Object.entries(slotTemplate as Record<string, number[]>)) {
     const d = parseInt(dStr);
     const idxs = [...new Set((nos || []).map(n => n - 1))].filter(i => i >= 0).sort((a, b) => a - b);
     if (idxs.length) win[d] = idxs;
@@ -137,7 +213,7 @@ function windowsFromTemplate(slotTemplate) {
 
 // ── Ders gruplama (parça deseni) yardımcıları ──
 // Desen string'i: "3-2-2" → [3,2,2]. Ayraç olarak rakam dışı her şey kabul edilir.
-function parsePattern(str) {
+function parsePattern(str: string | undefined): number[] {
   return String(str || '')
     .split(/[^0-9]+/)
     .filter(Boolean)
@@ -145,26 +221,26 @@ function parsePattern(str) {
     .filter(n => n > 0 && n <= 12);
 }
 // Desen girilmemişse varsayılan: 2'li gruplar + tek kalan saat 1'lik grup.
-function defaultSplit(h) {
-  const arr = Array(Math.floor(h / 2)).fill(2);
+function defaultSplit(h: number): number[] {
+  const arr: number[] = Array(Math.floor(h / 2)).fill(2);
   if (h % 2) arr.push(1);
   return arr;
 }
 // Bir hücrenin etkin deseni: override varsa o, yoksa saatten varsayılan.
-function resolvePieces(load, grouping, key, course) {
-  const h = (load[key]?.[course]) || 0;
+function resolvePieces(load: Load, grouping: Grouping | undefined, key: string | null, course: string): number[] {
+  const h = (load[key as string]?.[course]) || 0;
   if (h <= 0) return [];
-  const pat = parsePattern(grouping?.[key]?.[course]);
+  const pat = parsePattern(grouping?.[key as string]?.[course]);
   return pat.length ? pat : defaultSplit(h);
 }
 
 // slotIdx (0-tabanlı, solver çıktısı) → 7-gün slot id (d{gün}s{no}). slotNo = idx+1.
-function slotIdFor(day, slotIdx) {
+function slotIdFor(day: number, slotIdx: number | null | undefined): string | null {
   if (slotIdx == null || slotIdx < 0) return null;
   return makeSlotId(day, slotIdx + 1);
 }
 // Sonuç kartı etiketi: gerçek saat artık güne özgü (sabit varsayılan yok) → ders no göster.
-function slotLabel(day, slotIdx) {
+function slotLabel(day: number, slotIdx: number | null): string {
   return slotIdx == null ? '' : `${slotIdx + 1}. ders`;
 }
 // Kesin Kontrol "sistem önerisi": nicel bir "en ucuz" iddiası DEĞİL. Maliyetin gerçek
@@ -172,7 +248,7 @@ function slotLabel(day, slotIdx) {
 // bilinemez — o yüzden kategoriler eşdeğer sunulur, burada yalnızca "en küçük ve en
 // güvenli değişiklik" varsayılan olarak işaretlenir: mevcut günü uzatmak monotondur
 // (hiçbir mevcut düzeni bozmaz), takas gün düzenini değiştirir, yeni gün en büyüğüdür.
-function feasSuggestion(fr) {
+function feasSuggestion(fr: FeasInfeasible): { text: string; why: string } | null {
   if (fr.cheapest) return {
     text: `${fr.cheapest.name} — ${DAYS[fr.cheapest.day]} günü ${fr.cheapest.slots.join('. ve ')}. ders saatini müsait işaretleyin`,
     why: 'öğretmen o gün zaten geliyor; en küçük değişiklik, mevcut hiçbir düzeni bozmaz',
@@ -188,20 +264,20 @@ function feasSuggestion(fr) {
   return null;
 }
 // Manuel düzenlemede blok üyeliği: sınıf aynı slotta tek ders işler (K5) → benzersiz.
-const entryKeyOf = a => `${a.day}|${a.slot}|${a.cls}`;
-function shortCourse(c) {
-  return ({'TYT Matematik':'TYT Mat','AYT Matematik':'AYT Mat','Geometri':'Geo','Matematik':'Mat','Fen Bilgisi':'Fen','Sosyal Bilgiler':'Sos','İnkılap Tarihi':'İnk','İngilizce':'İng'})[c] || c.slice(0,5);
+const entryKeyOf = (a: Assigned) => `${a.day}|${a.slot}|${a.cls}`;
+function shortCourse(c: string): string {
+  return ({'TYT Matematik':'TYT Mat','AYT Matematik':'AYT Mat','Geometri':'Geo','Matematik':'Mat','Fen Bilgisi':'Fen','Sosyal Bilgiler':'Sos','İnkılap Tarihi':'İnk','İngilizce':'İng'} as Record<string, string>)[c] || c.slice(0,5);
 }
-function currentWeekKey() {
+function currentWeekKey(): string {
   const d = new Date(); d.setHours(0,0,0,0);
   d.setDate(d.getDate()+4-(d.getDay()||7));
   const ys = new Date(d.getFullYear(),0,1);
-  const wk = Math.ceil((((d-ys)/86400000)+1)/7);
+  const wk = Math.ceil((((d.getTime()-ys.getTime())/86400000)+1)/7);
   return `${d.getFullYear()}-W${String(wk).padStart(2,'0')}`;
 }
 
 // Öğretmenin hangi gruplara ders girebileceği (boşsa tüm gruplar)
-function teacherGroups(t) {
+function teacherGroups(t: TeacherDTO): string[] {
   const ag = t.allowedGroups || [];
   return ag.length > 0 ? ag : ['ortaokul','lise','mezun'];
 }
@@ -209,13 +285,13 @@ function teacherGroups(t) {
 // Her öğretmenin işaretlediği (gün, slotIndex) uygunluk çiftlerini topla — KATI mod,
 // solver da aynı kaynağı kullanır. Ön analiz ve generate() aynı fonksiyonu paylaşır ki
 // "hata yok" derken solver'ın gerçekte gördüğü kısıt kaçmasın.
-async function fetchTeacherSlots(teachers, api) {
-  const teacherSlots = {};
+async function fetchTeacherSlots(teachers: TeacherDTO[], api: ApiFn): Promise<TeacherSlots> {
+  const teacherSlots: TeacherSlots = {};
   await Promise.all(teachers.map(async t => {
     try {
-      const resp = await api(`/api/program?teacherId=${t.id}`); // {weekKey, program}
+      const resp = await api<{ weekKey?: string; program?: ProgramGrid }>(`/api/program?teacherId=${t.id}`); // {weekKey, program}
       const prog = resp.program || {};
-      const pairs = [];
+      const pairs: [number, number][] = [];
       for (const dayStr of Object.keys(prog)) {
         const day = parseInt(dayStr);
         const slots = prog[dayStr] || {};
@@ -233,8 +309,8 @@ async function fetchTeacherSlots(teachers, api) {
 
 // Bir grubun (gün,slot) pencere birleşimi: o gruptaki tüm sınıfların işaretli slotları.
 // Öğretmen kapasitesi bunun üst sınırı — aynı slotta tek sınıfa girer (birleşim sayılır).
-function groupSlotUnion(grp, classes, windowsOf, groupOf) {
-  const union = new Set();
+function groupSlotUnion(grp: string, classes: string[], windowsOf: (cls: string) => Windows, groupOf: (cls: string) => string | null): Set<string> {
+  const union = new Set<string>();
   for (const cls of classes) {
     if (groupOf(cls) !== grp) continue;
     const win = windowsOf(cls);
@@ -248,7 +324,7 @@ function groupSlotUnion(grp, classes, windowsOf, groupOf) {
 // Öğretmenin bir grupta çalışabileceği toplam SAAT kapasitesi (izin günleri hariç).
 // teacherSlots verilmişse (gerçek available işaretleri) kapasite onunla kesiştirilir —
 // verilmemişse (henüz yüklenmedi) sınıf pencerelerinin üst sınırına geri düşülür.
-function teacherHourCap(t, grp, classes, windowsOf, groupOf, teacherSlots) {
+function teacherHourCap(t: TeacherDTO, grp: string, classes: string[], windowsOf: (cls: string) => Windows, groupOf: (cls: string) => string | null, teacherSlots: TeacherSlots | null | undefined): number {
   const offDays = new Set(t.offDays || []);
   const availSet = teacherSlots ? new Set((teacherSlots[t.id] || []).map(([d, idx]) => `${d}:${idx}`)) : null;
   let cap = 0;
@@ -266,8 +342,8 @@ function teacherHourCap(t, grp, classes, windowsOf, groupOf, teacherSlots) {
 // işaretlemiş (solver'ın piece_ok kuralıyla aynı). Çapraz-sınıf öğretmen çekişmesi
 // YOK SAYILIR (iyimser) — bu yüzden buradan çıkan hatalar KESİNDİR: hiçbir gün
 // dağıtımıyla çözülemez, yanlış pozitif üretmez.
-function pieceFeasibleDays(win, L, eligTeachers, teacherSlots) {
-  const days = [];
+function pieceFeasibleDays(win: Windows, L: number, eligTeachers: TeacherDTO[], teacherSlots: TeacherSlots): number[] {
+  const days: number[] = [];
   for (const [dStr, slots] of Object.entries(win)) {
     const d = parseInt(dStr);
     const ok = eligTeachers.some(t => {
@@ -286,13 +362,13 @@ function pieceFeasibleDays(win, L, eligTeachers, teacherSlots) {
 
 // Parça→gün ikili eşleme (augmenting path). K3 gereği aynı dersin parçaları FARKLI
 // günlere gider; kaç parçaya gün bulunabildiğini döner (maksimum eşleme — kesin).
-function maxDayMatching(feasibleSets) {
-  const dayOf = new Map(); // day -> piece index
-  function tryAssign(i, visited) {
+function maxDayMatching(feasibleSets: number[][]): number {
+  const dayOf = new Map<number, number>(); // day -> piece index
+  function tryAssign(i: number, visited: Set<number>): boolean {
     for (const d of feasibleSets[i]) {
       if (visited.has(d)) continue;
       visited.add(d);
-      if (!dayOf.has(d) || tryAssign(dayOf.get(d), visited)) { dayOf.set(d, i); return true; }
+      if (!dayOf.has(d) || tryAssign(dayOf.get(d)!, visited)) { dayOf.set(d, i); return true; }
     }
     return false;
   }
@@ -301,20 +377,29 @@ function maxDayMatching(feasibleSets) {
   return matched;
 }
 
+interface AnalyzeCtx {
+  colKeyOf: (cls: string) => string | null;
+  groupOf: (cls: string) => string | null;
+  labelOf: (cls: string) => string;
+  windowsOf: (cls: string) => Windows;
+  teacherSlots?: TeacherSlots | null;
+  coursesForCol?: (key: string | null) => string[];
+}
+
 // Ön analiz: oluşturmadan önce kapasite/çakışma sorunlarını hesapla. teacherSlots
 // varsa (Oluştur ile aynı kaynak — /api/program available işaretleri) SAAT bazlı
 // kapasite kontrolü (#3) öğretmenin gerçekte uygun olduğu slotlarla sınırlandırılır,
 // ayrıca sınıf-yerel KESİN kontroller (#3b K3 gün eşleme, #3c gün-kümesi kapasitesi)
 // çalışır. Hangi sınıfın hangi güne gideceği TAHMİN edilmez — yalnız hiçbir dağıtımla
 // çözülemeyecek durumlar hata olur (çapraz-sınıf çekişme yok sayılır → iyimser sınır).
-function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, labelOf, windowsOf, teacherSlots, coursesForCol: coursesForColArg }) {
-  const errors = [], warnings = [], infos = [];
+function analyzeLoad(classes: string[], load: Load, teachers: TeacherDTO[], grouping: Grouping, { colKeyOf, groupOf, labelOf, windowsOf, teacherSlots, coursesForCol: coursesForColArg }: AnalyzeCtx) {
+  const errors: string[] = [], warnings: string[] = [], infos: string[] = [];
   const coursesOf = coursesForColArg || coursesForCol;
 
   // 0. Program penceresi işaretlenmemiş sınıflar → o sınıfa hiç ders yerleşmez (uyarı).
   for (const cls of classes) {
     const key = colKeyOf(cls);
-    const demand = coursesOf(key).reduce((s, c) => s + ((load[key]?.[c]) || 0), 0);
+    const demand = coursesOf(key).reduce((s, c) => s + ((load[key as string]?.[c]) || 0), 0);
     if (demand <= 0) continue;
     const win = windowsOf(cls);
     if (!Object.keys(win).length) {
@@ -345,9 +430,9 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
   for (const cls of classes) {
     const key = colKeyOf(cls), grp = groupOf(cls);
     for (const course of coursesOf(key)) {
-      const h = (load[key]?.[course]) || 0; if (h <= 0) continue;
+      const h = (load[key as string]?.[course]) || 0; if (h <= 0) continue;
       const eligible = teachers.filter(tt =>
-        teacherTeaches(tt, course) && teacherGroups(tt).includes(grp)
+        teacherTeaches(tt, course) && teacherGroups(tt).includes(grp as string)
       );
       if (eligible.length === 0) {
         errors.push(`${labelOf(cls)} — ${course}: uygun öğretmen yok`);
@@ -356,12 +441,12 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
   }
 
   // 3. Branş bazında talep vs kapasite (SAAT bazında)
-  const branchHours = {}; // branch+grp → toplam saat talebi
+  const branchHours: Record<string, number> = {}; // branch+grp → toplam saat talebi
 
   for (const cls of classes) {
     const key = colKeyOf(cls), grp = groupOf(cls);
     for (const course of coursesOf(key)) {
-      const h = (load[key]?.[course]) || 0; if (h <= 0) continue;
+      const h = (load[key as string]?.[course]) || 0; if (h <= 0) continue;
       const k = course + '|' + grp; // ders adı = branş
       branchHours[k] = (branchHours[k] || 0) + h;
     }
@@ -391,11 +476,11 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
       const win = windowsOf(cls);
       const winDays = Object.keys(win).map(Number).sort((a, b) => a - b);
       if (!winDays.length) continue; // #0'da raporlandı
-      const clsPieces = []; // {course, L, days:Set} — 3c için birikir
+      const clsPieces: { course: string; L: number; days: Set<number> }[] = []; // 3c için birikir
       for (const course of coursesOf(key)) {
         const pat = resolvePieces(load, grouping, key, course);
         if (!pat.length) continue;
-        const elig = teachers.filter(tt => teacherTeaches(tt, course) && teacherGroups(tt).includes(grp));
+        const elig = teachers.filter(tt => teacherTeaches(tt, course) && teacherGroups(tt).includes(grp as string));
         if (!elig.length) continue; // #2'de raporlandı
         const sets = pat.map(L => pieceFeasibleDays(win, L, elig, teacherSlots));
         // 3b: K3 — her grup AYRI güne gitmek zorunda; eşleme kaç gruba gün bulabiliyor?
@@ -409,7 +494,7 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
       // 3c: gün-kümesi kapasitesi (Hall) — yalnız S günlerine yerleşebilen derslerin
       // toplam saati S'in pencere slot toplamını aşarsa kesin sığmaz.
       const usable = clsPieces.filter(p => p.days.size > 0); // günsüzler 3b'de raporlandı
-      const reported = [];
+      const reported: number[] = [];
       for (let mask = 1; mask < (1 << winDays.length); mask++) {
         if (reported.some(r => (mask & r) === r)) continue; // alt kümesi zaten raporlandı
         const S = winDays.filter((_, i) => mask & (1 << i));
@@ -439,7 +524,7 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
         const pat = resolvePieces(load, grouping, key, course);
         if (!pat.length) continue; // bu sınıf-derse saat girilmemiş → preset etkisiz
         // Öğretmen bu derse branş+grup olarak uygun mu?
-        if (!(teacherTeaches(t, course) && teacherGroups(t).includes(grp))) {
+        if (!(teacherTeaches(t, course) && teacherGroups(t).includes(grp as string))) {
           errors.push(`Ön eşleştirme — ${t.name} → ${labelOf(cls)} ${course}: öğretmen bu derse uygun değil (branş/grup uyuşmuyor) → program oluşturulamaz`);
           continue;
         }
@@ -470,7 +555,7 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
   // 5. Hiç talep yok kontrolü
   const totalHours = classes.reduce((s, cls) => {
     const key = colKeyOf(cls);
-    return s + coursesOf(key).reduce((ss, c) => ss + ((load[key]?.[c]) || 0), 0);
+    return s + coursesOf(key).reduce((ss, c) => ss + ((load[key as string]?.[c]) || 0), 0);
   }, 0);
   if (totalHours === 0) {
     infos.push('Hiç ders saati girilmemiş — ders yükü tablosunu doldurun.');
@@ -479,31 +564,51 @@ function analyzeLoad(classes, load, teachers, grouping, { colKeyOf, groupOf, lab
   return { errors, warnings, infos, ok: errors.length === 0 };
 }
 
+interface SolvePayload {
+  classes: string[];
+  teachers: TeacherDTO[];
+  load: Load;
+  pieces: Record<string, Record<string, number[]>>;
+  maxWeekly: number;
+  windows: Record<string, Windows>;
+  colKey: Record<string, string | null>;
+  group: Record<string, string | null>;
+  teacherSlots: TeacherSlots;
+  presets: { teacherId: string; cls: string; course: string }[];
+  feasibilityTest?: boolean;
+}
+
+interface ProgramOlusturucuProps {
+  api: ApiFn;
+  showToast?: ShowToast;
+  branding?: Branding | null;
+}
+
 // ── Ana bileşen ──
-export default function ProgramOlusturucu({ api, showToast, branding }) {
+export default function ProgramOlusturucu({ api, showToast, branding }: ProgramOlusturucuProps) {
   const confirm = useConfirm();
   const { classes: registryClasses, loaded: registryLoaded } = useClasses();
-  const [teachers, setTeachers] = useState(null);
+  const [teachers, setTeachers] = useState<TeacherDTO[] | null>(null);
   // Ders yükü BOŞ başlar (tüm değerler 0) — kaydedilmiş plan varsa config'ten yüklenir.
-  const [load, setLoad]         = useState({});
-  const [grouping, setGrouping] = useState({}); // {colKey: {ders: "3-2-2"}} — gruplama override
-  const [result, setResult]     = useState(null);
+  const [load, setLoad]         = useState<Load>({});
+  const [grouping, setGrouping] = useState<Grouping>({}); // {colKey: {ders: "3-2-2"}} — gruplama override
+  const [result, setResult]     = useState<SolveResult | null>(null);
   const [maxWeekly, setMaxWeekly] = useState(40);
   const [planDirty, setPlanDirty] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [applying, setApplying]   = useState(false);
   const [clearing, setClearing]   = useState(false);
-  const [conflicts, setConflicts] = useState(null);
-  const [preview, setPreview]     = useState(null);
-  const [previewId, setPreviewId] = useState(null);
-  const [analysis, setAnalysis]   = useState(null);
+  const [conflicts, setConflicts] = useState<{ items: string[]; checked: boolean } | null>(null);
+  const [preview, setPreview]     = useState<string | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [analysis, setAnalysis]   = useState<ReturnType<typeof analyzeLoad> | null>(null);
   const [presetTeacherId, setPresetTeacherId] = useState(''); // ön eşleştirme paneli (madde 11)
   const [feasChecking, setFeasChecking] = useState(false);   // Kesin Kontrol çalışıyor
-  const [feasResult, setFeasResult] = useState(null);        // {feasible, suggestions:[...]}
+  const [feasResult, setFeasResult] = useState<FeasResult | null>(null); // {feasible, suggestions:[...]}
   // Oluştur anındaki öğretmen müsaitlikleri — manuel blok taşıma denetimi bunu kullanır
   // (solver'ın gördüğü kaynakla aynı; taşıma kuralları solver kurallarının kopyası).
-  const [lastTeacherSlots, setLastTeacherSlots] = useState(null);
+  const [lastTeacherSlots, setLastTeacherSlots] = useState<TeacherSlots | null>(null);
 
   const classMeta = useMemo(
     () => new Map((registryClasses || []).map(c => [c.id, c])),
@@ -524,21 +629,21 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
 
   // Registry-öncelikli köprüler: özel şubelerde (s_…) sabit-kod ayrıştırma çalışmaz.
   const groupOf = useCallback(
-    cls => classMeta.get(cls)?.group || classToGroup(cls),
+    (cls: string) => classMeta.get(cls)?.group || classToGroup(cls),
     [classMeta]
   );
-  const colKeyOf = useCallback(cls => {
+  const colKeyOf = useCallback((cls: string) => {
     const c = classMeta.get(cls);
     if (c) return colKeyFromRegistry(c) || (/^s_/.test(cls) ? null : colKeyFor(cls));
     return colKeyFor(cls);
   }, [classMeta]);
   const labelOf = useCallback(
-    cls => /^s_/.test(cls) ? (classMeta.get(cls)?.ad || cls) : String(cls).toUpperCase(),
+    (cls: string) => /^s_/.test(cls) ? (classMeta.get(cls)?.ad || cls) : String(cls).toUpperCase(),
     [classMeta]
   );
   // Sınıfın KATI ders penceresi (slotTemplate → {gün: [slotIdx]}). İşaretsizse boş.
   const windowsOf = useCallback(
-    cls => windowsFromTemplate(classMeta.get(cls)?.slotTemplate),
+    (cls: string) => windowsFromTemplate(classMeta.get(cls)?.slotTemplate),
     [classMeta]
   );
 
@@ -548,14 +653,14 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
     () => coursesForColFromRegistry(colKeyOf, registryClasses),
     [colKeyOf, registryClasses]
   );
-  const coursesOfCol = useCallback(key => courseMap[key] || [], [courseMap]);
+  const coursesOfCol = useCallback((key: string | null) => courseMap[key as string] || [], [courseMap]);
 
   useEffect(() => {
     (async () => {
       try {
-        const data = await api('/api/teachers');
+        const data = await api<TeacherDTO[]>('/api/teachers');
         setTeachers(data);
-      } catch(e) { showToast?.(e.message,'error'); setTeachers([]); }
+      } catch(e) { showToast?.((e as Error).message,'error'); setTeachers([]); }
     })();
   }, [api, showToast]);
 
@@ -564,7 +669,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
   useEffect(() => {
     (async () => {
       try {
-        const cfg = await api('/api/config');
+        const cfg = await api<{ programPlan?: { load?: Load; grouping?: Grouping; maxWeekly?: number } }>('/api/config');
         const plan = cfg?.programPlan || {};
         if (plan.load && Object.keys(plan.load).length) setLoad(plan.load);
         if (plan.grouping && Object.keys(plan.grouping).length) setGrouping(plan.grouping);
@@ -583,13 +688,13 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
       });
       setPlanDirty(false);
       showToast?.('Ders yükü planı kaydedildi', 'success');
-    } catch(e) { showToast?.(e.message, 'error'); }
+    } catch(e) { showToast?.((e as Error).message, 'error'); }
     finally { setSavingPlan(false); }
   }
 
   // Dirty-işaretli sarmalayıcılar: kullanıcı girişi planı değiştirdi → Kaydet aktifleşir.
-  const updateLoad = useCallback(updater => { setLoad(updater); setPlanDirty(true); }, []);
-  const updateGrouping = useCallback(updater => { setGrouping(updater); setPlanDirty(true); }, []);
+  const updateLoad = useCallback((updater: (prev: Load) => Load) => { setLoad(updater); setPlanDirty(true); }, []);
+  const updateGrouping = useCallback((updater: (prev: Grouping) => Grouping) => { setGrouping(updater); setPlanDirty(true); }, []);
 
   // Analizi yeniden hesapla: teachers/load/grouping/classes/pencere değişince.
   // Öğretmen uygunluk (available) verisi de çekilir — Oluştur ile aynı kısıtı görür,
@@ -612,8 +717,9 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
   // Kısıtların tümü server'da modellenir; frontend payload'ı hazırlar ve sonucu gösterir.
   // Solver payload'ını kur — hem generate() hem feasibilityCheck() kullanır.
   // teacherSlots dışarıdan verilir (feasibility farklı senaryolar için değiştirir).
-  const buildPayload = useCallback((teacherSlots) => {
-    const windows = {}, colKey = {}, group = {};
+  const buildPayload = useCallback((teacherSlots: TeacherSlots): SolvePayload => {
+    const tList = teachers || []; // çağıranlar teachers yüklü olmadan çağırmaz
+    const windows: Record<string, Windows> = {}, colKey: Record<string, string | null> = {}, group: Record<string, string | null> = {};
     classes.forEach(c => {
       windows[c] = windowsOf(c);
       colKey[c] = colKeyOf(c);
@@ -621,26 +727,26 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
     });
     // "Hayalet talep" temizliği: config'te kalmış ama sınıfların dersler[]'inde
     // olmayan dersleri ayıkla (bkz commit 5d1d9c8).
-    const cleanLoad = {};
+    const cleanLoad: Load = {};
     for (const [ck, courses] of Object.entries(load)) {
       const valid = new Set(coursesOfCol(ck));
-      const filtered = {};
+      const filtered: Record<string, number> = {};
       for (const [course, saat] of Object.entries(courses || {})) {
         if (valid.has(course)) filtered[course] = saat;
       }
       if (Object.keys(filtered).length) cleanLoad[ck] = filtered;
     }
-    const pieces = {};
+    const pieces: Record<string, Record<string, number[]>> = {};
     Object.entries(grouping).forEach(([key, courses]) => {
       Object.entries(courses || {}).forEach(([course, str]) => {
         const pat = parsePattern(str);
         if (pat.length) (pieces[key] = pieces[key] || {})[course] = pat;
       });
     });
-    const presets = teachers.flatMap(t =>
+    const presets = tList.flatMap(t =>
       (t.presets || []).map(p => ({ teacherId: t.id, cls: p.cls, course: p.course }))
     );
-    return { classes, teachers, load: cleanLoad, pieces, maxWeekly, windows, colKey, group, teacherSlots, presets };
+    return { classes, teachers: tList, load: cleanLoad, pieces, maxWeekly, windows, colKey, group, teacherSlots, presets };
   }, [classes, teachers, windowsOf, colKeyOf, groupOf, load, coursesOfCol, grouping, maxWeekly]);
 
   async function generate() {
@@ -653,7 +759,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
       const teacherSlots = await fetchTeacherSlots(teachers, api);
       setLastTeacherSlots(teacherSlots);
       const payload = buildPayload(teacherSlots);
-      const data = await api('/api/program-solve', { method: 'POST', body: JSON.stringify(payload) });
+      const data = await api<SolveResponse>('/api/program-solve', { method: 'POST', body: JSON.stringify(payload) });
 
       const assigned = data.assigned || [];
       const unplaced = data.unplaced || [];
@@ -665,7 +771,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
       (data.presetWarnings || []).forEach(w => showToast?.(`Ön eşleştirme atlandı: ${w}`, 'info'));
       showToast?.(`${assigned.length} ders yerleşti${unplaced.length ? `, ${unplaced.length} açıkta` : ''}`, unplaced.length ? 'info' : 'success');
     } catch (e) {
-      showToast?.(e.message, 'error');
+      showToast?.((e as Error).message, 'error');
     } finally {
       setGenerating(false);
     }
@@ -685,7 +791,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
       const base = buildPayload(teacherSlots);
 
       // 1) Mevcut durumu kesin test et
-      const r0 = await api('/api/program-solve', {
+      const r0 = await api<SolveResponse>('/api/program-solve', {
         method: 'POST',
         body: JSON.stringify({ ...base, feasibilityTest: true }),
       });
@@ -701,7 +807,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
       //    öğretmeni sistematik test ederiz: tam-güne çıkarınca INFEASIBLE çözülüyor mu?
       //    Çözenler = tek başına yeterli darboğaz noktaları. Hiçbiri çözmüyorsa darboğaz
       //    ÇOKLU (tek öğretmenle açılamaz) — bunu açıkça söyleriz.
-      const allWin = {};
+      const allWin: Record<string, Set<number>> = {};
       for (const c of classes) {
         const w = windowsOf(c);
         for (const [d, slots] of Object.entries(w)) {
@@ -709,16 +815,16 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
           for (const s of slots) allWin[d].add(s);
         }
       }
-      const fullSlots = [];
+      const fullSlots: [number, number][] = [];
       for (const [d, set] of Object.entries(allWin)) for (const s of set) fullSlots.push([Number(d), s]);
 
-      const teachesSomething = new Set();
+      const teachesSomething = new Set<string>();
       for (const c of classes) {
         const key = colKeyOf(c), grp = groupOf(c);
         for (const course of coursesOfCol(key)) {
-          if (!((load[key]?.[course]) > 0)) continue;
+          if (!(((load[key as string]?.[course]) || 0) > 0)) continue;
           for (const t of teachers) {
-            if ((t.branches || []).includes(course) && teacherGroups(t).includes(grp)) teachesSomething.add(t.id);
+            if ((t.branches || []).includes(course) && teacherGroups(t).includes(grp as string)) teachesSomething.add(t.id);
           }
         }
       }
@@ -731,16 +837,16 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
       // kapsadığı branşlar vs sınıfların ihtiyaç duyduğu branşlar. "Herkesin
       // Pazartesi'si var" sayısal üstünlük değil — asıl mesele ÇEŞİTLİLİK. Hem
       // kullanıcıya kök neden olarak gösterilir hem de gün-takası aramasını yönlendirir.
-      const neededBranches = new Set();
+      const neededBranches = new Set<string>();
       for (const c of classes) {
         const key = colKeyOf(c);
-        for (const course of coursesOfCol(key)) if ((load[key]?.[course]) > 0) neededBranches.add(course);
+        for (const course of coursesOfCol(key)) if (((load[key as string]?.[course]) || 0) > 0) neededBranches.add(course);
       }
-      const dayGaps = [];
+      const dayGaps: DayGap[] = [];
       const windowDays = [...new Set(fullSlots.map(([d]) => d))].sort((a, b) => a - b);
       for (const d of windowDays) {
         const present = teachers.filter(t => (teacherSlots[t.id] || []).some(([dd]) => dd === d));
-        const covered = new Set();
+        const covered = new Set<string>();
         for (const t of present) for (const b of (t.branches || [])) covered.add(b);
         const missing = [...neededBranches].filter(b => !covered.has(b));
         if (missing.length) dayGaps.push({ day: d, missing });
@@ -756,27 +862,27 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
       //   2) YENİ GÜN AÇ — +2 saat + yepyeni bir gün (yol, tam gün blokaj) — en pahalı.
       // Toplam solver çağrısı bütçelenir; derin analiz butonu ama sonsuz sürmesin.
       let budget = 45;
-      const tryFeas = async (slotsOverride) => {
+      const tryFeas = async (slotsOverride: TeacherSlots) => {
         if (budget <= 0) return false;
         budget--;
-        const rt = await api('/api/program-solve', {
+        const rt = await api<SolveResponse>('/api/program-solve', {
           method: 'POST',
           body: JSON.stringify({ ...buildPayload(slotsOverride), feasibilityTest: true }),
         });
         return !!rt.feasible;
       };
 
-      const dayOfSlots = (slots) => new Set(slots.map(([d]) => d));
-      const swapFix = [];   // {teacherId,name,fromDay,toDay} — 0 ek saat
-      const cheapFix = [];  // {teacherId,name,day,slots[]} — +2 saat, mevcut gün
-      const costlyFix = []; // {teacherId,name,day,slots[]} — +2 saat, yeni gün
+      const dayOfSlots = (slots: [number, number][]) => new Set(slots.map(([d]) => d));
+      const swapFix: SwapFix[] = [];   // {teacherId,name,fromDay,toDay} — 0 ek saat
+      const cheapFix: FeasFix[] = [];  // {teacherId,name,day,slots[]} — +2 saat, mevcut gün
+      const costlyFix: FeasFix[] = []; // {teacherId,name,day,slots[]} — +2 saat, yeni gün
 
       // Ortak yardımcı: bir öğretmene belirli günlerin eksik slotlarında 2'li hizalı
       // çift ekleyerek dene; çözen ilk çifti fix listesine yaz.
-      const tryPairsOn = async (t, days, targetList) => {
+      const tryPairsOn = async (t: TeacherDTO, days: number[], targetList: FeasFix[]) => {
         const cur = teacherSlots[t.id] || [];
         const curSet = new Set(cur.map(([d, s]) => `${d}:${s}`));
-        const missingByDay = {};
+        const missingByDay: Record<number, number[]> = {};
         for (const [d, s] of fullSlots) {
           if (!curSet.has(`${d}:${s}`)) (missingByDay[d] = missingByDay[d] || []).push(s);
         }
@@ -822,7 +928,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
             if (swapBudget <= 0) break;
             swapBudget--;
             const moved = cur.filter(([d]) => d !== from)
-              .concat(cur.filter(([d]) => d === from).map(([, s]) => [g.day, s]))
+              .concat(cur.filter(([d]) => d === from).map(([, s]) => [g.day, s] as [number, number]))
               .filter(([d, s]) => d !== g.day || gapWin.has(s));
             if (await tryFeas({ ...teacherSlots, [t.id]: moved })) {
               swapFix.push({ teacherId: t.id, name: t.name, fromDay: from, toDay: g.day });
@@ -871,7 +977,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
         'error'
       );
     } catch (e) {
-      showToast?.(e.message, 'error');
+      showToast?.((e as Error).message, 'error');
     } finally {
       setFeasChecking(false);
     }
@@ -880,30 +986,31 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
   // ── Çakışma kontrolü: mevcut programları oku ve çakışanları bul ──
   async function checkConflicts() {
     if (!result?.assigned.length) return;
+    const tList = teachers || []; // sonuç varken teachers her zaman yüklü
     try {
       // Mevcut programları çek
-      const existing = {};
-      await Promise.all(teachers.map(async t => {
+      const existing: Record<string, ProgramGrid> = {};
+      await Promise.all(tList.map(async t => {
         try {
-          const resp = await api(`/api/program?teacherId=${t.id}`);
+          const resp = await api<{ weekKey?: string; program?: ProgramGrid }>(`/api/program?teacherId=${t.id}`);
           existing[t.id] = resp.program || {}; // {weekKey, program} → program
         } catch { existing[t.id] = {}; }
       }));
-      const items = [];
+      const items: string[] = [];
       for (const a of result.assigned) {
         const sid = slotIdFor(a.day, a.slot); if (!sid) continue;
         const prog = existing[a.teacherId] || {};
         const dayProg = prog[String(a.day)] || {};
         const cur = dayProg[sid];
         if (cur && cur.cls && cur.cls !== a.cls) {
-          const tName = teachers.find(t=>t.id===a.teacherId)?.name || a.teacherId;
+          const tName = tList.find(t=>t.id===a.teacherId)?.name || a.teacherId;
           items.push(`${tName} — ${DAYS[a.day]} ${sid}: mevcut ${labelOf(cur.cls)} → yeni ${labelOf(a.cls)} (${a.course})`);
         }
       }
       setConflicts({ items, checked: true });
       return items.length;
     } catch(e) {
-      showToast?.(e.message,'error');
+      showToast?.((e as Error).message,'error');
       return -1;
     }
   }
@@ -913,23 +1020,23 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
     if (!(await confirm({ message: 'Tüm öğretmenlerin izin günleri, ders programları ve etüt rezervasyonları silinecek. Emin misiniz?', confirmLabel: 'Tümünü Sil' }))) return;
     setClearing(true);
     try {
-      const res = await api('/api/admin/week', { method: 'POST', body: JSON.stringify({ action: 'reset-all' }) });
+      const res = await api<{ ok: boolean; deleted: { programs: number; slots: number; offDays: number }; teachers: number }>('/api/admin/week', { method: 'POST', body: JSON.stringify({ action: 'reset-all' }) });
       showToast?.(`Temizlendi — ${res.teachers} öğretmen, ${res.deleted.programs} program, ${res.deleted.slots} slot, ${res.deleted.offDays} izin günü`, 'success');
       // Öğretmen listesini yeniden yükle (offDays değişti)
-      const data = await api('/api/teachers');
+      const data = await api<TeacherDTO[]>('/api/teachers');
       setTeachers(data);
-    } catch(e) { showToast?.(e.message,'error'); }
+    } catch(e) { showToast?.((e as Error).message,'error'); }
     finally { setClearing(false); }
   }
 
   // ── Uygula: program:{teacherId} şablonlarına yaz ──
-  async function applyToTemplates(weekKey) {
+  async function applyToTemplates(weekKey: string) {
     if (!result?.assigned.length) return;
     // Çakışma kontrolü yapılmamışsa önce kontrol et
     if (!conflicts?.checked) {
       const n = await checkConflicts();
       if (n === -1) return;
-      if (n > 0) {
+      if (n != null && n > 0) {
         showToast?.(`${n} çakışma var — kontrol edip onaylayın`,'info');
         return;
       }
@@ -937,11 +1044,11 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
     setApplying(true);
     try {
       // Önce tüm öğretmenlerin programını temizle
-      for (const t of teachers) {
+      for (const t of (teachers || [])) {
         await api('/api/program', { method: 'DELETE', body: JSON.stringify({ teacherId: t.id }) });
       }
       // Yeni programı yaz
-      const byTeacher = {};
+      const byTeacher: Record<string, Record<number, Record<string, { type: string; cls: string; fixed: boolean; branch: string }>>> = {};
       for (const a of result.assigned) {
         const sid = slotIdFor(a.day, a.slot); if (!sid) continue;
         byTeacher[a.teacherId] = byTeacher[a.teacherId] || {};
@@ -956,12 +1063,12 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
       }
       showToast?.(`${ok} öğretmenin programı uygulandı`,'success');
       setConflicts(null);
-    } catch(e) { showToast?.(e.message,'error'); }
+    } catch(e) { showToast?.((e as Error).message,'error'); }
     finally { setApplying(false); }
   }
 
   // ── PDF yazdır ──
-  function printSchedule(type, id) {
+  function printSchedule(type: string, id: string) {
     setPreview(type);
     setPreviewId(id);
     setTimeout(() => window.print(), 400);
@@ -974,9 +1081,9 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
   let totalDemand=0;
   classes.forEach(cls => {
     const key=colKeyOf(cls);
-    coursesOfCol(key).forEach(course => { totalDemand+=(load[key]?.[course])||0; });
+    coursesOfCol(key).forEach(course => { totalDemand+=(load[key as string]?.[course])||0; });
   });
-  const capByBranch={};
+  const capByBranch: Record<string, number> = {};
   teachers.forEach(t => {
     (t.branches||[]).forEach(b=>capByBranch[b]=(capByBranch[b]||0)+1);
   });
@@ -1189,7 +1296,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
               key={`preset-${t.id}`}
               teacher={t}
               showToast={showToast}
-              onSaved={(presets) => setTeachers(prev => prev.map(x => x.id === t.id ? { ...x, presets } : x))}
+              onSaved={(presets: TeacherPresetDTO[]) => setTeachers(prev => (prev || []).map(x => x.id === t.id ? { ...x, presets } : x))}
             />
           ) : null;
         })() : (
@@ -1270,7 +1377,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
         <ResultView
           result={result} classes={classes} teachers={teachers} labelOf={labelOf}
           maxWeekly={maxWeekly} applying={applying}
-          conflictsChecked={conflicts?.checked && conflicts.items.length === 0}
+          conflictsChecked={!!(conflicts?.checked && conflicts.items.length === 0)}
           onApply={() => applyToTemplates(currentWeekKey())}
           onCheckConflicts={checkConflicts}
           onPrintTeacher={id => printSchedule('teacher',id)}
@@ -1281,7 +1388,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
             // total yeniden sayılır, çakışma onayı bayatladı → Uygula öncesi yeniden
             // kontrol zorunlu (Uygula akışı zaten checked ister).
             setResult(r => {
-              const next = { ...r, ...patch };
+              const next = { ...(r as SolveResult), ...patch };
               next.total = next.assigned.length;
               return next;
             });
@@ -1303,22 +1410,31 @@ export default function ProgramOlusturucu({ api, showToast, branding }) {
   );
 }
 
+interface LoadTableProps {
+  load: Load;
+  setLoad: (updater: (prev: Load) => Load) => void;
+  grouping: Grouping;
+  setGrouping: (updater: (prev: Grouping) => Grouping) => void;
+  cols: typeof LOAD_COLUMNS;
+  courseMap: Record<string, string[]>;
+}
+
 // ── Ders yükü tablosu: sütunlar dikey, satırlar dersler ──
 // Her hücre iki girişli: üstte toplam SAAT, altta gruplama deseni (örn "3-2-2").
 // Desen boşsa varsayılan 2'li bölme uygulanır. Desen girilince saat = desen toplamı.
-function LoadTable({ load, setLoad, grouping, setGrouping, cols, courseMap }) {
+function LoadTable({ load, setLoad, grouping, setGrouping, cols, courseMap }: LoadTableProps) {
   // Bilinen sıradaki çekirdek dersler önce, kurumun özel dersleri (courseMap'te olup
   // ORDER'da olmayan) sona eklenir — böylece "Paragraf" gibi dersler satırlardan düşmez.
   const allCourses = useMemo(() => {
-    const used = new Set();
+    const used = new Set<string>();
     for (const c of cols) for (const d of (courseMap[c.key] || [])) used.add(d);
     const known = ORDER.filter(d => used.has(d));
     const extra = [...used].filter(d => !ORDER.includes(d));
     return [...known, ...extra];
   }, [cols, courseMap]);
-  const [editing, setEditing] = useState({}); // "colKey|ders" → yazım halindeki ham desen
+  const [editing, setEditing] = useState<Record<string, string>>({}); // "colKey|ders" → yazım halindeki ham desen
 
-  const clearPattern = (key, d) => setGrouping(prev => {
+  const clearPattern = (key: string, d: string) => setGrouping(prev => {
     if (prev[key]?.[d] == null) return prev;
     const nk = { ...(prev[key] || {}) }; delete nk[d];
     const next = { ...prev, [key]: nk };
@@ -1326,13 +1442,13 @@ function LoadTable({ load, setLoad, grouping, setGrouping, cols, courseMap }) {
     return next;
   });
 
-  const set = (key, d, val) => {
+  const set = (key: string, d: string, val: string) => {
     setLoad(prev => ({...prev,[key]:{...(prev[key]||{}),[d]:Math.max(0,parseInt(val)||0)}}));
     clearPattern(key, d); // saat değişince eski desen toplamla çelişir — varsayılana dön
   };
 
   // Desen commit (blur): geçerliyse normalize edip sakla, saat = desen toplamı.
-  const commitPattern = (key, d, raw) => {
+  const commitPattern = (key: string, d: string, raw: string) => {
     setEditing(s => { const n = {...s}; delete n[key+'|'+d]; return n; });
     const pat = parsePattern(raw);
     const cur = grouping?.[key]?.[d] || '';
@@ -1344,7 +1460,7 @@ function LoadTable({ load, setLoad, grouping, setGrouping, cols, courseMap }) {
     setLoad(prev => ({...prev, [key]: {...(prev[key]||{}), [d]: sum}}));
   };
 
-  const sumFor = key => (courseMap[key]||[]).reduce((s,d)=>s+((load[key]?.[d])||0),0);
+  const sumFor = (key: string) => (courseMap[key]||[]).reduce((s,d)=>s+((load[key]?.[d])||0),0);
 
   return (
     <div className="overflow-x-auto">
@@ -1408,16 +1524,34 @@ function LoadTable({ load, setLoad, grouping, setGrouping, cols, courseMap }) {
   );
 }
 
+interface ResultViewProps {
+  result: SolveResult;
+  classes: string[];
+  teachers: TeacherDTO[];
+  labelOf: (cls: string) => string;
+  maxWeekly: number;
+  applying: boolean;
+  conflictsChecked: boolean;
+  onApply: () => void;
+  onCheckConflicts: () => void;
+  onPrintTeacher: (id: string) => void;
+  onPrintClass: (cls: string) => void;
+  windowsOf?: (cls: string) => Windows;
+  teacherSlots?: TeacherSlots | null;
+  groupOf?: (cls: string) => string | null;
+  onEdit?: (patch: Partial<Pick<SolveResult, 'assigned' | 'unplaced' | 'tLoad'>>) => void;
+}
+
 // ── Sonuç görünümü ──
-function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, conflictsChecked, onApply, onCheckConflicts, onPrintTeacher, onPrintClass, windowsOf, teacherSlots, groupOf, onEdit }) {
+function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, conflictsChecked, onApply, onCheckConflicts, onPrintTeacher, onPrintClass, windowsOf, teacherSlots, groupOf, onEdit }: ResultViewProps) {
   const [viewMode, setViewMode] = useState('class');
   const [viewDay, setViewDay]   = useState('all');
   const [editMode, setEditMode] = useState(false); // manuel blok taşıma (sınıf görünümünde)
-  const [sel, setSel]           = useState(null);  // seçili blok id
-  const [selUnplaced, setSelUnplaced] = useState(null); // {idx, teacherId|null} — açıkta parça seçimi
+  const [sel, setSel]           = useState<string | null>(null);  // seçili blok id
+  const [selUnplaced, setSelUnplaced] = useState<{ idx: number; teacherId: string | null } | null>(null); // açıkta parça seçimi
 
   const teacherById = useMemo(() => {
-    const m = {}; teachers.forEach(t => { m[t.id] = t; }); return m;
+    const m: Record<string, TeacherDTO> = {}; teachers.forEach(t => { m[t.id] = t; }); return m;
   }, [teachers]);
 
   // Sonuç değişince (yeni Oluştur / manuel düzenleme) seçimler bayatlar — temizle.
@@ -1427,18 +1561,18 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
 
   // ── Manuel düzenleme: assigned → bloklar (aynı gün+sınıf+ders+öğretmen ardışık koşusu) ──
   const { blocks, blockOfEntry } = useMemo(() => {
-    const groupsMap = new Map();
+    const groupsMap = new Map<string, Assigned[]>();
     for (const a of result.assigned) {
       const k = `${a.day}|${a.cls}|${a.course}|${a.teacherId}`;
       if (!groupsMap.has(k)) groupsMap.set(k, []);
-      groupsMap.get(k).push(a);
+      groupsMap.get(k)!.push(a);
     }
-    const blocks = [], blockOfEntry = new Map();
+    const blocks: Block[] = [], blockOfEntry = new Map<string, string>();
     for (const arr of groupsMap.values()) {
       arr.sort((x, y) => x.slot - y.slot);
       let run = [arr[0]];
       const flush = () => {
-        const b = {
+        const b: Block = {
           id: `${run[0].day}-${run[0].slot}-${run[0].cls}-${run[0].course}`,
           day: run[0].day, start: run[0].slot, len: run.length,
           cls: run[0].cls, course: run[0].course, teacherId: run[0].teacherId,
@@ -1460,7 +1594,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
   // K5 (sınıf çakışması) + K4 (öğretmen çakışması). Hizalama (çift-ofset) solver'ın
   // paketleme tekniğidir, iş kuralı değildir — manuelde dayatılmaz. ignoreIds:
   // taşınan/takas edilen blokların mevcut yerleri yok sayılır.
-  const canPlace = useCallback((b, day, start, ignoreIds) => {
+  const canPlace = useCallback((b: Block, day: number, start: number, ignoreIds: Set<string>) => {
     // K6: izin günü — available işareti kalmış olsa bile izin günü kesin yasak
     // (solver da offDays'i availability'den AYRI, hard denetler).
     if (new Set(teacherById[b.teacherId]?.offDays || []).has(day)) return false;
@@ -1472,7 +1606,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
     }
     const end = start + b.len - 1;
     for (const a of result.assigned) {
-      if (ignoreIds.has(blockOfEntry.get(entryKeyOf(a)))) continue;
+      if (ignoreIds.has(blockOfEntry.get(entryKeyOf(a)) as string)) continue;
       if (a.day !== day) continue;
       if (a.cls === b.cls && a.course === b.course) return false; // K3
       if (a.slot < start || a.slot > end) continue;
@@ -1493,7 +1627,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
     const sibling = blocks.find(b => b.cls === u.cls && b.course === u.course);
     const grp = groupOf ? groupOf(u.cls) : null;
     const eligible = teachers.filter(t =>
-      (t.branches || []).includes(u.course) && teacherGroups(t).includes(grp));
+      (t.branches || []).includes(u.course) && teacherGroups(t).includes(grp as string));
     const preset = eligible.find(t =>
       (t.presets || []).some(p => p.cls === u.cls && p.course === u.course));
     return {
@@ -1509,7 +1643,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
   // Öğretmen çözünürlüğü: sabit (sibling) > kullanıcının seçtiği > tek aday > ön eşleştirme
   const upTeacherId = upMeta
     ? (upMeta.fixedTeacherId
-        || selUnplaced.teacherId
+        || selUnplaced?.teacherId
         || (upMeta.eligibleIds.length === 1 ? upMeta.eligibleIds[0] : null)
         || upMeta.presetTeacherId)
     : null;
@@ -1517,7 +1651,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
   // Aktif parça: taşınan mevcut blok VEYA yerleştirilen açıkta parça (sanal blok).
   // Sanal blokta day/start -1 → "kendi konumunu atla" koşulu hiç tetiklenmez,
   // ignore kümesi gridde hiçbir girdiyle eşleşmez (yerleşik değil).
-  const activePiece = useMemo(() => {
+  const activePiece = useMemo<Block | null>(() => {
     if (selBlock) return selBlock;
     if (!upSel || !upMeta || !upTeacherId) return null;
     return { id: '__unplaced__', day: -1, start: -1, len: upMeta.hours,
@@ -1526,8 +1660,8 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
 
   // Aktif parçanın gidebileceği boş başlangıçlar ("gün:slot")
   const validTargets = useMemo(() => {
-    if (!activePiece) return new Set();
-    const out = new Set();
+    if (!activePiece) return new Set<string>();
+    const out = new Set<string>();
     const ig = new Set([activePiece.id]);
     const win = windowsOf ? windowsOf(activePiece.cls) : {};
     for (const [dStr, slots] of Object.entries(win || {})) {
@@ -1542,8 +1676,8 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
 
   // Takas: aynı sınıfın başka bloğuyla yer değiştirme — iki yön de kurallara uyuyorsa.
   const swapTargets = useMemo(() => {
-    if (!selBlock) return new Set();
-    const out = new Set();
+    if (!selBlock) return new Set<string>();
+    const out = new Set<string>();
     for (const b2 of blocks) {
       if (b2.id === selBlock.id || b2.cls !== selBlock.cls) continue;
       const ig = new Set([selBlock.id, b2.id]);
@@ -1552,7 +1686,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
     return out;
   }, [selBlock, blocks, canPlace]);
 
-  function moveSel(day, start) {
+  function moveSel(day: number, start: number) {
     if (!selBlock) return;
     const next = result.assigned.map(a =>
       blockOfEntry.get(entryKeyOf(a)) !== selBlock.id ? a
@@ -1560,7 +1694,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
     onEdit?.({ assigned: next });
     setSel(null);
   }
-  function swapSel(b2) {
+  function swapSel(b2: Block) {
     if (!selBlock) return;
     const next = result.assigned.map(a => {
       const bid = blockOfEntry.get(entryKeyOf(a));
@@ -1572,10 +1706,10 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
     setSel(null);
   }
   // Açıkta parçayı gride yerleştir: L saat satırı ekle, unplaced'dan düş, tLoad güncelle.
-  function placeSel(day, start) {
-    if (!upSel || !upMeta || !upTeacherId) return;
+  function placeSel(day: number, start: number) {
+    if (!selUnplaced || !upSel || !upMeta || !upTeacherId) return;
     const tname = teacherById[upTeacherId]?.name || '';
-    const added = [];
+    const added: Assigned[] = [];
     for (let i = 0; i < upMeta.hours; i++) {
       added.push({ cls: upSel.cls, course: upSel.course, teacherId: upTeacherId,
                    teacherName: tname, day, slot: start + i });
@@ -1604,8 +1738,8 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
   // Tuval: normalde yalnız dolu slotlar; düzenleme modunda sınıf pencerelerinin
   // birleşimi de eklenir ki boş hedef hücreler tıklanabilir olsun.
   const dayCanvas = useMemo(() => {
-    const m = new Map();
-    const add = (d, s) => { if (!m.has(d)) m.set(d, new Set()); m.get(d).add(s); };
+    const m = new Map<number, Set<number>>();
+    const add = (d: number, s: number) => { if (!m.has(d)) m.set(d, new Set()); m.get(d)!.add(s); };
     for (const a of result.assigned) add(a.day, a.slot);
     if (editMode && windowsOf) {
       for (const cls of classes) {
@@ -1615,7 +1749,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
     }
     return m;
   }, [result.assigned, editMode, windowsOf, classes]);
-  const slotsOfDay = d => [...(dayCanvas.get(d) || [])].sort((a, b) => a - b);
+  const slotsOfDay = (d: number) => [...(dayCanvas.get(d) || [])].sort((a, b) => a - b);
 
   const canEdit = !!(onEdit && windowsOf && teacherSlots);
   const usedDays = [...dayCanvas.keys()].sort((a,b)=>a-b);
@@ -1623,12 +1757,12 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
   const loadRows = teachers.map(t=>({name:t.name,n:result.tLoad[t.id]||0,branch:(t.branches||[])[0],id:t.id})).sort((a,b)=>b.n-a.n);
   const maxN = Math.max(1,...loadRows.map(r=>r.n));
 
-  const unplacedGrouped={};
+  const unplacedGrouped: Record<string, { cls: Set<string>; n: number }> = {};
   result.unplaced.forEach(u=>{const k=`${u.course} — ${u.reason}`;(unplacedGrouped[k]=unplacedGrouped[k]||{cls:new Set(),n:0}).n++;unplacedGrouped[k].cls.add(u.cls);});
 
   const rowKeys = viewMode==='class' ? classes : teachers.map(t=>t.name);
 
-  const find=(rk,d,i)=>result.assigned.find(a=>a.day===d&&a.slot===i&&(
+  const find=(rk: string,d: number,i: number)=>result.assigned.find(a=>a.day===d&&a.slot===i&&(
     viewMode==='class'?a.cls===rk:a.teacherName===rk));
 
   return (
@@ -1716,7 +1850,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
                     const cur = upTeacherId === tid;
                     return (
                       <button key={tid}
-                        onClick={() => setSelUnplaced(su => ({ ...su, teacherId: tid }))}
+                        onClick={() => setSelUnplaced(su => ({ ...su!, teacherId: tid }))}
                         className="ml-1 px-1.5 py-0.5 rounded border text-[10px]"
                         style={cur
                           ? {background:'#4f46e5', color:'#fff', borderColor:'#4f46e5', fontWeight:600}
@@ -1784,7 +1918,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
             <div key={r.id} className="flex items-center gap-2 text-[11px]">
               <span className="w-28 truncate text-gray-600">{r.name}</span>
               <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-                <div className="h-full rounded-full" style={{width:`${r.n/maxN*100}%`,background:r.n>maxWeekly?'#ef4444':COURSE_COLOR[r.branch]||'#6366f1'}}/>
+                <div className="h-full rounded-full" style={{width:`${r.n/maxN*100}%`,background:r.n>maxWeekly?'#ef4444':COURSE_COLOR[r.branch || '']||'#6366f1'}}/>
               </div>
               <span className="w-7 text-right" style={{fontWeight:600,color:r.n>maxWeekly?'#dc2626':'#374151'}}>{r.n}</span>
               <button onClick={()=>onPrintTeacher(r.id)} className="btn-icon btn-icon-primary ml-1" title="PDF / Yazdır">
@@ -1841,7 +1975,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
             {rowKeys.map(rk=>(
               <tr key={rk}>
                 <td className="p-2 sticky left-0 z-10 whitespace-nowrap" style={{background:'#fff',fontWeight:700,border:'1px solid #eef0f5'}}>
-                  {viewMode==='class'?labelOf(rk):viewMode==='room'?`D${rk} (${rk<=5?'1.k':rk<=8?'2.k':'3.k'})`:rk}
+                  {viewMode==='class'?labelOf(rk):viewMode==='room'?`D${rk} (${Number(rk)<=5?'1.k':Number(rk)<=8?'2.k':'3.k'})`:rk}
                 </td>
                 {days.map(d => {
                   return slotsOfDay(d).map((s,si) => {
@@ -1867,13 +2001,13 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
                     const col=COURSE_COLOR[a.course]||'#6366f1';
                     const bid = blockOfEntry.get(entryKeyOf(a));
                     const isSel = editMode && sel === bid;
-                    const isSwap = editMode && selBlock && swapTargets.has(bid);
+                    const isSwap = editMode && selBlock && bid != null && swapTargets.has(bid);
                     const clickable = editMode && viewMode==='class';
                     return (
                       <td key={d+'-'+s} className="p-1 text-center"
                         onClick={clickable ? () => {
-                          if (isSwap) swapSel(blocks.find(b => b.id === bid));
-                          else { setSel(isSel ? null : bid); setSelUnplaced(null); }
+                          if (isSwap) swapSel(blocks.find(b => b.id === bid)!);
+                          else { setSel(isSel ? null : (bid || null)); setSelUnplaced(null); }
                         } : undefined}
                         title={clickable ? (isSwap ? 'Takas et' : isSel ? 'Seçimi bırak' : 'Taşımak için seç') : undefined}
                         style={{minWidth:64,border:`1px solid ${col}30`,borderLeft:si===0?`3px solid ${col}60`:undefined,
@@ -1896,8 +2030,19 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
   );
 }
 
+interface PrintPreviewProps {
+  type: string;
+  id: string | null;
+  result: SolveResult;
+  teachers: TeacherDTO[];
+  classes: string[];
+  labelOf: (cls: string) => string;
+  brandName?: string;
+  onClose: () => void;
+}
+
 // ── Yazdırma önizleme (print-only div) ──
-function PrintPreview({ type, id, result, teachers, classes, labelOf, brandName, onClose }) {
+function PrintPreview({ type, id, result, teachers, classes, labelOf, brandName, onClose }: PrintPreviewProps) {
   // Bir öğretmenin programını veya bir sınıfın programını oluştur
   const pages = useMemo(() => {
     if (type==='teacher') {
@@ -1946,15 +2091,22 @@ function PrintPreview({ type, id, result, teachers, classes, labelOf, brandName,
   return createPortal(content, document.body);
 }
 
-function SchedulePage({ title, lessons, labelOf, brandName }) {
+interface SchedulePageProps {
+  title: string;
+  lessons: Assigned[];
+  labelOf: (cls: string) => string;
+  brandName?: string;
+}
+
+function SchedulePage({ title, lessons, labelOf, brandName }: SchedulePageProps) {
   const usedDays = [...new Set(lessons.map(a=>a.day))].sort((a,b)=>a-b);
   // Ders GERÇEK slot satırına oturur (Sıra = gerçek ders no) — güne göre yukarı
   // sıkıştırma yapılmaz, yoksa "5. ders" etiketli ders 1. satırda görünür.
   // Satır aralığı: kullanılan en erken–en geç slot; aradaki boş saatler boş hücre.
-  const bySlot = new Map(usedDays.map(d => [d, new Map()]));
+  const bySlot = new Map<number, Map<number, Assigned>>(usedDays.map(d => [d, new Map()]));
   let minSlot = Infinity, maxSlot = -1;
   for (const a of lessons) {
-    bySlot.get(a.day).set(a.slot, a);
+    bySlot.get(a.day)!.set(a.slot, a);
     if (a.slot < minSlot) minSlot = a.slot;
     if (a.slot > maxSlot) maxSlot = a.slot;
   }
@@ -1985,7 +2137,7 @@ function SchedulePage({ title, lessons, labelOf, brandName }) {
               <tr key={s}>
                 <td style={{border:'1px solid #e5e7eb',padding:'5px 8px',color:'#9ca3af',textAlign:'center',fontWeight:600,background:'#f9fafb'}}>{s+1}</td>
                 {usedDays.map(d => {
-                  const a = bySlot.get(d).get(s);
+                  const a = bySlot.get(d)!.get(s);
                   if (!a) return <td key={d+'-'+s} style={{border:'1px solid #e5e7eb',borderLeft:'3px solid #6366f130',background:'#fafafa'}}/>;
                   const col = COURSE_COLOR[a.course]||'#6366f1';
                   return (
