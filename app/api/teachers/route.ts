@@ -6,12 +6,13 @@ import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zName, zId, zStringArray } from '@/lib/validate';
 import { defaultCoursesFor } from '@/lib/classes';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
+import type { Class, Prisma, TeacherPreset } from '@prisma/client';
 
 // SQL TeacherPreset satırları → {cls, course} sözleşmesi (classId = legacy cls kodu).
-const presetsOut = (rows) => (rows || []).map((p) => ({ cls: p.classId, course: p.course }));
+const presetsOut = (rows: TeacherPreset[] | null | undefined) => (rows || []).map((p) => ({ cls: p.classId, course: p.course }));
 // presets'i SQL'de değiştir (sil + yeniden oluştur). teacherId = SQL cuid.
-async function replacePresetsSql(teacherCuid, clean) {
+async function replacePresetsSql(teacherCuid: string, clean: { cls: string; course: string }[]) {
   await tdb().teacherPreset.deleteMany({ where: { teacherId: teacherCuid } });
   for (const p of clean) await tdb().teacherPreset.create({ data: { teacherId: teacherCuid, classId: p.cls, course: p.course } });
 }
@@ -22,14 +23,14 @@ import { newId as makeId } from '@/lib/id';
 // Sınıf REGISTRY'den doğrulanır (Class tablosu, legacyId) — sabit-kod listesi değil;
 // ders, sınıfın kendi ders kümesinden (dersler, boşsa kademe şablonu) kontrol edilir.
 // Geçersiz (branş dışı ders / izin dışı grup / bilinmeyen sınıf) satırlar sessizce atılır.
-function sanitizePresets(list, teacher, classRows) {
+function sanitizePresets(list: { cls?: string; course?: string }[], teacher: { branches?: string[]; allowedGroups?: string[] }, classRows: Class[]): { cls: string; course: string }[] {
   if (!Array.isArray(list)) return [];
   const branches = new Set(teacher.branches || []);
   const ag = teacher.allowedGroups || [];
   const groups = ag.length > 0 ? new Set(ag) : new Set(['ortaokul', 'lise', 'mezun']);
   const byId = new Map((classRows || []).map((c) => [c.legacyId, c]));
-  const seen = new Set();
-  const out = [];
+  const seen = new Set<string>();
+  const out: { cls: string; course: string }[] = [];
   for (const p of list) {
     const cls = String(p?.cls || '');
     const course = String(p?.course || '');
@@ -95,10 +96,10 @@ export const POST = withAuth('manage', async (req) => {
   const normPhone = phone ? (normalizeTurkishMobile(phone) || '') : '';
   const hash = await bcrypt.hash(initialPassword(password, normPhone), 10);
   const legacyId = makeId();
-  await tdb().teacher.create({ data: {
+  await tdb().teacher.create({ data: withScope({
     legacyId, name, username, passwordHash: hash, branches,
     allowedGroups: allowedGroups || [], photoUrl: photoUrl || '', phone: normPhone, mustChangePassword: true,
-  } });
+  }) });
   await initWeekForTeacher(legacyId, getWeekKey());
   return NextResponse.json({ id: legacyId, name, username, branches, allowedGroups: allowedGroups || [], photoUrl: photoUrl || '' });
 });
@@ -115,12 +116,12 @@ export const PUT = withAuth('manage', async (req) => {
     const set = new Set(t.offDays || []);
     off ? set.add(dayIndex) : set.delete(dayIndex);
     const offDays = Array.from(set).sort((a, b) => a - b);
-    const data = { offDays };
+    const data: Prisma.TeacherUpdateInput = { offDays };
     // İzin günü AÇILDIYSA o günün şablon ders/etüt entry'lerini sil —
     // yoksa izin kalkınca eski dersler geri canlanır. Sonra slot grid'i yeniden kur.
     if (off) {
-      const tmpl = JSON.parse(JSON.stringify(t.programTemplate || {}));
-      if (tmpl[String(dayIndex)]) { delete tmpl[String(dayIndex)]; data.programTemplate = tmpl; }
+      const tmpl: Record<string, unknown> = JSON.parse(JSON.stringify(t.programTemplate || {}));
+      if (tmpl[String(dayIndex)]) { delete tmpl[String(dayIndex)]; data.programTemplate = tmpl as object; }
     }
     await tdb().teacher.update({ where: { id: t.id }, data });
     await initWeekForTeacher(id, getWeekKey());
@@ -138,7 +139,7 @@ export const PUT = withAuth('manage', async (req) => {
   const { id, name, password, branches, allowedGroups, photoUrl, phone } = body;
   const t = await tdb().teacher.findFirst({ where: { legacyId: id }, include: { presets: true } });
   if (!t) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
-  const data = {
+  const data: { name: string; username: string; branches: string[]; allowedGroups: string[]; photoUrl: string | null; phone: string; passwordHash?: string } = {
     name, username: name,
     branches: branches !== undefined ? branches : (t.branches || []),
     allowedGroups: allowedGroups || t.allowedGroups,

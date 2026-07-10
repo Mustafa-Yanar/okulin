@@ -12,7 +12,7 @@ const WeekActionSchema = z.object({
   weekKey: z.string().max(40).optional(),
 });
 
-async function advanceWeek(currentWeek) {
+async function advanceWeek(currentWeek: string): Promise<string> {
   const teachers = await getAllTeachers(); // SQL-aware
   if (!teachers || teachers.length === 0) return getWeekKey();
 
@@ -63,7 +63,7 @@ export const POST = withAuth('manage', async (req) => {
     let offDays = 0, programs = 0;
     for (const t of teachers) {
       const hasOff = (t.offDays || []).length > 0;
-      const hasProg = t.programTemplate && Object.keys(t.programTemplate).length > 0;
+      const hasProg = t.programTemplate && Object.keys(t.programTemplate as object).length > 0;
       if (hasOff || hasProg) {
         await tdb().teacher.update({ where: { id: t.id }, data: { offDays: [], programTemplate: {} } });
         if (hasOff) offDays++;

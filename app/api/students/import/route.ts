@@ -4,15 +4,17 @@ import * as XLSX from 'xlsx';
 import { withAuth, initialPassword } from '@/lib/auth';
 import { getClasses } from '@/lib/classes';
 import { normalizeTurkishMobile } from '@/lib/phone';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
 
 import { newId as makeId } from '@/lib/id';
 
 // "ahmet mehmet yılmaz" → "Ahmet Mehmet YILMAZ"
-function formatName(raw) {
+function formatName(raw: string): string {
   const parts = raw.trim().split(/\s+/);
   if (parts.length === 0) return raw;
-  const surname = parts[parts.length - 1].toUpperCase('tr-TR');
+  // NOT: eski kod toUpperCase('tr-TR') idi — argüman yok sayılır, düz toUpperCase çalışır.
+  // Davranışı birebir korumak için toLocaleUpperCase'e GEÇİLMEDİ (İ/I farkı yaratırdı).
+  const surname = parts[parts.length - 1].toUpperCase();
   const firstNames = parts.slice(0, -1).map(p =>
     p.charAt(0).toLocaleUpperCase('tr-TR') + p.slice(1).toLocaleLowerCase('tr-TR')
   );
@@ -22,12 +24,12 @@ function formatName(raw) {
 export const POST = withAuth('manage', async (req) => {
   const form = await req.formData();
   const file = form.get('file');
-  if (!file) return NextResponse.json({ error: 'Dosya bulunamadı' }, { status: 400 });
+  if (!file || typeof file === 'string') return NextResponse.json({ error: 'Dosya bulunamadı' }, { status: 400 });
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
   // Şube → köprü grubu haritası (registry; boşsa constants'tan türetilmiş sanal liste).
   const allClasses = await getClasses();
@@ -39,7 +41,7 @@ export const POST = withAuth('manage', async (req) => {
   const classes = await tdb().class.findMany({ select: { id: true, legacyId: true } });
   const clsIdMap = new Map(classes.map((c) => [c.legacyId, c.id]));
 
-  const results = { added: [], skipped: [], errors: [] };
+  const results: { added: { name: string; cls: string; password: string }[]; skipped: string[]; errors: string[] } = { added: [], skipped: [], errors: [] };
 
   for (const row of rows) {
     const rawName = String(row[0] || '').trim();
@@ -61,7 +63,7 @@ export const POST = withAuth('manage', async (req) => {
     }
 
     // Diploma notu (yalnız mezun): geçersizse öğrenciyi atlamadan boş bırak ve uyar.
-    let diplomaNotu = '';
+    let diplomaNotu: number | '' = '';
     if (group === 'mezun' && rawDiploma) {
       const v = parseFloat(rawDiploma.replace(',', '.'));
       if (!isNaN(v) && v >= 50 && v <= 100) diplomaNotu = Math.round(v * 100) / 100;
@@ -89,14 +91,14 @@ export const POST = withAuth('manage', async (req) => {
     const password = initialPassword('', normPhone);
     const hash = await bcrypt.hash(password, 10);
     const id = makeId();
-    await tdb().student.create({ data: {
+    await tdb().student.create({ data: withScope({
       legacyId: id, name, username: name, passwordHash: hash,
       classId: clsIdMap.get(cls) || null, group,
       phone: normPhone || null, parentPhone: normParentPhone || null,
       parentName: parentName || null,
       diplomaNotu: diplomaNotu === '' ? null : diplomaNotu, // Float? ; '' → null
       mustChangePassword: true,
-    } });
+    }) });
     existingUsernames.add(name);
     results.added.push({ name, cls, password });
   }

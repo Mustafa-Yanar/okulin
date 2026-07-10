@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { ALL_DAYS, daySlots } from '@/lib/constants';
 import { getWeekKey, getAllTeachers, getTeacherWeekSlots, getDaySlotTimes } from '@/lib/slots';
 
@@ -12,9 +12,7 @@ import { getWeekKey, getAllTeachers, getTeacherWeekSlots, getDaySlotTimes } from
 //   cls, weekKey,
 //   schedule: { [dayIndex]: [ { slotId, slotLabel, teacherId, teacherName, branch, fixed } ] }
 // }
-export async function GET(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
+export const GET = withAuth(async (req) => {
 
   const { searchParams } = new URL(req.url);
   const cls = searchParams.get('cls');
@@ -26,7 +24,7 @@ export async function GET(req) {
     return NextResponse.json({ cls, weekKey, schedule: {} });
   }
 
-  const schedule = {};
+  const schedule: Record<number, object[]> = {};
   for (const day of ALL_DAYS) schedule[day.index] = [];
   const slotTimes = await getDaySlotTimes(); // 7-gün model
 
@@ -51,4 +49,4 @@ export async function GET(req) {
   }
 
   return NextResponse.json({ cls, weekKey, schedule });
-}
+});

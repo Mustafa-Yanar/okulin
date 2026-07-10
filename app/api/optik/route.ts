@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import sharp from 'sharp';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 
 const MAX_BYTES = 20 * 1024 * 1024; // 20 MB (PDF için geniş limit)
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
@@ -21,22 +21,18 @@ Boş veya okunamayan sorular için null yaz.
 Tüm sayfaları sırasıyla JSON olarak döndür, başka hiçbir metin ekleme:
 {"forms":[{"page":1,"answers":["A","C",null],"total":40},{"page":2,"answers":["B","A","C"],"total":40}]}`;
 
-function cleanJson(raw) {
+function cleanJson(raw: string): string {
   return raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/, '').trim();
 }
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'superadmin')) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
+export const POST = withAuth(['director', 'counselor', 'superadmin'], async (req) => {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: 'GEMINI_API_KEY yapılandırılmamış' }, { status: 500 });
   }
 
-  let formData;
+  let formData: FormData;
   try {
     formData = await req.formData();
   } catch {
@@ -44,7 +40,7 @@ export async function POST(req) {
   }
 
   const file = formData.get('image');
-  if (!file) return NextResponse.json({ error: 'image alanı eksik' }, { status: 400 });
+  if (!file || typeof file === 'string') return NextResponse.json({ error: 'image alanı eksik' }, { status: 400 });
 
   const mimeType = file.type || 'application/octet-stream';
   if (!ALLOWED_TYPES.includes(mimeType)) {
@@ -57,8 +53,8 @@ export async function POST(req) {
   }
 
   const isPdf = mimeType === 'application/pdf';
-  let base64Data;
-  let effectiveMime;
+  let base64Data: string;
+  let effectiveMime: string;
 
   if (isPdf) {
     // PDF: Sharp gerekmez, doğrudan Gemini'ye gönder
@@ -90,7 +86,7 @@ export async function POST(req) {
     ]);
     raw = result.response.text().trim();
   } catch (err) {
-    return NextResponse.json({ error: 'Gemini API hatası: ' + err.message }, { status: 502 });
+    return NextResponse.json({ error: 'Gemini API hatası: ' + (err instanceof Error ? err.message : err) }, { status: 502 });
   }
 
   // JSON parse — her iki prompt da {"forms":[...]} döndürür
@@ -101,4 +97,4 @@ export async function POST(req) {
   } catch {
     return NextResponse.json({ forms: null, pageCount: 0, raw }, { status: 422 });
   }
-}
+});

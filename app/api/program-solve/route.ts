@@ -22,7 +22,7 @@ export const POST = withAuth('manage', async (req) => {
     return NextResponse.json({ error: 'Çözücü yapılandırılmamış (SOLVER_SHARED_SECRET eksik)' }, { status: 500 });
   }
 
-  let payload;
+  let payload: unknown;
   try {
     payload = await req.json();
   } catch {
@@ -38,6 +38,6 @@ export const POST = withAuth('manage', async (req) => {
     const data = await res.json().catch(() => ({ error: 'Çözücü yanıtı okunamadı' }));
     return NextResponse.json(data, { status: res.status });
   } catch (e) {
-    return NextResponse.json({ error: `Çözücüye ulaşılamadı: ${e.message}` }, { status: 502 });
+    return NextResponse.json({ error: `Çözücüye ulaşılamadı: ${e instanceof Error ? e.message : e}` }, { status: 502 });
   }
 });

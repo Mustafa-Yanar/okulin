@@ -1,37 +1,36 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { currentOrg } from '@/lib/tenant';
-import { getSession } from '@/lib/auth';
+import { withAuth, type Session } from '@/lib/auth';
 import { parseBody, z, zName, zPassword } from '@/lib/validate';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
 
 // HQ (Genel Merkez) API — çok şubeli kurumların şube yönetimi.
 // Erişim: org_admin (kendi org'u) veya superadmin (tüm org'lar).
 // Tüm branch metadata GLOBAL (org:<slug>:* prefix'i, tenant prefix YOK).
 
-function requireHQ(session, org) {
+function requireHQ(session: Session | null | undefined, org: string): boolean {
   if (!session) return false;
   if (session.role === 'superadmin') return true;
   if (session.role === 'org_admin' && session.org === org) return true;
   return false;
 }
 
-function isValidBranchSlug(s) {
+function isValidBranchSlug(s: unknown): s is string {
   return typeof s === 'string' && /^[a-z0-9][a-z0-9-]{0,38}$/.test(s) && s !== '__hq__';
 }
 
 // GET /api/hq — şube listesi + her şube için istatistik
-export async function GET() {
-  const session = await getSession();
+// withAuth predicate: org_admin yalnız kendi org'unda (currentOrg header'dan çözülür).
+export const GET = withAuth((s: Session) => requireHQ(s, currentOrg()), async () => {
   const org = currentOrg();
-  if (!requireHQ(session, org)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   const rows = await tdb().branch.findMany({ where: { orgSlug: org } });
-  const metaMap = {};
+  const metaMap: Record<string, { slug: string; name: string; active: boolean; createdAt: Date | string | null }> = {};
   rows.forEach((r) => { metaMap[r.slug] = r; });
   const branchSlugs = rows.length > 0 ? rows.map((r) => r.slug) : ['main'];
 
-  const branches = [];
+  const branches: { slug: string; name: string; active: boolean; createdAt: string | null; directorUsername: string | null; studentCount: number; teacherCount: number }[] = [];
   for (const slug of branchSlugs) {
     const meta = metaMap[slug] || { slug, name: slug === 'main' ? 'Ana Şube' : slug, active: true, createdAt: null };
     const dir = await tdb(org, slug).director.findFirst();
@@ -54,7 +53,7 @@ export async function GET() {
 
   const orgRec = await tdb().org.findFirst({ where: { slug: org } });
   return NextResponse.json({ org, orgName: orgRec?.name || org, branches, appDomain: process.env.APP_DOMAIN || '' });
-}
+});
 
 const HQActionSchema = z.discriminatedUnion('action', [
   z.object({
@@ -82,10 +81,8 @@ const HQActionSchema = z.discriminatedUnion('action', [
 ]);
 
 // POST /api/hq — yeni şube oluştur veya güncelle
-export async function POST(req) {
-  const session = await getSession();
+export const POST = withAuth((s: Session) => requireHQ(s, currentOrg()), async (req) => {
   const org = currentOrg();
-  if (!requireHQ(session, org)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
 
   const parsed = await parseBody(req, HQActionSchema);
   if (!parsed.ok) return parsed.response;
@@ -100,7 +97,8 @@ export async function POST(req) {
     const { name, directorUsername, directorPassword, directorName } = parsed.data;
     await tdb().branch.create({ data: { orgSlug: org, slug: branchSlug, name, active: true } });
     const passwordHash = await bcrypt.hash(directorPassword, 10);
-    await tdb(org, branchSlug).director.create({ data: { username: directorUsername, passwordHash, name: directorName || name } });
+    // tdb(org, branchSlug) enjeksiyonu doğru şubeye yazar — withScope tip iddiası aynı değerlerle dolar
+    await tdb(org, branchSlug).director.create({ data: withScope({ username: directorUsername, passwordHash, name: directorName || name }) });
     return NextResponse.json({ ok: true, branchSlug });
   }
 
@@ -109,8 +107,8 @@ export async function POST(req) {
 
   if (action === 'toggle_active') {
     if (branchSlug === 'main') return NextResponse.json({ error: 'Ana şube devre dışı bırakılamaz' }, { status: 400 });
-    await tdb().branch.update({ where: { orgSlug_slug: { orgSlug: org, slug: branchSlug } }, data: { active: !meta.active } });
-    return NextResponse.json({ ok: true, active: !meta.active });
+    await tdb().branch.update({ where: { orgSlug_slug: { orgSlug: org, slug: branchSlug } }, data: { active: !meta!.active } });
+    return NextResponse.json({ ok: true, active: !meta!.active });
   }
   if (action === 'reset_director') {
     const dir = await tdb(org, branchSlug).director.findFirst();
@@ -124,4 +122,4 @@ export async function POST(req) {
     return NextResponse.json({ ok: true });
   }
   return NextResponse.json({ error: 'Geçersiz action' }, { status: 400 });
-}
+});
