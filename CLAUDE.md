@@ -78,11 +78,11 @@ Her özellik veya düzeltme tamamlandığında **onay beklemeden:**
 | # | Aksiyon | Durum |
 |---|---------|-------|
 | 1 | SQL göçünü tamamla, Redis kod yolunu temizle | ✅ TAMAMLANDI (2026-07-08) — `isSqlEnabled`/çift-yol kod tabanında sıfır, `lib/usesql.js` silindi, Vercel `OKULIN_USE_SQL` env kaldırıldı. Redis yalnız bilinçli alt-sistemlerde (OTP cihaz tanıma, haftalık arşiv, rate-limit, backup snapshot) kalıyor. |
-| 2 | TypeScript'e geçiş | ⏳ Henüz başlanmadı — şimdi en büyük öncelik |
+| 2 | TypeScript'e geçiş | ✅ TAMAMLANDI (2026-07-10, dalga-1) — lib/ + app/api/ %100 strict TS (tsconfig strict+allowJs, typescript@5.9); app/_components bilinçli JS (Faz 3) |
 | 3 | `makeId` → `crypto.randomUUID()` | ✅ `lib/id.js` tek kaynak (newId + sortable), 19 dosya geçti. courses slug / audit-errlog key / payment oid bilinçli hariç. |
-| 4 | Merkezi yetkilendirme wrapper'ı | ⏳ |
+| 4 | Merkezi yetkilendirme wrapper'ı | ✅ TAMAMLANDI (2026-07-10) — 71/71 route withAuth'ta; login/cron/callback gibi istisnalar yorumla gerekçeli |
 | 5 | Kritik route'lara entegrasyon testi | ⏳ |
-| 6 | İstemci ortak yardımcıları: `shared.js` | ⏳ |
-| 7 | Global hata handler | ⏳ |
+| 6 | İstemci ortak yardımcıları: `shared.js` | ✅ TAMAMLANDI (2026-07-10) — app/_components/shared.js tek kaynak; 13 api() + hafta/slot yardımcı kopyası silindi |
+| 7 | Global hata handler | ✅ Hata formatı birleşti (2026-07-10): her uçta `{ error }` + doğru status (PayTR callback düz metin istisnası); global handler ihtiyacı kalktı |
 
-**NOT:** #1 bittiği için çift-yol kod tekrarı artık yok, en büyük öncelik #2 TypeScript. Redis'in kalıcı anahtarları (ratelimit, backup, payment lock, OTP cihaz tanıma, haftalık arşiv) bilinçli olarak kalmaya devam ediyor.
+**NOT:** Dalga-1 (2026-07-10) ile #2/#4/#6/#7 kapandı. Kalan borç: #5 (route entegrasyon testleri) + app/_components TS'e geçişi (Faz 3). Redis'in kalıcı anahtarları (ratelimit, backup, OTP cihaz tanıma, haftalık arşiv) bilinçli olarak kalmaya devam ediyor.
