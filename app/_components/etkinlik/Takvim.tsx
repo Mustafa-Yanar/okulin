@@ -9,6 +9,7 @@ import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
 import { api } from '../shared';
+import type { ShowToast } from '../types';
 
 
 // Tür → etiket + renk (dark-mode'da color-mix tonlarıyla çalışır).
@@ -20,29 +21,53 @@ const TYPES = [
   { key: 'etkinlik', label: 'Etkinlik', color: '#8b5cf6' },
   { key: 'diger', label: 'Diğer', color: '#64748b' },
 ];
-const TYPE_MAP = Object.fromEntries(TYPES.map(t => [t.key, t]));
+const TYPE_MAP: Record<string, (typeof TYPES)[number]> = Object.fromEntries(TYPES.map(t => [t.key, t]));
 
 const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 const DOW = ['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
 
-function parseYmd(ymd) {
+// app/api/etkinlik/route.ts EtkinlikData ile birebir.
+interface EtkinlikDTO {
+  id: string;
+  title: string;
+  desc?: string;
+  type: string;
+  startDate: string;
+  endDate?: string;
+  classes?: string[];
+  createdBy?: string;
+  createdByName?: string;
+  createdByRole?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface EtkinlikResponse {
+  etkinlikler?: EtkinlikDTO[];
+  canManage?: boolean;
+}
+
+type ClassGroup = ReturnType<typeof groupedClasses>[number];
+type ClassMap = Map<string, string>;
+
+function parseYmd(ymd: string | undefined): Date | null {
   if (!ymd) return null;
   const d = new Date(ymd + 'T00:00:00');
-  return isNaN(d) ? null : d;
+  return isNaN(d.getTime()) ? null : d;
 }
-function todayYmd() {
+function todayYmd(): string {
   const d = new Date(); d.setHours(0, 0, 0, 0);
   return d.toISOString().slice(0, 10);
 }
-function isPast(ev) {
+function isPast(ev: EtkinlikDTO): boolean {
   return (ev.endDate || ev.startDate) < todayYmd();
 }
-function monthKey(ymd) { return (ymd || '').slice(0, 7); }
-function monthLabel(ymd) {
+function monthKey(ymd: string | undefined): string { return (ymd || '').slice(0, 7); }
+function monthLabel(ymd: string | undefined): string {
   const d = parseYmd(ymd); if (!d) return '';
   return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
-function rangeLabel(ev) {
+function rangeLabel(ev: EtkinlikDTO): string {
   const s = parseYmd(ev.startDate); if (!s) return '';
   const sLbl = `${s.getDate()} ${MONTHS[s.getMonth()]} ${DOW[s.getDay()]}`;
   if (ev.endDate && ev.endDate !== ev.startDate) {
@@ -52,8 +77,15 @@ function rangeLabel(ev) {
   return sLbl;
 }
 
+interface EventCardProps {
+  ev: EtkinlikDTO;
+  classMap: ClassMap;
+  onEdit?: (ev: EtkinlikDTO) => void;
+  onDelete?: (ev: EtkinlikDTO) => void;
+}
+
 // ════════════════════ Ortak etkinlik kartı ════════════════════
-function EventCard({ ev, classMap, onEdit, onDelete }) {
+function EventCard({ ev, classMap, onEdit, onDelete }: EventCardProps) {
   const t = TYPE_MAP[ev.type] || TYPE_MAP.diger;
   const d = parseYmd(ev.startDate);
   const cl = Array.isArray(ev.classes) ? ev.classes : [];
@@ -92,14 +124,21 @@ function EventCard({ ev, classMap, onEdit, onDelete }) {
   );
 }
 
+interface MonthGroupsProps {
+  events: EtkinlikDTO[];
+  classMap: ClassMap;
+  onEdit?: (ev: EtkinlikDTO) => void;
+  onDelete?: (ev: EtkinlikDTO) => void;
+}
+
 // Aylara göre grupla + render
-function MonthGroups({ events, classMap, onEdit, onDelete }) {
+function MonthGroups({ events, classMap, onEdit, onDelete }: MonthGroupsProps) {
   const groups = useMemo(() => {
-    const map = new Map();
+    const map = new Map<string, EtkinlikDTO[]>();
     events.forEach(ev => {
       const k = monthKey(ev.startDate);
       if (!map.has(k)) map.set(k, []);
-      map.get(k).push(ev);
+      map.get(k)!.push(ev);
     });
     return [...map.entries()];
   }, [events]);
@@ -118,36 +157,40 @@ function MonthGroups({ events, classMap, onEdit, onDelete }) {
   );
 }
 
-function useClassMap() {
+function useClassMap(): ClassMap {
   const { classes } = useClasses();
   return useMemo(() => new Map((classes || []).map(c => [c.id, c.ad])), [classes]);
 }
 
 // Yaklaşan + geçmiş ayrımı (paylaşılan)
-function splitEvents(list) {
+function splitEvents(list: EtkinlikDTO[]) {
   const upcoming = list.filter(ev => !isPast(ev));            // artan (API zaten artan döner)
   const past = list.filter(ev => isPast(ev)).reverse();       // en yeni geçmiş önce
   return { upcoming, past };
 }
 
+interface TakvimManagerProps {
+  showToast?: ShowToast;
+}
+
 // ════════════════════ YÖNETİCİ ════════════════════
-export function TakvimManager({ showToast }) {
+export function TakvimManager({ showToast }: TakvimManagerProps) {
   const confirm = useConfirm();
-  const { data, isLoading, mutate } = useSWR('/api/etkinlik');
+  const { data, isLoading, mutate } = useSWR<EtkinlikResponse>('/api/etkinlik');
   const list = data?.etkinlikler || [];
   const classMap = useClassMap();
-  const [editing, setEditing] = useState(null); // düzenlenen etkinlik
+  const [editing, setEditing] = useState<EtkinlikDTO | null>(null); // düzenlenen etkinlik
   const [showPast, setShowPast] = useState(false);
   const { upcoming, past } = splitEvents(list);
 
-  async function remove(ev) {
+  async function remove(ev: EtkinlikDTO) {
     if (!(await confirm(`"${ev.title}" etkinliği silinsin mi?`))) return;
     try {
       await api(`/api/etkinlik?id=${encodeURIComponent(ev.id)}`, { method: 'DELETE' });
       mutate({ ...data, etkinlikler: list.filter(x => x.id !== ev.id) }, { revalidate: false });
       if (editing?.id === ev.id) setEditing(null);
       showToast?.('Etkinlik silindi');
-    } catch (e) { showToast?.(e.message, 'error'); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); }
   }
 
   return (
@@ -176,7 +219,14 @@ export function TakvimManager({ showToast }) {
   );
 }
 
-function TakvimComposer({ showToast, editing, onDone, onCancel }) {
+interface TakvimComposerProps {
+  showToast?: ShowToast;
+  editing: EtkinlikDTO | null;
+  onDone?: () => void;
+  onCancel?: () => void;
+}
+
+function TakvimComposer({ showToast, editing, onDone, onCancel }: TakvimComposerProps) {
   const { classes } = useClasses();
   const groups = groupedClasses(classes);
   const [title, setTitle] = useState('');
@@ -184,9 +234,9 @@ function TakvimComposer({ showToast, editing, onDone, onCancel }) {
   const [type, setType] = useState('etkinlik');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [sel, setSel] = useState([]); // boş = herkes
+  const [sel, setSel] = useState<string[]>([]); // boş = herkes
   const [busy, setBusy] = useState(false);
-  const [edId, setEdId] = useState(null);
+  const [edId, setEdId] = useState<string | null>(null);
 
   // editing değişince formu doldur
   useEffect(() => {
@@ -204,8 +254,8 @@ function TakvimComposer({ showToast, editing, onDone, onCancel }) {
   function reset() {
     setEdId(null); setTitle(''); setDesc(''); setType('etkinlik'); setStartDate(''); setEndDate(''); setSel([]);
   }
-  function toggle(id) { setSel(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); }
-  function toggleGroup(g) {
+  function toggle(id: string) { setSel(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); }
+  function toggleGroup(g: ClassGroup) {
     const ids = g.items.map(i => i.id);
     const allOn = ids.every(id => sel.includes(id));
     setSel(p => allOn ? p.filter(x => !ids.includes(x)) : [...new Set([...p, ...ids])]);
@@ -225,7 +275,7 @@ function TakvimComposer({ showToast, editing, onDone, onCancel }) {
       showToast?.(edId ? 'Etkinlik güncellendi' : 'Etkinlik eklendi');
       reset();
       onDone?.();
-    } catch (e) { showToast?.(e.message, 'error'); } finally { setBusy(false); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); } finally { setBusy(false); }
   }
 
   return (
@@ -309,7 +359,7 @@ function TakvimComposer({ showToast, editing, onDone, onCancel }) {
 
 // ════════════════════ SALT-OKUNUR (öğrenci / veli / öğretmen) ════════════════════
 export function TakvimView() {
-  const { data, isLoading } = useSWR('/api/etkinlik');
+  const { data, isLoading } = useSWR<EtkinlikResponse>('/api/etkinlik');
   const list = data?.etkinlikler || [];
   const classMap = useClassMap();
   const [showPast, setShowPast] = useState(false);
