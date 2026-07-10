@@ -2,17 +2,8 @@
 
 import React, { useState } from 'react';
 import { Lock, LogOut, ShieldCheck } from 'lucide-react';
+import { api } from './shared';
 
-async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-    credentials: 'same-origin',
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'İşlem başarısız');
-  return data;
-}
 
 // Zorunlu şifre değiştirme ekranı.
 // İlk girişte (mustChangePassword:true) veya müdür şifre sıfırlamasından sonra gösterilir.

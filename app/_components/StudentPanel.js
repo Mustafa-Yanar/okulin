@@ -24,65 +24,14 @@ import {
   weekRangeLabel,
   ALL_DAYS
 } from '@/lib/constants';
+import { api, getAdjacentWeek, isSlotPast, WeekNav } from './shared';
 
 // Helper API Fetcher
-async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-    credentials: 'same-origin',
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'İşlem başarısız');
-  return data;
-}
 
 // Helper: haftalık gezinme hesaplayıcı
-function getAdjacentWeek(weekKey, delta) {
-  const [year, wStr] = weekKey.split('-W');
-  const week = parseInt(wStr);
-  const date = new Date(parseInt(year), 0, 1 + (week - 1) * 7);
-  date.setDate(date.getDate() + delta * 7);
-  const d = new Date(date);
-  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  const w = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return `${d.getFullYear()}-W${String(w).padStart(2, '0')}`;
-}
 
 // Helper: ders saati geçip geçmediğini denetleme
-function isSlotPast(weekKey, dayIndex, slotLabel) {
-  const [year, wStr] = weekKey.split('-W');
-  const week = parseInt(wStr);
-  const jan4 = new Date(parseInt(year), 0, 4);
-  const dayOfWeek = jan4.getDay() || 7;
-  const mon = new Date(jan4);
-  mon.setDate(jan4.getDate() - dayOfWeek + 1 + (week - 1) * 7);
-  const startStr = (slotLabel || '').split('–')[0]?.split(':') || ['0','0'];
-  const hh = parseInt(startStr[0] || '0');
-  const mm = parseInt(startStr[1] || '0');
-  const slotStart = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + dayIndex, hh, mm);
-  return slotStart.getTime() <= Date.now();
-}
 
-function WeekNav({ weekKey, onPrev, onNext, canPrev = true, canNext = true }) {
-  const { startStr, endStr } = weekRangeLabel(weekKey);
-  return (
-    <div className="flex items-center gap-1">
-      <button onClick={onPrev} disabled={!canPrev} aria-label="Önceki hafta"
-        className={`btn-ghost !p-2 ${!canPrev ? 'opacity-30 cursor-not-allowed' : ''}`}>
-        <ChevronLeft size={16} />
-      </button>
-      <span className="text-caption text-center whitespace-nowrap">
-        {startStr} – {endStr}
-      </span>
-      <button onClick={onNext} disabled={!canNext} aria-label="Sonraki hafta"
-        className={`btn-ghost !p-2 ${!canNext ? 'opacity-30 cursor-not-allowed' : ''}`}>
-        <ChevronRight size={16} />
-      </button>
-    </div>
-  );
-}
 
 // Lucide Chevron Icon Helpers inside WeekNav
 function ChevronLeft({ size, className }) {

@@ -17,30 +17,10 @@ import { DavranisView } from './davranis/Davranis';
 import { useClasses } from './ClassesContext';
 import { classLabelFrom } from '@/lib/classCatalog';
 import { getWeekKey, weekRangeLabel, classLabel } from '@/lib/constants';
+import { api, getAdjacentWeek } from './shared';
 
-async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-    credentials: 'same-origin',
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'İşlem başarısız');
-  return data;
-}
 
 // Haftalık gezinme (StudentPanel ile aynı hesap).
-function getAdjacentWeek(weekKey, delta) {
-  const [year, wStr] = weekKey.split('-W');
-  const week = parseInt(wStr);
-  const date = new Date(parseInt(year), 0, 1 + (week - 1) * 7);
-  date.setDate(date.getDate() + delta * 7);
-  const d = new Date(date);
-  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  const w = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-  return `${d.getFullYear()}-W${String(w).padStart(2, '0')}`;
-}
 
 const tl = (n) => `${(Number(n) || 0).toLocaleString('tr-TR')} ₺`;
 

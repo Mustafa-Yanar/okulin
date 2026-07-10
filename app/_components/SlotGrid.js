@@ -11,6 +11,7 @@ import {
 import { useClasses } from './ClassesContext';
 import { useSlotTimes } from './SlotTimesContext';
 import { classLabelFrom, coursesForClass } from '@/lib/classCatalog';
+import { isSlotPast } from './shared';
 
 // Helper: Modal Component
 function Modal({ title, onClose, children }) {
@@ -47,23 +48,6 @@ function Label({ children }) {
 }
 
 // Helper: ders saati geçip geçmediğini denetleme
-function isSlotPast(weekKey, dayIndex, slotLabel) {
-  try {
-    const [year, wStr] = weekKey.split('-W');
-    const week = parseInt(wStr);
-    const jan4 = new Date(parseInt(year), 0, 4);
-    const dayOfWeek = jan4.getDay() || 7;
-    const mon = new Date(jan4);
-    mon.setDate(jan4.getDate() - dayOfWeek + 1 + (week - 1) * 7);
-    const startStr = (slotLabel || '').split('–')[0]?.split(':') || ['0','0'];
-    const hh = parseInt(startStr[0] || '0');
-    const mm = parseInt(startStr[1] || '0');
-    const slotStart = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + dayIndex, hh, mm);
-    return slotStart.getTime() <= Date.now();
-  } catch {
-    return false;
-  }
-}
 
 // SlotCell — desktop'ta <td>, mobile'da <div> olarak sarılır (asDiv prop'u).
 // İçindeki tüm <td className="py-1 px-1"> wrapper'ları Wrap ile parametrize edildi.

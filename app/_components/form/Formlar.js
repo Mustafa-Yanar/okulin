@@ -10,17 +10,8 @@ import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
 import { newId } from '@/lib/id';
+import { api } from '../shared';
 
-async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-    credentials: 'same-origin',
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'İşlem başarısız');
-  return data;
-}
 
 const ROLE_LABEL = { student: 'Öğrenci', parent: 'Veli', teacher: 'Öğretmen' };
 const QTYPE = {

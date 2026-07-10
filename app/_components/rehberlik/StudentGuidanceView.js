@@ -3,18 +3,9 @@ import LoadingBox from '../Loading';
 
 import React, { useState, useEffect } from 'react';
 import { BookOpen, Check } from 'lucide-react';
+import { api } from '../shared';
 
 // Helper API Fetcher
-async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-    credentials: 'same-origin',
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'İşlem başarısız');
-  return data;
-}
 
 export default function StudentGuidanceView({ studentId, onReviewed, readOnly, branchFilter }) {
   const [weeks, setWeeks] = useState([]);
