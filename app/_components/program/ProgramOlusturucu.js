@@ -1947,12 +1947,18 @@ function PrintPreview({ type, id, result, teachers, classes, labelOf, brandName,
 }
 
 function SchedulePage({ title, lessons, labelOf, brandName }) {
-  const usedDays = [...new Set(lessons.map(a=>a.day))].sort();
-  // Her gün için slotları sıralı dizi — sıra numarası = slot sırası
-  const dayLessons = usedDays.map(d =>
-    lessons.filter(a=>a.day===d).sort((a,b)=>a.slot-b.slot)
-  );
-  const maxRows = Math.max(0, ...dayLessons.map(ls=>ls.length));
+  const usedDays = [...new Set(lessons.map(a=>a.day))].sort((a,b)=>a-b);
+  // Ders GERÇEK slot satırına oturur (Sıra = gerçek ders no) — güne göre yukarı
+  // sıkıştırma yapılmaz, yoksa "5. ders" etiketli ders 1. satırda görünür.
+  // Satır aralığı: kullanılan en erken–en geç slot; aradaki boş saatler boş hücre.
+  const bySlot = new Map(usedDays.map(d => [d, new Map()]));
+  let minSlot = Infinity, maxSlot = -1;
+  for (const a of lessons) {
+    bySlot.get(a.day).set(a.slot, a);
+    if (a.slot < minSlot) minSlot = a.slot;
+    if (a.slot > maxSlot) maxSlot = a.slot;
+  }
+  const rowSlots = maxSlot < 0 ? [] : Array.from({length: maxSlot - minSlot + 1}, (_, i) => minSlot + i);
 
   return (
     <div className="print-page p-8" style={{pageBreakAfter:'always',minHeight:'100vh'}}>
@@ -1975,15 +1981,15 @@ function SchedulePage({ title, lessons, labelOf, brandName }) {
             </tr>
           </thead>
           <tbody>
-            {[...Array(maxRows).keys()].map(rowIdx => (
-              <tr key={rowIdx}>
-                <td style={{border:'1px solid #e5e7eb',padding:'5px 8px',color:'#9ca3af',textAlign:'center',fontWeight:600,background:'#f9fafb'}}>{rowIdx+1}</td>
-                {usedDays.map((d,di) => {
-                  const a = dayLessons[di][rowIdx];
-                  if (!a) return <td key={d+'-'+rowIdx} style={{border:'1px solid #e5e7eb',borderLeft:'3px solid #6366f130',background:'#fafafa'}}/>;
+            {rowSlots.map(s => (
+              <tr key={s}>
+                <td style={{border:'1px solid #e5e7eb',padding:'5px 8px',color:'#9ca3af',textAlign:'center',fontWeight:600,background:'#f9fafb'}}>{s+1}</td>
+                {usedDays.map(d => {
+                  const a = bySlot.get(d).get(s);
+                  if (!a) return <td key={d+'-'+s} style={{border:'1px solid #e5e7eb',borderLeft:'3px solid #6366f130',background:'#fafafa'}}/>;
                   const col = COURSE_COLOR[a.course]||'#6366f1';
                   return (
-                    <td key={d+'-'+rowIdx} style={{border:`1px solid ${col}30`,borderLeft:`3px solid ${col}60`,background:`${col}12`,padding:'5px 8px',textAlign:'center'}}>
+                    <td key={d+'-'+s} style={{border:`1px solid ${col}30`,borderLeft:`3px solid ${col}60`,background:`${col}12`,padding:'5px 8px',textAlign:'center'}}>
                       <div style={{fontWeight:700,color:col,fontSize:11}}>{a.course}</div>
                       <div style={{fontSize:10,color:'#6b7280'}}>{slotLabel(d, a.slot)}</div>
                       <div style={{fontSize:10,color:'#9ca3af'}}>{labelOf(a.cls)}</div>
