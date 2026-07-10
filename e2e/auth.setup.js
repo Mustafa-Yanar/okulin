@@ -10,17 +10,23 @@ const path = require('path');
 
 const BASE = process.env.OKULIN_BASE_URL || 'https://testkurs.okulin.com';
 
+// Öğretmen/öğrenci hesapları .env.local'den gelir (playwright.config @next/env yükler).
+// Eski sabit fikstür isimleri ('Matematik Öğretmeni1', 'Duha pirinç') canlı veriden
+// silindi — bayat fallback tutmuyoruz; env eksikse net hatayla düşülür.
 const DIR_USER = process.env.OKULIN_DIR_USER || 'testkurs_mudur';
 const DIR_PASS = process.env.OKULIN_DIR_PASS || 'testkursmudur';
-const TEA_USER = process.env.OKULIN_TEA_USER || 'Matematik Öğretmeni1';
-const TEA_PASS = process.env.OKULIN_TEA_PASS || 'test_ogrt_2026';
-const STU_USER = process.env.OKULIN_STU_USER || 'Duha pirinç';
-const STU_PASS = process.env.OKULIN_STU_PASS || 'test_ogrenci_2026';
+const TEA_USER = process.env.OKULIN_TEA_USER;
+const TEA_PASS = process.env.OKULIN_TEA_PASS;
+const STU_USER = process.env.OKULIN_STU_USER;
+const STU_PASS = process.env.OKULIN_STU_PASS;
 
 const AUTH_DIR = path.join(__dirname, '.auth');
 if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 
 async function loginAndSave(context, username, password, role, file) {
+  if (!username || !password) {
+    throw new Error(`${role} giriş bilgileri eksik — .env.local'de OKULIN_TEA_USER/PASS ve OKULIN_STU_USER/PASS tanımlı olmalı.`);
+  }
   const res = await context.request.post(`${BASE}/api/auth`, {
     headers: { 'Content-Type': 'application/json', Origin: BASE },
     data: { action: 'login', username, password, role },

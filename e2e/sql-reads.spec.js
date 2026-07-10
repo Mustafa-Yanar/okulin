@@ -2,11 +2,10 @@
  * SQL GÖÇ TESTİ — Okuma uçları
  * Kritik GET endpoint'lerinin SQL'den doğru veri döndürdüğünü doğrular.
  * Oturumlar auth.setup.js'ten gelir (storageState) — bu dosyada login YOK.
+ * Kimlikler dinamik: oturum sahibi öğretmen GET /api/auth ile keşfedilir.
  */
 const { test, expect } = require('@playwright/test');
-
-const BASE       = process.env.OKULIN_BASE_URL || 'https://testkurs.okulin.com';
-const TEACHER_ID = 'd9sxbn8a'; // Matematik Öğretmeni1 legacyId
+const { BASE, TEA_STATE, whoami } = require('./helpers');
 
 test.describe('Director okuma testleri', () => {
   test.use({ storageState: 'e2e/.auth/director.json' });
@@ -32,12 +31,24 @@ test.describe('Director okuma testleri', () => {
     expect(list[0]).toHaveProperty('cls');
   });
 
-  test('slot-times: weekday + weekend slotlar gelir', async ({ request }) => {
+  test('slot-times: 7-gün formatı ({days:{0..6}}) döner', async ({ request }) => {
     const res = await request.get(`${BASE}/api/slot-times`);
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.weekday.length).toBeGreaterThan(0);
-    expect(body.weekend.length).toBeGreaterThan(0);
+    // 7-gün göçü sonrası sözleşme: { days: {0..6: {count, times}}, etutSuresi, molaSuresi }
+    expect(body).toHaveProperty('days');
+    for (let d = 0; d < 7; d++) {
+      const day = body.days[String(d)] ?? body.days[d];
+      expect(day, `gün ${d} tanımlı olmalı`).toBeDefined();
+      expect(typeof day.count).toBe('number');
+      expect(Array.isArray(day.times)).toBe(true);
+      expect(day.times.length).toBe(day.count);
+    }
+    expect(typeof body.etutSuresi).toBe('number');
+    expect(typeof body.molaSuresi).toBe('number');
+    // En az bir günde ders saati tanımlı olmalı (kurum çalışıyor)
+    const totalSlots = Object.values(body.days).reduce((n, d) => n + (d.count || 0), 0);
+    expect(totalSlots).toBeGreaterThan(0);
   });
 
   test('stats: öğretmen/öğrenci sayısı tutarlı', async ({ request }) => {
@@ -66,10 +77,12 @@ test.describe('Director okuma testleri', () => {
 });
 
 test.describe('Teacher okuma testleri', () => {
-  test.use({ storageState: 'e2e/.auth/teacher.json' });
+  test.use({ storageState: TEA_STATE });
 
-  test('teacher: kendi slot grid\'ini okur', async ({ request }) => {
-    const res = await request.get(`${BASE}/api/slots?teacherId=${TEACHER_ID}`);
+  test('teacher: kendi slot grid\'ini okur (oturumdan keşif)', async ({ request }) => {
+    const me = await whoami(request);
+    expect(me.role).toBe('teacher');
+    const res = await request.get(`${BASE}/api/slots?teacherId=${me.id}`);
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(body).toHaveProperty('grid');
@@ -77,7 +90,8 @@ test.describe('Teacher okuma testleri', () => {
   });
 
   test('teacher: kendi programını okur', async ({ request }) => {
-    const res = await request.get(`${BASE}/api/program?teacherId=${TEACHER_ID}`);
+    const me = await whoami(request);
+    const res = await request.get(`${BASE}/api/program?teacherId=${me.id}`);
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(body).toHaveProperty('weekKey');
