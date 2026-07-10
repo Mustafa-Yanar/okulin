@@ -1,0 +1,12 @@
+# Cloud Run source deploy (gcloud run deploy --source .) yüklemesine yalnız
+# çözücü için gerekenler girsin — Next.js/node_modules/git dışarıda kalır.
+*
+!Dockerfile
+!api/
+!api/solver/
+!api/solver/**
+!solver-service/
+!solver-service/**
+__pycache__/
+*.pyc
+api/solver/_harness.py

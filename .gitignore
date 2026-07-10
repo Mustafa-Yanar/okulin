@@ -42,3 +42,4 @@ tmp/
 /.playwright/
 node_modules/.cache/ms-playwright
 *.md
+!solver-service/README.md
