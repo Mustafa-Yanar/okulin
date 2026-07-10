@@ -1,18 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ChevronDown, ClipboardList, ListChecks, BarChart3, Target } from 'lucide-react';
 import KonuTakibi from './KonuTakibi';
 import DenemeAnaliz from './DenemeAnaliz';
 import HedefKarti from './HedefKarti';
+
+interface RehberlikAccordionProps {
+  solvedContent: ReactNode;
+  subjects: string[];
+  editable?: boolean;
+  studentId?: string;
+}
 
 // Rehberlik sekmesinin 3 akordiyon kartı.
 // - solvedContent: 1. kart içeriği (çözülen sorular) — panele göre dışarıdan verilir
 // - subjects: konu takibi dersleri (guidanceSubjectsFor sonucu, branşa göre süzülmüş gelir)
 // - editable: konu slider'ları düzenlenebilir mi
 // - studentId: müdür/öğretmen başka öğrenci için; öğrenci kendi için boş
-export default function RehberlikAccordion({ solvedContent, subjects, editable, studentId }) {
-  const [open, setOpen] = useState(null); // hepsi kapalı başlar
+export default function RehberlikAccordion({ solvedContent, subjects, editable, studentId }: RehberlikAccordionProps) {
+  const [open, setOpen] = useState<string | null>(null); // hepsi kapalı başlar
 
   const cards = [
     {

@@ -2,16 +2,32 @@
 
 import { useState } from 'react';
 import { ChevronLeft, GitMerge, FileSpreadsheet, FileDown, AlertTriangle, Trophy } from 'lucide-react';
-import { exportMergeExcel, exportMergePdf } from './denemeExport';
+import { exportMergeExcel, exportMergePdf, type MergeReportDTO, type MergeListDTO } from './denemeExport';
+import type { ShowToast } from '../types';
+
+// GET /api/deneme/exams liste elemanı (özet).
+export interface ExamSummaryDTO {
+  id: string;
+  name: string;
+  examType: string;
+  date: string;
+  kitapcikSayisi?: number;
+}
+
+interface MergeListesiProps {
+  exams: ExamSummaryDTO[];
+  showToast: ShowToast;
+  onBack: () => void;
+}
 
 // TYT + AYT sınavını öğrenci bazında birleştir → 3 türde (SAY/EA/SÖZ) yerleştirme listesi.
 // Anlık: iki sınav seç → /api/deneme/merge → liste + Excel/PDF. Kalıcı kayıt yok.
-export default function MergeListesi({ exams, showToast, onBack }) {
+export default function MergeListesi({ exams, showToast, onBack }: MergeListesiProps) {
   const tytList = (exams || []).filter((e) => e.examType === 'TYT');
   const aytList = (exams || []).filter((e) => e.examType === 'AYT');
   const [tytId, setTytId] = useState('');
   const [aytId, setAytId] = useState('');
-  const [report, setReport] = useState(null);
+  const [report, setReport] = useState<MergeReportDTO | null>(null);
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(0);
   const [exporting, setExporting] = useState('');
@@ -24,7 +40,7 @@ export default function MergeListesi({ exams, showToast, onBack }) {
         `/api/deneme/merge?tyt=${encodeURIComponent(tytId)}&ayt=${encodeURIComponent(aytId)}`,
         { credentials: 'same-origin' }
       );
-      const d = await res.json().catch(() => ({}));
+      const d = (await res.json().catch(() => ({}))) as MergeReportDTO & { error?: string };
       if (!res.ok) return showToast(d.error || 'Birleştirilemedi', 'error');
       setReport(d);
       setActive(0);
@@ -33,14 +49,14 @@ export default function MergeListesi({ exams, showToast, onBack }) {
     }
   }
 
-  async function doExport(kind) {
+  async function doExport(kind: string) {
     if (!report?.lists?.length) return;
     setExporting(kind);
     try {
       if (kind === 'xlsx') await exportMergeExcel(report);
       else await exportMergePdf(report);
     } catch (e) {
-      showToast('Dışa aktarma hatası: ' + (e?.message || ''), 'error');
+      showToast('Dışa aktarma hatası: ' + ((e as Error)?.message || ''), 'error');
     } finally {
       setExporting('');
     }
@@ -131,7 +147,7 @@ export default function MergeListesi({ exams, showToast, onBack }) {
   );
 }
 
-function MergeTablo({ list }) {
+function MergeTablo({ list }: { list: MergeListDTO }) {
   const o = list.ortalama || {};
   return (
     <div className="card overflow-x-auto">

@@ -5,23 +5,32 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { topicsFor } from '@/lib/deneme/topics';
 
+// GET/POST /api/topics — ders → konu index → yüzde.
+type TopicsMap = Record<string, Record<number, number>>;
+
+interface KonuTakibiProps {
+  subjects: string[];
+  editable?: boolean;
+  studentId?: string;
+}
+
 // Ders → konu → slider. editable ise yüzdeler değiştirilebilir.
 // studentId: müdür/öğretmen başka öğrenci için verir; öğrenci kendi için boş bırakır.
-export default function KonuTakibi({ subjects, editable, studentId }) {
-  const [topics, setTopics] = useState({}); // { subject: { [idx]: percent } }
+export default function KonuTakibi({ subjects, editable, studentId }: KonuTakibiProps) {
+  const [topics, setTopics] = useState<TopicsMap>({}); // { subject: { [idx]: percent } }
   const [loading, setLoading] = useState(true);
-  const [openSubject, setOpenSubject] = useState(null);
+  const [openSubject, setOpenSubject] = useState<string | null>(null);
 
   const qs = studentId ? `?studentId=${encodeURIComponent(studentId)}` : '';
 
   useEffect(() => {
     fetch(`/api/topics${qs}`, { credentials: 'same-origin' })
       .then((r) => r.json())
-      .then((d) => setTopics(d.topics || {}))
+      .then((d: { topics?: TopicsMap }) => setTopics(d.topics || {}))
       .finally(() => setLoading(false));
   }, [qs]);
 
-  async function setPercent(subject, idx, percent) {
+  async function setPercent(subject: string, idx: number, percent: number) {
     // İyimser güncelle
     setTopics((prev) => ({
       ...prev,

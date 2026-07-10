@@ -2,11 +2,18 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Calculator, FileSpreadsheet, FileDown, AlertTriangle, Trophy } from 'lucide-react';
-import { exportExcel, exportPdf } from './denemeExport';
+import { exportExcel, exportPdf, type DenemeReportDTO, type ReportListDTO } from './denemeExport';
+import type { DenemeExam } from '@/lib/deneme/types';
+import type { ShowToast } from '../types';
+
+interface SonucListesiProps {
+  exam: DenemeExam;
+  showToast: ShowToast;
+}
 
 // Sınav detayı "Sonuçlar" adımı: Hesapla → puan türü başına liste + Excel/PDF indir.
-export default function SonucListesi({ exam, showToast }) {
-  const [report, setReport] = useState(null);
+export default function SonucListesi({ exam, showToast }: SonucListesiProps) {
+  const [report, setReport] = useState<DenemeReportDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [computing, setComputing] = useState(false);
   const [active, setActive] = useState(0);
@@ -16,7 +23,7 @@ export default function SonucListesi({ exam, showToast }) {
     setLoading(true);
     try {
       const res = await fetch(`/api/deneme/exams/${exam.id}/report`, { credentials: 'same-origin' });
-      if (res.ok) setReport(await res.json());
+      if (res.ok) setReport((await res.json()) as DenemeReportDTO);
     } finally {
       setLoading(false);
     }
@@ -28,7 +35,7 @@ export default function SonucListesi({ exam, showToast }) {
     setComputing(true);
     try {
       const res = await fetch(`/api/deneme/exams/${exam.id}/compute`, { method: 'POST', credentials: 'same-origin' });
-      const d = await res.json().catch(() => ({}));
+      const d = (await res.json().catch(() => ({}))) as { error?: string; graded?: number; count?: number; ortalamaNet?: number };
       if (!res.ok) return showToast(d.error || 'Hesaplanamadı', 'error');
       showToast(`${d.graded}/${d.count} kayıt puanlandı · ort. net ${d.ortalamaNet}`);
       await load();
@@ -37,14 +44,14 @@ export default function SonucListesi({ exam, showToast }) {
     }
   }
 
-  async function doExport(kind) {
+  async function doExport(kind: string) {
     if (!report?.lists?.length) return;
     setExporting(kind);
     try {
       if (kind === 'xlsx') await exportExcel(report);
       else await exportPdf(report);
     } catch (e) {
-      showToast('Dışa aktarma hatası: ' + (e?.message || ''), 'error');
+      showToast('Dışa aktarma hatası: ' + ((e as Error)?.message || ''), 'error');
     } finally {
       setExporting('');
     }
@@ -109,7 +116,7 @@ export default function SonucListesi({ exam, showToast }) {
   );
 }
 
-function ListeTablosu({ list }) {
+function ListeTablosu({ list }: { list: ReportListDTO }) {
   const subjects = list.subjects;
   return (
     <div className="card overflow-x-auto">
@@ -158,8 +165,8 @@ function ListeTablosu({ list }) {
 }
 
 // Uzun ders adını başlık için kısalt (tooltip tam adı taşır).
-function kisalt(label) {
-  const map = {
+function kisalt(label: string): string {
+  const map: Record<string, string> = {
     Türkçe: 'Tür', Matematik: 'Mat', Geometri: 'Geo', Fizik: 'Fiz', Kimya: 'Kim',
     Biyoloji: 'Biy', Tarih: 'Tar', Coğrafya: 'Coğ', 'Din Kültürü': 'Din', Felsefe: 'Fel',
     Edebiyat: 'Edb', 'Tarih-1': 'Tar1', 'Coğrafya-1': 'Coğ1', 'Tarih-2': 'Tar2',

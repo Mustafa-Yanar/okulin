@@ -4,12 +4,24 @@ import { useEffect, useState } from 'react';
 import { Target, Check, Pencil } from 'lucide-react';
 import LoadingBox from '../Loading';
 
+// GET /api/hedef yanıtı.
+interface HedefData {
+  weekly: number;
+  thisWeekSolved: number;
+  history: { weekKey: string; solved: number }[];
+}
+
+interface HedefKartiProps {
+  studentId?: string;
+  editable?: boolean;
+}
+
 // Haftalık soru çözüm hedefi kartı. guidance verisini tüketir (çoğaltmaz).
 // "Çözülen" = D+Y+B toplamı (Haftalık Çözülen Sorular kartının verisiyle aynı kaynak).
 // editable: hedef konabilir/güncellenebilir mi (öğrenci kendi, müdür/rehber herkes).
 // studentId: başka öğrenci için; öğrenci kendi için boş.
-export default function HedefKarti({ studentId, editable }) {
-  const [data, setData] = useState(null);
+export default function HedefKarti({ studentId, editable }: HedefKartiProps) {
+  const [data, setData] = useState<HedefData | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState('');
@@ -21,7 +33,7 @@ export default function HedefKarti({ studentId, editable }) {
   function load() {
     fetch(`/api/hedef${qs}`, { credentials: 'same-origin' })
       .then((r) => r.json())
-      .then((d) => {
+      .then((d: HedefData | null) => {
         setData(d);
         setVal(d?.weekly ? String(d.weekly) : '');
       })

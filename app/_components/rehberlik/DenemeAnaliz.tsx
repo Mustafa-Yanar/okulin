@@ -4,14 +4,33 @@ import EmptyState from '../EmptyState';
 
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, BarChart3 } from 'lucide-react';
-import NetChart from './NetChart';
+import NetChart, { type NetChartDatum } from './NetChart';
 import { calcNet, TYT_GROUPS, AYT_CATEGORIES } from '@/lib/deneme/config';
+import type { Results } from '@/lib/deneme/types';
+
+// GET /api/deneme/me | /api/deneme/student — öğrencinin deneme noktası.
+interface DenemePointDTO {
+  examId: string;
+  name: string;
+  examType: string;
+  dateLabel: string;
+  fullDate: string;
+  rank: number;
+  total: number;
+  toplamNet: number;
+  results?: Results;
+  subjectKeys?: string[];
+}
+
+interface DenemeAnalizProps {
+  studentId?: string;
+}
 
 // Bir öğrencinin deneme analizi. studentId verilirse o öğrenci (müdür/öğretmen),
 // verilmezse giriş yapan öğrencinin kendisi (/api/deneme/me).
-export default function DenemeAnaliz({ studentId }) {
+export default function DenemeAnaliz({ studentId }: DenemeAnalizProps) {
   const [tab, setTab] = useState('liste'); // 'liste' | 'grafik'
-  const [points, setPoints] = useState([]);
+  const [points, setPoints] = useState<DenemePointDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [examType, setExamType] = useState('TYT');
 
@@ -21,7 +40,7 @@ export default function DenemeAnaliz({ studentId }) {
       : '/api/deneme/me';
     fetch(url, { credentials: 'same-origin' })
       .then((r) => r.json())
-      .then((d) => setPoints(d.points || []))
+      .then((d: { points?: DenemePointDTO[] }) => setPoints(d.points || []))
       .finally(() => setLoading(false));
   }, [studentId]);
 
@@ -75,8 +94,8 @@ export default function DenemeAnaliz({ studentId }) {
   );
 }
 
-function ExamList({ points }) {
-  const [openId, setOpenId] = useState(null);
+function ExamList({ points }: { points: DenemePointDTO[] }) {
+  const [openId, setOpenId] = useState<string | null>(null);
   return (
     <div className="space-y-2">
       {[...points].reverse().map((p) => {
@@ -121,7 +140,7 @@ function ExamList({ points }) {
 }
 
 // Ders key -> görünen ad (config'le uyumlu kısa eşleme)
-const SUBJECT_LABELS = {
+const SUBJECT_LABELS: Record<string, string> = {
   turkce: 'Türkçe', tarih: 'Tarih', cografya: 'Coğrafya', felsefe: 'Felsefe',
   din: 'Din Kültürü', felsefe_secmeli: 'Felsefe (Seçmeli)',
   matematik: 'Matematik', geometri: 'Geometri',
@@ -130,7 +149,7 @@ const SUBJECT_LABELS = {
   tarih_2: 'Tarih-2', cografya_2: 'Coğrafya-2',
 };
 
-function ExamDetail({ point }) {
+function ExamDetail({ point }: { point: DenemePointDTO }) {
   const keys = point.subjectKeys || Object.keys(point.results || {});
   return (
     <div className="border-t border-gray-100 px-4 py-3">
@@ -178,8 +197,8 @@ function ExamDetail({ point }) {
 }
 
 // subjectKey -> soru sayısı (tüm TYT + AYT gruplarından düzleştirilmiş)
-const SUBJECT_QUESTION_COUNTS = (() => {
-  const map = {};
+const SUBJECT_QUESTION_COUNTS: Record<string, number> = (() => {
+  const map: Record<string, number> = {};
   const allGroups = [
     ...TYT_GROUPS,
     ...Object.values(AYT_CATEGORIES).flatMap((c) => c.groups),
@@ -192,12 +211,12 @@ const SUBJECT_QUESTION_COUNTS = (() => {
   return map;
 })();
 
-function GrowthChart({ points, examType }) {
+function GrowthChart({ points, examType }: { points: DenemePointDTO[]; examType: string }) {
   const [mode, setMode] = useState('toplam'); // 'toplam' | 'ders'
 
   // Ders bazlı modda görünecek alt dersler: tüm denemelerde geçen subjectKey'ler (sıralı)
   const subjectKeys = useMemo(() => {
-    const seen = [];
+    const seen: string[] = [];
     points.forEach((p) => {
       (p.subjectKeys || Object.keys(p.results || {})).forEach((k) => {
         if (!seen.includes(k)) seen.push(k);
@@ -212,7 +231,7 @@ function GrowthChart({ points, examType }) {
 
   const { chartData, chartSeries, yMax } = useMemo(() => {
     if (mode === 'toplam') {
-      const data = points.map((p) => ({
+      const data: NetChartDatum[] = points.map((p) => ({
         name: p.dateLabel,
         full: `${p.name} (${p.fullDate})`,
         'Toplam Net': p.toplamNet,
@@ -223,7 +242,7 @@ function GrowthChart({ points, examType }) {
     const label = SUBJECT_LABELS[activeSubject] || activeSubject;
     const data = points.map((p) => {
       const r = p.results?.[activeSubject];
-      const point = { name: p.dateLabel, full: `${p.name} (${p.fullDate})` };
+      const point: NetChartDatum = { name: p.dateLabel, full: `${p.name} (${p.fullDate})` };
       point[label] = r ? r.net : null;
       return point;
     });

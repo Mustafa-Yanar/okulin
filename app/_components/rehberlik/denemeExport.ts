@@ -3,22 +3,80 @@
 // xlsx/jspdf YALNIZ tıklamada dinamik yüklenir (SSR güvenli, ana bundle'ı şişirmez).
 // PDF Türkçe karakterleri için /public/fonts/Roboto-Turkish.ttf gömülür.
 
-function fileSafe(s) {
+import type { jsPDF } from 'jspdf';
+
+// ── İstemci DTO'ları: lib/deneme/report.ts buildReports/buildMergeReport çıktısı
+// (route JSON'u) ile birebir; SonucListesi/MergeListesi de bu tipleri tüketir. ──
+export interface ReportSubjectCellDTO {
+  dogru?: number;
+  yanlis?: number;
+  bos?: number;
+  net?: number;
+}
+export interface ReportRowDTO {
+  rank: number;
+  name: string;
+  cls: string;
+  matched: boolean;
+  source: string;
+  subjects: Record<string, ReportSubjectCellDTO>;
+  toplamNet: number;
+  puan: number | null;
+}
+export interface ReportListDTO {
+  key: string;
+  label: string;
+  subjects: { key: string; label: string }[];
+  rows: ReportRowDTO[];
+  ortalama: { subjects: Record<string, number>; toplamNet: number; puan: number | null };
+}
+// GET /api/deneme/exams/[id]/report yanıtı (buildReports + hasKey/rowCount).
+export interface DenemeReportDTO {
+  exam: { id: string; name: string; examType: string; date?: string | null };
+  lists: ReportListDTO[];
+  hasKey?: boolean;
+  rowCount?: number;
+}
+export interface MergeRowDTO {
+  rank: number;
+  name: string;
+  cls: string;
+  tytPuan: number | null;
+  aytPuan: number | null;
+  yerlestirme: number | null;
+}
+export interface MergeListDTO {
+  key: string;
+  label: string;
+  rows: MergeRowDTO[];
+  ortalama: { tytPuan?: number | null; aytPuan?: number | null; yerlestirme?: number | null };
+}
+// GET /api/deneme/merge yanıtı.
+export interface MergeReportDTO {
+  tyt?: { id?: string; name?: string } | null;
+  ayt?: { id?: string; name?: string } | null;
+  matchedCount: number;
+  lists: MergeListDTO[];
+}
+
+type MatrixCell = string | number;
+
+function fileSafe(s: string | undefined): string {
   return String(s || 'rapor').replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60);
 }
 
-function f2(n) {
+function f2(n: number | null | undefined): string {
   return (Math.round((n || 0) * 100) / 100).toFixed(2);
 }
 
 // Bir liste → { head, body, avgRow } (PDF/Excel ortak matris).
-function listToMatrix(list) {
-  const head = ['Sıra', 'İsim', 'Sınıf'];
+function listToMatrix(list: ReportListDTO) {
+  const head: MatrixCell[] = ['Sıra', 'İsim', 'Sınıf'];
   for (const s of list.subjects) head.push(`${s.label} D`, `${s.label} Y`, `${s.label} N`);
   head.push('Top. Net', 'Puan');
 
   const body = list.rows.map((r) => {
-    const row = [r.rank, r.name, r.cls || ''];
+    const row: MatrixCell[] = [r.rank, r.name, r.cls || ''];
     for (const s of list.subjects) {
       const c = r.subjects[s.key] || {};
       row.push(c.dogru ?? 0, c.yanlis ?? 0, f2(c.net));
@@ -27,7 +85,7 @@ function listToMatrix(list) {
     return row;
   });
 
-  const avgRow = ['', 'OKUL ORTALAMASI', ''];
+  const avgRow: MatrixCell[] = ['', 'OKUL ORTALAMASI', ''];
   for (const s of list.subjects) {
     avgRow.push('', '', f2(list.ortalama.subjects[s.key]));
   }
@@ -36,7 +94,7 @@ function listToMatrix(list) {
   return { head, body, avgRow };
 }
 
-export async function exportExcel(report) {
+export async function exportExcel(report: DenemeReportDTO) {
   const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   for (const list of report.lists) {
@@ -47,7 +105,7 @@ export async function exportExcel(report) {
   XLSX.writeFile(wb, `${fileSafe(report.exam.name)}_sonuc.xlsx`);
 }
 
-async function loadTurkishFont(doc) {
+async function loadTurkishFont(doc: jsPDF): Promise<boolean> {
   try {
     const res = await fetch('/fonts/Roboto-Turkish.ttf');
     if (!res.ok) return false;
@@ -55,7 +113,8 @@ async function loadTurkishFont(doc) {
     let bin = '';
     const bytes = new Uint8Array(buf);
     for (let i = 0; i < bytes.length; i += 0x8000) {
-      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      // fromCharCode.apply sayısal dizi bekler; Uint8Array alt-dizisi çalışma anında aynı.
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000) as unknown as number[]);
     }
     const b64 = btoa(bin);
     doc.addFileToVFS('Roboto-Turkish.ttf', b64);
@@ -69,9 +128,9 @@ async function loadTurkishFont(doc) {
 
 // ---- TYT+AYT birleştirme çıktısı (kolonlar: Sıra/İsim/Sınıf/TYT/AYT/Yerleştirme) ----
 
-function mergeListToMatrix(list) {
-  const head = ['Sıra', 'İsim', 'Sınıf', 'TYT', 'AYT', 'Yerleştirme'];
-  const body = list.rows.map((r) => [
+function mergeListToMatrix(list: MergeListDTO) {
+  const head: MatrixCell[] = ['Sıra', 'İsim', 'Sınıf', 'TYT', 'AYT', 'Yerleştirme'];
+  const body = list.rows.map((r): MatrixCell[] => [
     r.rank,
     r.name,
     r.cls || '',
@@ -80,7 +139,7 @@ function mergeListToMatrix(list) {
     r.yerlestirme != null ? f2(r.yerlestirme) : '—',
   ]);
   const o = list.ortalama || {};
-  const avgRow = [
+  const avgRow: MatrixCell[] = [
     '', 'OKUL ORTALAMASI', '',
     o.tytPuan != null ? f2(o.tytPuan) : '—',
     o.aytPuan != null ? f2(o.aytPuan) : '—',
@@ -89,11 +148,11 @@ function mergeListToMatrix(list) {
   return { head, body, avgRow };
 }
 
-function mergeFileBase(report) {
+function mergeFileBase(report: MergeReportDTO): string {
   return fileSafe(`${report.tyt?.name || 'TYT'}_${report.ayt?.name || 'AYT'}_birlestirme`);
 }
 
-export async function exportMergeExcel(report) {
+export async function exportMergeExcel(report: MergeReportDTO) {
   const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   for (const list of report.lists) {
@@ -104,10 +163,10 @@ export async function exportMergeExcel(report) {
   XLSX.writeFile(wb, `${mergeFileBase(report)}.xlsx`);
 }
 
-export async function exportMergePdf(report) {
+export async function exportMergePdf(report: MergeReportDTO) {
   const { jsPDF } = await import('jspdf');
   const autoTableMod = await import('jspdf-autotable');
-  const autoTable = autoTableMod.default || autoTableMod.autoTable;
+  const autoTable = autoTableMod.default || (autoTableMod as { autoTable?: typeof autoTableMod.default }).autoTable;
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
   const hasFont = await loadTurkishFont(doc);
@@ -141,10 +200,10 @@ export async function exportMergePdf(report) {
   doc.save(`${mergeFileBase(report)}.pdf`);
 }
 
-export async function exportPdf(report) {
+export async function exportPdf(report: DenemeReportDTO) {
   const { jsPDF } = await import('jspdf');
   const autoTableMod = await import('jspdf-autotable');
-  const autoTable = autoTableMod.default || autoTableMod.autoTable;
+  const autoTable = autoTableMod.default || (autoTableMod as { autoTable?: typeof autoTableMod.default }).autoTable;
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const hasFont = await loadTurkishFont(doc);
@@ -156,7 +215,8 @@ export async function exportPdf(report) {
     doc.setFontSize(12);
     doc.text(`${report.exam.name} — ${list.label}`, 30, 28);
     doc.setFontSize(8);
-    doc.text(new Date(report.exam.date).toLocaleDateString('tr-TR'), 30, 40);
+    // date null/undefined gelirse orijinal JS davranışı korunur (Date(null)=1970, Date(undefined)=Invalid).
+    doc.text(new Date(report.exam.date as string).toLocaleDateString('tr-TR'), 30, 40);
 
     const { head, body, avgRow } = listToMatrix(list);
     autoTable(doc, {

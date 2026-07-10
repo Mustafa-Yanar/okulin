@@ -13,7 +13,20 @@ import {
 
 const COLORS = ['#6366f1', '#16a34a', '#dc2626', '#9333ea', '#ea580c', '#0891b2', '#ca8a04', '#db2777'];
 
-export default function NetChart({ data, series, yMax }) {
+// Grafik noktası: name (x etiketi) + full (tooltip başlığı) + seri adı → net değeri.
+export interface NetChartDatum {
+  name?: string;
+  full?: string;
+  [series: string]: unknown;
+}
+
+interface NetChartProps {
+  data: NetChartDatum[];
+  series: string[];
+  yMax?: number;
+}
+
+export default function NetChart({ data, series, yMax }: NetChartProps) {
   if (!data || data.length === 0) {
     return (
       <div className="h-64 flex items-center justify-center text-gray-400 text-sm">

@@ -6,23 +6,31 @@
 
 import React, { useState } from 'react';
 import { ClipboardList, NotebookPen, Award, BarChart2, FileText, ScanLine } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { DirectorAttendanceView } from '../director/Attendance';
 import { OdevManager } from '../odev/Odev';
 import { DavranisManager } from '../davranis/Davranis';
 import OptikFormTab from '../director/OptikFormTab';
 import DirectorDenemeYonetimi from './DirectorDenemeYonetimi';
 import { useUrlParam } from '../useUrlParam';
+import type { Session } from '@/lib/auth';
+import type { ShowToast } from '../types';
 
-export default function RehberlikHub({ session, showToast }) {
+interface RehberlikHubProps {
+  session: Session;
+  showToast: ShowToast; // DirectorDenemeYonetimi zorunlu ister; panel her zaman geçer
+}
+
+export default function RehberlikHub({ session, showToast }: RehberlikHubProps) {
   const isCounselor = session?.role === 'counselor';
   const [rtab, setRtab] = useUrlParam('rtab');
   const [denemeTab, setDenemeTab] = useState('sinavlar');
 
-  const subtabs = [
+  const subtabs: [string, string, LucideIcon][] = [
     ['yoklama', 'Yoklama', ClipboardList],
     ['odev', 'Ödevler', NotebookPen],
     ['davranis', 'Davranış', Award],
-    ...(isCounselor ? [] : [['denemeler', 'Denemeler', BarChart2]]),
+    ...(isCounselor ? [] : [['denemeler', 'Denemeler', BarChart2] as [string, string, LucideIcon]]),
   ];
   const active = subtabs.some(([k]) => k === rtab) ? rtab : 'yoklama';
 
@@ -44,7 +52,7 @@ export default function RehberlikHub({ session, showToast }) {
       {active === 'denemeler' && !isCounselor && (
         <div>
           <div className="pill-tabs mb-4">
-            {[['sinavlar', 'Sınavlar', FileText], ['optik', 'Optik Form', ScanLine]].map(([k, l, Icon]) => (
+            {([['sinavlar', 'Sınavlar', FileText], ['optik', 'Optik Form', ScanLine]] as [string, string, LucideIcon][]).map(([k, l, Icon]) => (
               <button key={k} onClick={() => setDenemeTab(k)}
                 className={`pill-tab press-effect${denemeTab === k ? ' is-active' : ''}`}>
                 <Icon size={13} /> <span>{l}</span>

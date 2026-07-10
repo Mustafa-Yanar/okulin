@@ -2,27 +2,34 @@
 
 import { useMemo, useState } from 'react';
 import { KeyRound, Check, Save } from 'lucide-react';
-import { getTemplate, boxLength } from '@/lib/deneme/template';
+import { getTemplate, boxLength, type TemplateBox } from '@/lib/deneme/template';
+import type { DenemeExam } from '@/lib/deneme/types';
+import type { ShowToast } from '../types';
+
+interface AnswerKeyFormProps {
+  exam: DenemeExam;
+  showToast: ShowToast;
+}
 
 // Cevap anahtarı giriş formu (Drive mockup "Cevapanahtarı.png").
 // Her kutu = bir ders grubu; cevaplar BOŞLUKSUZ tek string girilir, ders sınırı
 // şablondan bilinir. İptal/boş soru için "*" işareti kullanılır.
-export default function AnswerKeyForm({ exam, showToast }) {
+export default function AnswerKeyForm({ exam, showToast }: AnswerKeyFormProps) {
   const template = getTemplate(exam.examType);
   const kitapciklar = (exam.kitapcikSayisi || 1) === 2 ? ['A', 'B'] : ['A'];
   const [aktif, setAktif] = useState('A');
   const [saving, setSaving] = useState(false);
 
   // keys: { A: { boxKey: string }, B: {...} } — exam.answerKey'den tohumla
-  const [keys, setKeys] = useState(() => {
-    const init = {};
+  const [keys, setKeys] = useState<Record<string, Record<string, string>>>(() => {
+    const init: Record<string, Record<string, string>> = {};
     for (const k of kitapciklar) init[k] = { ...(exam.answerKey?.[k] || {}) };
     return init;
   });
 
   if (!template) return <p className="text-sm text-red-600">Geçersiz sınav türü.</p>;
 
-  function setBox(boxKey, val) {
+  function setBox(boxKey: string, val: string) {
     setKeys((prev) => ({
       ...prev,
       [aktif]: { ...prev[aktif], [boxKey]: val.toLocaleUpperCase('tr') },
@@ -31,7 +38,7 @@ export default function AnswerKeyForm({ exam, showToast }) {
 
   async function save() {
     // İstemci tarafı ön doğrulama
-    const eksik = template.boxes.filter((b) => {
+    const eksik = template!.boxes.filter((b) => {
       const len = String(keys[aktif]?.[b.key] || '').replace(/\s/g, '').length;
       return len !== boxLength(b);
     });
@@ -49,7 +56,7 @@ export default function AnswerKeyForm({ exam, showToast }) {
         credentials: 'same-origin',
         body: JSON.stringify({ kitapcik: aktif, answers: keys[aktif] }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) return showToast(data.error || 'Kaydedilemedi', 'error');
       showToast(`${aktif} kitapçığı cevap anahtarı kaydedildi`);
     } catch {
@@ -102,7 +109,13 @@ export default function AnswerKeyForm({ exam, showToast }) {
   );
 }
 
-function BoxInput({ box, value, onChange }) {
+interface BoxInputProps {
+  box: TemplateBox;
+  value: string;
+  onChange: (v: string) => void;
+}
+
+function BoxInput({ box, value, onChange }: BoxInputProps) {
   const expected = boxLength(box);
   const clean = useMemo(() => String(value).replace(/\s/g, ''), [value]);
   const ok = clean.length === expected;

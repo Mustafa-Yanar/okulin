@@ -2,33 +2,40 @@
 
 import { useEffect, useState } from 'react';
 import { Plus, Trash2, ChevronLeft, KeyRound, Upload, BarChart3, GitMerge } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import AnswerKeyForm from './AnswerKeyForm';
-import VeriGirisi from './VeriGirisi';
+import VeriGirisi, { type ExamRowDTO } from './VeriGirisi';
 import SonucListesi from './SonucListesi';
-import MergeListesi from './MergeListesi';
+import MergeListesi, { type ExamSummaryDTO } from './MergeListesi';
 import { useConfirm } from '../ConfirmProvider';
+import type { DenemeExam } from '@/lib/deneme/types';
+import type { ShowToast } from '../types';
 
-const TYPE_LABEL = { TYT: 'TYT', AYT: 'AYT', LGS: 'LGS' };
+const TYPE_LABEL: Record<string, string> = { TYT: 'TYT', AYT: 'AYT', LGS: 'LGS' };
+
+interface DirectorDenemeYonetimiProps {
+  showToast: ShowToast;
+}
 
 // Müdür/rehber: sınav oluştur → cevap anahtarı gir → (Faz 2) veri gir → (Faz 3) sonuç.
-export default function DirectorDenemeYonetimi({ showToast }) {
+export default function DirectorDenemeYonetimi({ showToast }: DirectorDenemeYonetimiProps) {
   const confirm = useConfirm();
   const [mode, setMode] = useState('list'); // 'list' | 'create' | 'detail' | 'merge'
-  const [exams, setExams] = useState([]);
-  const [detailId, setDetailId] = useState(null);
+  const [exams, setExams] = useState<ExamSummaryDTO[]>([]);
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   async function loadList() {
     const res = await fetch('/api/deneme/exams', { credentials: 'same-origin' });
-    if (res.ok) setExams((await res.json()).exams || []);
+    if (res.ok) setExams(((await res.json()) as { exams?: ExamSummaryDTO[] }).exams || []);
   }
   useEffect(() => { loadList(); }, []);
 
-  function openDetail(id) {
+  function openDetail(id: string) {
     setDetailId(id);
     setMode('detail');
   }
 
-  async function remove(id, e) {
+  async function remove(id: string, e: React.MouseEvent) {
     e.stopPropagation();
     if (!(await confirm('Bu sınavı (cevap anahtarı + tüm veriler) silmek istediğine emin misin?'))) return;
     const res = await fetch(`/api/deneme/exams/${id}`, { method: 'DELETE', credentials: 'same-origin' });
@@ -94,14 +101,20 @@ export default function DirectorDenemeYonetimi({ showToast }) {
   );
 }
 
-function CreateExam({ showToast, onCancel, onCreated }) {
+interface CreateExamProps {
+  showToast: ShowToast;
+  onCancel: () => void;
+  onCreated: (id: string) => void;
+}
+
+function CreateExam({ showToast, onCancel, onCreated }: CreateExamProps) {
   const [name, setName] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [examType, setExamType] = useState('TYT');
   const [kitapcikSayisi, setKitapcik] = useState(1);
   const [saving, setSaving] = useState(false);
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!name.trim()) return showToast('Sınav adı gir.', 'error');
     setSaving(true);
@@ -112,7 +125,7 @@ function CreateExam({ showToast, onCancel, onCreated }) {
         credentials: 'same-origin',
         body: JSON.stringify({ name: name.trim(), date: new Date(date).toISOString(), examType, kitapcikSayisi }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string; examId: string };
       if (!res.ok) return showToast(data.error || 'Oluşturulamadı', 'error');
       showToast('Sınav oluşturuldu');
       onCreated(data.examId);
@@ -172,24 +185,31 @@ function CreateExam({ showToast, onCancel, onCreated }) {
   );
 }
 
-function ExamDetail({ examId, showToast, onBack }) {
-  const [exam, setExam] = useState(null);
+interface ExamDetailProps {
+  examId: string;
+  showToast: ShowToast;
+  onBack: () => void;
+}
+
+function ExamDetail({ examId, showToast, onBack }: ExamDetailProps) {
+  const [exam, setExam] = useState<DenemeExam | null>(null);
   const [step, setStep] = useState('cevap'); // 'cevap' | 'veri' | 'sonuc'
-  const [rows, setRows] = useState([]);
+  const [rows, setRows] = useState<ExamRowDTO[]>([]);
 
   async function load() {
     const res = await fetch(`/api/deneme/exams/${examId}`, { credentials: 'same-origin' });
     if (res.ok) {
-      const d = await res.json();
-      setExam(d.exam);
-      setRows(d.exam?.rows || []);
+      const d = (await res.json()) as { exam?: DenemeExam };
+      setExam(d.exam || null);
+      // store her satıra id yazar; DenemeRow sözleşmesi id'yi index imzasında taşır.
+      setRows((d.exam?.rows || []) as ExamRowDTO[]);
     }
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [examId]);
 
   if (!exam) return <div className="card p-10 text-center text-gray-400">Yükleniyor…</div>;
 
-  const STEPS = [
+  const STEPS: [string, string, LucideIcon][] = [
     ['cevap', 'Cevap Anahtarı', KeyRound],
     ['veri', 'Veri Girişi', Upload],
     ['sonuc', 'Sonuçlar', BarChart3],
@@ -204,7 +224,7 @@ function ExamDetail({ examId, showToast, onBack }) {
       <div className="flex items-center gap-3">
         <span className="badge-info text-xs px-2 py-0.5 rounded">{TYPE_LABEL[exam.examType] || exam.examType}</span>
         <h2 className="font-700 text-xl" style={{ fontWeight: 700 }}>{exam.name}</h2>
-        <span className="text-sm text-gray-400">{new Date(exam.date).toLocaleDateString('tr-TR')}</span>
+        <span className="text-sm text-gray-400">{new Date(exam.date as string).toLocaleDateString('tr-TR')}</span>
       </div>
 
       <div className="pill-tabs">

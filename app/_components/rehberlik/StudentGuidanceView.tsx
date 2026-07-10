@@ -5,16 +5,34 @@ import React, { useState, useEffect } from 'react';
 import { BookOpen, Check } from 'lucide-react';
 import { api } from '../shared';
 
-// Helper API Fetcher
+// GET /api/guidance?listAll=1 hafta kaydı.
+interface GuidanceEntry {
+  correct?: number;
+  wrong?: number;
+  empty?: number;
+}
+interface GuidanceWeek {
+  weekKey: string;
+  reviewed?: boolean;
+  reviewedAt?: string;
+  entries?: Record<string, GuidanceEntry>;
+}
 
-export default function StudentGuidanceView({ studentId, onReviewed, readOnly, branchFilter }) {
-  const [weeks, setWeeks] = useState([]);
+interface StudentGuidanceViewProps {
+  studentId: string;
+  onReviewed?: () => void;
+  readOnly?: boolean;
+  branchFilter?: (subject: string) => boolean;
+}
+
+export default function StudentGuidanceView({ studentId, onReviewed, readOnly, branchFilter }: StudentGuidanceViewProps) {
+  const [weeks, setWeeks] = useState<GuidanceWeek[]>([]);
   const [loading, setLoading] = useState(true);
-  const [approving, setApproving] = useState(null);
+  const [approving, setApproving] = useState<string | null>(null);
 
   async function load() {
     try {
-      const d = await api(`/api/guidance?listAll=1&studentId=${studentId}`);
+      const d = await api<{ weeks?: GuidanceWeek[] }>(`/api/guidance?listAll=1&studentId=${studentId}`);
       setWeeks(d.weeks || []);
     } catch {
       setWeeks([]);
@@ -26,7 +44,7 @@ export default function StudentGuidanceView({ studentId, onReviewed, readOnly, b
     load();
   }, [studentId]);
 
-  async function approve(weekKey) {
+  async function approve(weekKey: string) {
     setApproving(weekKey);
     try {
       await api('/api/guidance', { method: 'PUT', body: JSON.stringify({ studentId, weekKey }) });
@@ -45,7 +63,7 @@ export default function StudentGuidanceView({ studentId, onReviewed, readOnly, b
     </div>
   );
 
-  const weekLabelFn = wk => {
+  const weekLabelFn = (wk: string) => {
     try {
       const [year, week] = wk.split('-W');
       const jan4 = new Date(parseInt(year), 0, 4);
@@ -53,7 +71,7 @@ export default function StudentGuidanceView({ studentId, onReviewed, readOnly, b
       const mon = new Date(jan4);
       mon.setDate(jan4.getDate() - dow + 1 + (parseInt(week) - 1) * 7);
       const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-      const fmt = d => d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
+      const fmt = (d: Date) => d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
       return `${fmt(mon)} – ${fmt(sun)} ${year}`;
     } catch { return wk; }
   };

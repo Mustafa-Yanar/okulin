@@ -3,12 +3,32 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Upload, ScanLine, FileText, Image as ImageIcon, Trash2, Plus, Save, ChevronDown, Keyboard, HardDriveDownload, AlertTriangle } from 'lucide-react';
 import { getTemplate, boxLength, normalizeRaw, CHOICES } from '@/lib/deneme/template';
-import { parseDat, datSupports } from '@/lib/deneme/dat';
+import { parseDat, datSupports, type ParseDatResult } from '@/lib/deneme/dat';
 import { useConfirm } from '../ConfirmProvider';
+import type { DenemeExam, DenemeRow } from '@/lib/deneme/types';
+import type { ShowToast, StudentDTO } from '../types';
+
+// Sınav satırı — store her satıra id verir (DenemeRow sözleşmesinde index imzasında).
+export type ExamRowDTO = DenemeRow & { id: string };
+
+// /api/optik'in döndürdüğü form + kullanıcı girilen isim.
+interface OptikForm {
+  page?: number;
+  answers: (string | null)[];
+  total?: number;
+  name: string;
+}
+
+interface VeriGirisiProps {
+  exam: DenemeExam;
+  rows?: ExamRowDTO[];
+  onChanged?: () => void;
+  showToast: ShowToast;
+}
 
 // Sınav detayındaki "Veri Girişi" adımı: optik (foto/PDF) + manuel giriş + öğrenci eşleştirme.
 // Excel yükleme kaldırıldı — girdi artık optik/.dat (.dat Faz 2b).
-export default function VeriGirisi({ exam, rows = [], onChanged, showToast }) {
+export default function VeriGirisi({ exam, rows = [], onChanged, showToast }: VeriGirisiProps) {
   const kitapciklar = (exam.kitapcikSayisi || 1) === 2 ? ['A', 'B'] : ['A'];
   const [kitapcik, setKitapcik] = useState('A');
   const [mode, setMode] = useState('optik'); // 'optik' | 'dat' | 'manuel'
@@ -55,14 +75,20 @@ export default function VeriGirisi({ exam, rows = [], onChanged, showToast }) {
   );
 }
 
-// ---- Optik .dat: okuyucu çıktısı (cp1254 sabit genişlik) → öğrenci-başına kitapçık + cevaplar ----
-function DatEkle({ exam, onChanged, showToast }) {
-  const [fileName, setFileName] = useState('');
-  const [parsed, setParsed] = useState(null); // { students, warnings, total }
-  const [saving, setSaving] = useState(false);
-  const inputRef = useRef(null);
+interface DatEkleProps {
+  exam: DenemeExam;
+  onChanged?: () => void;
+  showToast: ShowToast;
+}
 
-  async function onFile(e) {
+// ---- Optik .dat: okuyucu çıktısı (cp1254 sabit genişlik) → öğrenci-başına kitapçık + cevaplar ----
+function DatEkle({ exam, onChanged, showToast }: DatEkleProps) {
+  const [fileName, setFileName] = useState('');
+  const [parsed, setParsed] = useState<ParseDatResult | null>(null); // { students, warnings, total }
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
     if (f.size > 10 * 1024 * 1024) return showToast("Dosya 10 MB'dan büyük", 'error');
@@ -82,11 +108,11 @@ function DatEkle({ exam, onChanged, showToast }) {
     }
   }
 
-  function setName(i, v) {
-    setParsed((p) => ({ ...p, students: p.students.map((s, idx) => (idx === i ? { ...s, name: v } : s)) }));
+  function setName(i: number, v: string) {
+    setParsed((p) => ({ ...p!, students: p!.students.map((s, idx) => (idx === i ? { ...s, name: v } : s)) }));
   }
-  function removeRow(i) {
-    setParsed((p) => ({ ...p, students: p.students.filter((_, idx) => idx !== i) }));
+  function removeRow(i: number) {
+    setParsed((p) => ({ ...p!, students: p!.students.filter((_, idx) => idx !== i) }));
   }
 
   async function addAll() {
@@ -104,7 +130,7 @@ function DatEkle({ exam, onChanged, showToast }) {
         credentials: 'same-origin',
         body: JSON.stringify({ source: 'dat', students }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string; added?: number; matched?: number; graded?: boolean };
       if (!res.ok) return showToast(data.error || 'Eklenemedi', 'error');
       const not = data.graded ? '' : ' (cevap anahtarı yok → puan 0, anahtar girince Hesapla)';
       showToast(`${data.added} kayıt eklendi, ${data.matched} eşleşti${not}`);
@@ -169,25 +195,32 @@ function DatEkle({ exam, onChanged, showToast }) {
   );
 }
 
+interface OptikEkleProps {
+  exam: DenemeExam;
+  kitapcik: string;
+  onChanged?: () => void;
+  showToast: ShowToast;
+}
+
 // ---- Optik: foto/PDF oku → isim ata → sınava ekle ----
-function OptikEkle({ exam, kitapcik, onChanged, showToast }) {
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
+function OptikEkle({ exam, kitapcik, onChanged, showToast }: OptikEkleProps) {
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const [isPdf, setIsPdf] = useState(false);
   const [fileName, setFileName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [forms, setForms] = useState(null); // [{page, answers, total, name}]
+  const [forms, setForms] = useState<OptikForm[] | null>(null); // [{page, answers, total, name}]
   const [saving, setSaving] = useState(false);
-  const [openIdx, setOpenIdx] = useState(null);
-  const inputRef = useRef(null);
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  function onFile(e) {
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
     if (f.size > 20 * 1024 * 1024) return showToast("Dosya 20 MB'dan büyük", 'error');
     const pdf = f.type === 'application/pdf';
     setFile(f); setIsPdf(pdf); setFileName(f.name); setForms(null);
-    if (!pdf) { const r = new FileReader(); r.onload = (ev) => setPreview(ev.target.result); r.readAsDataURL(f); }
+    if (!pdf) { const r = new FileReader(); r.onload = (ev) => setPreview(ev.target?.result as string); r.readAsDataURL(f); }
     else setPreview(null);
   }
 
@@ -198,7 +231,7 @@ function OptikEkle({ exam, kitapcik, onChanged, showToast }) {
       const fd = new FormData();
       fd.append('image', file);
       const res = await fetch('/api/optik', { method: 'POST', body: fd, credentials: 'same-origin' });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string; forms?: Omit<OptikForm, 'name'>[]; pageCount?: number };
       if (!res.ok) throw new Error(data.error || 'Hata');
       if (data.forms) {
         setForms(data.forms.map((f) => ({ ...f, name: '' })));
@@ -207,17 +240,17 @@ function OptikEkle({ exam, kitapcik, onChanged, showToast }) {
         showToast('Form okundu ama parse edilemedi', 'error');
       }
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast((err as Error).message, 'error');
     } finally {
       setLoading(false);
     }
   }
 
-  function setName(i, v) {
-    setForms((prev) => prev.map((f, idx) => (idx === i ? { ...f, name: v } : f)));
+  function setName(i: number, v: string) {
+    setForms((prev) => (prev || []).map((f, idx) => (idx === i ? { ...f, name: v } : f)));
   }
-  function setAnswer(fi, ai, v) {
-    setForms((prev) => prev.map((f, idx) => {
+  function setAnswer(fi: number, ai: number, v: string) {
+    setForms((prev) => (prev || []).map((f, idx) => {
       if (idx !== fi) return f;
       const answers = [...f.answers]; answers[ai] = v || null; return { ...f, answers };
     }));
@@ -234,7 +267,7 @@ function OptikEkle({ exam, kitapcik, onChanged, showToast }) {
         credentials: 'same-origin',
         body: JSON.stringify({ source: 'optik', kitapcik, students }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string; added?: number; matched?: number; graded?: boolean };
       if (!res.ok) return showToast(data.error || 'Eklenemedi', 'error');
       const not = data.graded ? '' : ' (cevap anahtarı yok → puan 0, anahtar girince Hesapla)';
       showToast(`${data.added} kayıt eklendi, ${data.matched} eşleşti${not}`);
@@ -318,19 +351,26 @@ function OptikEkle({ exam, kitapcik, onChanged, showToast }) {
   );
 }
 
+interface ManuelEkleProps {
+  exam: DenemeExam;
+  kitapcik: string;
+  onChanged?: () => void;
+  showToast: ShowToast;
+}
+
 // ---- Manuel: isim + kutu kutu cevap → tek öğrenci ekle ----
-function ManuelEkle({ exam, kitapcik, onChanged, showToast }) {
+function ManuelEkle({ exam, kitapcik, onChanged, showToast }: ManuelEkleProps) {
   const template = getTemplate(exam.examType);
   const [name, setName] = useState('');
-  const [boxes, setBoxes] = useState({});
+  const [boxes, setBoxes] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   if (!template) return null;
 
-  function buildFlat() {
+  function buildFlat(): (string | null)[] {
     // Kutuları booklet sırasında birleştir → düz cevap dizisi (her kutu tam uzunlukta).
-    const flat = [];
-    for (const box of template.boxes) {
+    const flat: (string | null)[] = [];
+    for (const box of template!.boxes) {
       const chars = normalizeRaw(boxes[box.key] || '');
       const len = boxLength(box);
       for (let i = 0; i < len; i++) flat.push(chars[i] && chars[i] !== ' ' ? chars[i] : null);
@@ -348,7 +388,7 @@ function ManuelEkle({ exam, kitapcik, onChanged, showToast }) {
         credentials: 'same-origin',
         body: JSON.stringify({ source: 'manual', kitapcik, students: [{ name: name.trim(), answers: buildFlat() }] }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) return showToast(data.error || 'Eklenemedi', 'error');
       showToast(`${name.trim()} eklendi`);
       setName(''); setBoxes({});
@@ -389,23 +429,30 @@ function ManuelEkle({ exam, kitapcik, onChanged, showToast }) {
   );
 }
 
+interface KayitListesiProps {
+  exam: DenemeExam;
+  rows: ExamRowDTO[];
+  onChanged?: () => void;
+  showToast: ShowToast;
+}
+
 // ---- Kayıtlar + öğrenci eşleştirme ----
-function KayitListesi({ exam, rows, onChanged, showToast }) {
+function KayitListesi({ exam, rows, onChanged, showToast }: KayitListesiProps) {
   const confirm = useConfirm();
-  const [students, setStudents] = useState([]);
-  const [matches, setMatches] = useState({}); // rowId -> studentId
+  const [students, setStudents] = useState<StudentDTO[]>([]);
+  const [matches, setMatches] = useState<Record<string, string>>({}); // rowId -> studentId
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetch('/api/students', { credentials: 'same-origin' })
       .then((r) => r.json())
-      .then((d) => setStudents(Array.isArray(d) ? d : []))
+      .then((d: StudentDTO[]) => setStudents(Array.isArray(d) ? d : []))
       .catch(() => {});
   }, []);
 
   // rows değişince yerel eşleştirme taslağını sıfırla (kaydedilmişleri yansıt)
   useEffect(() => {
-    const init = {};
+    const init: Record<string, string> = {};
     for (const r of rows) init[r.id] = r.studentId || '';
     setMatches(init);
   }, [rows]);
@@ -415,7 +462,7 @@ function KayitListesi({ exam, rows, onChanged, showToast }) {
     [rows, matches]
   );
 
-  async function del(rowId) {
+  async function del(rowId: string) {
     if (!(await confirm('Bu kaydı sil?'))) return;
     const res = await fetch(`/api/deneme/exams/${exam.id}/rows?rowId=${rowId}`, { method: 'DELETE', credentials: 'same-origin' });
     if (res.ok) { showToast('Kayıt silindi'); onChanged?.(); }
