@@ -6,11 +6,13 @@ import { withAuth } from '@/lib/auth';
 // kontrolü yapılır, sonra shared-secret ile server-to-server forward edilir.
 
 function solverUrl() {
-  // Production'da kalıcı public domain (okulin.com) kullanılır — proje adına bağlı
-  // değil, deployment-protection'a takılmaz. VERCEL_URL deployment-spesifik adresi
-  // protection'a takılır (401). Override için SOLVER_BASE_URL env'i (öncelikli).
+  // Çözücü Google Cloud Run'da (solver-service/README.md). SOLVER_BASE_URL env'i
+  // öncelikli; yoksa production'da servisin kalıcı run.app adresine düşer.
+  // Lokalde: solver-service README'deki uvicorn komutu (port 8111).
   const base = process.env.SOLVER_BASE_URL
-    || (process.env.VERCEL ? 'https://okulin.com' : 'http://localhost:3000');
+    || (process.env.VERCEL
+      ? 'https://okulin-solver-1085762360623.europe-west1.run.app'
+      : 'http://localhost:8111');
   return `${base}/solve`;
 }
 

@@ -12,10 +12,10 @@ Frontend → POST /api/program-solve  [Next.js proxy, director auth]
                  → Cloud Run (bu servis)  →  api/solver/model.py (CP-SAT)
 ```
 
-- `SOLVER_BASE_URL` Vercel env'i Cloud Run URL'ine işaret eder.
-- Geri dönüş (rollback): `SOLVER_BASE_URL`'i silmek yeterli → eski Vercel
-  Python yolu (`api/solve.py`) devreye girer. Canlı doğrulama bitene kadar
-  o yol silinmez.
+- `SOLVER_BASE_URL` Vercel env'i Cloud Run URL'ine işaret eder; env yoksa
+  proxy production'da servisin kalıcı run.app adresine düşer (route.js fallback).
+- Eski Vercel Python yolu (`api/solve.py` + `/solve` rewrite) canlı doğrulama
+  sonrası 2026-07-10'da kaldırıldı. Acil geri dönüş gerekirse: git revert.
 
 ## Tek seferlik kurulum
 

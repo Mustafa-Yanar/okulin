@@ -32,11 +32,6 @@ const nextConfig = {
   // ESLint build'i GATE etmez (deploy lint hatası yüzünden kırılmasın). Lint ayrı bir
   // geliştirme aracı: `npm run lint` + PostToolUse lint-fix hook'u kalite sağlar.
   eslint: { ignoreDuringBuilds: true },
-  // /solve → kök api/solve.py (Vercel Python function). /solve Next route alanında
-  // olmadığı için app/api/* route'larının hiçbiriyle çakışmaz.
-  async rewrites() {
-    return [{ source: '/solve', destination: '/api/solve' }];
-  },
   async headers() {
     return [{ source: '/:path*', headers: SECURITY_HEADERS }];
   },
