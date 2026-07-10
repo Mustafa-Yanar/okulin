@@ -20,7 +20,7 @@ const COUNSELOR_WRITABLE_KEYS = ['programPlan'];
 // İçerik doğrulaması config servisinde (CONFIG_KEYS süzgeci + mergeDefault) yapılır.
 const PatchSchema = z.object({
   patch: z.record(z.string().max(60), z.any()).refine(
-    (obj) => Object.keys(obj).length > 0 && Object.keys(obj).every((k) => CONFIG_KEYS.includes(k)),
+    (obj) => Object.keys(obj).length > 0 && Object.keys(obj).every((k) => (CONFIG_KEYS as string[]).includes(k)),
     { message: 'Geçersiz veya boş config anahtarı' },
   ),
 });
@@ -32,6 +32,7 @@ export const GET = withAuth(['director', 'accountant', 'counselor'], async () =>
 });
 
 // Yazma: müdür + rehber (rehber yalnız programPlan, aşağıda kısıtlanır).
+// Bilinçli inline rol dallanması: rehberin yazabileceği anahtar kümesi istek gövdesine bağlı.
 export const PATCH = withAuth(['director', 'counselor'], async (req, ctx, session) => {
   const parsed = await parseBody(req, PatchSchema);
   if (!parsed.ok) return parsed.response;

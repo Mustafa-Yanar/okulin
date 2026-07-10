@@ -1,23 +1,21 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { tdb } from '@/lib/sqldb';
 import { ALL_DAYS, daySlots } from '@/lib/constants';
 import { getDaySlotTimes } from '@/lib/slots';
+import type { Prisma } from '@prisma/client';
+
+type BookingWithTeacher = Prisma.SlotBookingGetPayload<{ include: { teacher: { select: { name: true; legacyId: true } } } }>;
 
 // GET /api/archive?type=teacher&id=xxx  veya  ?type=student&id=xxx
-export async function GET(req) {
-  const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const GET = withAuth(['director', 'counselor'], async (req) => {
   const { searchParams } = new URL(req.url);
   const type = searchParams.get('type'); // 'teacher' | 'student'
   const id = searchParams.get('id');
 
   if (!type || !id) return NextResponse.json({ error: 'type ve id gerekli' }, { status: 400 });
 
-  let bookings = [];
+  let bookings: BookingWithTeacher[] = [];
   if (type === 'teacher') {
     const teacher = await tdb().teacher.findFirst({ where: { legacyId: id } });
     if (!teacher) return NextResponse.json({ weeks: [] });
@@ -33,12 +31,17 @@ export async function GET(req) {
   }
 
   const slotTimes = await getDaySlotTimes(); // 7-gün model
-  const weeksMap = {}; // weekKey -> entries[]
+  interface ArchiveEntry {
+    day: number; dayLabel: string; slotId: string; slotLabel: string;
+    studentId: string; studentName: string; studentCls: string;
+    bookedBy: string; fixed: boolean; teacherId: string; teacherName: string; branch: string;
+  }
+  const weeksMap: Record<string, ArchiveEntry[]> = {}; // weekKey -> entries[]
   bookings.forEach(b => {
     const day = ALL_DAYS.find(d => d.index === b.dayIndex);
     const slotList = daySlots(b.dayIndex, slotTimes.days[b.dayIndex]);
     const slot = slotList.find(s => s.id === b.slotId);
-    const entry = {
+    const entry: ArchiveEntry = {
       day: b.dayIndex,
       dayLabel: day?.label || '',
       slotId: b.slotId,
@@ -61,4 +64,4 @@ export async function GET(req) {
     .sort((a, b) => b.weekKey.localeCompare(a.weekKey));
 
   return NextResponse.json({ weeks });
-}
+});

@@ -5,18 +5,19 @@ import {
   getClasses, defaultCoursesFor,
 } from '@/lib/classes';
 import { getCourses } from '@/lib/courses';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
+import { Prisma, type Class } from '@prisma/client';
 
 export const runtime = 'nodejs';
 
 // SQL satırı → mevcut sözleşme şekli (id = legacyId).
-const classOut = (c) => ({ id: c.legacyId, ad: c.ad, kademe: c.kademe, duzey: c.duzey, dal: c.dal, group: c.group, dersler: c.dersler || [], seeded: c.seeded, slotTemplate: c.slotTemplate || null });
+const classOut = (c: Class) => ({ id: c.legacyId, ad: c.ad, kademe: c.kademe, duzey: c.duzey, dal: c.dal, group: c.group, dersler: c.dersler || [], seeded: c.seeded, slotTemplate: c.slotTemplate || null });
 
 import { newId } from '@/lib/id';
 const newClassId = () => newId('s_');
 
 // Kademe → köprü grubu (mevcut çözücü/etüt 'ortaokul|lise|mezun' bekler).
-function groupForKademe(kademe) {
+function groupForKademe(kademe: string): string {
   if (kademe === 'mezun') return 'mezun';
   if (kademe === 'ortaokul') return 'ortaokul';
   if (kademe === 'lise') return 'lise';
@@ -43,12 +44,12 @@ export const POST = withAuth('manage', async (req) => {
   if (!parsed.ok) return parsed.response;
   const { ad, kademe, duzey, dal, dersler } = parsed.data;
 
-  const row = await tdb().class.create({ data: {
+  const row = await tdb().class.create({ data: withScope({
     legacyId: newClassId(), ad: ad.trim(), kademe, duzey: duzey || null, dal: dal || null,
     group: groupForKademe(kademe),
     dersler: (dersler && dersler.length) ? dersler : defaultCoursesFor(kademe, duzey, dal),
     seeded: false,
-  } });
+  }) });
   return NextResponse.json({ ok: true, class: classOut(row) });
 });
 
@@ -74,20 +75,21 @@ export const PATCH = withAuth('manage', async (req) => {
 
   const existing = await tdb().class.findFirst({ where: { legacyId: id } });
   if (!existing) return NextResponse.json({ error: 'Şube bulunamadı' }, { status: 404 });
-  const patch = {};
+  const patch: Prisma.ClassUpdateInput = {};
   if (ad !== undefined) patch.ad = ad.trim();
   if (dal !== undefined) patch.dal = dal || null;
   if (dersler !== undefined) patch.dersler = dersler;
   if (slotTemplate !== undefined) {
     // Boş dizileri temizle → sadece slotu olan günleri sakla (null = hiç işaret yok).
-    if (slotTemplate === null) patch.slotTemplate = null;
+    // Json alanında DB NULL = Prisma.DbNull (eski düz null'ın çalışma zamanı eşdeğeri).
+    if (slotTemplate === null) patch.slotTemplate = Prisma.DbNull;
     else {
-      const cleaned = {};
+      const cleaned: Record<string, number[]> = {};
       for (const [d, nos] of Object.entries(slotTemplate)) {
         const arr = [...new Set(nos)].sort((a, b) => a - b);
         if (arr.length) cleaned[d] = arr;
       }
-      patch.slotTemplate = Object.keys(cleaned).length ? cleaned : null;
+      patch.slotTemplate = Object.keys(cleaned).length ? cleaned : Prisma.DbNull;
     }
   }
   const row = await tdb().class.update({ where: { id: existing.id }, data: patch });

@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { getSession, initialPassword } from '@/lib/auth';
+import { withAuth, initialPassword } from '@/lib/auth';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zName, zId } from '@/lib/validate';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
 import { newId as makeId } from '@/lib/id';
 
 // Müdür yardımcısı (assistant_director) hesapları — müdür oluşturur/yönetir.
@@ -17,22 +17,12 @@ const CreateSchema = z.object({ name: zName, password: z.string().max(200).optio
 const UpdateSchema = z.object({ id: zId, name: zName, password: z.string().max(200).optional(), phone: zPhone });
 const DeleteSchema = z.object({ id: zId });
 
-export async function GET() {
-  const session = await getSession();
-  if (!session || session.role !== 'director') {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const GET = withAuth(['director'], async () => {
   const rows = await tdb().assistantDirector.findMany();
   return NextResponse.json(rows.map(a => ({ id: a.legacyId, name: a.name, username: a.username, phone: a.phone || '' })));
-}
+});
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || session.role !== 'director') {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth(['director'], async (req) => {
   const parsed = await parseBody(req, CreateSchema);
   if (!parsed.ok) return parsed.response;
   const { name, password, phone } = parsed.data;
@@ -44,34 +34,25 @@ export async function POST(req) {
   const normPhone = phone ? (normalizeTurkishMobile(phone) || '') : '';
   const initPassword = initialPassword(password, normPhone);
   const hash = await bcrypt.hash(initPassword, 10);
-  await tdb().assistantDirector.create({ data: { legacyId: id, name, username, passwordHash: hash, phone: normPhone, mustChangePassword: true } });
+  await tdb().assistantDirector.create({ data: withScope({ legacyId: id, name, username, passwordHash: hash, phone: normPhone, mustChangePassword: true }) });
   return NextResponse.json({ id, name, username });
-}
+});
 
-export async function PUT(req) {
-  const session = await getSession();
-  if (!session || session.role !== 'director') {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const PUT = withAuth(['director'], async (req) => {
   const parsed = await parseBody(req, UpdateSchema);
   if (!parsed.ok) return parsed.response;
   const { id, name, password, phone } = parsed.data;
 
   const a = await tdb().assistantDirector.findFirst({ where: { legacyId: id } });
   if (!a) return NextResponse.json({ error: 'Müdür yardımcısı bulunamadı' }, { status: 404 });
-  const data = { name, username: name, phone: phone !== undefined ? (normalizeTurkishMobile(phone) || phone || '') : (a.phone || '') };
+  const data: { name: string; username: string; phone: string; passwordHash?: string } =
+    { name, username: name, phone: phone !== undefined ? (normalizeTurkishMobile(phone) || phone || '') : (a.phone || '') };
   if (password) data.passwordHash = await bcrypt.hash(password, 10);
   await tdb().assistantDirector.update({ where: { id: a.id }, data });
   return NextResponse.json({ ok: true });
-}
+});
 
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!session || session.role !== 'director') {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const DELETE = withAuth(['director'], async (req, _ctx, session) => {
   const parsed = await parseBody(req, DeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;
@@ -85,4 +66,4 @@ export async function DELETE(req) {
     detail: `Müdür yardımcısı silindi: ${a?.name || id}`,
   });
   return NextResponse.json({ ok: true });
-}
+});

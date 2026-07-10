@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getSession, isManager } from '@/lib/auth';
+import { withAuth, isManager, type Session } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
 import { classToGroup, classLabel, STUDENT_GROUPS } from '@/lib/constants';
 import { getClasses, getClass } from '@/lib/classes';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
+import type { ParentChild } from '@/lib/parents';
 
 // Tek yön duyuru/bilgilendirme sistemi (hub-spoke). Gönderen: müdür + rehber.
 // Alıcı: rol×kapsam ile hedeflenir; rol-içi (veli-veli vb.) YOK. Okundu + push.
@@ -21,6 +22,7 @@ const AudienceSchema = z.object({
   cls: z.string().max(60).optional(), // şube id (özel şube 's_xxxxxxxx' = 10 krk)
   ids: z.array(z.string().max(100)).max(3000).optional(),
 });
+type Audience = z.infer<typeof AudienceSchema>;
 
 const BodySchema = z.discriminatedUnion('action', [
   z.object({
@@ -32,8 +34,24 @@ const BodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('read'), id: zId }),
 ]);
 
+interface Recipient {
+  role: string;
+  id: string;
+  name: string;
+}
+
+// Announcement.data Json içeriği (recipients hariç gönderi kaydı).
+interface AnnouncementData {
+  id?: string;
+  title?: string;
+  body?: string;
+  senderName?: string;
+  createdAt?: string;
+  [key: string]: unknown;
+}
+
 // Hedef kitleyi çöz → [{role, id, name}]
-async function resolveRecipients(audience) {
+async function resolveRecipients(audience: Audience): Promise<Recipient[]> {
   const { role, scope, cls, group, ids } = audience;
 
   // group scope için şube→grup haritası (registry-aware). Lazımsa hesaplanır.
@@ -41,7 +59,7 @@ async function resolveRecipients(audience) {
 
   if (role === 'parent') {
     const rows = await tdb().parent.findMany();
-    let recs = rows.map(p => ({ id: p.phone, children: p.children || [] }));
+    let recs = rows.map(p => ({ id: p.phone, children: ((p.children as unknown as ParentChild[] | null) || []) })); // children: Json
     if (scope === 'selected') recs = recs.filter(r => ids?.includes(r.id));
     else if (scope === 'class') recs = recs.filter(r => (r.children || []).some(c => c.cls === cls));
     else if (scope === 'group') {
@@ -67,18 +85,18 @@ async function resolveRecipients(audience) {
   return recs.map(t => ({ role: 'teacher', id: t.id, name: t.name }));
 }
 
-const GROUP_LABELS = { ilkokul: 'İlkokul', ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
+const GROUP_LABELS: Record<string, string> = { ilkokul: 'İlkokul', ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
 
-async function audienceLabel(audience) {
+async function audienceLabel(audience: Audience): Promise<string> {
   const roleLbl = { parent: 'Veli', student: 'Öğrenci', teacher: 'Öğretmen' }[audience.role];
   if (audience.scope === 'all') return `Tüm ${roleLbl === 'Veli' ? 'Veliler' : roleLbl === 'Öğrenci' ? 'Öğrenciler' : 'Öğretmenler'}`;
   if (audience.scope === 'group') {
-    const gLbl = GROUP_LABELS[audience.group] || STUDENT_GROUPS[audience.group]?.label || audience.group;
+    const gLbl = GROUP_LABELS[audience.group || ''] || STUDENT_GROUPS[audience.group || '']?.label || audience.group;
     return `${gLbl} ${roleLbl === 'Veli' ? 'Velileri' : roleLbl + 'leri'}`;
   }
   if (audience.scope === 'class') {
     // Şube etiketi registry'den (özel isim); kayıtsızsa classLabel fallback.
-    const lbl = (await getClass(audience.cls))?.ad || classLabel(audience.cls);
+    const lbl = (await getClass(audience.cls || ''))?.ad || classLabel(audience.cls || '');
     return `${lbl} ${roleLbl === 'Veli' ? 'Velileri' : roleLbl + 'leri'}`;
   }
   return `Seçili ${roleLbl}ler`;
@@ -86,10 +104,8 @@ async function audienceLabel(audience) {
 
 // GET — yönetici: gönderdiği duyurular + okunma sayıları; ?id=X → kim okudu detayı.
 //       alıcı: kendi gelen kutusu (inbox).
-export async function GET(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+// Bilinçli inline rol dallanması: aynı uç yönetici/alıcı için farklı veri döner.
+export const GET = withAuth(async (req, _ctx, session) => {
   const detailId = new URL(req.url).searchParams.get('id');
 
   // Kim okudu detayı (yönetici)
@@ -97,12 +113,12 @@ export async function GET(req) {
     const ann = await tdb().announcement.findFirst({ where: { legacyId: detailId }, include: { recipients: true } });
     if (!ann) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
     const recipients = ann.recipients.map(r => ({ id: r.recipientId, name: r.name, read: r.read }));
-    return NextResponse.json({ id: detailId, title: ann.data.title, recipients });
+    return NextResponse.json({ id: detailId, title: (ann.data as AnnouncementData).title, recipients });
   }
 
   if (isManager(session)) {
     const rows = await tdb().announcement.findMany({ include: { _count: { select: { recipients: { where: { read: true } } } } } });
-    const list = rows.map(r => ({ ...r.data, readCount: r._count.recipients }));
+    const list = rows.map(r => ({ ...(r.data as AnnouncementData), readCount: r._count.recipients }));
     list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     return NextResponse.json({ announcements: list });
   }
@@ -115,17 +131,15 @@ export async function GET(req) {
   const list = myRecs
     .filter(r => r.announcement)
     .map(r => {
-      const d = r.announcement.data;
+      const d = r.announcement.data as AnnouncementData;
       return { id: d.id, title: d.title, body: d.body, senderName: d.senderName, createdAt: d.createdAt, read: r.read };
     })
     .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   return NextResponse.json({ announcements: list });
-}
+});
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+// Bilinçli inline yetki dallanması: 'read' aksiyonu her alıcıya açık, 'send' yalnız yönetici.
+export const POST = withAuth(async (req, _ctx, session) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -161,10 +175,10 @@ export async function POST(req) {
   };
   // data = içerik (recipients normalize AnnouncementRecipient'a, recipientCount data'da kalır).
   const { recipients: _omit, ...dataNoRecips } = rec;
-  const ann = await tdb().announcement.create({ data: { legacyId: id, data: dataNoRecips } });
+  const ann = await tdb().announcement.create({ data: withScope({ legacyId: id, data: dataNoRecips }) });
   if (recipients.length) {
     await tdb().announcementRecipient.createMany({
-      data: recipients.map(r => ({ announcementId: ann.id, role: r.role, recipientId: r.id, name: r.name })),
+      data: recipients.map(r => withScope({ announcementId: ann.id, role: r.role, recipientId: r.id, name: r.name })),
     });
   }
 
@@ -180,13 +194,10 @@ export async function POST(req) {
   });
 
   return NextResponse.json({ ok: true, id, recipientCount: recipients.length });
-}
+});
 
 // DELETE ?id=X — yönetici duyuruyu siler
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-
+export const DELETE = withAuth((session: Session) => isManager(session), async (req) => {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
@@ -194,4 +205,4 @@ export async function DELETE(req) {
   if (!ann) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
   await tdb().announcement.delete({ where: { id: ann.id } }); // recipients cascade
   return NextResponse.json({ ok: true });
-}
+});

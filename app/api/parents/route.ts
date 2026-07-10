@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { syncParents, parentsStatus, resetParent } from '@/lib/parents';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { normalizeTurkishMobile } from '@/lib/phone';
@@ -10,26 +10,17 @@ import { parseBody, z } from '@/lib/validate';
 // POST {action:'sync'}: öğrencilerin parentPhone'larından veli hesaplarını kur/güncelle.
 // POST {action:'reset', phone}: bir velinin şifresini sıfırla (telefon = geçici şifre).
 
-export async function GET() {
-  const session = await getSession();
-  if (!session || session.role !== 'director') {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
+export const GET = withAuth(['director'], async () => {
   const parents = await parentsStatus();
   return NextResponse.json({ parents });
-}
+});
 
 const ParentSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('sync') }),
   z.object({ action: z.literal('reset'), phone: z.string().min(1).max(40) }),
 ]);
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || session.role !== 'director') {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth(['director'], async (req, _ctx, session) => {
   const parsed = await parseBody(req, ParentSchema);
   if (!parsed.ok) return parsed.response;
 
@@ -58,4 +49,4 @@ export async function POST(req) {
   }
 
   return NextResponse.json({ error: 'Geçersiz işlem' }, { status: 400 });
-}
+});

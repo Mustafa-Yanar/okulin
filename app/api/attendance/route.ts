@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
 import { notifyAbsentParents } from '@/lib/notify';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
 
 export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
@@ -15,10 +15,7 @@ const AttendancePostSchema = z.object({
 
 // Attendance.records: { [studentId]: 'var' | 'gec' | 'yok' }
 
-export async function GET(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-
+export const GET = withAuth(async (req) => {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get('date');
   const teacherId = searchParams.get('teacherId');
@@ -35,14 +32,9 @@ export async function GET(req) {
     where: { date, teacherId: teacher.id, cls, lessonNo: String(lessonNo) },
   });
   return NextResponse.json(att?.records || {});
-}
+});
 
-export async function POST(req) {
-  const session = await getSession();
-  if (!session || session.role !== 'teacher') {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
+export const POST = withAuth(['teacher'], async (req, _ctx, session) => {
   const parsed = await parseBody(req, AttendancePostSchema);
   if (!parsed.ok) return parsed.response;
   const { date, cls, lessonNo, attendance } = parsed.data;
@@ -57,7 +49,7 @@ export async function POST(req) {
     await tdb().attendance.update({ where: { id: existing.id }, data: { records: attendance } });
   } else {
     await tdb().attendance.create({
-      data: { date, teacherId: teacher.id, cls, lessonNo: lessonNoStr, records: attendance },
+      data: withScope({ date, teacherId: teacher.id, cls, lessonNo: lessonNoStr, records: attendance }),
     });
   }
 
@@ -65,4 +57,4 @@ export async function POST(req) {
   await notifyAbsentParents(date, attendance);
 
   return NextResponse.json({ ok: true });
-}
+});
