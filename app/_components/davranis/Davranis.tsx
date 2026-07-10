@@ -9,6 +9,7 @@ import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
 import { api } from '../shared';
+import type { ShowToast } from '../types';
 
 
 const PRESETS = {
@@ -27,26 +28,51 @@ const PRESETS = {
   ],
 };
 
-function fmtDateTime(iso) {
+// GET /api/davranis mapper çıktıları (route.ts behEntryOut + roster).
+interface BehaviorEntryDTO {
+  id: string;
+  points: number;
+  reason: string;
+  note: string;
+  byName: string;
+  byRole: string;
+  by: string;
+  at: string;
+}
+interface RosterRowDTO {
+  id: string;
+  name: string;
+  cls: string;
+  total: number;
+  count: number;
+}
+
+function fmtDateTime(iso: string | undefined): string {
   if (!iso) return '';
   return new Date(iso).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
-function totalBadge(total) {
+function totalBadge(total: number): string {
   if (total > 0) return 'badge-success';
   if (total < 0) return 'badge-danger';
   return 'badge';
 }
-function isManagerRole(role) { return role === 'director' || role === 'counselor'; }
+function isManagerRole(role: string | undefined) { return role === 'director' || role === 'counselor'; }
+
+interface DavranisManagerProps {
+  showToast?: ShowToast;
+  userRole?: string;
+  userId?: string;
+}
 
 // ════════════════════ YÖNETİCİ / ÖĞRETMEN ════════════════════
-export function DavranisManager({ showToast, userRole, userId }) {
-  const { data, isLoading, mutate } = useSWR('/api/davranis');
+export function DavranisManager({ showToast, userRole, userId }: DavranisManagerProps) {
+  const { data, isLoading, mutate } = useSWR<{ roster?: RosterRowDTO[] }>('/api/davranis');
   const { classes } = useClasses();
   const groups = useMemo(() => groupedClasses(classes), [classes]);
   const clsLabel = useMemo(() => new Map((classes || []).map(c => [c.id, c.ad])), [classes]);
   const [q, setQ] = useState('');
   const [clsFilter, setClsFilter] = useState('');
-  const [openId, setOpenId] = useState(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const roster = data?.roster || [];
   const filtered = roster.filter(r =>
@@ -100,23 +126,31 @@ export function DavranisManager({ showToast, userRole, userId }) {
   );
 }
 
-function StudentDetail({ studentId, showToast, userRole, userId, onChanged }) {
+interface StudentDetailProps {
+  studentId: string;
+  showToast?: ShowToast;
+  userRole?: string;
+  userId?: string;
+  onChanged?: () => void;
+}
+
+function StudentDetail({ studentId, showToast, userRole, userId, onChanged }: StudentDetailProps) {
   const confirm = useConfirm();
-  const { data, isLoading, mutate } = useSWR(`/api/davranis?studentId=${encodeURIComponent(studentId)}`);
+  const { data, isLoading, mutate } = useSWR<{ entries?: BehaviorEntryDTO[]; total?: number }>(`/api/davranis?studentId=${encodeURIComponent(studentId)}`);
   const entries = data?.entries || [];
   const [reason, setReason] = useState('');
   const [points, setPoints] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const canDelete = e => isManagerRole(userRole) || e.by === userId;
+  const canDelete = (e: BehaviorEntryDTO) => isManagerRole(userRole) || e.by === userId;
 
-  async function give(body, msg) {
+  async function give(body: { reason: string; points: number; note?: string }, msg?: string) {
     setBusy(true);
     try {
       await api('/api/davranis', { method: 'POST', body: JSON.stringify({ action: 'add', studentId, ...body }) });
       showToast?.(msg || 'Eklendi');
       mutate(); onChanged?.();
-    } catch (e) { showToast?.(e.message, 'error'); } finally { setBusy(false); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); } finally { setBusy(false); }
   }
   async function addCustom() {
     const p = parseInt(points, 10);
@@ -125,13 +159,13 @@ function StudentDetail({ studentId, showToast, userRole, userId, onChanged }) {
     await give({ reason: reason.trim(), points: p, note: note.trim() }, 'Puan eklendi');
     setReason(''); setPoints(''); setNote('');
   }
-  async function remove(e) {
+  async function remove(e: BehaviorEntryDTO) {
     if (!(await confirm('Bu davranış kaydı silinsin mi?'))) return;
     try {
       await api(`/api/davranis?studentId=${encodeURIComponent(studentId)}&entryId=${encodeURIComponent(e.id)}`, { method: 'DELETE' });
       showToast?.('Silindi');
       mutate(); onChanged?.();
-    } catch (err) { showToast?.(err.message, 'error'); }
+    } catch (err) { showToast?.((err as Error).message, 'error'); }
   }
 
   return (
@@ -192,10 +226,14 @@ function StudentDetail({ studentId, showToast, userRole, userId, onChanged }) {
   );
 }
 
+interface DavranisViewProps {
+  studentId?: string;
+}
+
 // ════════════════════ ÖĞRENCİ / VELİ (salt okunur) ════════════════════
-export function DavranisView({ studentId }) {
+export function DavranisView({ studentId }: DavranisViewProps) {
   const url = studentId ? `/api/davranis?studentId=${encodeURIComponent(studentId)}` : '/api/davranis';
-  const { data, isLoading } = useSWR(url);
+  const { data, isLoading } = useSWR<{ entries?: BehaviorEntryDTO[]; total?: number }>(url);
   const total = data?.total || 0;
   const entries = data?.entries || [];
 
