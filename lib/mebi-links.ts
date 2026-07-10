@@ -8,7 +8,15 @@
 // noktalarıdır; MEBİ modülleri (YKS/LGS/Okul Dersleri) e-Devlet/EBA girişi arkasında tek
 // platformdan akar → kararsız deep-link yerine ana giriş + tamamlayıcı MEB platformları.
 
-export const MEBI_LINKS = [
+export interface MebiLink {
+  id: string;
+  title: string;
+  desc: string;
+  url: string;
+  tag: string;
+}
+
+export const MEBI_LINKS: MebiLink[] = [
   {
     id: 'mebi',
     title: 'MEBİ — Bireysel Öğrenme Platformu',

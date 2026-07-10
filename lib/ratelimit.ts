@@ -55,16 +55,23 @@ export const errorLogRatelimit = new Ratelimit({
   prefix: 'rl:errlog',
 });
 
+export interface LimitResult {
+  success: boolean;
+  reset: number;
+  limit: number;
+  remaining: number;
+}
+
 // Fail-open rate limit: Redis erişilemezse (kesinti/timeout) isteği ENGELLEMEZ.
 // Gerekçe: rate limit brute-force'u YAVAŞLATMA katmanıdır, kimlik doğrulama DEĞİL.
 // Redis bir an düşerse tüm login/şifre/gate uçlarının 500 dönüp kimsenin giriş
 // yapamaması, kısa süreli korumasızlıktan daha kötü (auth + bcrypt zaten devrede).
 // Redis çalışırken normal koruma aynen sürer.
-export async function safeLimit(limiter, key) {
+export async function safeLimit(limiter: Ratelimit, key: string): Promise<LimitResult> {
   try {
     return await limiter.limit(key);
   } catch (e) {
-    console.warn('[ratelimit] Redis erişilemedi, limit atlanıyor (fail-open):', e?.message || e);
+    console.warn('[ratelimit] Redis erişilemedi, limit atlanıyor (fail-open):', e instanceof Error ? e.message : e);
     return { success: true, reset: 0, limit: 0, remaining: 0 };
   }
 }
@@ -72,7 +79,7 @@ export async function safeLimit(limiter, key) {
 // İstemci IP'sini header'lardan çıkarır.
 // Vercel proxy'sinin koyduğu x-forwarded-for ilk olarak alınır.
 // Fallback: x-real-ip, sonra 'unknown' (limit yine de geçerli ama tüm 'unknown' tek key olur).
-export function getClientIp(req) {
+export function getClientIp(req: Request): string {
   const fwd = req.headers.get('x-forwarded-for');
   if (fwd) return fwd.split(',')[0].trim();
   const real = req.headers.get('x-real-ip');
@@ -82,7 +89,7 @@ export function getClientIp(req) {
 
 // Kalan süreyi insan-okunabilir Türkçe metne çevirir
 // reset: ms epoch
-export function formatResetWait(reset) {
+export function formatResetWait(reset: number): string {
   const remainingMs = reset - Date.now();
   if (remainingMs <= 0) return 'birazdan';
   const minutes = Math.ceil(remainingMs / 60000);

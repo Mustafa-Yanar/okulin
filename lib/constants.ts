@@ -1,28 +1,28 @@
 // ── Branş sistemi: ders adı = branş adı, otomatik eşleme YOK ──
 // Öğretmen verebildiği dersleri (branches[]) tek tek işaretler; grup-bazlı kısıtlı.
 // Grup → o gruba ait seçilebilir branşlar (KESİN matris)
-export const BRANCHES_BY_GROUP = {
+export const BRANCHES_BY_GROUP: Record<string, string[]> = {
   ortaokul: ['Türkçe', 'Matematik', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İnkılap Tarihi', 'İngilizce'],
   lise:     ['Türkçe', 'Matematik', 'TYT Matematik', 'AYT Matematik', 'Geometri', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe'],
   mezun:    ['Türkçe', 'TYT Matematik', 'AYT Matematik', 'Geometri', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe'],
 };
 
-export function branchesForGroup(group) {
+export function branchesForGroup(group: string): string[] {
   return BRANCHES_BY_GROUP[group] || [];
 }
 
 // allowedGroups birleşimi → öğretmenin seçebileceği branşlar (dedup, sıra korunur).
 // Boşsa tüm grupların branşları.
-export function branchesForGroups(groups) {
+export function branchesForGroups(groups?: string[] | null): string[] {
   const gs = (groups && groups.length) ? groups : Object.keys(BRANCHES_BY_GROUP);
-  const out = [], seen = new Set();
+  const out: string[] = [], seen = new Set<string>();
   for (const g of gs) for (const b of branchesForGroup(g)) {
     if (!seen.has(b)) { seen.add(b); out.push(b); }
   }
   return out;
 }
 
-export function allBranches() {
+export function allBranches(): string[] {
   return branchesForGroups(Object.keys(BRANCHES_BY_GROUP));
 }
 
@@ -31,7 +31,7 @@ export const MATH_FAMILY = ['TYT Matematik', 'AYT Matematik', 'Geometri'];
 
 // Sınıfa göre öğrencinin etütte görebileceği dersler (= o sınıfın gördüğü dersler).
 // COL_COURSES + colKeyFor ile türetilir → program ders listesiyle senkron.
-export function allowedBranchesForClass(cls) {
+export function allowedBranchesForClass(cls: string | null | undefined): string[] {
   if (!cls) return [];
   return COL_COURSES[colKeyForClass(cls)] || [];
 }
@@ -49,12 +49,12 @@ export const DEFAULT_SLOTS_PER_DAY = 12;
 export const MAX_SLOTS_PER_DAY = 16;
 
 // Güne özgü slot id üret: (dayIndex, slotNo 1-tabanlı) → "d0s1"
-export function slotId(dayIndex, slotNo) {
+export function slotId(dayIndex: number, slotNo: number): string {
   return `d${dayIndex}s${slotNo}`;
 }
 
 // Bir gün için slot id listesi üret (count kadar).
-export function slotIdsForDay(dayIndex, count = DEFAULT_SLOTS_PER_DAY) {
+export function slotIdsForDay(dayIndex: number, count: number = DEFAULT_SLOTS_PER_DAY): string[] {
   return Array.from({ length: count }, (_, i) => slotId(dayIndex, i + 1));
 }
 
@@ -62,7 +62,7 @@ export function slotIdsForDay(dayIndex, count = DEFAULT_SLOTS_PER_DAY) {
 // w{n}: hafta içi → hangi güne ait olduğu context'ten gelmeli (dayIndex verilir).
 // e{n}: hafta sonu → aynı şekilde. Yalnız slot NUMARASINI korur (w3 → d{gün}s3).
 // Not: eski id gün bilgisi taşımaz (w/e sadece "tip"), o yüzden dayIndex zorunlu.
-export function migrateSlotId(oldId, dayIndex) {
+export function migrateSlotId(oldId: string, dayIndex: number): string {
   const m = /^[we](\d+)$/.exec(oldId);
   if (m) return slotId(dayIndex, parseInt(m[1], 10));
   return oldId; // zaten yeni format veya bilinmeyen → dokunma
@@ -73,8 +73,20 @@ export function migrateSlotId(oldId, dayIndex) {
 export const WEEKDAY_SLOT_IDS = ['w1','w2','w3','w4','w5','w6','w7','w8','w9','w10','w11','w12'];
 export const WEEKEND_SLOT_IDS = ['e1','e2','e3','e4','e5','e6','e7','e8','e9','e10','e11','e12'];
 
+// Slot saat aralığı: { start:'09:45', end:'10:20' }
+export interface SlotTime {
+  start: string;
+  end: string;
+}
+
+// UI slot kaydı: id + gösterim etiketi + saatler.
+export interface Slot extends SlotTime {
+  id: string;
+  label: string;
+}
+
 // Default saatler (Redis'te slot_times yoksa kullanılır)
-export const DEFAULT_WEEKDAY_TIMES = [
+export const DEFAULT_WEEKDAY_TIMES: SlotTime[] = [
   { start: '09:45', end: '10:20' },
   { start: '10:30', end: '11:05' },
   { start: '11:15', end: '11:50' },
@@ -88,7 +100,7 @@ export const DEFAULT_WEEKDAY_TIMES = [
   { start: '18:00', end: '18:35' },
   { start: '18:45', end: '19:20' },
 ];
-export const DEFAULT_WEEKEND_TIMES = [
+export const DEFAULT_WEEKEND_TIMES: SlotTime[] = [
   { start: '09:30', end: '10:05' },
   { start: '10:15', end: '10:50' },
   { start: '11:00', end: '11:35' },
@@ -108,12 +120,12 @@ export const DEFAULT_ETUT_SURESI = 60; // dk — etüt formunda bitişi ön-dold
 export const DEFAULT_MOLA_SURESI = 10; // dk — ders/etüt arası min boşluk (uyarı kontrolü)
 
 // Etiket üretici: { start, end } → "HH:MM–HH:MM"
-export function formatSlotLabel(t) {
+export function formatSlotLabel(t: SlotTime): string {
   return `${t.start}–${t.end}`;
 }
 
 // Saat dizisini { id, label } slot dizisine çevir
-export function makeSlots(ids, times) {
+export function makeSlots(ids: string[], times: SlotTime[]): Slot[] {
   return ids.map((id, i) => {
     const t = times[i] || { start: '00:00', end: '00:00' };
     return { id, label: formatSlotLabel(t), start: t.start, end: t.end };
@@ -124,8 +136,15 @@ export function makeSlots(ids, times) {
 export const WEEKDAY_SLOTS = makeSlots(WEEKDAY_SLOT_IDS, DEFAULT_WEEKDAY_TIMES);
 export const WEEKEND_SLOTS = makeSlots(WEEKEND_SLOT_IDS, DEFAULT_WEEKEND_TIMES);
 
+export interface DayInfo {
+  index: number;
+  label: string;
+  short: string;
+  weekend: boolean;
+}
+
 // Tüm günler: 0=Pzt 1=Sal 2=Çar 3=Per 4=Cum 5=Cmt 6=Paz
-export const ALL_DAYS = [
+export const ALL_DAYS: DayInfo[] = [
   { index: 0, label: 'Pazartesi', short: 'Pzt', weekend: false },
   { index: 1, label: 'Salı',      short: 'Sal', weekend: false },
   { index: 2, label: 'Çarşamba',  short: 'Çar', weekend: false },
@@ -137,10 +156,16 @@ export const ALL_DAYS = [
 
 export const WEEKDAYS = ALL_DAYS.filter(d => !d.weekend).map(d => d.label);
 
+// Günlük slot yapılandırması: ders sayısı + saatler (TenantConfig.slotTimes.days[i]).
+export interface DayConfig {
+  count?: number;
+  times?: SlotTime[];
+}
+
 // Bir gün için slot listesi üret. Yeni model: her gün kendi count + times.
 //   daySlots(0, { count: 6, times: [...] }) → [{id:'d0s1',...}, ... 6 slot]
 // times eksik/kısa ise 00:00–00:00 ile doldurulur (makeSlots davranışı).
-export function daySlots(dayIndex, dayConfig) {
+export function daySlots(dayIndex: number, dayConfig?: DayConfig | null): Slot[] {
   const count = dayConfig?.count ?? DEFAULT_SLOTS_PER_DAY;
   const times = dayConfig?.times || [];
   return makeSlots(slotIdsForDay(dayIndex, count), times);
@@ -148,7 +173,7 @@ export function daySlots(dayIndex, dayConfig) {
 
 // GERİYE UYUM (deprecated): eski imza slotsForDay(dayIndex, times) — hafta içi/sonu
 // 12 slot varsayar. Henüz göç etmemiş çağrılar için korunur; yeni kod daySlots kullanmalı.
-export function slotsForDay(dayIndex, times) {
+export function slotsForDay(dayIndex: number, times?: SlotTime[] | null): Slot[] {
   if (times) {
     const ids = dayIndex >= 5 ? WEEKEND_SLOT_IDS : WEEKDAY_SLOT_IDS;
     return makeSlots(ids, times);
@@ -167,12 +192,12 @@ export const MEZUN_FORBIDDEN_ETUT_SLOT = 'w9';
 export const MEZUN_FORBIDDEN_ETUT_SLOT_NO = 9;
 
 // Slot id'sinden slot NUMARASINI çıkar (1-tabanlı). Yeni: d{gün}s{n} · eski: w{n}/e{n}.
-export function slotNoOf(slotId) {
+export function slotNoOf(slotId: string | null | undefined): number | null {
   const m = /(?:^[we]|s)(\d+)$/.exec(slotId || '');
   return m ? parseInt(m[1], 10) : null;
 }
 
-export const STUDENT_GROUPS = {
+export const STUDENT_GROUPS: Record<string, { label: string; classes: string[] }> = {
   ortaokul: {
     label: 'Ortaokul',
     classes: ['701', '702', '801', '802'],
@@ -201,21 +226,21 @@ export const ALL_CLASSES = [
   ...STUDENT_GROUPS.mezun.classes,
 ];
 
-export function classToGroup(cls) {
+export function classToGroup(cls: string): string | null {
   for (const [key, val] of Object.entries(STUDENT_GROUPS)) {
     if (val.classes.includes(cls)) return key;
   }
   return null;
 }
 
-export function classLabel(cls) {
+export function classLabel(cls: string): string {
   if (cls.startsWith('m')) {
     const n = parseInt(cls.slice(1));
     return `Mezun ${n <= 5 ? 'Sayısal' : 'EA'} (${cls.toUpperCase()})`;
   }
   const g = Math.floor(parseInt(cls) / 100);
   const sec = parseInt(cls.slice(1));
-  const gNames = { 7:'7.Sınıf', 8:'8.Sınıf', 1:'9.Sınıf', 2:'10.Sınıf', 3:'11.Sınıf', 4:'12.Sınıf' };
+  const gNames: Record<number, string> = { 7:'7.Sınıf', 8:'8.Sınıf', 1:'9.Sınıf', 2:'10.Sınıf', 3:'11.Sınıf', 4:'12.Sınıf' };
   let type = '';
   if (g === 3) type = sec <= 3 ? ' Sayısal' : ' EA';
   if (g === 4) type = sec <= 5 ? ' Sayısal' : ' EA';
@@ -223,19 +248,19 @@ export function classLabel(cls) {
 }
 
 // Hafta anahtarı (ISO-8601 hafta no): "2026-W21". slots.js ve page.js tek kaynak olarak buradan alır.
-export function getWeekKey(date = new Date()) {
+export function getWeekKey(date: Date | string | number = new Date()): string {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() + 4 - (d.getDay() || 7));
   const yearStart = new Date(d.getFullYear(), 0, 1);
-  const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
 // Hafta anahtarından okunabilir tarih aralığı: { startStr:'25 Mayıs', endStr:'31 Mayıs', yearStr:2026 }
 // DirectorPanel ve StudentPanel tek kaynak olarak buradan alır.
 const TR_MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
-export function weekRangeLabel(weekKey) {
+export function weekRangeLabel(weekKey: string): { startStr: string; endStr: string; yearStr: string | number } {
   try {
     const [year, wStr] = String(weekKey).split('-W');
     const week = parseInt(wStr);
@@ -258,7 +283,7 @@ export function weekRangeLabel(weekKey) {
 
 // ── Ders yükü sütunları ve sınıf→sütun eşlemesi (tek kaynak) ──
 // Her sütunun gördüğü dersler. allowedBranchesForClass + ProgramOlusturucu buna dayanır.
-export const COL_COURSES = {
+export const COL_COURSES: Record<string, string[]> = {
   'Ortaokul_7':               ['Türkçe', 'Matematik', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İngilizce'],
   'Ortaokul_8':               ['Türkçe', 'Matematik', 'Fen Bilgisi', 'İnkılap Tarihi', 'İngilizce'],
   'Lise Ortak_9':             ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe'],
@@ -272,7 +297,7 @@ export const COL_COURSES = {
 };
 
 // Sınıf → ders yükü sütun anahtarı
-export function colKeyForClass(cls) {
+export function colKeyForClass(cls: string | null | undefined): string {
   if (!cls) return 'Lise Ortak_9';
   if (cls.startsWith('m')) {
     const n = parseInt(cls.slice(1));

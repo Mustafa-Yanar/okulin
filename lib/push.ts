@@ -1,6 +1,6 @@
 import webpush from 'web-push';
 import { currentOrg, currentBranch } from './tenant';
-import { tdb } from './sqldb';
+import { tdb, withScope } from './sqldb';
 import { prisma } from './prisma';
 
 // Web Push altyapısı — VAPID ile tarayıcı push servislerine bildirim gönderir.
@@ -10,7 +10,7 @@ import { prisma } from './prisma';
 //   Endpoint'e göre tekilleştirilir.
 
 let _configured = false;
-function ensureConfigured() {
+function ensureConfigured(): boolean {
   if (_configured) return true;
   const pub = process.env.VAPID_PUBLIC_KEY;
   const priv = process.env.VAPID_PRIVATE_KEY;
@@ -24,8 +24,30 @@ function ensureConfigured() {
   return true;
 }
 
+// Tarayıcının PushSubscription.toJSON() çıktısı (subscribe akışından gelir).
+export interface PushSubscriptionInput {
+  endpoint?: string;
+  keys?: { p256dh?: string; auth?: string };
+}
+
+export interface PushPayload {
+  title: string;
+  body: string;
+  url?: string;
+  tag?: string;
+  icon?: string;
+  requireInteraction?: boolean;
+}
+
+export interface PushSendResult {
+  sent: number;
+  failed: number;
+  removed: number;
+  error?: string;
+}
+
 // Kullanıcıya yeni bir cihaz aboneliği ekler (endpoint'e göre tekilleştirir).
-export async function savePushSubscription(role, userId, subscription) {
+export async function savePushSubscription(role: string, userId: string, subscription: PushSubscriptionInput | null | undefined): Promise<boolean> {
   if (!subscription?.endpoint) return false;
   // endpoint GLOBAL-unique → arama tenant'sız (ham prisma) olmalı. tdb() ile aransa
   // orgSlug enjekte edilir, başka kurumdaki aynı endpoint bulunamaz → create → P2002.
@@ -37,19 +59,19 @@ export async function savePushSubscription(role, userId, subscription) {
       data: { role, userId, keys: subscription.keys || {}, orgSlug: currentOrg(), branch: currentBranch() },
     });
   } else {
-    await tdb().pushSub.create({ data: { role, userId, endpoint: subscription.endpoint, keys: subscription.keys || {} } });
+    await tdb().pushSub.create({ data: withScope({ role, userId, endpoint: subscription.endpoint, keys: subscription.keys || {} }) });
   }
   return true;
 }
 
 // Bir cihaz aboneliğini kaldırır (endpoint'e göre).
-export async function removePushSubscription(role, userId, endpoint) {
+export async function removePushSubscription(role: string, userId: string, endpoint: string): Promise<boolean> {
   await tdb().pushSub.deleteMany({ where: { role, userId, endpoint } });
   return true;
 }
 
 // Kullanıcının kayıtlı cihaz sayısı.
-export async function getSubscriptionCount(role, userId) {
+export async function getSubscriptionCount(role: string, userId: string): Promise<number> {
   return await tdb().pushSub.count({ where: { role, userId } });
 }
 
@@ -57,21 +79,23 @@ export async function getSubscriptionCount(role, userId) {
 // payload: { title, body, url?, tag?, icon?, requireInteraction? }
 // Geçersiz/expired abonelikler (404/410) otomatik temizlenir.
 // Dönüş: { sent, failed, removed }
-export async function sendPushToUser(role, userId, payload) {
+export async function sendPushToUser(role: string, userId: string, payload: PushPayload): Promise<PushSendResult> {
   if (!ensureConfigured()) return { sent: 0, failed: 0, removed: 0, error: 'VAPID yok' };
   const body = JSON.stringify(payload);
 
   const rows = await tdb().pushSub.findMany({ where: { role, userId } });
   if (rows.length === 0) return { sent: 0, failed: 0, removed: 0 };
+
   let sent = 0, failed = 0;
-  const toRemove = [];
+  const toRemove: string[] = [];
   for (const row of rows) {
     try {
-      await webpush.sendNotification({ endpoint: row.endpoint, keys: row.keys }, body);
+      // keys Json alanı — savePushSubscription {p256dh, auth} yazar
+      await webpush.sendNotification({ endpoint: row.endpoint, keys: row.keys as { p256dh: string; auth: string } }, body);
       sent++;
     } catch (err) {
       failed++;
-      const code = err?.statusCode;
+      const code = (err as { statusCode?: number } | null)?.statusCode;
       if (code === 404 || code === 410) toRemove.push(row.id); // geçersiz → düşür
     }
   }

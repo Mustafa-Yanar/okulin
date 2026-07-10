@@ -4,12 +4,19 @@
 // Asla throw etmez (raporlama hatası uygulamayı bozmamalı).
 // Spam koruması: aynı mesaj kısa sürede tekrar gönderilmez + oturum başına üst sınır.
 
-const seen = new Map();        // message -> son gönderim zamanı (ms)
+const seen = new Map<string, number>(); // message -> son gönderim zamanı (ms)
 const DEDUPE_MS = 30_000;      // aynı hatayı 30 sn içinde tekrar gönderme
 let sentCount = 0;
 const MAX_PER_SESSION = 50;    // sekme ömrü boyunca en fazla 50 rapor
 
-export function reportError({ message, stack, source = 'manual', componentStack } = {}) {
+export interface ErrorReport {
+  message?: unknown;
+  stack?: unknown;
+  source?: string;
+  componentStack?: unknown;
+}
+
+export function reportError({ message, stack, source = 'manual', componentStack }: ErrorReport = {}): void {
   try {
     if (!message || typeof message !== 'string') return;
     if (sentCount >= MAX_PER_SESSION) return;

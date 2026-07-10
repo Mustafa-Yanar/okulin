@@ -9,16 +9,21 @@ import { tenantRedis } from './tenant';
 // Anahtar: uidx:<küçük-harf-username>
 // Değer:   [{ role:'student'|'teacher'|'accountant', id }]
 
-function indexKey(username) {
+export interface IndexEntry {
+  role: string;
+  id: string;
+}
+
+function indexKey(username: string | null | undefined): string {
   return `uidx:${String(username || '').trim().toLowerCase()}`;
 }
 
 // İndekse ekle (role+id'ye göre tekilleştirir).
-export async function addToIndex(username, role, id) {
+export async function addToIndex(username: string | null | undefined, role: string, id: string): Promise<void> {
   if (!username) return;
   const redis = tenantRedis();
   const key = indexKey(username);
-  const existing = (await redis.get(key)) || [];
+  const existing = (await redis.get<IndexEntry[]>(key)) || [];
   const list = Array.isArray(existing) ? existing : [];
   if (!list.some(e => e.role === role && e.id === id)) {
     list.push({ role, id });
@@ -27,11 +32,11 @@ export async function addToIndex(username, role, id) {
 }
 
 // İndeksten kaldır.
-export async function removeFromIndex(username, role, id) {
+export async function removeFromIndex(username: string | null | undefined, role: string, id: string): Promise<void> {
   if (!username) return;
   const redis = tenantRedis();
   const key = indexKey(username);
-  const existing = (await redis.get(key)) || [];
+  const existing = (await redis.get<IndexEntry[]>(key)) || [];
   const list = Array.isArray(existing) ? existing : [];
   const filtered = list.filter(e => !(e.role === role && e.id === id));
   if (filtered.length > 0) await redis.set(key, filtered);
@@ -39,7 +44,7 @@ export async function removeFromIndex(username, role, id) {
 }
 
 // İsim değişiminde indeksi güncelle (eski isimden sil, yeni isme ekle).
-export async function updateIndexUsername(oldUsername, newUsername, role, id) {
+export async function updateIndexUsername(oldUsername: string | null | undefined, newUsername: string | null | undefined, role: string, id: string): Promise<void> {
   const o = String(oldUsername || '').trim().toLowerCase();
   const n = String(newUsername || '').trim().toLowerCase();
   if (o && o !== n) await removeFromIndex(oldUsername, role, id);
@@ -47,8 +52,8 @@ export async function updateIndexUsername(oldUsername, newUsername, role, id) {
 }
 
 // Login için: kullanıcı adına ait adayları döndür.
-export async function lookupIndex(username) {
+export async function lookupIndex(username: string): Promise<IndexEntry[]> {
   const redis = tenantRedis();
-  const existing = (await redis.get(indexKey(username))) || [];
+  const existing = (await redis.get<IndexEntry[]>(indexKey(username))) || [];
   return Array.isArray(existing) ? existing : [];
 }

@@ -1,9 +1,10 @@
 import { ALL_DAYS, daySlots, DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES,
-  DEFAULT_SLOTS_PER_DAY, MEZUN_ONLY_LESSON_SLOTS, getWeekKey } from './constants';
+  DEFAULT_SLOTS_PER_DAY, MEZUN_ONLY_LESSON_SLOTS, getWeekKey, type SlotTime } from './constants';
 
 // getWeekKey tek kaynak constants.js'te — buradan re-export (mevcut '@/lib/slots' importları kırılmasın)
 export { getWeekKey };
 import { tdb } from './sqldb';
+import type { SlotBooking } from '@prisma/client';
 
 // ── SLOT SAATLERİ (7-gün model) ───────────────────────────────────────────────
 // Depolama şekli (TenantConfig.slotTimes):
@@ -11,15 +12,59 @@ import { tdb } from './sqldb';
 //   ESKİ: { weekday: [...12], weekend: [...12] }  → okurken 7 güne genişletilir.
 // getDaySlotTimes her zaman NORMALİZE 7-gün objesi döndürür (geriye uyum garantili).
 
+export interface DaySlotConfig {
+  count: number;
+  times: SlotTime[];
+}
+
+export interface NormalizedSlotTimes {
+  days: Record<number, DaySlotConfig>;
+}
+
+// TenantConfig.slotTimes Json alanının olası (eski/yeni) şekli.
+interface StoredSlotTimes {
+  days?: Record<string | number, { count?: number; times?: SlotTime[] } | undefined>;
+  weekday?: SlotTime[];
+  weekend?: SlotTime[];
+}
+
+// Hücre içeriği — SlotBooking.data Json alanının şekli (grid hücresi).
+export interface SlotCell {
+  booked?: boolean;
+  disabled?: boolean;
+  fixed?: boolean;
+  lessonType?: string;
+  cls?: string;
+  subBranch?: string;
+  branch?: string;
+  studentId?: string | null;
+  studentName?: string | null;
+  studentCls?: string | null;
+  bookedBy?: string | null;
+  bookedAt?: string;
+}
+
+// Öğretmen program şablonundaki tek giriş (programTemplate Json).
+export interface ProgramEntry {
+  type?: string;
+  cls?: string;
+  subBranch?: string;
+  fixed?: boolean;
+  studentId?: string;
+  studentName?: string;
+  studentCls?: string;
+}
+
 // Eski {weekday, weekend} veya null → normalize {days:{0..6:{count,times}}}.
-export function normalizeSlotTimes(stored) {
+export function normalizeSlotTimes(stored: unknown): NormalizedSlotTimes {
+  const s = (stored || {}) as StoredSlotTimes; // Json alanı — şekli çalışma anında doğrulanır
   // Yeni format zaten days taşıyorsa: eksik günleri default'la, count'u times'tan türet.
-  if (stored && stored.days && typeof stored.days === 'object') {
-    const days = {};
+  if (s && s.days && typeof s.days === 'object') {
+    const days: Record<number, DaySlotConfig> = {};
     for (let d = 0; d < 7; d++) {
-      const dc = stored.days[d] || stored.days[String(d)];
+      const dc = s.days[d] || s.days[String(d)];
       if (dc && Array.isArray(dc.times)) {
-        const count = Number.isFinite(dc.count) ? dc.count : dc.times.length;
+        const count = Number.isFinite(dc.count) ? (dc.count as number) : dc.times.length;
         days[d] = { count, times: dc.times.slice(0, count) };
       } else {
         // gün tanımsız → hafta içi/sonu default'una düş
@@ -30,29 +75,29 @@ export function normalizeSlotTimes(stored) {
     return { days };
   }
   // Eski {weekday, weekend} → 5+2 güne kopyala.
-  const weekday = stored?.weekday || DEFAULT_WEEKDAY_TIMES;
-  const weekend = stored?.weekend || DEFAULT_WEEKEND_TIMES;
-  const days = {};
+  const weekday = s?.weekday || DEFAULT_WEEKDAY_TIMES;
+  const weekend = s?.weekend || DEFAULT_WEEKEND_TIMES;
+  const days: Record<number, DaySlotConfig> = {};
   for (let d = 0; d < 5; d++) days[d] = { count: weekday.length, times: weekday };
   for (let d = 5; d < 7; d++) days[d] = { count: weekend.length, times: weekend };
   return { days };
 }
 
 // Normalize 7-gün slot saatleri (her zaman {days:{0..6}}).
-export async function getDaySlotTimes() {
+export async function getDaySlotTimes(): Promise<NormalizedSlotTimes> {
   const cfg = await tdb().tenantConfig.findFirst();
   return normalizeSlotTimes(cfg?.slotTimes);
 }
 
 // Bir günün slot listesi ({id,label,start,end}) — config'ten.
-export async function getDaySlots(dayIndex) {
+export async function getDaySlots(dayIndex: number) {
   const st = await getDaySlotTimes();
   return daySlots(dayIndex, st.days[dayIndex]);
 }
 
 // GERİYE UYUM (deprecated): {weekday, weekend} bekleyen eski çağrılar için.
 // 7-gün modelinde weekday = gün0, weekend = gün5 örneği alınır (temsili).
-export async function getSlotTimes() {
+export async function getSlotTimes(): Promise<{ weekday: SlotTime[]; weekend: SlotTime[] }> {
   const st = await getDaySlotTimes();
   return {
     weekday: st.days[0].times,
@@ -61,12 +106,12 @@ export async function getSlotTimes() {
 }
 
 // current_week — aktif hafta anahtarı (TenantConfig.currentWeek)
-export async function getCurrentWeek() {
+export async function getCurrentWeek(): Promise<string | null> {
   const cfg = await tdb().tenantConfig.findFirst();
   return cfg?.currentWeek || null;
 }
 
-export async function setCurrentWeek(weekKey) {
+export async function setCurrentWeek(weekKey: string): Promise<void> {
   const cfg = await tdb().tenantConfig.findFirst();
   if (cfg) {
     await tdb().tenantConfig.update({
@@ -74,12 +119,13 @@ export async function setCurrentWeek(weekKey) {
       data: { currentWeek: weekKey },
     });
   } else {
-    await tdb().tenantConfig.create({ data: { currentWeek: weekKey } });
+    // orgSlug+branch tdb() tarafından enjekte edilir — tip bunu bilemediği için cast.
+    await tdb().tenantConfig.create({ data: { currentWeek: weekKey } as never });
   }
 }
 
 // Week key: ISO week string like "2024-W20"
-export function getMondayOfWeek(weekKey) {
+export function getMondayOfWeek(weekKey: string): Date {
   const [year, wStr] = weekKey.split('-W');
   const week = parseInt(wStr);
   const jan4 = new Date(parseInt(year), 0, 4);
@@ -90,7 +136,7 @@ export function getMondayOfWeek(weekKey) {
 }
 
 // weekKey'i n hafta ileri/geri taşır
-export function shiftWeek(weekKey, delta) {
+export function shiftWeek(weekKey: string, delta: number): string {
   const mon = getMondayOfWeek(weekKey);
   mon.setDate(mon.getDate() + delta * 7);
   return getWeekKey(mon);
@@ -98,7 +144,7 @@ export function shiftWeek(weekKey, delta) {
 
 // Slot başlangıç anını (TSİ +03) Date olarak döndürür.
 // slotLabel formatı: "HH:MM–HH:MM"
-export function slotStartTime(weekKey, dayIndex, slotLabel) {
+export function slotStartTime(weekKey: string, dayIndex: number, slotLabel: string | null | undefined): Date {
   const monday = getMondayOfWeek(weekKey);
   // UTC bazlı tarih oluştur (Türkiye saati TSİ +03)
   const y = monday.getFullYear();
@@ -112,7 +158,7 @@ export function slotStartTime(weekKey, dayIndex, slotLabel) {
 }
 
 // weekKey, mevcut hafta ile +2 arasında mı? (toplam 3 hafta düzenlenebilir)
-export function isEditableWeek(weekKey) {
+export function isEditableWeek(weekKey: string): boolean {
   const current = getWeekKey();
   const w1 = shiftWeek(current, 1);
   const w2 = shiftWeek(current, 2);
@@ -120,26 +166,26 @@ export function isEditableWeek(weekKey) {
 }
 
 // SQL yardımcısı: hücre değerini SlotBooking satırından kur
-function cellFromRow(row) {
+function cellFromRow(row: SlotBooking): SlotCell {
   // data Json varsa kullan (tam hücre içeriği); yoksa scalar alanlara geri düş
-  return row.data || {
+  return (row.data as SlotCell | null) || {
     booked: row.booked,
     disabled: row.disabled,
     fixed: row.fixed,
     studentId: row.studentId,
     studentName: row.studentName,
     studentCls: row.studentCls,
-    branch: row.dersBranch,
+    branch: row.dersBranch ?? undefined,
     bookedBy: row.bookedBy,
   };
 }
 
 // SQL yardımcısı: program şablonundaki giriş + mevcut hücreden yeni hücre hesapla
 // (initWeekForTeacher ile program/route POST aynı mantığı kullanır)
-function computeCellFromEntry(entry, existing) {
+function computeCellFromEntry(entry: ProgramEntry | undefined, existing: SlotCell | undefined): SlotCell {
   // Şablondan gelen sabit DERS
   if (entry && entry.type === 'ders') {
-    const gridEntry = {
+    const gridEntry: SlotCell = {
       booked: false, disabled: true, lessonType: 'ders',
       cls: entry.cls || '', fixed: true,
     };
@@ -171,7 +217,7 @@ function computeCellFromEntry(entry, existing) {
 }
 
 // SQL yardımcısı: SlotBooking satırı için scalar alanları hücre nesnesinden çıkar
-function scalarFromCell(cell) {
+function scalarFromCell(cell: SlotCell) {
   return {
     booked: cell.booked ?? false,
     disabled: cell.disabled ?? true,
@@ -181,35 +227,36 @@ function scalarFromCell(cell) {
     studentCls: cell.studentCls || null,
     dersBranch: cell.branch || null,
     bookedBy: cell.bookedBy || null,
-    data: cell,
+    data: cell as object,
   };
 }
 
 // Bir haftanın slotlarını program'a göre init eder.
-export async function initWeekForTeacher(legacyTeacherId, weekKey) {
+export async function initWeekForTeacher(legacyTeacherId: string, weekKey: string): Promise<void> {
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
   if (!teacher) return;
   const hasGroups = teacher.allowedGroups && teacher.allowedGroups.length > 0;
   const offDays = new Set(teacher.offDays || []);
-  const program = teacher.programTemplate || {};
+  // programTemplate Json — gün → slotId → giriş şeklinde saklanır
+  const program = (teacher.programTemplate || {}) as Record<string, Record<string, ProgramEntry | undefined> | undefined>;
 
   // Mevcut SlotBooking satırlarını oku (geçici rezervasyonları korumak için)
   const existingRows = await tdb().slotBooking.findMany({ where: { weekKey, teacherId: teacher.id } });
-  const existingByKey = {};
+  const existingByKey: Record<string, SlotCell> = {};
   for (const row of existingRows) {
     existingByKey[`${row.dayIndex}:${row.slotId}`] = cellFromRow(row);
   }
 
   // Her slot için yeni hücre değeri hesapla (7-gün model: her gün kendi slotları)
   const slotTimes = await getDaySlotTimes();
-  const newRows = [];
+  const newRows: object[] = [];
   for (const day of ALL_DAYS) {
     const slots = daySlots(day.index, slotTimes.days[day.index]);
     for (let slotNo = 1; slotNo <= slots.length; slotNo++) {
       const slot = slots[slotNo - 1];
       const entry = program[String(day.index)]?.[slot.id];
       const existing = existingByKey[`${day.index}:${slot.id}`];
-      let cell;
+      let cell: SlotCell;
 
       // Mezun-only kuralı: hafta içi (gün<5) ilk 6 slot yalnız mezun öğretmene açık.
       // Eski id-bazlı (w1-w6) kontrol → slot NUMARASINA taşındı (güne özgü id'lerde geçerli).
@@ -240,14 +287,15 @@ export async function initWeekForTeacher(legacyTeacherId, weekKey) {
 
   // Eski satırları sil, yenilerini oluştur (tdb() orgSlug+branch enjekte eder)
   await tdb().slotBooking.deleteMany({ where: { weekKey, teacherId: teacher.id } });
-  if (newRows.length > 0) await tdb().slotBooking.createMany({ data: newRows });
+  // orgSlug+branch tdb() enjeksiyonuyla gelir — createMany veri tipi bunu bilemez, cast gerekli.
+  if (newRows.length > 0) await tdb().slotBooking.createMany({ data: newRows as never });
 }
 
 // Tüm günler ve slotlar için grid döndürür (7-gün model)
-export async function getTeacherWeekSlots(legacyTeacherId, weekKey) {
+export async function getTeacherWeekSlots(legacyTeacherId: string, weekKey: string): Promise<Record<number, SlotCell[]>> {
   const slotTimes = await getDaySlotTimes();
-  const daySlotList = {}; // dayIndex → slot[] (id eşlemesi için)
-  const grid = {};
+  const daySlotList: Record<number, { id: string }[]> = {}; // dayIndex → slot[] (id eşlemesi için)
+  const grid: Record<number, SlotCell[]> = {};
   for (const day of ALL_DAYS) {
     const slots = daySlots(day.index, slotTimes.days[day.index]);
     daySlotList[day.index] = slots;
@@ -282,20 +330,20 @@ export async function getAllStudents() {
 }
 
 // program:{legacyTeacherId} objesini oku (grid + etutSablonlari)
-export async function getProgramTemplate(legacyTeacherId) {
+export async function getProgramTemplate(legacyTeacherId: string) {
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
-  return teacher?.programTemplate || {};
+  return (teacher?.programTemplate || {}) as Record<string, unknown>;
 }
 
 // program:{legacyTeacherId} objesini yaz (grid + etutSablonlari)
-export async function setProgramTemplate(legacyTeacherId, data) {
+export async function setProgramTemplate(legacyTeacherId: string, data: object): Promise<void> {
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
   if (!teacher) return;
   await tdb().teacher.update({ where: { id: teacher.id }, data: { programTemplate: data } });
 }
 
 // program şablonunu sil (null yap)
-export async function deleteProgramTemplate(legacyTeacherId) {
+export async function deleteProgramTemplate(legacyTeacherId: string): Promise<void> {
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
   if (!teacher) return;
   await tdb().teacher.update({ where: { id: teacher.id }, data: { programTemplate: null } });

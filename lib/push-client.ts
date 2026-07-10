@@ -1,17 +1,23 @@
 // Tarayıcı tarafı Web Push yardımcıları. Yalnız client'ta çağrılmalı.
 
 // VAPID public key (base64url) → Uint8Array (applicationServerKey için)
-function urlBase64ToUint8Array(base64String) {
+function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const raw = atob(base64);
-  const arr = new Uint8Array(raw.length);
+  const arr = new Uint8Array(new ArrayBuffer(raw.length));
   for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
   return arr;
 }
 
+export interface PushState {
+  supported: boolean;
+  permission: NotificationPermission | 'unsupported';
+  subscribed: boolean;
+}
+
 // Push destekleniyor mu?
-export function isPushSupported() {
+export function isPushSupported(): boolean {
   return (
     typeof window !== 'undefined' &&
     'serviceWorker' in navigator &&
@@ -21,7 +27,7 @@ export function isPushSupported() {
 }
 
 // Mevcut durum: { supported, permission, subscribed }
-export async function getPushState() {
+export async function getPushState(): Promise<PushState> {
   if (!isPushSupported()) return { supported: false, permission: 'unsupported', subscribed: false };
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();
@@ -33,7 +39,7 @@ export async function getPushState() {
 }
 
 // Bildirim izni iste + abone ol + sunucuya kaydet. Dönüş: true/false
-export async function subscribeToPush() {
+export async function subscribeToPush(): Promise<boolean> {
   if (!isPushSupported()) throw new Error('Tarayıcınız bildirimleri desteklemiyor');
 
   const permission = await Notification.requestPermission();
@@ -66,7 +72,7 @@ export async function subscribeToPush() {
 }
 
 // Aboneliği iptal et (hem tarayıcıdan hem sunucudan).
-export async function unsubscribeFromPush() {
+export async function unsubscribeFromPush(): Promise<boolean> {
   if (!isPushSupported()) return false;
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();

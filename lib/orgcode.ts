@@ -11,7 +11,7 @@
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 // Yeni kurum kodu üret (6 karakter). Gösterimde XXX-XXX biçimlenir, saklamada düz.
-export function generateOrgCode(len = 6) {
+export function generateOrgCode(len = 6): string {
   let out = '';
   // crypto varsa onu kullan (Node + Edge uyumlu), yoksa Math.random fallback.
   const cryptoObj = (typeof globalThis !== 'undefined' && globalThis.crypto) ? globalThis.crypto : null;
@@ -26,7 +26,7 @@ export function generateOrgCode(len = 6) {
 }
 
 // Kullanıcı girişini normalize et (büyük harf, güvenli alfabe dışı her şeyi at).
-export function normalizeCode(input) {
+export function normalizeCode(input: unknown): string {
   return String(input || '')
     .toUpperCase()
     .split('')
@@ -35,14 +35,14 @@ export function normalizeCode(input) {
 }
 
 // Gösterim biçimi: ABC123 → ABC-123 (6 hane için ortadan böl).
-export function formatCode(code) {
+export function formatCode(code: unknown): string {
   const c = normalizeCode(code);
   if (c.length === 6) return `${c.slice(0, 3)}-${c.slice(3)}`;
   return c;
 }
 
 // Tek kurum (şubesiz) için hedef host. Şube varsa <branch>.<slug>.
-export function hostForOrg(slug, branch = 'main', appDomain = process.env.APP_DOMAIN || 'okulin.com') {
+export function hostForOrg(slug: string, branch = 'main', appDomain = process.env.APP_DOMAIN || 'okulin.com'): string {
   if (branch && branch !== 'main') return `${branch}.${slug}.${appDomain}`;
   return `${slug}.${appDomain}`;
 }

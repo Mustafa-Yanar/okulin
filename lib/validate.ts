@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+// parseBody dönüş tipi: başarıda şemadan türetilmiş data, hatada hazır 400 yanıtı.
+export type ParseBodyResult<S extends z.ZodTypeAny> =
+  | { ok: true; data: z.infer<S> }
+  | { ok: false; response: NextResponse };
+
 /**
  * Gövdeyi güvenle JSON'a çevirip Zod şemasıyla doğrular.
  *
@@ -13,8 +18,8 @@ import { z } from 'zod';
  *   if (!parsed.ok) return parsed.response;
  *   const { name, cls } = parsed.data;
  */
-export async function parseBody(req, schema) {
-  let raw;
+export async function parseBody<S extends z.ZodTypeAny>(req: Request, schema: S): Promise<ParseBodyResult<S>> {
+  let raw: unknown;
   try {
     raw = await req.json();
   } catch {

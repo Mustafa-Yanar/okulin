@@ -3,7 +3,7 @@
 // sarmalayıcıyla (lib/db.js Proxy'sinin SQL hali) birlikte devreye girecek.
 import { PrismaClient } from '@prisma/client';
 
-const globalForPrisma = globalThis;
+const globalForPrisma = globalThis as typeof globalThis & { __okulinPrisma?: PrismaClient };
 
 export const prisma =
   globalForPrisma.__okulinPrisma ?? new PrismaClient();

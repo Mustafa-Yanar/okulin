@@ -7,7 +7,7 @@
 // Kanonik çıktı: "5321234567"
 
 // Ham girişi kanonik 10 haneli forma çevirir. Geçersizse null.
-export function normalizeTurkishMobile(raw) {
+export function normalizeTurkishMobile(raw: unknown): string | null {
   if (!raw) return null;
   let digits = String(raw).replace(/\D/g, ''); // sadece rakamlar
 
@@ -23,19 +23,19 @@ export function normalizeTurkishMobile(raw) {
 }
 
 // Geçerli Türk cep numarası mı?
-export function isValidTurkishMobile(raw) {
+export function isValidTurkishMobile(raw: unknown): boolean {
   return normalizeTurkishMobile(raw) !== null;
 }
 
 // Görüntüleme formatı: "0532 123 45 67". Geçersizse ham değeri olduğu gibi döndürür.
-export function formatTurkishMobile(raw) {
+export function formatTurkishMobile(raw: string | null | undefined): string {
   const n = normalizeTurkishMobile(raw);
   if (!n) return raw || '';
   return `0${n.slice(0, 3)} ${n.slice(3, 6)} ${n.slice(6, 8)} ${n.slice(8, 10)}`;
 }
 
 // SMS API'leri için 90 ön ekli form: "905321234567". Geçersizse null.
-export function toSmsFormat(raw) {
+export function toSmsFormat(raw: unknown): string | null {
   const n = normalizeTurkishMobile(raw);
   return n ? `90${n}` : null;
 }

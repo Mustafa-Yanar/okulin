@@ -1,11 +1,36 @@
-import { SignJWT, jwtVerify } from 'jose';
+import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import { cookies, headers } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'crypto';
 import { DEFAULT_ORG } from './org';
 
+// Oturum payload'u — JWT claim'leri. JWTPayload'ı genişletir (ek alanlar unknown
+// olarak erişilebilir; role/id/name gibi bilinenler tipli).
+export interface Session extends JWTPayload {
+  role: string;
+  id?: string;
+  name?: string;
+  username?: string;
+  org?: string;
+  branch?: string;
+  // veli: kendi çocukları — eski token'larda düz id listesi, yenilerde {id,...} listesi
+  children?: ({ id?: string; name?: string; cls?: string } | string)[];
+  mustChangePassword?: boolean;
+}
+
+// Next.js App Router route handler'ının 2. argümanı (dinamik segment parametreleri).
+export interface RouteContext {
+  params?: Record<string, string | string[]>;
+}
+
+// withAuth ile sarılan handler: guard geçince session 3. argüman olarak enjekte edilir.
+export type AuthedHandler = (req: NextRequest, ctx: RouteContext, session: Session) => Promise<Response> | Response;
+
+// Yetki modu: 'auth' | 'manage' | 'intake' | rol listesi | özel predicate.
+export type AuthMode = 'auth' | 'manage' | 'intake' | string[] | ((session: Session) => boolean | Promise<boolean>);
+
 // İstekteki kurum (middleware'in koyduğu x-org; yoksa varsayılan).
-function currentOrg() {
+function currentOrg(): string {
   try {
     return headers().get('x-org') || DEFAULT_ORG;
   } catch {
@@ -14,7 +39,7 @@ function currentOrg() {
 }
 
 // İstekteki şube (middleware'in koyduğu x-branch; yoksa 'main').
-function currentBranch() {
+function currentBranch(): string {
   try {
     return headers().get('x-branch') || 'main';
   } catch {
@@ -25,7 +50,7 @@ function currentBranch() {
 // Operasyonel yönetici: müdür VEYA rehber. Rehber = müdür yetkileri EKSİ muhasebe
 // (öğretmen/program/öğrenci/deneme/yoklama/optik/rehberlik). Finans route'ları bunu
 // KULLANMAZ — orada director||accountant ayrı kontrol edilir (rehber finansı görmez).
-export function isManager(session) {
+export function isManager(session: Session | null | undefined): boolean {
   return !!session && (session.role === 'director' || session.role === 'counselor');
 }
 
@@ -40,9 +65,9 @@ export function isManager(session) {
 //
 // lib/config.js'i lazy import ederiz: auth.js çok yerde import edilir, config zinciri
 // (prisma/sqldb) build-time'da yüklenmesin diye fonksiyon içinde require yapılır.
-export async function canManage(session) {
+export async function canManage(session: Session | null | undefined): Promise<boolean> {
   if (!isManager(session)) return false;
-  if (session.role === 'director') return true;
+  if (session!.role === 'director') return true;
   // counselor: config'e bak.
   const { getOrgConfig } = await import('./config');
   const perms = await getOrgConfig('permissions');
@@ -55,7 +80,7 @@ export async function canManage(session) {
 // ödeme planını tek başına bitirir (Akyazı senaryosu). Müdür/rehber canManage kuralına
 // tabi; muhasebeci kurum config permissions.accountant.intake açıkken (varsayılan açık,
 // müdür Ayarlar'dan kapatabilir — her kurumda muhasebeci kayıt yapmayabilir).
-export async function canIntake(session) {
+export async function canIntake(session: Session | null | undefined): Promise<boolean> {
   if (!session) return false;
   if (session.role === 'accountant') {
     const { getOrgConfig } = await import('./config');
@@ -82,10 +107,12 @@ export async function canIntake(session) {
 //   'intake' → canIntake(session) (kayıt akışı: manage VEYA muhasebeci config'e göre) — 403
 //   dizi     → session.role listede mi — 403
 //   fn       → özel async predicate (session) => bool — 403
-export function withAuth(modeOrHandler, maybeHandler) {
-  const handler = maybeHandler || modeOrHandler;
-  const mode = maybeHandler ? modeOrHandler : 'auth';
-  return async (req, ctx) => {
+export function withAuth(handler: AuthedHandler): (req: NextRequest, ctx: RouteContext) => Promise<Response>;
+export function withAuth(mode: AuthMode, handler: AuthedHandler): (req: NextRequest, ctx: RouteContext) => Promise<Response>;
+export function withAuth(modeOrHandler: AuthMode | AuthedHandler, maybeHandler?: AuthedHandler) {
+  const handler = (maybeHandler || modeOrHandler) as AuthedHandler;
+  const mode: AuthMode = maybeHandler ? (modeOrHandler as AuthMode) : 'auth';
+  return async (req: NextRequest, ctx: RouteContext) => {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
     let ok = true;
@@ -105,7 +132,7 @@ const PWD_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
 
 // Kriptografik güvenli rastgele şifre. crypto.randomBytes kullanır (Math.random DEĞİL).
 // 8 karakter × 55 alfabe = ~46 bit entropi, brute force pratik imkansız (rate limit ile).
-export function randomPassword(length = 8) {
+export function randomPassword(length = 8): string {
   const bytes = randomBytes(length);
   let result = '';
   for (let i = 0; i < length; i++) {
@@ -119,7 +146,7 @@ export function randomPassword(length = 8) {
 // Hangi yol olursa olsun mustChangePassword:true ile birlikte kullanılmalı (ilk
 // girişte zorunlu değişim). Müdür bu kurala DAHİL DEĞİL (ayrı yönetilir).
 export const FALLBACK_PASSWORD = '12345678';
-export function initialPassword(manualPassword, normalizedPhone) {
+export function initialPassword(manualPassword: string | null | undefined, normalizedPhone: string | null | undefined): string {
   const manual = (manualPassword || '').trim();
   if (manual) return manual;
   if (normalizedPhone) return normalizedPhone;
@@ -129,8 +156,8 @@ export function initialPassword(manualPassword, normalizedPhone) {
 // JWT secret. Public repo'da duran eski sabit/leaked secret ('etut-takip-secret-key-2024')
 // KALDIRILDI. Prod'da JWT_SECRET Vercel env'de tanımlı (zorunlu). Lazy çözümleme: modül
 // yüklenirken değil, ilk imzalama/doğrulamada — böylece build kırılmaz.
-let _secret;
-function getSecret() {
+let _secret: Uint8Array | undefined;
+function getSecret(): Uint8Array {
   if (_secret) return _secret;
   const s = process.env.JWT_SECRET;
   if (!s) {
@@ -144,23 +171,23 @@ function getSecret() {
 }
 const COOKIE = 'etut_session';
 
-export async function signToken(payload) {
+export async function signToken(payload: Session): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: 'HS256' })
     .setExpirationTime('7d')
     .sign(getSecret());
 }
 
-export async function verifyToken(token) {
+export async function verifyToken(token: string): Promise<Session | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret());
-    return payload;
+    return payload as Session; // imzalı token'ı biz ürettik — payload şekli Session
   } catch {
     return null;
   }
 }
 
-export async function getSession() {
+export async function getSession(): Promise<Session | null> {
   const jar = cookies();
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;
@@ -183,7 +210,10 @@ export async function getSession() {
   return session;
 }
 
-export async function setSession(res, payload) {
+// Set-Cookie yazabilen yanıt (NextResponse.cookies).
+type ResponseWithCookies = { cookies: { set: (name: string, value: string, opts: Record<string, unknown>) => unknown } };
+
+export async function setSession(res: ResponseWithCookies, payload: Session): Promise<void> {
   // Superadmin: '__super__'. Org_admin: '__hq__' branch. Diğerleri: currentOrg() + istek şubesi.
   const org = payload.role === 'superadmin' ? '__super__' : currentOrg();
   const branch = payload.role === 'org_admin' ? '__hq__' : (payload.branch || currentBranch());
@@ -197,7 +227,7 @@ export async function setSession(res, payload) {
   });
 }
 
-export async function clearSession(res) {
+export async function clearSession(res: ResponseWithCookies): Promise<void> {
   res.cookies.set(COOKIE, '', { maxAge: 0, path: '/' });
 }
 
@@ -206,12 +236,12 @@ export async function clearSession(res) {
 // - öğrenci: yalnız kendisi
 // - veli: yalnız kendi çocukları (session.children içindeki id'ler)
 // (muhasebeci buraya dahil DEĞİL — finance route'u kendi içinde izin verir)
-export function canReadStudent(session, studentId) {
+export function canReadStudent(session: Session | null | undefined, studentId: string | null | undefined): boolean {
   if (!session || !studentId) return false;
   if (session.role === 'director' || session.role === 'teacher') return true;
   if (session.role === 'student') return session.id === studentId;
   if (session.role === 'parent') {
-    return Array.isArray(session.children) && session.children.some(c => (c.id || c) === studentId);
+    return Array.isArray(session.children) && session.children.some(c => ((typeof c === 'string' ? c : c.id)) === studentId);
   }
   return false;
 }

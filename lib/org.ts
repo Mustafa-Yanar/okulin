@@ -13,7 +13,7 @@ export const DEFAULT_ORG = process.env.DEFAULT_ORG || 'cozum';
 export const APP_DOMAIN = process.env.APP_DOMAIN || ''; // örn. "okulin.com"
 
 // Slug'ı güvenli hale getir: küçük harf, yalnız [a-z0-9-], makul uzunluk.
-function sanitizeSlug(s) {
+function sanitizeSlug(s: unknown): string | null {
   const clean = String(s || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
   return clean.length >= 1 && clean.length <= 40 ? clean : null;
 }
@@ -21,7 +21,7 @@ function sanitizeSlug(s) {
 // Host subdomain etiketleri (APP_DOMAIN'in altındaki kısım), yoksa null.
 // "cozum.okulin.com"        → ["cozum"]
 // "akyazi.cozum.okulin.com" → ["akyazi","cozum"]  (şube.kurum)
-function labelsFromHost(host) {
+function labelsFromHost(host: string | null | undefined): string[] | null {
   if (!host) return null;
   const h = host.split(':')[0].toLowerCase(); // portu at
   if (!APP_DOMAIN) return null;               // domain henüz yok → DEFAULT_ORG'a bırak
@@ -34,7 +34,7 @@ function labelsFromHost(host) {
 }
 
 // Host'tan kurum slug'ı (yoksa null). Kurum = EN SAĞDAKİ etiket (şube.kurum.domain).
-export function orgFromHost(host) {
+export function orgFromHost(host: string | null | undefined): string | null {
   const labels = labelsFromHost(host);
   if (!labels) return null;
   return sanitizeSlug(labels[labels.length - 1]);
@@ -42,24 +42,24 @@ export function orgFromHost(host) {
 
 // Host'tan şube slug'ı (yoksa null → 'main'). Şube = EN SOLDAKİ etiket, ancak
 // en az iki etiket varsa (şube.kurum). Tek etiket (kurum.domain) → şube yok.
-export function branchFromHost(host) {
+export function branchFromHost(host: string | null | undefined): string | null {
   const labels = labelsFromHost(host);
   if (!labels || labels.length < 2) return null;
   return sanitizeSlug(labels[0]);
 }
 
 // Çözülen org (yoksa varsayılan). Tek geçiş noktası.
-export function resolveOrg(host) {
+export function resolveOrg(host: string | null | undefined): string {
   return orgFromHost(host) || DEFAULT_ORG;
 }
 
 // Çözülen şube (yoksa 'main'). Tek geçiş noktası.
-export function resolveBranch(host) {
+export function resolveBranch(host: string | null | undefined): string {
   return branchFromHost(host) || 'main';
 }
 
 // Host apex mi (okulin.com / www.okulin.com)? Apex = tanıtım sayfası, kurum değil.
-export function isApexHost(host) {
+export function isApexHost(host: string | null | undefined): boolean {
   if (!host || !APP_DOMAIN) return false;
   const h = host.split(':')[0].toLowerCase();
   return h === APP_DOMAIN || h === `www.${APP_DOMAIN}`;

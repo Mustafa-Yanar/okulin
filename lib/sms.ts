@@ -12,7 +12,7 @@ function client() {
 
 // Kanonik 10 haneli Türk numarasını E.164'e çevir.
 // Girdi normalizeTurkishMobile çıktısı (10 hane, '5' ile başlar).
-export function toE164(phone) {
+export function toE164(phone: string | null | undefined): string {
   const canonical = normalizeTurkishMobile(phone);
   if (canonical) return `+90${canonical}`;
   // Zaten +90 ile geliyorsa olduğu gibi döndür
@@ -21,18 +21,19 @@ export function toE164(phone) {
   return `+${digits}`;
 }
 
-export async function sendOtp(phone) {
+export async function sendOtp(phone: string): Promise<string> {
   const e164 = toE164(phone);
-  await client().verify.v2.services(verifySid).verifications.create({
+  // verifySid env'den gelir; tanımsızsa Twilio çalışma anında hata verir (eski davranış).
+  await client().verify.v2.services(verifySid as string).verifications.create({
     to: e164,
     channel: 'sms',
   });
   return e164;
 }
 
-export async function verifyOtp(phone, code) {
+export async function verifyOtp(phone: string, code: string): Promise<boolean> {
   const e164 = toE164(phone);
-  const result = await client().verify.v2.services(verifySid)
+  const result = await client().verify.v2.services(verifySid as string)
     .verificationChecks.create({ to: e164, code });
   return result.status === 'approved';
 }

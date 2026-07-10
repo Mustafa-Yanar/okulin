@@ -24,9 +24,19 @@ function vercelEnv() {
 }
 
 // Token + proje tanımlı mı? (panel "domain otomasyonu açık mı" göstergesi için)
-export function vercelConfigured() {
+export function vercelConfigured(): boolean {
   const { token, projectId } = vercelEnv();
   return Boolean(token && projectId);
+}
+
+export interface AddDomainResult {
+  ok: boolean;
+  domain?: string;
+  verified?: boolean;
+  alreadyExists?: boolean;
+  skipped?: boolean;
+  status?: number;
+  error?: string;
 }
 
 // Subdomain'i projeye ekle. Hata FIRLATMAZ — sonuç nesnesi döner:
@@ -34,7 +44,7 @@ export function vercelConfigured() {
 //   { ok:true, alreadyExists:true }  → zaten ekli (idempotent, 409)
 //   { ok:false, skipped:true }       → env tanımsız (no-op)
 //   { ok:false, status, error }      → API hatası
-export async function addProjectDomain(domain) {
+export async function addProjectDomain(domain: string): Promise<AddDomainResult> {
   const { token, projectId, teamId } = vercelEnv();
   if (!token || !projectId) {
     console.warn('[vercel] VERCEL_TOKEN/PROJECT_ID tanımsız — domain ekleme atlandı.');
@@ -68,6 +78,6 @@ export async function addProjectDomain(domain) {
     return { ok: false, status: res.status, error: errText || `HTTP ${res.status}` };
   } catch (e) {
     console.error('[vercel] beklenmeyen hata:', e);
-    return { ok: false, error: e.message };
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }

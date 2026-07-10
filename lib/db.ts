@@ -1,4 +1,4 @@
-import { tenantRedis } from './tenant';
+import { tenantRedis, type ScopedRedis } from './tenant';
 
 // Drop-in kurum-kapsamlı Redis. Route'lar `import redis from '@/lib/db'` ile bunu
 // kullanır — gövdeye hiç dokunmadan. Her metod çağrısında org'u istek header'ından
@@ -9,9 +9,11 @@ import { tenantRedis } from './tenant';
 //
 // NOT: yedek/cron gibi tüm-org gezen yerler bunu DEĞİL, ham '@/lib/redis'i kullanır.
 
-const db = new Proxy({}, {
-  get(_target, prop) {
-    return (...args) => tenantRedis()[prop](...args);
+// Proxy her metod çağrısını istek-anı tenantRedis()'ine yönlendirir; şekli birebir
+// ScopedRedis olduğundan cast güvenli (dinamik Proxy'yi statik tiplemenin tek yolu).
+const db = new Proxy({} as ScopedRedis, {
+  get(_target, prop: keyof ScopedRedis) {
+    return (...args: unknown[]) => (tenantRedis()[prop] as (...a: unknown[]) => unknown)(...args);
   },
 });
 

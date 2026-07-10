@@ -36,16 +36,16 @@ export const CONFIG_DEFAULTS = {
   // grouping: {colKey: {ders: "3-2-2"}}, dayLimits: {cls: {gün: saat}}.
   // load boş obje = henüz kaydedilmemiş → UI tüm değerleri 0 başlatır.
   programPlan: {
-    load: {},
-    grouping: {},
-    dayLimits: {},
+    load: {} as Record<string, Record<string, number>>,
+    grouping: {} as Record<string, Record<string, string>>,
+    dayLimits: {} as Record<string, Record<string, number>>,
     maxWeekly: 40,
   },
 
   // Derslikler (K2) — fiziksel oda listesi. Boşsa CP-SAT'a oda kısıtı uygulanmaz
   // (mevcut davranış: her sınıf 1:1 sanal oda). Doldurulursa ileride solver oda
   // çakışmasını engeller. Şekil: [{ id, name, capacity }]
-  classrooms: [],
+  classrooms: [] as { id?: string; name?: string; capacity?: number }[],
 
   // Muhasebe gider kategorileri. lib/constants.js EXPENSE_CATEGORIES'in eşi.
   // "Diğer" daima sonda tutulur (UI + API normalize eder).
@@ -91,60 +91,63 @@ export const CONFIG_DEFAULTS = {
   },
 };
 
+export type ConfigKey = keyof typeof CONFIG_DEFAULTS;
+export type ConfigValue<K extends ConfigKey> = (typeof CONFIG_DEFAULTS)[K];
+
 // Bilinen config key'leri — PATCH yalnız bunları kabul eder (rastgele key yazılamaz).
-export const CONFIG_KEYS = Object.keys(CONFIG_DEFAULTS);
+export const CONFIG_KEYS = Object.keys(CONFIG_DEFAULTS) as ConfigKey[];
 
 // ── OKUMA ───────────────────────────────────────────────────────────────────
 
 // Tek bir config key'ini getir. DB'de yoksa CONFIG_DEFAULTS[key] döner.
 // Obje tipli key'lerde (modules gibi) default ile DERİN birleştirme yapılır:
 // kurum yalnız bir alt-anahtarı değiştirmişse kalan alt-anahtarlar default kalır.
-export async function getOrgConfig(key, orgOverride, branchOverride) {
+export async function getOrgConfig<K extends ConfigKey>(key: K, orgOverride?: string, branchOverride?: string): Promise<ConfigValue<K>> {
   const def = CONFIG_DEFAULTS[key];
   const { orgSlug, branch } = tenant(orgOverride, branchOverride);
   const row = await prisma.orgConfig.findUnique({
     where: { orgSlug_branch_key: { orgSlug, branch, key } },
   });
   if (!row) return def;
-  return mergeDefault(def, row.value);
+  return mergeDefault(def, row.value) as ConfigValue<K>;
 }
 
 // Kurumun TÜM config'ini getir (frontend tek istekte okur). Eksik key'ler default'la
 // doldurulur → dönen obje her zaman tam (CONFIG_KEYS hepsini içerir).
-export async function getAllConfigs(orgOverride, branchOverride) {
+export async function getAllConfigs(orgOverride?: string, branchOverride?: string): Promise<typeof CONFIG_DEFAULTS> {
   const { orgSlug, branch } = tenant(orgOverride, branchOverride);
   const rows = await prisma.orgConfig.findMany({ where: { orgSlug, branch } });
   const stored = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  const out = {};
+  const out: Partial<Record<ConfigKey, unknown>> = {};
   for (const key of CONFIG_KEYS) {
     out[key] = (key in stored) ? mergeDefault(CONFIG_DEFAULTS[key], stored[key]) : CONFIG_DEFAULTS[key];
   }
-  return out;
+  return out as typeof CONFIG_DEFAULTS;
 }
 
 // ── YAZMA ─────────────────────────────────────────────────────────────────────
 
 // Tek key'i yaz (upsert). Bilinmeyen key reddedilir.
-export async function setOrgConfig(key, value, orgOverride, branchOverride) {
+export async function setOrgConfig<K extends ConfigKey>(key: K, value: unknown, orgOverride?: string, branchOverride?: string): Promise<ConfigValue<K>> {
   if (!CONFIG_KEYS.includes(key)) throw new Error(`Bilinmeyen config anahtarı: ${key}`);
   const { orgSlug, branch } = tenant(orgOverride, branchOverride);
   await prisma.orgConfig.upsert({
     where: { orgSlug_branch_key: { orgSlug, branch, key } },
-    update: { value },
-    create: { orgSlug, branch, key, value },
+    update: { value: value as object },
+    create: { orgSlug, branch, key, value: value as object },
   });
   return getOrgConfig(key, orgOverride, branchOverride);
 }
 
 // Birden çok key'i tek seferde yaz. patch: { key: value, ... }. Bilinmeyen key atlanır.
-export async function patchConfigs(patch, orgOverride, branchOverride) {
+export async function patchConfigs(patch: Record<string, unknown>, orgOverride?: string, branchOverride?: string): Promise<typeof CONFIG_DEFAULTS> {
   const { orgSlug, branch } = tenant(orgOverride, branchOverride);
-  const entries = Object.entries(patch).filter(([k]) => CONFIG_KEYS.includes(k));
+  const entries = Object.entries(patch).filter(([k]) => (CONFIG_KEYS as string[]).includes(k));
   for (const [key, value] of entries) {
     await prisma.orgConfig.upsert({
       where: { orgSlug_branch_key: { orgSlug, branch, key } },
-      update: { value },
-      create: { orgSlug, branch, key, value },
+      update: { value: value as object },
+      create: { orgSlug, branch, key, value: value as object },
     });
   }
   return getAllConfigs(orgOverride, branchOverride);
@@ -154,7 +157,7 @@ export async function patchConfigs(patch, orgOverride, branchOverride) {
 
 // Düz obje default'larını sığ-derin birleştir: stored alt-anahtarları default'un
 // üzerine yazar, eksikler default'tan gelir. Dizi/primitive ise stored'u olduğu gibi al.
-function mergeDefault(def, stored) {
+function mergeDefault(def: unknown, stored: unknown): unknown {
   if (Array.isArray(def) || Array.isArray(stored)) return stored ?? def;
   if (def && typeof def === 'object' && stored && typeof stored === 'object') {
     return { ...def, ...stored };

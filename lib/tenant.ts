@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import redis from './redis';
 import { DEFAULT_ORG } from './org';
+import type { Redis } from '@upstash/redis';
 
 // Kurum-kapsamlı (multi-tenant) Redis erişimi.
 // Tüm anahtarlar `t:<org>:<branch>:` ön ekiyle scope'lanır → kurumlar birbirinin
@@ -14,8 +15,11 @@ import { DEFAULT_ORG } from './org';
 
 const BRANCH = 'main';
 
+type SetOpts = Parameters<Redis['set']>[2];
+type ScanOpts = { match?: string; count?: number; type?: string };
+
 // İstekteki kurum (middleware'in koyduğu x-org header'ından; yoksa varsayılan).
-export function currentOrg() {
+export function currentOrg(): string {
   try {
     return headers().get('x-org') || DEFAULT_ORG;
   } catch {
@@ -24,7 +28,7 @@ export function currentOrg() {
 }
 
 // İstekteki şube (middleware'in koyduğu x-branch; yoksa 'main' — tek şubeli/eski davranış).
-export function currentBranch() {
+export function currentBranch(): string {
   try {
     return headers().get('x-branch') || 'main';
   } catch {
@@ -32,23 +36,52 @@ export function currentBranch() {
   }
 }
 
-function prefixFor(org) {
+function prefixFor(org: string): string {
   return `t:${org}:${BRANCH}:`;
 }
 
-// Test edilebilir çekirdek: bir client + prefix alır, scoped sarmalayıcı döner.
-export function _scopedClient(client, prefix) {
-  const k = (key) => prefix + key;
-  const strip = (key) => (typeof key === 'string' && key.startsWith(prefix) ? key.slice(prefix.length) : key);
+export interface ScopedPipeline {
+  get(key: string): ScopedPipeline;
+  set(key: string, val: unknown, opts?: SetOpts): ScopedPipeline;
+  del(...keys: string[]): ScopedPipeline;
+  sadd(key: string, ...m: unknown[]): ScopedPipeline;
+  srem(key: string, ...m: unknown[]): ScopedPipeline;
+  scard(key: string): ScopedPipeline;
+  sismember(key: string, m: unknown): ScopedPipeline;
+  incr(key: string): ScopedPipeline;
+  exec(): Promise<unknown[]>;
+}
 
-  const scopedPipeline = () => {
+export interface ScopedRedis {
+  get<T = unknown>(key: string): Promise<T | null>;
+  set(key: string, val: unknown, opts?: SetOpts): Promise<unknown>;
+  del(...keys: string[]): Promise<number>;
+  exists(...keys: string[]): Promise<number>;
+  incr(key: string): Promise<number>;
+  expire(key: string, s: number): Promise<0 | 1>;
+  sadd(key: string, ...m: unknown[]): Promise<number>;
+  srem(key: string, ...m: unknown[]): Promise<number>;
+  sismember(key: string, member: unknown): Promise<0 | 1>;
+  smembers<T extends unknown[] = string[]>(key: string): Promise<T>;
+  scard(key: string): Promise<number>;
+  keys(pattern: string): Promise<string[]>;
+  scan(cursor: string | number, opts?: ScanOpts): Promise<[string, string[]]>;
+  pipeline(): ScopedPipeline;
+}
+
+// Test edilebilir çekirdek: bir client + prefix alır, scoped sarmalayıcı döner.
+export function _scopedClient(client: Redis, prefix: string): ScopedRedis {
+  const k = (key: string) => prefix + key;
+  const strip = (key: string) => (typeof key === 'string' && key.startsWith(prefix) ? key.slice(prefix.length) : key);
+
+  const scopedPipeline = (): ScopedPipeline => {
     const p = client.pipeline();
-    const wrap = {
+    const wrap: ScopedPipeline = {
       get: (key) => { p.get(k(key)); return wrap; },
       set: (key, val, opts) => { opts === undefined ? p.set(k(key), val) : p.set(k(key), val, opts); return wrap; },
       del: (...keys) => { p.del(...keys.map(k)); return wrap; },
-      sadd: (key, ...m) => { p.sadd(k(key), ...m); return wrap; },
-      srem: (key, ...m) => { p.srem(k(key), ...m); return wrap; },
+      sadd: (key, ...m) => { p.sadd(k(key), ...(m as [unknown, ...unknown[]])); return wrap; },
+      srem: (key, ...m) => { p.srem(k(key), ...(m as [unknown, ...unknown[]])); return wrap; },
       scard: (key) => { p.scard(k(key)); return wrap; },
       sismember: (key, m) => { p.sismember(k(key), m); return wrap; },
       incr: (key) => { p.incr(k(key)); return wrap; },
@@ -64,17 +97,17 @@ export function _scopedClient(client, prefix) {
     exists: (...keys) => client.exists(...keys.map(k)),
     incr: (key) => client.incr(k(key)),
     expire: (key, s) => client.expire(k(key), s),
-    sadd: (key, ...m) => client.sadd(k(key), ...m),
-    srem: (key, ...m) => client.srem(k(key), ...m),
+    sadd: (key, ...m) => client.sadd(k(key), ...(m as [unknown, ...unknown[]])),
+    srem: (key, ...m) => client.srem(k(key), ...(m as [unknown, ...unknown[]])),
     sismember: (key, member) => client.sismember(k(key), member),
-    smembers: (key) => client.smembers(k(key)),
+    smembers: <T extends unknown[] = string[]>(key: string) => client.smembers<T>(k(key)),
     scard: (key) => client.scard(k(key)),
     keys: async (pattern) => (await client.keys(prefix + pattern)).map(strip),
     scan: async (cursor, opts = {}) => {
-      const o = { ...opts };
+      const o: ScanOpts = { ...opts };
       if (o.match) o.match = prefix + o.match;
-      const [next, found] = await client.scan(cursor, o);
-      return [next, (found || []).map(strip)];
+      const [next, found] = await client.scan(cursor, o as Parameters<Redis['scan']>[1]);
+      return [String(next), (found || []).map(strip)];
     },
     pipeline: scopedPipeline,
   };
@@ -84,7 +117,7 @@ export function _scopedClient(client, prefix) {
 // orgOverride: scriptlerde veya HQ panel API'sinde explicit org geçilir.
 // branchOverride: HQ panel API'sinde explicit şube geçilir (ör. 'ankara').
 // Her ikisi de verilmezse istek bağlamındaki org + şube (x-branch, yoksa 'main') kullanılır.
-export function tenantRedis(orgOverride, branchOverride) {
+export function tenantRedis(orgOverride?: string, branchOverride?: string): ScopedRedis {
   const org = orgOverride || currentOrg();
   const branch = branchOverride || currentBranch();
   return _scopedClient(redis, `t:${org}:${branch}:`);

@@ -1,16 +1,23 @@
 import bcrypt from 'bcryptjs';
-import { tdb } from './sqldb';
+import { tdb, withScope } from './sqldb';
 
 // Veli (parent) — TELEFON-BAZLI kimlik. Bir veli telefonu → o telefonu `parentPhone`
 // olarak taşıyan TÜM öğrenciler (kardeşler tek girişte).
+
+// Parent.children Json alanındaki tek çocuk kaydı.
+export interface ParentChild {
+  id: string;
+  name: string;
+  cls: string;
+}
 
 // Müdür "veli erişimini senkronize et" → parent kayıtlarını öğrencilerden yeniden kurar.
 // - Yeni veli: ilk şifre = telefonun kendisi, ilk girişte ZORUNLU değişim.
 // - Var olan veli: children güncellenir, ŞİFRE KORUNUR.
 // - Artık çocuğu kalmayan veli (tüm öğrencileri silinmiş): hesap kaldırılır.
 // öğrencileri parentPhone'a göre grupla (legacy id/name/cls).
-async function groupStudentsByParentPhone() {
-  const map = new Map();
+async function groupStudentsByParentPhone(): Promise<Map<string, { children: ParentChild[]; parentName: string }>> {
+  const map = new Map<string, { children: ParentChild[]; parentName: string }>();
   const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
   for (const s of rows) {
     if (!s.parentPhone) continue;
@@ -35,7 +42,7 @@ export async function syncParents() {
       updated++;
     } else {
       const passwordHash = await bcrypt.hash(phone, 10); // ilk şifre = telefon
-      await tdb().parent.create({ data: { phone, passwordHash, mustChangePassword: true, children, name: parentName || '' } });
+      await tdb().parent.create({ data: withScope({ phone, passwordHash, mustChangePassword: true, children, name: parentName || '' }) });
       created++;
     }
   }
@@ -50,16 +57,19 @@ export async function syncParents() {
 // Müdür durum görünümü: kayıtlı veli listesi.
 export async function parentsStatus() {
   const rows = await tdb().parent.findMany();
-  return rows.map(r => ({
-    phone: r.phone, name: r.name || '',
-    childrenNames: (r.children || []).map(c => c.name),
-    childrenCount: (r.children || []).length,
-    mustChangePassword: !!r.mustChangePassword,
-  })).sort((a, b) => String(a.phone).localeCompare(String(b.phone)));
+  return rows.map(r => {
+    const children = (r.children || []) as unknown as ParentChild[]; // Json alanı — syncParents yazar
+    return {
+      phone: r.phone, name: r.name || '',
+      childrenNames: children.map(c => c.name),
+      childrenCount: children.length,
+      mustChangePassword: !!r.mustChangePassword,
+    };
+  }).sort((a, b) => String(a.phone).localeCompare(String(b.phone)));
 }
 
 // Bir velinin şifresini sıfırla → telefon yeniden geçici şifre olur, ilk girişte değişir.
-export async function resetParent(phone) {
+export async function resetParent(phone: string): Promise<boolean> {
   const rec = await tdb().parent.findFirst({ where: { phone } });
   if (!rec) return false;
   await tdb().parent.update({ where: { id: rec.id }, data: { passwordHash: await bcrypt.hash(phone, 10), mustChangePassword: true } });
