@@ -2,15 +2,32 @@
  * GERÇEK UI MULTI-CONTEXT — Ödev döngüsü
  * Öğretmen ödev verir → öğrenci görür + teslim eder → öğretmen kontrol eder.
  * Üç adımlı, iki rol eşzamanlı. storageState ile login atlanır.
+ *
+ * Dinamik kurgu (sabit fikstür yok): ödev, OTURUM ÖĞRENCİSİNİN sınıfına verilir;
+ * sınıf çipi etiketi kayıttaki görünen ad (classes registry `ad`) ile keşfedilir.
+ * Temizlik afterAll'da (test timeout'unda finally kesilebilir): verilen ödev
+ * başlıkla bulunup API'den silinir (teslimler kayıtla birlikte gider).
  */
 const { test, expect } = require('@playwright/test');
+const { BASE, JSON_HEADERS, TEA_STATE, STU_STATE, whoami, reEscape } = require('./helpers');
 
-const TEA_STATE = 'e2e/.auth/teacher.json';
-const STU_STATE = 'e2e/.auth/student.json';
-const CLASS_LABEL = 'Mezun EA (M7)'; // Duha pirinç'in sınıfı
+const title = 'Test Ödev ' + Date.now();
+
+test.afterAll(async ({ playwright }) => {
+  const teaReq = await playwright.request.newContext({ storageState: TEA_STATE });
+  try {
+    const list = await (await teaReq.get(`${BASE}/api/odev`)).json();
+    const mine = (list.odevler || []).find((o) => o.title === title);
+    if (mine) {
+      await teaReq.delete(`${BASE}/api/odev?id=${mine.id}`, { headers: JSON_HEADERS }).catch(() => {});
+    }
+  } catch { /* best-effort */ } finally {
+    await teaReq.dispose();
+  }
+});
 
 test('ödev: öğretmen verir → öğrenci teslim → öğretmen kontrol', async ({ browser }) => {
-  const title = 'Test Ödev ' + Date.now();
+  test.setTimeout(150_000);
   const desc = 'Sayfa 42-50 arası sorular.';
 
   const teaCtx = await browser.newContext({ storageState: TEA_STATE });
@@ -19,6 +36,13 @@ test('ödev: öğretmen verir → öğrenci teslim → öğretmen kontrol', asyn
   const stu = await stuCtx.newPage();
 
   try {
+    // ---- KEŞİF: oturum öğrencisi + sınıfının görünen adı ----
+    const STU = await whoami(stuCtx.request);
+    const clsData = await (await teaCtx.request.get(`${BASE}/api/classes`)).json();
+    const clsRow = (clsData.classes || []).find((c) => c.id === STU.cls);
+    expect(clsRow, `öğrencinin sınıfı (${STU.cls}) kayıtlı olmalı`).toBeTruthy();
+    const clsLabel = clsRow.ad; // ödev formundaki çip etiketi
+
     // ---- 1) ÖĞRETMEN: ödev verir ----
     await tea.goto('/');
     await tea.waitForLoadState('networkidle').catch(() => {});
@@ -26,8 +50,8 @@ test('ödev: öğretmen verir → öğrenci teslim → öğretmen kontrol', asyn
     await tea.waitForTimeout(1200);
     await tea.getByPlaceholder(/Ödev başlığı/).fill(title);
     await tea.getByPlaceholder(/Açıklama/).fill(desc);
-    await tea.getByPlaceholder('Ders / Branş').fill('Matematik');
-    await tea.getByRole('button', { name: CLASS_LABEL }).click(); // m7 sınıfını seç
+    await tea.getByPlaceholder('Ders / Branş').fill('Deneme Dersi');
+    await tea.getByRole('button', { name: clsLabel }).click(); // öğrencinin sınıfını seç
     await tea.screenshot({ path: 'e2e/shots/odev-01-ogretmen-form.png', fullPage: true });
     await tea.getByRole('button', { name: /Ödev Ver/ }).click();
     await tea.waitForTimeout(2000);
@@ -53,8 +77,8 @@ test('ödev: öğretmen verir → öğrenci teslim → öğretmen kontrol', asyn
     await tea.getByText(title).first().click();
     await tea.waitForTimeout(1500);
     await tea.screenshot({ path: 'e2e/shots/odev-04-ogretmen-modal.png', fullPage: true });
-    // Öğrenci teslim etti → "Kontrol et" görünmeli
-    await expect(tea.getByText('Duha pirinç').first()).toBeVisible({ timeout: 8000 });
+    // Öğrenci teslim etti → adının yanında "Kontrol et" görünmeli
+    await expect(tea.getByText(new RegExp(reEscape(STU.name))).first()).toBeVisible({ timeout: 8000 });
     await tea.getByRole('button', { name: /Kontrol et/ }).click();
     await tea.waitForTimeout(500);
     await tea.getByPlaceholder(/Puan/).fill('100');
@@ -72,6 +96,7 @@ test('ödev: öğretmen verir → öğrenci teslim → öğretmen kontrol', asyn
     await expect(stu.getByText(/Kontrol edildi/).first()).toBeVisible({ timeout: 8000 });
     await expect(stu.getByText(/Puan: 100/).first()).toBeVisible({ timeout: 8000 });
   } finally {
+    // Veri temizliği afterAll'da — burada yalnız context'ler kapatılır
     await teaCtx.close();
     await stuCtx.close();
   }

@@ -1,48 +1,101 @@
 /**
- * GERÇEK UI MULTI-CONTEXT — Etüt rezervasyonu
- * Müdür öğretmene etüt şablonu ekler (gerçek API) → öğrenci müsait etütten rezerve eder (UI)
- * → öğrenci "Etütlerim"de + öğretmen "Program"da görür.
+ * GERÇEK UI MULTI-CONTEXT — Etüt (serbest şablon) rezervasyonu
+ * Müdür uygun bir öğretmene etüt şablonu ekler (gerçek API) → OTURUM ÖĞRENCİSİ
+ * müsait etütten UI ile rezerve eder → "Etütlerim"de görür → oturum ÖĞRETMENİ
+ * aynı veriyi API'den çapraz doğrular.
+ *
+ * Dinamik kurgu (sabit fikstür yok):
+ * - Öğrenci = oturum sahibi (whoami). Şablon sahibi öğretmen = öğrencinin
+ *   grubuna (allowedGroups) ve sınıfının ders listesine UYUMLU ilk öğretmen —
+ *   oturum öğretmeni her kurulumda öğrenciyle aynı grupta olmayabilir, bu
+ *   yüzden partner keşifle seçilir; oturum öğretmeni doğrulayıcı roldedir.
+ * - Gün/saat dinamik: bu haftanın geleceğinde kalan ilk gün, 23:00–23:30
+ *   (geçmiş-etüt filtresine takılmaz, gerçek programla çakışmaz).
+ * Temizlik afterAll'da (test timeout'unda finally kesilebilir): eklenen şablon
+ * silinir (rezervasyon da birlikte gider).
  */
 const { test, expect } = require('@playwright/test');
+const {
+  BASE, JSON_HEADERS, DIR_STATE, TEA_STATE, STU_STATE,
+  getWeekKey, slotStartTime, DAY_LABELS, whoami, reEscape,
+} = require('./helpers');
 
-const BASE = process.env.OKULIN_BASE_URL || 'https://testkurs.okulin.com';
-const DIR_STATE = 'e2e/.auth/director.json';
-const TEA_STATE = 'e2e/.auth/teacher.json';
-const STU_STATE = 'e2e/.auth/student.json';
-const TEACHER_ID = 'd9sxbn8a';   // Matematik Öğretmeni1 (TYT/AYT/Geometri)
-const TEACHER_NAME = 'Matematik Öğretmeni1';
-const DAY = 5; // Cumartesi
+const MATH_FAMILY = ['TYT Matematik', 'AYT Matematik', 'Geometri'];
+const START = '23:00', END = '23:30';
+const SLOT_LABEL = `${START}–${END}`;
 
-function getWeekKey(d = new Date()) {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const dayNum = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
-  return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
-}
+// afterAll temizliğinin ihtiyaç duyduğu kimlikler (test sırasında dolar)
+const created = { partnerId: null, etutId: null };
 
-test('etüt: öğrenci rezerve eder → öğrenci + öğretmen çizelgede görür', async ({ browser }) => {
+test.afterAll(async ({ playwright }) => {
+  if (!created.etutId) return;
+  const dirReq = await playwright.request.newContext({ storageState: DIR_STATE });
+  try {
+    await dirReq.delete(`${BASE}/api/etut-sablon`, {
+      headers: JSON_HEADERS,
+      data: { teacherId: created.partnerId, id: created.etutId },
+    }).catch(() => {});
+  } finally {
+    await dirReq.dispose();
+  }
+});
+
+test('etüt: öğrenci rezerve eder → öğrenci + öğretmen tarafı doğrular', async ({ browser }) => {
+  test.setTimeout(150_000);
   const weekKey = getWeekKey();
   const dirSetup = await browser.newContext({ storageState: DIR_STATE });
 
-  // ---- ÖN-KOŞUL: müdür öğretmene Cumartesi 10:00–11:00 etüt şablonu ekler ----
-  const addRes = await dirSetup.request.post(`${BASE}/api/etut-sablon`, {
-    headers: { 'Content-Type': 'application/json', Origin: BASE },
-    data: { teacherId: TEACHER_ID, weekKey, sablon: { dayIndex: DAY, start: '10:00', end: '11:00', aktif: true } },
-  });
-  expect(addRes.status()).toBe(200);
+  // ---- KEŞİF: oturum öğrencisi + uyumlu partner öğretmen + branş ----
+  const stuProbe = await browser.newContext({ storageState: STU_STATE });
+  const STU = await whoami(stuProbe.request);
+  await stuProbe.close();
 
-  // Eklenen şablonun id'sini bul (teardown için)
+  const clsData = await (await dirSetup.request.get(`${BASE}/api/classes`)).json();
+  const clsRow = (clsData.classes || []).find((c) => c.id === STU.cls);
+  const clsDersler = clsRow?.dersler || [];
+  expect(clsDersler.length, `öğrencinin sınıfı (${STU.cls}) ders listesiyle kayıtlı olmalı`).toBeGreaterThan(0);
+
+  const allEtut = await (await dirSetup.request.get(`${BASE}/api/etut-sablon/all?week=${weekKey}`)).json();
+  const myBookings = (allEtut.etutler || []).filter((e) => e.booked && e.studentId === STU.id);
+  const bookedBranches = new Set(myBookings.map((b) => b.branch).filter(Boolean));
+  const mathTaken = myBookings.some((b) => MATH_FAMILY.includes(b.branch));
+
+  const teachers = await (await dirSetup.request.get(`${BASE}/api/teachers`)).json();
+  const selectableFor = (t) => (t.branches || []).filter((b) =>
+    clsDersler.includes(b) && !bookedBranches.has(b) && !(MATH_FAMILY.includes(b) && mathTaken));
+  const partner = teachers.find((t) =>
+    (t.allowedGroups || []).includes(STU.group) && selectableFor(t).length > 0);
+  expect(partner, `öğrencinin grubuna (${STU.group}) uyumlu branşlı öğretmen bulunamadı`).toBeTruthy();
+  const branch = selectableFor(partner)[0]; // UI'nin göstereceği ilk seçilebilir branş
+
+  // Gün: bu hafta 23:00'ı henüz geçmemiş ilk gün
+  const now = Date.now();
+  let day = -1;
+  for (let d = 0; d <= 6; d++) {
+    if (slotStartTime(weekKey, d, START).getTime() > now + 15 * 60 * 1000) { day = d; break; }
+  }
+  expect(day, 'bu hafta gelecekte kalan gün yok (Pazar gece yarısına çok yakın)').toBeGreaterThanOrEqual(0);
+
+  // ---- ÖN-KOŞUL: müdür partnere etüt şablonu ekler ----
+  const addRes = await dirSetup.request.post(`${BASE}/api/etut-sablon`, {
+    headers: JSON_HEADERS,
+    data: { teacherId: partner.id, weekKey, sablon: { dayIndex: day, start: START, end: END, aktif: true } },
+  });
+  expect(addRes.status(), await addRes.text()).toBe(200);
+
+  // Eklenen şablonun id'sini bul (teardown + çapraz doğrulama için)
   const allRes = await dirSetup.request.get(`${BASE}/api/etut-sablon/all?week=${weekKey}`);
   const all = await allRes.json();
-  const mine = (all.etutler || []).find(e => e.teacherId === TEACHER_ID && e.start === '10:00' && e.dayIndex === DAY);
+  const mine = (all.etutler || []).find((e) =>
+    e.teacherId === partner.id && e.dayIndex === day && e.start === START && !e.booked);
   const etutId = mine?.id;
+  expect(etutId, 'eklenen şablon listede bulunamadı').toBeTruthy();
+  created.partnerId = partner.id;
+  created.etutId = etutId;
 
   const stuCtx = await browser.newContext({ storageState: STU_STATE });
   const teaCtx = await browser.newContext({ storageState: TEA_STATE });
   const stu = await stuCtx.newPage();
-  const tea = await teaCtx.newPage();
 
   try {
     // ---- ÖĞRENCİ: müsait etütten rezerve eder ----
@@ -52,45 +105,43 @@ test('etüt: öğrenci rezerve eder → öğrenci + öğretmen çizelgede görü
     await stu.waitForTimeout(1500);
     await stu.screenshot({ path: 'e2e/shots/etut-01-ogrenci-musait.png', fullPage: true });
 
-    await stu.getByRole('button', { name: new RegExp(TEACHER_NAME) }).click(); // öğretmen ağacını aç
+    await stu.getByRole('button', { name: new RegExp(reEscape(partner.name)) }).first().click(); // öğretmen ağacını aç
     await stu.waitForTimeout(500);
-    await stu.getByRole('button', { name: /Cumartesi/ }).click(); // günü aç
+    await stu.getByRole('button', { name: new RegExp(`^${DAY_LABELS[day]}`) }).first().click(); // günü aç
     await stu.waitForTimeout(500);
     await stu.screenshot({ path: 'e2e/shots/etut-02-ogrenci-slotlar.png', fullPage: true });
-    // Geometri branş butonunu rezerve et. DİKKAT: "Geometri" öğretmen başlığında da
-    // (branş listesi metni) geçer → exact:true ile yalnız branş butonunu hedefle.
-    await stu.getByRole('button', { name: 'Geometri', exact: true }).click();
-    await stu.waitForTimeout(1800);
+
+    // Şablon satırı (23:00–23:30) içindeki branş butonuna tıkla.
+    // Tek branşta etiket "X · Al", çok branşta düz "X" → ^X regex ikisini de yakalar.
+    const row = stu.locator(`xpath=//span[text()="${SLOT_LABEL}"]/ancestor::div[contains(@class,"justify-between")][1]`).first();
+    await expect(row).toBeVisible({ timeout: 8000 });
+    await row.getByRole('button', { name: new RegExp(`^${reEscape(branch)}`) }).click();
+    // Rezervasyonun GERÇEKTEN başarılı olduğunu anında doğrula (hata toast'ı
+    // sessizce yutulup sonraki adımlarda kafa karıştırmasın)
+    await expect(stu.getByText('Etüde kaydoldunuz').first()).toBeVisible({ timeout: 8000 });
+    await stu.waitForTimeout(1200);
     await stu.screenshot({ path: 'e2e/shots/etut-03-ogrenci-rezerve.png', fullPage: true });
 
     // ---- ÖĞRENCİ: "Etütlerim"de rezervasyonu görür ----
     await stu.getByRole('button', { name: 'Etütlerim' }).click();
-    // Etütlerim SWR ile yüklenir — "Yükleniyor" kaybolmasını bekle (timing tuzağı)
     await stu.getByText('Yükleniyor').first().waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
     await stu.waitForTimeout(800);
     await stu.screenshot({ path: 'e2e/shots/etut-04-ogrenci-etutlerim.png', fullPage: true });
-    // Rezervasyon kanıtı: "Etütlerim" gün listesi katlanır (collapsible).
-    // "Cumartesi" günü + "1 etüt" sayacı = rezervasyon öğrenci paneline yansıdı.
-    await expect(stu.getByText(/Cumartesi/).first()).toBeVisible({ timeout: 10000 });
-    await expect(stu.getByText(/1 etüt/).first()).toBeVisible({ timeout: 8000 });
+    // Gün başlığı + "N etüt" sayacı = rezervasyon öğrenci paneline yansıdı
+    await expect(stu.getByText(new RegExp(DAY_LABELS[day])).first()).toBeVisible({ timeout: 10000 });
+    await expect(stu.getByText(/\d+ etüt/).first()).toBeVisible({ timeout: 8000 });
 
-    // ---- ÖĞRETMEN tarafında rezervasyon görünür (çapraz doğrulama) ----
-    // Not: Öğretmen "Program" Tablo görünümü serbest etüt rezervasyonlarını listelemiyor
-    // (UI tasarımı — ders slot grid'i gösterir). Çapraz doğrulamayı öğretmen/müdür
-    // gözünden VERİ düzeyinde yapıyoruz: öğretmenin etüdü Duha'ya booked görünmeli.
-    const teaView = await tea.request.get(`${BASE}/api/etut-sablon/all?week=${weekKey}`);
+    // ---- OTURUM ÖĞRETMENİ tarafı: veri düzeyinde çapraz doğrulama ----
+    const teaView = await teaCtx.request.get(`${BASE}/api/etut-sablon/all?week=${weekKey}`);
+    expect(teaView.status()).toBe(200);
     const teaEtuts = (await teaView.json()).etutler || [];
-    const booked = teaEtuts.find(e => e.teacherId === TEACHER_ID && e.booked && e.studentName === 'Duha pirinç');
-    expect(booked, 'Öğretmenin etüdü Duha pirinç\'e rezerve görünmeli').toBeTruthy();
-    expect(booked.branch).toBe('Geometri');
+    const booked = teaEtuts.find((e) => e.id === etutId && e.teacherId === partner.id);
+    expect(booked, 'etüt öğretmen tarafında görünmeli').toBeTruthy();
+    expect(booked.booked, 'etüt rezerve görünmeli').toBe(true);
+    expect(booked.studentName).toBe(STU.name);
+    expect(booked.branch).toBe(branch);
   } finally {
-    // ---- TEARDOWN: etüt şablonunu sil (rezervasyon da gider) ----
-    if (etutId) {
-      await dirSetup.request.delete(`${BASE}/api/etut-sablon`, {
-        headers: { 'Content-Type': 'application/json', Origin: BASE },
-        data: { teacherId: TEACHER_ID, id: etutId },
-      }).catch(() => {});
-    }
+    // Veri temizliği afterAll'da — burada yalnız context'ler kapatılır
     await dirSetup.close();
     await stuCtx.close();
     await teaCtx.close();

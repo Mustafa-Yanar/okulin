@@ -7,9 +7,27 @@ const { test, expect } = require('@playwright/test');
 
 const DIR_STATE = 'e2e/.auth/director.json';
 const STU_STATE = 'e2e/.auth/student.json';
+const BASE = process.env.OKULIN_BASE_URL || 'https://testkurs.okulin.com';
+
+const title = 'Otomatik Test Duyuru ' + Date.now();
+
+// TEMİZLİK: test duyurusunu sil (kalıcı çöp yok) — timeout'ta da koşar.
+test.afterAll(async ({ playwright }) => {
+  const dirReq = await playwright.request.newContext({ storageState: DIR_STATE });
+  try {
+    const list = await (await dirReq.get(`${BASE}/api/announcements`)).json();
+    const mine = (list.announcements || []).find((a) => a.title === title);
+    if (mine?.id) {
+      await dirReq.delete(`${BASE}/api/announcements?id=${mine.id}`, {
+        headers: { 'Content-Type': 'application/json', Origin: BASE },
+      }).catch(() => {});
+    }
+  } catch { /* best-effort */ } finally {
+    await dirReq.dispose();
+  }
+});
 
 test('duyuru: müdür gönderir → öğrenci ekranında belirir', async ({ browser }) => {
-  const title = 'Otomatik Test Duyuru ' + Date.now();
   const body = 'Bu bir multi-context UI test duyurusudur.';
 
   const dirCtx = await browser.newContext({ storageState: DIR_STATE });
