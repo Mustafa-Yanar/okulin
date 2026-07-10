@@ -5,49 +5,110 @@ import {
   ClipboardList, Plus, Trash2, X, Check, Send, BarChart3, Lock, Unlock,
   Type, CircleDot, CheckSquare, Star, GripVertical, Users,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useClasses } from '../ClassesContext';
 import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
 import { newId } from '@/lib/id';
 import { api } from '../shared';
+import type { ShowToast } from '../types';
 
 
-const ROLE_LABEL = { student: 'Öğrenci', parent: 'Veli', teacher: 'Öğretmen' };
-const QTYPE = {
+const ROLE_LABEL: Record<string, string> = { student: 'Öğrenci', parent: 'Veli', teacher: 'Öğretmen' };
+const QTYPE: Record<string, { label: string; icon: LucideIcon }> = {
   text: { label: 'Metin', icon: Type },
   single: { label: 'Tek Seçim', icon: CircleDot },
   multi: { label: 'Çoklu Seçim', icon: CheckSquare },
   rating: { label: 'Puan (1-5)', icon: Star },
 };
 function qid() { return newId('q'); }
-function fmtDate(iso) {
+function fmtDate(iso: string | undefined): string {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// app/api/form/route.ts şekilleri (QuestionSchema / GET mapper'ları) ile birebir.
+interface FormQuestion {
+  id: string;
+  label: string;
+  type: string; // 'text' | 'single' | 'multi' | 'rating'
+  options?: string[];
+  required?: boolean;
+}
+// GET /api/form liste elemanı — yönetici listesinde responseCount/audience,
+// yanıtlayan listesinde answered dolu gelir (aynı uç, rol dallanması).
+interface FormListItemDTO {
+  id: string;
+  title: string;
+  desc?: string;
+  audience?: { roles: string[]; classes?: string[] };
+  questionCount: number;
+  anonymous: boolean;
+  closed: boolean;
+  closeDate: string;
+  createdAt?: string;
+  responseCount?: number;
+  answered?: boolean;
+}
+// GET /api/form?id=… detay: form + (yanıtlayan için) kendi cevabı.
+interface FormDetailDTO {
+  id: string;
+  title: string;
+  desc?: string;
+  audience?: { roles: string[]; classes?: string[] };
+  questions?: FormQuestion[];
+  anonymous?: boolean;
+  closeDate?: string;
+  closed?: boolean;
+}
+// Sonuç kalemi — route sonuç mapper'ının soru tipine göre ürettiği üç şekil.
+type ResultItemDTO =
+  | { id: string; label: string; type: 'single' | 'multi'; counts: Record<string, number> }
+  | { id: string; label: string; type: 'rating'; avg: number; count: number; dist: Record<number, number> }
+  | { id: string; label: string; type: 'text'; answers: { text: string; name: string | null }[] };
+
+// Yanıt değer uzayı: text→string, single→string, multi→string[], rating→number.
+type AnswerValue = string | number | string[];
+type Answers = Record<string, AnswerValue | undefined>;
+
+// FormBuilder'ın soru taslağı (options her zaman dizi).
+interface DraftQuestion {
+  id: string;
+  label: string;
+  type: string;
+  required: boolean;
+  options: string[];
+}
+
+type ClassGroup = ReturnType<typeof groupedClasses>[number];
+
+interface FormManagerProps {
+  showToast?: ShowToast;
+}
+
 // ════════════════════ YÖNETİCİ ════════════════════
-export function FormManager({ showToast }) {
+export function FormManager({ showToast }: FormManagerProps) {
   const confirm = useConfirm();
-  const { data, isLoading, mutate } = useSWR('/api/form');
+  const { data, isLoading, mutate } = useSWR<{ formlar?: FormListItemDTO[] }>('/api/form');
   const list = data?.formlar || [];
   const [building, setBuilding] = useState(false);
-  const [resultsId, setResultsId] = useState(null);
+  const [resultsId, setResultsId] = useState<string | null>(null);
 
-  async function toggleClose(f) {
+  async function toggleClose(f: FormListItemDTO) {
     try {
       await api('/api/form', { method: 'POST', body: JSON.stringify({ action: 'close', id: f.id, closed: !f.closed }) });
       mutate();
       showToast?.(f.closed ? 'Form açıldı' : 'Form kapatıldı');
-    } catch (e) { showToast?.(e.message, 'error'); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); }
   }
-  async function remove(f) {
+  async function remove(f: FormListItemDTO) {
     if (!(await confirm(`"${f.title}" formu ve tüm yanıtları silinsin mi?`))) return;
     try {
       await api(`/api/form?id=${encodeURIComponent(f.id)}`, { method: 'DELETE' });
       mutate({ formlar: list.filter(x => x.id !== f.id) }, { revalidate: false });
       showToast?.('Form silindi');
-    } catch (e) { showToast?.(e.message, 'error'); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); }
   }
 
   return (
@@ -101,31 +162,37 @@ export function FormManager({ showToast }) {
   );
 }
 
+interface FormBuilderProps {
+  showToast?: ShowToast;
+  onDone?: () => void;
+  onCancel?: () => void;
+}
+
 // ── Form oluşturucu ──
-function FormBuilder({ showToast, onDone, onCancel }) {
+function FormBuilder({ showToast, onDone, onCancel }: FormBuilderProps) {
   const { classes } = useClasses();
   const groups = groupedClasses(classes);
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
-  const [roles, setRoles] = useState(['student']);
-  const [sel, setSel] = useState([]); // sınıf hedefi (boş = hepsi)
+  const [roles, setRoles] = useState<string[]>(['student']);
+  const [sel, setSel] = useState<string[]>([]); // sınıf hedefi (boş = hepsi)
   const [anonymous, setAnonymous] = useState(false);
   const [closeDate, setCloseDate] = useState('');
-  const [questions, setQuestions] = useState([]);
+  const [questions, setQuestions] = useState<DraftQuestion[]>([]);
   const [busy, setBusy] = useState(false);
 
-  function toggleRole(r) { setRoles(p => p.includes(r) ? p.filter(x => x !== r) : [...p, r]); }
-  function toggleCls(id) { setSel(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); }
-  function toggleGroup(g) {
+  function toggleRole(r: string) { setRoles(p => p.includes(r) ? p.filter(x => x !== r) : [...p, r]); }
+  function toggleCls(id: string) { setSel(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); }
+  function toggleGroup(g: ClassGroup) {
     const ids = g.items.map(i => i.id);
     const allOn = ids.every(id => sel.includes(id));
     setSel(p => allOn ? p.filter(x => !ids.includes(x)) : [...new Set([...p, ...ids])]);
   }
-  function addQuestion(type) {
+  function addQuestion(type: string) {
     setQuestions(p => [...p, { id: qid(), label: '', type, required: false, options: (type === 'single' || type === 'multi') ? ['', ''] : [] }]);
   }
-  function updateQ(i, patch) { setQuestions(p => p.map((q, idx) => idx === i ? { ...q, ...patch } : q)); }
-  function removeQ(i) { setQuestions(p => p.filter((_, idx) => idx !== i)); }
+  function updateQ(i: number, patch: Partial<DraftQuestion>) { setQuestions(p => p.map((q, idx) => idx === i ? { ...q, ...patch } : q)); }
+  function removeQ(i: number) { setQuestions(p => p.filter((_, idx) => idx !== i)); }
 
   async function save() {
     if (!title.trim()) return showToast?.('Başlık gerekli', 'error');
@@ -150,7 +217,7 @@ function FormBuilder({ showToast, onDone, onCancel }) {
       });
       showToast?.('Form oluşturuldu');
       onDone?.();
-    } catch (e) { showToast?.(e.message, 'error'); } finally { setBusy(false); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); } finally { setBusy(false); }
   }
 
   const showClassPicker = roles.includes('student') || roles.includes('parent');
@@ -247,12 +314,19 @@ function FormBuilder({ showToast, onDone, onCancel }) {
   );
 }
 
-function QuestionEditor({ q, index, onChange, onRemove }) {
+interface QuestionEditorProps {
+  q: DraftQuestion;
+  index: number;
+  onChange: (patch: Partial<DraftQuestion>) => void;
+  onRemove: () => void;
+}
+
+function QuestionEditor({ q, index, onChange, onRemove }: QuestionEditorProps) {
   const { icon: Icon, label } = QTYPE[q.type];
   const isChoice = q.type === 'single' || q.type === 'multi';
-  function setOpt(i, val) { onChange({ options: q.options.map((o, idx) => idx === i ? val : o) }); }
+  function setOpt(i: number, val: string) { onChange({ options: q.options.map((o, idx) => idx === i ? val : o) }); }
   function addOpt() { onChange({ options: [...q.options, ''] }); }
-  function removeOpt(i) { onChange({ options: q.options.filter((_, idx) => idx !== i) }); }
+  function removeOpt(i: number) { onChange({ options: q.options.filter((_, idx) => idx !== i) }); }
 
   return (
     <div className="rounded-lg p-2.5" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
@@ -283,9 +357,22 @@ function QuestionEditor({ q, index, onChange, onRemove }) {
   );
 }
 
+// GET /api/form?id=… yönetici sonuç yanıtı.
+interface ResultsResponse {
+  form?: FormDetailDTO;
+  responseCount: number;
+  eligibleCount: number;
+  results?: ResultItemDTO[];
+}
+
+interface ResultsModalProps {
+  formId: string;
+  onClose: () => void;
+}
+
 // ── Sonuç modalı ──
-function ResultsModal({ formId, onClose }) {
-  const { data, isLoading } = useSWR(`/api/form?id=${encodeURIComponent(formId)}`);
+function ResultsModal({ formId, onClose }: ResultsModalProps) {
+  const { data, isLoading } = useSWR<ResultsResponse>(`/api/form?id=${encodeURIComponent(formId)}`);
   const form = data?.form;
   const results = data?.results || [];
 
@@ -304,7 +391,7 @@ function ResultsModal({ formId, onClose }) {
             <p className="text-caption py-4">Henüz yanıt yok.</p>
           ) : (
             <div className="flex flex-col gap-4">
-              {results.map(r => <ResultItem key={r.id} r={r} total={data.responseCount} />)}
+              {results.map(r => <ResultItem key={r.id} r={r} total={data ? data.responseCount : 0} />)}
             </div>
           )}
         </div>
@@ -313,7 +400,12 @@ function ResultsModal({ formId, onClose }) {
   );
 }
 
-function ResultItem({ r, total }) {
+interface ResultItemProps {
+  r: ResultItemDTO;
+  total: number;
+}
+
+function ResultItem({ r, total }: ResultItemProps) {
   return (
     <div>
       <p className="text-sm font-600 mb-2" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.label}</p>
@@ -363,11 +455,15 @@ function ResultItem({ r, total }) {
   );
 }
 
+interface FormRespondProps {
+  showToast?: ShowToast;
+}
+
 // ════════════════════ YANITLAYAN (öğrenci / veli / öğretmen) ════════════════════
-export function FormRespond({ showToast }) {
-  const { data, isLoading, mutate } = useSWR('/api/form');
+export function FormRespond({ showToast }: FormRespondProps) {
+  const { data, isLoading, mutate } = useSWR<{ formlar?: FormListItemDTO[] }>('/api/form');
   const list = data?.formlar || [];
-  const [openId, setOpenId] = useState(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   if (isLoading) return <p className="text-caption py-8 text-center">Yükleniyor…</p>;
   if (list.length === 0) return <EmptyState icon={ClipboardList} title="Form yok" description="Size yönlendirilen formlar burada görünür." />;
@@ -398,11 +494,18 @@ export function FormRespond({ showToast }) {
   );
 }
 
-function FillModal({ formId, onClose, onSaved, showToast }) {
-  const { data, isLoading } = useSWR(`/api/form?id=${encodeURIComponent(formId)}`);
+interface FillModalProps {
+  formId: string;
+  onClose: () => void;
+  onSaved?: () => void;
+  showToast?: ShowToast;
+}
+
+function FillModal({ formId, onClose, onSaved, showToast }: FillModalProps) {
+  const { data, isLoading } = useSWR<{ form?: FormDetailDTO; mine?: { answers?: Answers } | null }>(`/api/form?id=${encodeURIComponent(formId)}`);
   const form = data?.form;
   const mine = data?.mine;
-  const [answers, setAnswers] = useState(null);
+  const [answers, setAnswers] = useState<Answers | null>(null);
   const [busy, setBusy] = useState(false);
 
   // İlk yüklemede mevcut yanıtı doldur
@@ -411,12 +514,13 @@ function FillModal({ formId, onClose, onSaved, showToast }) {
     setAnswers(mine?.answers ? { ...mine.answers } : {});
   }
 
-  const closed = form && (form.closed || (form.closeDate && form.closeDate < new Date().toISOString().slice(0, 10)));
+  const closed = !!(form && (form.closed || (form.closeDate && form.closeDate < new Date().toISOString().slice(0, 10))));
 
-  function setAns(qid, val) { setAnswers(p => ({ ...p, [qid]: val })); }
-  function toggleMulti(qid, opt) {
+  function setAns(qid: string, val: AnswerValue) { setAnswers(p => ({ ...p, [qid]: val })); }
+  function toggleMulti(qid: string, opt: string) {
     setAnswers(p => {
-      const arr = Array.isArray(p[qid]) ? p[qid] : [];
+      const cur = p?.[qid];
+      const arr = Array.isArray(cur) ? cur : [];
       return { ...p, [qid]: arr.includes(opt) ? arr.filter(x => x !== opt) : [...arr, opt] };
     });
   }
@@ -428,7 +532,7 @@ function FillModal({ formId, onClose, onSaved, showToast }) {
       showToast?.('Yanıtınız alındı');
       onSaved?.();
       onClose();
-    } catch (e) { showToast?.(e.message, 'error'); } finally { setBusy(false); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); } finally { setBusy(false); }
   }
 
   return (
@@ -451,11 +555,11 @@ function FillModal({ formId, onClose, onSaved, showToast }) {
                     {i + 1}. {q.label} {q.required && <span style={{ color: '#e11d48' }}>*</span>}
                   </p>
                   {q.type === 'text' && (
-                    <textarea value={answers[q.id] || ''} disabled={closed} onChange={e => setAns(q.id, e.target.value)} rows={2} className="input !text-sm resize-y" placeholder="Yanıtınız" />
+                    <textarea value={(answers[q.id] as string) || ''} disabled={closed} onChange={e => setAns(q.id, e.target.value)} rows={2} className="input !text-sm resize-y" placeholder="Yanıtınız" />
                   )}
                   {q.type === 'single' && (
                     <div className="flex flex-col gap-1.5">
-                      {q.options.map(o => (
+                      {(q.options || []).map(o => (
                         <label key={o} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
                           <input type="radio" name={q.id} checked={answers[q.id] === o} disabled={closed} onChange={() => setAns(q.id, o)} className="accent-indigo-600" /> {o}
                         </label>
@@ -464,9 +568,9 @@ function FillModal({ formId, onClose, onSaved, showToast }) {
                   )}
                   {q.type === 'multi' && (
                     <div className="flex flex-col gap-1.5">
-                      {q.options.map(o => (
+                      {(q.options || []).map(o => (
                         <label key={o} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
-                          <input type="checkbox" checked={Array.isArray(answers[q.id]) && answers[q.id].includes(o)} disabled={closed} onChange={() => toggleMulti(q.id, o)} className="accent-indigo-600" /> {o}
+                          <input type="checkbox" checked={Array.isArray(answers[q.id]) && (answers[q.id] as string[]).includes(o)} disabled={closed} onChange={() => toggleMulti(q.id, o)} className="accent-indigo-600" /> {o}
                         </label>
                       ))}
                     </div>
