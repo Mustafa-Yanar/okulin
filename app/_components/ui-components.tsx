@@ -1,10 +1,22 @@
 import React from 'react';
 import { BookOpen } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
+import type { Branding } from '@/lib/branding';
 
-export function Toast({ toast }) {
+// AppContent showToast'ın ürettiği şekil: { msg, type } — types.ts'te yok, yerel tanım.
+interface ToastData {
+  msg: React.ReactNode;
+  type: string;
+}
+
+interface ToastProps {
+  toast: ToastData | null | undefined;
+}
+
+export function Toast({ toast }: ToastProps) {
   if (!toast) return null;
-  const cls = { success: 'toast-success', error: 'toast-error', info: 'toast-info' };
+  // Record<string, string>: bilinmeyen type değeri || ile toast-success'e düşer (mevcut davranış).
+  const cls: Record<string, string> = { success: 'toast-success', error: 'toast-error', info: 'toast-info' };
   return (
     <div className={`fixed bottom-6 left-1/2 z-50 animate-fade-up -translate-x-1/2 toast-base ${cls[toast.type] || 'toast-success'}`}>
       {toast.msg}
@@ -12,15 +24,26 @@ export function Toast({ toast }) {
   );
 }
 
-export function Label({ children, htmlFor }) {
+interface LabelProps {
+  children: React.ReactNode;
+  htmlFor?: string;
+}
+
+export function Label({ children, htmlFor }: LabelProps) {
   return <label htmlFor={htmlFor} className="block text-xs font-600 text-gray-500 uppercase tracking-wide mb-1.5" style={{ fontWeight: 600 }}>{children}</label>;
 }
 
-export function FormField({ label, children }) {
+interface FormFieldProps {
+  label: React.ReactNode;
+  children: React.ReactNode;
+}
+
+export function FormField({ label, children }: FormFieldProps) {
   const id = React.useId();
-  let associatedId;
+  let associatedId: string | undefined;
+  // isValidElement<{ id?: string }>: yalnız tip argümanı — props.id okuma/klonlama davranışı aynı.
   const content = React.Children.map(children, child => {
-    if (!associatedId && React.isValidElement(child) && !child.props.id) {
+    if (!associatedId && React.isValidElement<{ id?: string }>(child) && !child.props.id) {
       associatedId = id;
       return React.cloneElement(child, { id });
     }
@@ -29,7 +52,12 @@ export function FormField({ label, children }) {
   return <div className="mb-4"><Label htmlFor={associatedId}>{label}</Label>{content}</div>;
 }
 
-export function BrandHeader({ branding, subtitle }) {
+interface BrandHeaderProps {
+  branding?: Branding | null;
+  subtitle?: React.ReactNode;
+}
+
+export function BrandHeader({ branding, subtitle }: BrandHeaderProps) {
   return (
     <div className="text-center mb-8">
       {branding?.logoUrl ? (

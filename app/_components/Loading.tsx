@@ -2,7 +2,12 @@
 
 // ─── Skeleton blokları ────────────────────────────────────────────────────────
 
-export function SkeletonLine({ width = 'w-full', height = 'h-4' }) {
+interface SkeletonLineProps {
+  width?: string;
+  height?: string;
+}
+
+export function SkeletonLine({ width = 'w-full', height = 'h-4' }: SkeletonLineProps) {
   return <div className={`skeleton ${width} ${height}`} />;
 }
 
@@ -20,7 +25,11 @@ export function SkeletonCard() {
   );
 }
 
-export function SkeletonList({ count = 4 }) {
+interface SkeletonListProps {
+  count?: number;
+}
+
+export function SkeletonList({ count = 4 }: SkeletonListProps) {
   return (
     <div className="space-y-2">
       {Array.from({ length: count }).map((_, i) => (
@@ -30,7 +39,12 @@ export function SkeletonList({ count = 4 }) {
   );
 }
 
-export function SkeletonTable({ rows = 5, cols = 4 }) {
+interface SkeletonTableProps {
+  rows?: number;
+  cols?: number;
+}
+
+export function SkeletonTable({ rows = 5, cols = 4 }: SkeletonTableProps) {
   return (
     <div className="card overflow-hidden">
       <div className="p-4 space-y-3">
@@ -48,7 +62,12 @@ export function SkeletonTable({ rows = 5, cols = 4 }) {
 
 // ─── Genel loading göstergesi ────────────────────────────────────────────────
 
-export function LoadingSpinner({ size = 20, className = '' }) {
+interface LoadingSpinnerProps {
+  size?: number;
+  className?: string;
+}
+
+export function LoadingSpinner({ size = 20, className = '' }: LoadingSpinnerProps) {
   return (
     <svg
       width={size} height={size}
@@ -63,8 +82,13 @@ export function LoadingSpinner({ size = 20, className = '' }) {
   );
 }
 
+interface LoadingBoxProps {
+  height?: string;
+  label?: string;
+}
+
 // İçeriği ortalayan loading kutusu — tam sayfa veya panel içi
-export default function LoadingBox({ height = 'h-48', label = 'Yükleniyor…' }) {
+export default function LoadingBox({ height = 'h-48', label = 'Yükleniyor…' }: LoadingBoxProps) {
   return (
     <div className={`flex flex-col items-center justify-center gap-2 ${height}`} aria-label={label}>
       <LoadingSpinner size={24} />

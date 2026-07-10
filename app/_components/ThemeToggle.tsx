@@ -3,14 +3,14 @@
 import { useState, useEffect } from 'react';
 import { Moon, Sun } from 'lucide-react';
 
-function getInitialDark() {
+function getInitialDark(): boolean {
   if (typeof window === 'undefined') return false;
   const stored = localStorage.getItem('theme');
   if (stored) return stored === 'dark';
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
-export function useDarkMode() {
+export function useDarkMode(): { dark: boolean; toggle: () => void } {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
@@ -32,7 +32,11 @@ export function useDarkMode() {
   return { dark, toggle };
 }
 
-export default function ThemeToggle({ collapsed }) {
+interface ThemeToggleProps {
+  collapsed: boolean;
+}
+
+export default function ThemeToggle({ collapsed }: ThemeToggleProps) {
   const { dark, toggle } = useDarkMode();
 
   return (

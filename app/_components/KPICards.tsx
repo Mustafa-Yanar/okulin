@@ -2,12 +2,36 @@
 
 import React from 'react';
 import { GraduationCap, Users, Wallet, AlertCircle } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
-function fmt(n) {
+// GET /api/stats yanıt şekli (app/api/stats/route.ts) — types.ts'te yok, yerel tanım.
+interface StatsData {
+  studentCount: number;
+  teacherCount: number;
+  thisMonthCollection: number;
+  pendingAmount: number;
+}
+
+// COLORS girdisi: kart ikon kutusunun arkaplan + ikon renk sınıfları.
+interface ColorPair {
+  bg: string;
+  icon: string;
+}
+
+function fmt(n: number | undefined): string {
   return (n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-function KPICard({ icon: Icon, label, value, sub, color, loading }) {
+interface KPICardProps {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  sub?: string;
+  color: ColorPair;
+  loading?: boolean;
+}
+
+function KPICard({ icon: Icon, label, value, sub, color, loading }: KPICardProps) {
   return (
     <div className="card card-hover p-5 flex flex-col gap-4">
       <div className="flex items-start justify-between">
@@ -37,8 +61,23 @@ const COLORS = {
   orange: { bg: 'bg-orange-500/10', icon: 'text-orange-500' },
 };
 
-export default function KPICards({ stats, loading, showFinance = true }) {
-  const cards = [
+// cards dizisinin eleman şekli (sub yalnız finans kartlarında var).
+interface CardDef {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  sub?: string;
+  color: ColorPair;
+}
+
+interface KPICardsProps {
+  stats?: StatsData | null;
+  loading?: boolean;
+  showFinance?: boolean;
+}
+
+export default function KPICards({ stats, loading, showFinance = true }: KPICardsProps) {
+  const cards: CardDef[] = [
     {
       icon: GraduationCap,
       label: 'Aktif Öğrenci',
@@ -62,7 +101,8 @@ export default function KPICards({ stats, loading, showFinance = true }) {
         icon: AlertCircle,
         label: 'Vadesi Geçen',
         value: loading ? '—' : `₺${fmt(stats?.pendingAmount)}`,
-        sub: stats?.pendingAmount > 0 ? 'ödeme bekliyor' : undefined,
+        // (?? 0) yalnız tip daraltması için: undefined > 0 zaten false idi, davranış birebir aynı.
+        sub: (stats?.pendingAmount ?? 0) > 0 ? 'ödeme bekliyor' : undefined,
         color: COLORS.orange,
       },
     ] : []),

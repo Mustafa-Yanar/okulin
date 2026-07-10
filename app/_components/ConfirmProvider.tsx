@@ -9,21 +9,45 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
-const ConfirmContext = createContext(null);
+// Çağıran tarafın verebileceği seçenekler (hepsi opsiyonel)
+export interface ConfirmOptions {
+  title?: string;
+  message?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
+}
 
-export function useConfirm() {
+// State'te tutulan, varsayılanları doldurulmuş hali
+interface ResolvedConfirmOptions {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  danger: boolean;
+}
+
+export type ConfirmFn = (arg?: string | ConfirmOptions) => Promise<boolean>;
+
+const ConfirmContext = createContext<ConfirmFn | null>(null);
+
+export function useConfirm(): ConfirmFn {
   const ctx = useContext(ConfirmContext);
   if (!ctx) throw new Error('useConfirm bir ConfirmProvider içinde kullanılmalı');
   return ctx;
 }
 
-export function ConfirmProvider({ children }) {
-  const [opts, setOpts] = useState(null);
-  const resolverRef = useRef(null);
+interface ConfirmProviderProps {
+  children: React.ReactNode;
+}
 
-  const confirm = useCallback((arg) => {
-    const o = typeof arg === 'string' ? { message: arg } : (arg || {});
-    return new Promise((resolve) => {
+export function ConfirmProvider({ children }: ConfirmProviderProps) {
+  const [opts, setOpts] = useState<ResolvedConfirmOptions | null>(null);
+  const resolverRef = useRef<((result: boolean) => void) | null>(null);
+
+  const confirm = useCallback<ConfirmFn>((arg) => {
+    const o: ConfirmOptions = typeof arg === 'string' ? { message: arg } : (arg || {});
+    return new Promise<boolean>((resolve) => {
       resolverRef.current = resolve;
       setOpts({
         title: o.title || 'Emin misiniz?',
@@ -35,7 +59,7 @@ export function ConfirmProvider({ children }) {
     });
   }, []);
 
-  const settle = useCallback((result) => {
+  const settle = useCallback((result: boolean) => {
     setOpts(null);
     const r = resolverRef.current;
     resolverRef.current = null;
@@ -45,7 +69,7 @@ export function ConfirmProvider({ children }) {
   // ESC = vazgeç (yalnız diyalog açıkken)
   useEffect(() => {
     if (!opts) return;
-    const onKey = (e) => { if (e.key === 'Escape') settle(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') settle(false); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [opts, settle]);

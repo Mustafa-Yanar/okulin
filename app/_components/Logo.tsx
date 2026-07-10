@@ -6,13 +6,28 @@
 
 import { GraduationCap } from 'lucide-react';
 
-const SIZES = {
+type LogoSize = 'sm' | 'md' | 'lg';
+
+interface LogoSizeSpec {
+  box: number;
+  icon: number;
+  text: string;
+  radius: number;
+}
+
+const SIZES: Record<LogoSize, LogoSizeSpec> = {
   sm: { box: 28, icon: 15, text: 'text-base', radius: 8 },
   md: { box: 36, icon: 19, text: 'text-xl', radius: 10 },
   lg: { box: 44, icon: 24, text: 'text-2xl', radius: 12 },
 };
 
-export default function Logo({ size = 'md', wordmark = true, className = '' }) {
+interface LogoProps {
+  size?: LogoSize;
+  wordmark?: boolean;
+  className?: string;
+}
+
+export default function Logo({ size = 'md', wordmark = true, className = '' }: LogoProps) {
   const s = SIZES[size] || SIZES.md;
   return (
     <div className={`flex items-center gap-2.5 ${className}`}>

@@ -7,14 +7,14 @@ import { reportError } from '@/lib/error-client';
 // Görünmez yardımcı bileşen — bir kez listener kurar.
 export function GlobalErrorListener() {
   React.useEffect(() => {
-    const onError = (event) => {
+    const onError = (event: ErrorEvent) => {
       reportError({
         message: event?.message || 'Bilinmeyen hata',
         stack: event?.error?.stack,
         source: 'window',
       });
     };
-    const onRejection = (event) => {
+    const onRejection = (event: PromiseRejectionEvent) => {
       const reason = event?.reason;
       reportError({
         message: (reason && (reason.message || String(reason))) || 'İşlenmeyen promise reddi',
@@ -32,18 +32,26 @@ export function GlobalErrorListener() {
   return null;
 }
 
+interface ErrorBoundaryProps {
+  children?: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
 // React render hatalarını yakalar; uygulamanın komple beyaz ekrana düşmesini önler.
-export class ErrorBoundary extends React.Component {
-  constructor(props) {
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError() {
+  static getDerivedStateFromError(): ErrorBoundaryState {
     return { hasError: true };
   }
 
-  componentDidCatch(error, info) {
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
     reportError({
       message: error?.message || 'React render hatası',
       stack: error?.stack,

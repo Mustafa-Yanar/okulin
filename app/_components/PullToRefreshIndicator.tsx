@@ -3,7 +3,14 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
-export default function PullToRefreshIndicator({ pullDistance, refreshState }) {
+interface PullToRefreshIndicatorProps {
+  pullDistance: number;
+  // usePullToRefresh hook'undaki değerler: idle | pulling | ready | refreshing | popping.
+  // Hook henüz JS/paralel çeviride olduğundan geniş `string` tipi kullanıldı (literal karşılaştırmalar tip-güvenli).
+  refreshState: string;
+}
+
+export default function PullToRefreshIndicator({ pullDistance, refreshState }: PullToRefreshIndicatorProps) {
   if (pullDistance <= 0) return null;
 
   return (

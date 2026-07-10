@@ -5,15 +5,23 @@
 // bu tek kaynaktan import eder.
 
 import React from 'react';
-import { X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { weekRangeLabel } from '@/lib/constants';
+import { X } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
-export const GROUPS = { ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
+export const GROUPS: Record<string, string> = { ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
+
+interface SectionHeaderProps {
+  title: React.ReactNode;
+  count?: number | null;
+  subtitle?: React.ReactNode;
+  icon?: LucideIcon;
+  children?: React.ReactNode;
+}
 
 // Tek tip bölüm/sekme başlığı — başlık (+ opsiyonel sayı), opsiyonel ikon + alt
 // başlık, sağda opsiyonel aksiyonlar (children). Panel başlıkları bunu kullanır
 // (eski ad-hoc flex+h3 blokları yerine; .section-header sınıfını kullanır).
-export function SectionHeader({ title, count, subtitle, icon: Icon, children }) {
+export function SectionHeader({ title, count, subtitle, icon: Icon, children }: SectionHeaderProps) {
   return (
     <div className="section-header flex-wrap gap-3">
       <div className="flex items-center gap-3 min-w-0">
@@ -37,18 +45,28 @@ export function SectionHeader({ title, count, subtitle, icon: Icon, children }) 
 // director alt-bileşen importları (./shared) değişmeden çalışmaya devam eder.
 export { api, getAdjacentWeek, isSlotPast, WeekNav } from '../shared';
 
-export function Modal({ title, onClose, children, wide, xwide, lockClose }) {
+interface ModalProps {
+  title: React.ReactNode;
+  onClose: () => void;
+  children: React.ReactNode;
+  wide?: boolean;
+  xwide?: boolean;
+  lockClose?: boolean;
+}
+
+export function Modal({ title, onClose, children, wide, xwide, lockClose }: ModalProps) {
   const titleId = React.useId();
-  const dialogRef = React.useRef(null);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
   // onClose/lockClose en güncel hâliyle okunsun ama effect her render tekrar kurulmasın.
   const onCloseRef = React.useRef(onClose); onCloseRef.current = onClose;
   const lockRef = React.useRef(lockClose); lockRef.current = lockClose;
 
   React.useEffect(() => {
-    const prevFocus = document.activeElement;
+    // activeElement Element döner; focus() varlığı runtime'da zaten kontrol ediliyor.
+    const prevFocus = document.activeElement as HTMLElement | null;
     // İçeride zaten odaklı bir öğe yoksa (autoFocus input'unu çalma) modalı odakla.
     if (!dialogRef.current?.contains(document.activeElement)) dialogRef.current?.focus();
-    const onKey = (e) => { if (e.key === 'Escape' && !lockRef.current) onCloseRef.current(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !lockRef.current) onCloseRef.current(); };
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
@@ -73,18 +91,31 @@ export function Modal({ title, onClose, children, wide, xwide, lockClose }) {
   );
 }
 
-export function Label({ children, htmlFor }) {
+interface LabelProps {
+  children: React.ReactNode;
+  htmlFor?: string;
+}
+
+export function Label({ children, htmlFor }: LabelProps) {
   return <label htmlFor={htmlFor} className="text-label block mb-1.5">{children}</label>;
+}
+
+interface FormFieldProps {
+  label: React.ReactNode;
+  children: React.ReactNode;
+  error?: React.ReactNode;
+  hint?: React.ReactNode;
 }
 
 // label'ı ilk form elemanı child'ına useId ile bağlar (ekran okuyucu + otomatik doldurma).
 // Birden çok / element olmayan child varsa güvenle olduğu gibi bırakır.
 // error: doluysa alan altında kırmızı mesaj + ilk input'a .input-error eklenir.
 // hint: nötr yardımcı metin (error yokken gösterilir).
-export function FormField({ label, children, error, hint }) {
+export function FormField({ label, children, error, hint }: FormFieldProps) {
   const id = React.useId();
-  let associatedId;
+  let associatedId: string | undefined;
   const content = React.Children.map(children, child => {
+    // isValidElement daraltması props'u any yapar (React 18 tipi) — id/className erişimi güvenli.
     if (!associatedId && React.isValidElement(child) && !child.props.id) {
       associatedId = id;
       // İlk form elemanına id ver; error varsa hata stilini de ekle.
@@ -108,7 +139,7 @@ export function FormField({ label, children, error, hint }) {
 
 
 
-export function guidanceSubjectsFor(cls) {
+export function guidanceSubjectsFor(cls: string | null | undefined): string[] {
   if (!cls) return [];
   if (cls.startsWith('7')) {
     return ['Türkçe', 'Matematik', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İngilizce'];

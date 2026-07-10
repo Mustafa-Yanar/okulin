@@ -9,12 +9,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
-function read(key) {
+function read(key: string): string | null {
   if (typeof window === 'undefined') return null;
   return new URLSearchParams(window.location.search).get(key);
 }
 
-function write(key, value, mode) {
+function write(key: string, value: string | null | undefined, mode: 'push' | 'replace'): void {
   if (typeof window === 'undefined') return;
   const params = new URLSearchParams(window.location.search);
   if (value == null || value === '') params.delete(key);
@@ -25,8 +25,8 @@ function write(key, value, mode) {
   else window.history.replaceState({}, '', url);
 }
 
-export function useUrlParam(key) {
-  const [value, setValueState] = useState(null);
+export function useUrlParam(key: string): [string | null, (v: string | null) => void] {
+  const [value, setValueState] = useState<string | null>(null);
 
   // Mount: URL'deki değeri oku (SSR güvenli — ilk render null).
   useEffect(() => {
@@ -42,7 +42,7 @@ export function useUrlParam(key) {
     return () => window.removeEventListener('popstate', onPop);
   }, [key]);
 
-  const setValue = useCallback((v) => {
+  const setValue = useCallback((v: string | null) => {
     setValueState(v || null);
     write(key, v, 'push');
   }, [key]);

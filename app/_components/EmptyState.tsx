@@ -9,14 +9,26 @@
 //   <EmptyState icon={Search} title="Sonuç bulunamadı" compact />
 //   <EmptyState icon={FileText} title="Kaynak yok" action={<button className="btn-primary ...">Ekle</button>} />
 
+import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
+
+interface EmptyStateProps {
+  icon?: LucideIcon;
+  title: ReactNode;
+  description?: ReactNode;
+  action?: ReactNode;
+  compact?: boolean;   // dar alanlar (liste içi) için daha küçük boşluk
+  card?: boolean;       // kart zemini içinde göstermek istenirse
+}
+
 export default function EmptyState({
   icon: Icon,
   title,
   description,
   action,
-  compact = false,   // dar alanlar (liste içi) için daha küçük boşluk
-  card = false,       // kart zemini içinde göstermek istenirse
-}) {
+  compact = false,
+  card = false,
+}: EmptyStateProps) {
   const pad = compact ? 'py-8' : 'py-12';
   const iconSize = compact ? 22 : 28;
   const circle = compact ? 'w-12 h-12' : 'w-16 h-16';

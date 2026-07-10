@@ -1,0 +1,62 @@
+// İstemci tarafı ortak DTO tipleri — TEK kaynak (TS Faz 3).
+// API route'larının döndürdüğü JSON şekilleri; sunucudaki mapper'larla
+// (ör. app/api/students/route.ts studentOut, app/api/teachers/route.ts GET)
+// birebir eşleşir. lib/'de zaten var olan tipler BURAYA kopyalanmaz —
+// Session (lib/auth), Branding (lib/branding), ConfigValue (lib/config),
+// Slot/SlotTime (lib/constants), SlotCell/ProgramEntry (lib/slots),
+// ClassRecord (lib/classes), CourseRecord (lib/courses) doğrudan import edilir.
+// NOT: import type satırları derlemede silinir; sunucu modüllerinden tip almak
+// client bileşenlerde güvenlidir.
+
+import type { Session } from '@/lib/auth';
+import type { Branding } from '@/lib/branding';
+import type { ConfigValue } from '@/lib/config';
+
+// GET /api/students — studentOut mapper çıktısı.
+export interface StudentDTO {
+  id: string;
+  name: string;
+  username: string;
+  cls: string;
+  group: string;
+  phone: string;
+  parentPhone: string;
+  parentName: string;
+  birthDate: string;
+  diplomaNotu: number | '';
+  obp: number | null;
+  parentRelation: string;
+  parentNote: string;
+  parent2Name: string;
+  parent2Phone: string;
+  parent2Relation: string;
+}
+
+// Öğretmen ders ön-tanımı (preset): sınıf + ders eşlemesi.
+export interface TeacherPresetDTO {
+  cls: string;
+  course: string;
+}
+
+// GET /api/teachers — liste elemanı.
+export interface TeacherDTO {
+  id: string;
+  name: string;
+  username: string;
+  branches: string[];
+  allowedGroups: string[];
+  photoUrl: string;
+  offDays: string[];
+  phone: string;
+  presets: TeacherPresetDTO[];
+}
+
+// GET /api/auth — oturum + kurum durumu (whoami).
+export interface WhoamiResponse {
+  session: Session | null;
+  directorExists: boolean;
+  branding: Branding;
+  modules: ConfigValue<'modules'>;
+  etut: ConfigValue<'etut'>;
+  permissions: ConfigValue<'permissions'>;
+}

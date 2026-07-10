@@ -6,14 +6,23 @@ import { api } from './shared';
 
 // Helper API Fetcher
 
-function Modal({ title, onClose, children, wide, xwide }) {
+interface ModalProps {
+  title: React.ReactNode;
+  onClose: () => void;
+  children: React.ReactNode;
+  wide?: boolean;
+  xwide?: boolean;
+}
+
+function Modal({ title, onClose, children, wide, xwide }: ModalProps) {
   const titleId = useId();
-  const dialogRef = useRef(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose); onCloseRef.current = onClose;
   useEffect(() => {
-    const prevFocus = document.activeElement;
+    // activeElement Element döner; focus'un varlığı zaten çalışma zamanında typeof ile kontrol ediliyor (teknik zorunluluk)
+    const prevFocus = document.activeElement as (Element & { focus?: () => void }) | null;
     if (!dialogRef.current?.contains(document.activeElement)) dialogRef.current?.focus();
-    const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current(); };
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
@@ -34,15 +43,25 @@ function Modal({ title, onClose, children, wide, xwide }) {
   );
 }
 
-function Label({ children, htmlFor }) {
+interface LabelProps {
+  children: React.ReactNode;
+  htmlFor?: string;
+}
+
+function Label({ children, htmlFor }: LabelProps) {
   return <label htmlFor={htmlFor} className="text-label block mb-1.5">{children}</label>;
 }
 
-function FormField({ label, children }) {
+interface FormFieldProps {
+  label: React.ReactNode;
+  children: React.ReactNode;
+}
+
+function FormField({ label, children }: FormFieldProps) {
   const id = React.useId();
-  let associatedId;
+  let associatedId: string | undefined;
   const content = React.Children.map(children, child => {
-    if (!associatedId && React.isValidElement(child) && !child.props.id) {
+    if (!associatedId && React.isValidElement<{ id?: string }>(child) && !child.props.id) {
       associatedId = id;
       return React.cloneElement(child, { id });
     }
@@ -51,13 +70,18 @@ function FormField({ label, children }) {
   return <div className="mb-4"><Label htmlFor={associatedId}>{label}</Label>{content}</div>;
 }
 
-export default function ChangePasswordModal({ onClose, showToast }) {
+interface ChangePasswordModalProps {
+  onClose: () => void;
+  showToast: (msg: string, type?: string) => void;
+}
+
+export default function ChangePasswordModal({ onClose, showToast }: ChangePasswordModalProps) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [next2, setNext2] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const submit = async e => {
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (next !== next2) { showToast('Yeni şifreler eşleşmiyor', 'error'); return; }
     if (next.length < 4) { showToast('Şifre en az 4 karakter olmalı', 'error'); return; }
@@ -67,7 +91,8 @@ export default function ChangePasswordModal({ onClose, showToast }) {
       showToast('Şifre başarıyla değiştirildi');
       onClose();
     } catch (err) {
-      showToast(err.message, 'error');
+      // api() daima Error fırlatır — teknik daraltma, davranış birebir korunuyor
+      showToast((err as Error).message, 'error');
     } finally {
       setLoading(false);
     }

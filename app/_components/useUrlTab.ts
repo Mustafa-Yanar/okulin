@@ -10,12 +10,12 @@ import { useState, useEffect, useCallback } from 'react';
 
 const PARAM = 'sekme';
 
-function readParam() {
+function readParam(): string | null {
   if (typeof window === 'undefined') return null;
   return new URLSearchParams(window.location.search).get(PARAM);
 }
 
-function writeParam(value, mode) {
+function writeParam(value: string, mode: 'push' | 'replace'): void {
   if (typeof window === 'undefined') return;
   const params = new URLSearchParams(window.location.search);
   params.set(PARAM, value);
@@ -24,14 +24,14 @@ function writeParam(value, mode) {
   else window.history.replaceState({}, '', url);
 }
 
-export function useUrlTab(defaultTab, validTabs) {
+export function useUrlTab(defaultTab: string, validTabs?: string[]): [string, (value: string) => void] {
   const isValid = useCallback(
-    (v) => !!v && (!validTabs || validTabs.includes(v)),
+    (v: string | null): v is string => !!v && (!validTabs || validTabs.includes(v)),
     [validTabs]
   );
 
   // SSR/hydration güvenli: ilk render daima default; URL'i mount'tan sonra okuruz.
-  const [tab, setTabState] = useState(defaultTab);
+  const [tab, setTabState] = useState<string>(defaultTab);
 
   // Mount: URL'de geçerli sekme varsa onu yükle; yoksa default'u URL'e yaz (geçmişe eklemeden).
   useEffect(() => {
@@ -52,7 +52,7 @@ export function useUrlTab(defaultTab, validTabs) {
     return () => window.removeEventListener('popstate', onPop);
   }, [defaultTab, isValid]);
 
-  const setTab = useCallback((value) => {
+  const setTab = useCallback((value: string) => {
     setTabState(value);
     writeParam(value, 'push');
   }, []);

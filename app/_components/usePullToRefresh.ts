@@ -2,21 +2,24 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-export function usePullToRefresh(onRefresh) {
-  const [pullDistance, setPullDistance] = useState(0);
-  const [refreshState, setRefreshState] = useState('idle'); // idle | pulling | ready | refreshing | popping
+type RefreshState = 'idle' | 'pulling' | 'ready' | 'refreshing' | 'popping';
+type GestureDirection = 'none' | 'down' | 'other';
 
-  const scrollContainerRef = useRef(null); // scrollTop okunan içerik alanı (<main>)
-  const gestureTargetRef = useRef(null);   // touch dinleyicilerin bağlandığı kapsayıcı (header dahil)
-  const stateRef = useRef({ refreshState, pullDistance });
+export function usePullToRefresh(onRefresh: () => void | Promise<void>) {
+  const [pullDistance, setPullDistance] = useState(0);
+  const [refreshState, setRefreshState] = useState<RefreshState>('idle'); // idle | pulling | ready | refreshing | popping
+
+  const scrollContainerRef = useRef<HTMLElement | null>(null); // scrollTop okunan içerik alanı (<main>)
+  const gestureTargetRef = useRef<HTMLElement | null>(null);   // touch dinleyicilerin bağlandığı kapsayıcı (header dahil)
+  const stateRef = useRef<{ refreshState: RefreshState; pullDistance: number }>({ refreshState, pullDistance });
   useEffect(() => { stateRef.current = { refreshState, pullDistance }; }, [refreshState, pullDistance]);
 
   const touchStartY = useRef(0);
   const touchStartX = useRef(0);
   const isPullStart = useRef(false);
-  const gestureDirection = useRef('none');
+  const gestureDirection = useRef<GestureDirection>('none');
 
-  const handleTouchStart = useCallback((e) => {
+  const handleTouchStart = useCallback((e: TouchEvent) => {
     const container = scrollContainerRef.current;
     const isAtTop = container && container.scrollTop <= 2;
     const isIdle = stateRef.current.refreshState === 'idle';
@@ -31,7 +34,7 @@ export function usePullToRefresh(onRefresh) {
     }
   }, []);
 
-  const handleTouchMove = useCallback((e) => {
+  const handleTouchMove = useCallback((e: TouchEvent) => {
     if (!isPullStart.current) return;
 
     const currentY = e.touches[0].clientY;
@@ -95,13 +98,13 @@ export function usePullToRefresh(onRefresh) {
   }, [onRefresh]);
 
   // scrollTop'un okunacağı içerik alanını (<main>) işaretler — dinleyici bağlamaz.
-  const setScrollContainerRef = useCallback((node) => {
+  const setScrollContainerRef = useCallback((node: HTMLElement | null) => {
     scrollContainerRef.current = node;
   }, []);
 
   // Touch dinleyicilerini bağlanan kapsayıcıya kurar. Header'ı da kapsayan üst
   // kapsayıcıya verilirse, üst bardan çekince de uygulama animasyonu çalışır.
-  const setGestureContainerRef = useCallback((node) => {
+  const setGestureContainerRef = useCallback((node: HTMLElement | null) => {
     if (gestureTargetRef.current) {
       gestureTargetRef.current.removeEventListener('touchstart', handleTouchStart);
       gestureTargetRef.current.removeEventListener('touchmove', handleTouchMove);

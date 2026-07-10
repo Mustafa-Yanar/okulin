@@ -4,9 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { Bell, BellOff, BellRing } from 'lucide-react';
 import { isPushSupported, getPushState, subscribeToPush, unsubscribeFromPush } from '@/lib/push-client';
 
+interface NotificationButtonProps {
+  showToast: (msg: string, type?: string) => void;
+}
+
 // Header'da bildirim aç/kapat butonu. Tüm roller kullanabilir.
 // Kapalı: BellOff (gri). Açık: Bell (indigo). İşlem sırasında: pulse.
-export default function NotificationButton({ showToast }) {
+export default function NotificationButton({ showToast }: NotificationButtonProps) {
   const [supported, setSupported] = useState(true);
   const [subscribed, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,7 +41,7 @@ export default function NotificationButton({ showToast }) {
         showToast('Bildirimler açıldı');
       }
     } catch (err) {
-      showToast(err.message || 'Bildirim işlemi başarısız', 'error');
+      showToast((err instanceof Error && err.message) || 'Bildirim işlemi başarısız', 'error');
     } finally {
       setBusy(false);
     }

@@ -4,13 +4,26 @@
 // /api/classes tüm rollere açık (yalnız oturum ister). Registry boşsa boş dizi döner;
 // tüketiciler classLabelFrom(classes, cls, classLabel) ile constants fallback'e düşer
 // (kayıtsız kurumda davranış bit-bit aynı kalır). Tek kaynak — her panelde ayrı fetch yok.
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import type { ClassRecord } from '@/lib/classes';
+import type { CourseRecord } from '@/lib/courses';
 
-const ClassesContext = createContext({ classes: [], courses: [], loaded: false, reloadClasses: () => {} });
+interface ClassesContextValue {
+  classes: ClassRecord[];
+  courses: CourseRecord[];
+  loaded: boolean;
+  reloadClasses: () => void | Promise<void>;
+}
 
-export function ClassesProvider({ children }) {
-  const [classes, setClasses] = useState([]);
-  const [courses, setCourses] = useState([]);
+const ClassesContext = createContext<ClassesContextValue>({ classes: [], courses: [], loaded: false, reloadClasses: () => {} });
+
+interface ClassesProviderProps {
+  children: ReactNode;
+}
+
+export function ClassesProvider({ children }: ClassesProviderProps) {
+  const [classes, setClasses] = useState<ClassRecord[]>([]);
+  const [courses, setCourses] = useState<CourseRecord[]>([]);
   // İlk fetch tamamlandı mı? Tüketiciler bunu "kayıt gerçekten boş" ile "henüz yüklenmedi"
   // ayrımı için kullanır — aksi halde ilk render'da boş diziyi "kayıtsız kurum" sanıp
   // sabit-kod fallback'ine düşebilirler.
@@ -20,7 +33,8 @@ export function ClassesProvider({ children }) {
     try {
       const res = await fetch('/api/classes', { credentials: 'same-origin' });
       if (!res.ok) return; // 401 vb. → fallback'te kal
-      const data = await res.json();
+      // res.json() `any` döndürür; GET /api/classes sözleşmesi { classes, courses } (route.ts GET).
+      const data = (await res.json()) as { classes?: ClassRecord[]; courses?: CourseRecord[] };
       setClasses(Array.isArray(data.classes) ? data.classes : []);
       setCourses(Array.isArray(data.courses) ? data.courses : []);
     } catch {
@@ -39,6 +53,6 @@ export function ClassesProvider({ children }) {
   );
 }
 
-export function useClasses() {
+export function useClasses(): ClassesContextValue {
   return useContext(ClassesContext);
 }

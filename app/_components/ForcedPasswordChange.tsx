@@ -3,18 +3,26 @@
 import React, { useState } from 'react';
 import { Lock, LogOut, ShieldCheck } from 'lucide-react';
 import { api } from './shared';
+import type { Session } from '@/lib/auth';
 
+
+interface ForcedPasswordChangeProps {
+  session: Session;
+  onDone: () => void;
+  onLogout: () => void;
+  showToast: (msg: string, type?: string) => void;
+}
 
 // Zorunlu şifre değiştirme ekranı.
 // İlk girişte (mustChangePassword:true) veya müdür şifre sıfırlamasından sonra gösterilir.
 // Kapatılamaz — kullanıcı ya yeni şifre belirler ya çıkış yapar.
-export default function ForcedPasswordChange({ session, onDone, onLogout, showToast }) {
+export default function ForcedPasswordChange({ session, onDone, onLogout, showToast }: ForcedPasswordChangeProps) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [next2, setNext2] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const submit = async (e) => {
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (next !== next2) { showToast('Yeni şifreler eşleşmiyor', 'error'); return; }
     if (next.length < 6) { showToast('Şifre en az 6 karakter olmalı', 'error'); return; }
@@ -28,7 +36,8 @@ export default function ForcedPasswordChange({ session, onDone, onLogout, showTo
       showToast('Şifreniz belirlendi, hoş geldiniz');
       onDone();
     } catch (err) {
-      showToast(err.message, 'error');
+      // api() daima Error fırlatır — teknik daraltma, davranış birebir korunuyor
+      showToast((err as Error).message, 'error');
     } finally {
       setLoading(false);
     }
