@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { parseBody, z, zName, zPassword } from '@/lib/validate';
 import { generateOrgCode, formatCode, hostForOrg } from '@/lib/orgcode';
 import { addProjectDomain } from '@/lib/vercel';
 import { normalizeFacets } from '@/lib/institution';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
 import { prisma } from '@/lib/prisma';
 
 // Kurum silmede temizlenecek tenant tabloları (orgSlug bazında, tüm şubeler). Cascade
@@ -17,28 +17,28 @@ const TENANT_MODELS = [
   'guidance', 'auditLog', 'errLog', 'pushSub', 'payOrder',
 ];
 
-// Erişim: yalnız superadmin rolü.
-
-function requireSuperadmin(session) {
-  if (!session || session.role !== 'superadmin') return false;
-  return true;
-}
+// Erişim: yalnız superadmin rolü (withAuth(['superadmin'])).
 
 // Slug doğrulama: küçük harf, yalnız a-z0-9-, 2-40 karakter.
-function isValidSlug(s) {
+function isValidSlug(s: unknown): s is string {
   return typeof s === 'string' && /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$|^[a-z0-9]{2,40}$/.test(s);
 }
 
+interface OrgListItem {
+  slug: string; name: string; shortName: string | null; themeColor: string | null;
+  active: boolean; createdAt: string | null; type: string; code: string | null;
+  sektor: string; mulkiyet: string; kademeler: string[];
+  directorUsername?: string | null; branchCount?: number;
+}
+
 // GET /api/superadmin — tüm kurumları listele
-export async function GET() {
-  const session = await getSession();
-  if (!requireSuperadmin(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+export const GET = withAuth(['superadmin'], async () => {
 
   const rows = await tdb().org.findMany();
   const recs = rows.map((r) => ({ ...r, createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt }));
   if (!recs || recs.length === 0) return NextResponse.json({ orgs: [] });
 
-  const orgs = recs.map((rec) => {
+  const orgs: OrgListItem[] = recs.map((rec) => {
     const f = normalizeFacets(rec);
     return {
       slug: rec.slug,
@@ -63,7 +63,7 @@ export async function GET() {
   }
 
   return NextResponse.json({ orgs });
-}
+});
 
 const CreateOrgSchema = z.object({
   action: z.literal('create'),
@@ -99,9 +99,7 @@ const UpdateOrgSchema = z.object({
 });
 
 // POST /api/superadmin — yeni kurum + müdür oluştur
-export async function POST(req) {
-  const session = await getSession();
-  if (!requireSuperadmin(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+export const POST = withAuth(['superadmin'], async (req) => {
 
   const parsed = await parseBody(req, CreateOrgSchema);
   if (!parsed.ok) return parsed.response;
@@ -121,7 +119,7 @@ export async function POST(req) {
   if (dup) return NextResponse.json({ error: `"${slug}" zaten kayıtlı` }, { status: 409 });
 
   // Benzersiz kurum kodu (Org.code ile reverse-lookup; ayrı orgcode kaydı gerekmez)
-  let code;
+  let code: string | undefined;
   for (let i = 0; i < 20; i++) {
     const c = generateOrgCode();
     if (!(await tdb().org.findFirst({ where: { code: c } }))) { code = c; break; }
@@ -134,12 +132,14 @@ export async function POST(req) {
 
   // Ana şube müdürü (tenant-scoped)
   const passwordHash = await bcrypt.hash(directorPassword, 10);
-  await tdb(slug, 'main').director.create({ data: { username: directorUsername, passwordHash, name: directorName || name } });
+  // tdb(slug,'main') enjeksiyonu doğru kuruma yazar — withScope tip iddiası aynı değerlerle dolar
+  await tdb(slug, 'main').director.create({ data: withScope({ username: directorUsername, passwordHash, name: directorName || name }) });
 
   // Çok şubeli: org_admin + 'main' şube kaydı
   if (orgType === 'multi') {
-    const adminHash = await bcrypt.hash(orgAdminPassword, 10);
-    await tdb().orgAdmin.create({ data: { orgSlug: slug, username: orgAdminUsername, passwordHash: adminHash, name: orgAdminName || name } });
+    // multi ise orgAdminUsername/Password yukarıdaki 400 guard'ında doğrulandı — burada kesin dolu.
+    const adminHash = await bcrypt.hash(orgAdminPassword!, 10);
+    await tdb().orgAdmin.create({ data: { orgSlug: slug, username: orgAdminUsername!, passwordHash: adminHash, name: orgAdminName || name } });
     await tdb().branch.create({ data: { orgSlug: slug, slug: 'main', name: 'Ana Şube', active: true } });
   }
 
@@ -150,12 +150,10 @@ export async function POST(req) {
     domainProvisioned: domainResult.ok,
     domainWarning: domainResult.ok ? null : (domainResult.error || 'Domain eklenemedi'),
   });
-}
+});
 
 // DELETE /api/superadmin — kurumu ve tüm verisini kalıcı sil
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!requireSuperadmin(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+export const DELETE = withAuth(['superadmin'], async (req) => {
 
   const parsed = await parseBody(req, z.object({ slug: z.string().min(2).max(40) }));
   if (!parsed.ok) return parsed.response;
@@ -165,18 +163,17 @@ export async function DELETE(req) {
   if (!org) return NextResponse.json({ error: 'Kurum bulunamadı' }, { status: 404 });
   let deleted = 0;
   for (const m of TENANT_MODELS) {
-    try { const r = await prisma[m].deleteMany({ where: { orgSlug: slug } }); deleted += r.count; } catch { /* model yoksa atla */ }
+    // Dinamik model erişimi: TENANT_MODELS listesi elle bakımlı — tip birleşimi statik ifade edilemez.
+    try { const r = await (prisma[m as 'director'] as unknown as { deleteMany: (a: { where: { orgSlug: string } }) => Promise<{ count: number }> }).deleteMany({ where: { orgSlug: slug } }); deleted += r.count; } catch { /* model yoksa atla */ }
   }
   await prisma.branch.deleteMany({ where: { orgSlug: slug } });
   await prisma.orgAdmin.deleteMany({ where: { orgSlug: slug } });
   await prisma.org.delete({ where: { slug } });
   return NextResponse.json({ ok: true, deleted });
-}
+});
 
 // PATCH /api/superadmin — kurum güncelle (aktif/pasif, müdür şifresi, ad)
-export async function PATCH(req) {
-  const session = await getSession();
-  if (!requireSuperadmin(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+export const PATCH = withAuth(['superadmin'], async (req) => {
 
   const parsed = await parseBody(req, UpdateOrgSchema);
   if (!parsed.ok) return parsed.response;
@@ -214,10 +211,10 @@ export async function PATCH(req) {
   }
   if (action === 'rename') {
     if (!name) return NextResponse.json({ error: 'name gerekli' }, { status: 400 });
-    const data = { name };
+    const data: { name: string; shortName?: string | null } = { name };
     if (shortName !== undefined) data.shortName = shortName || null;
     await tdb().org.update({ where: { slug }, data });
     return NextResponse.json({ ok: true });
   }
   return NextResponse.json({ error: 'Geçersiz action' }, { status: 400 });
-}
+});

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getSession, canReadStudent } from '@/lib/auth';
-import { getWeekKey, getTeacherWeekSlots, getAllTeachers, slotStartTime, getDaySlotTimes, getProgramTemplate } from '@/lib/slots';
+import { withAuth, canReadStudent } from '@/lib/auth';
+import { getWeekKey, getTeacherWeekSlots, getAllTeachers, slotStartTime, getDaySlotTimes, getProgramTemplate, type SlotCell, type ProgramEntry } from '@/lib/slots';
 import { ALL_DAYS, daySlots, MEZUN_FORBIDDEN_ETUT_SLOT_NO, slotNoOf, MATH_FAMILY, allowedBranchesForClass } from '@/lib/constants';
 import { parseBody, z, zId } from '@/lib/validate';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
+import type { Prisma } from '@prisma/client';
 import { currentOrg, currentBranch } from '@/lib/tenant';
 import { getOrgConfig } from '@/lib/config';
 
@@ -19,9 +20,8 @@ const SlotDeleteSchema = z.object({
 });
 
 // GET /api/slots?week=2024-W20&teacherId=xxx
-export async function GET(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
+// Bilinçli inline rol dallanması: veli yalnız kendi çocuğunun rezervasyonlarını görür.
+export const GET = withAuth(async (req, _ctx, session) => {
 
   const { searchParams } = new URL(req.url);
   const weekKey = searchParams.get('week') || getWeekKey();
@@ -34,7 +34,7 @@ export async function GET(req) {
 
   const teachers = await getAllTeachers(); // id=legacyId
   const slotTimes = await getDaySlotTimes();
-  const allSlots = [];
+  const allSlots: ({ teacherId: string; teacherName: string; branches: string[]; allowedGroups: string[]; day: number; dayLabel: string; weekend: boolean; slotId: string; slotLabel: string } & SlotCell)[] = [];
 
   for (const teacher of teachers) {
     const grid = await getTeacherWeekSlots(teacher.id, weekKey);
@@ -69,12 +69,12 @@ export async function GET(req) {
   }
 
   return NextResponse.json({ weekKey, slots: allSlots });
-}
+});
 
 // POST /api/slots - book a slot
-export async function POST(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
+// Bilinçli inline rol dallanması: kurallar (self-booking limiti, kilit, hedef öğrenci)
+// role ve istek içeriğine bağlı — withAuth mode'uyla ifade edilemez.
+export const POST = withAuth(async (req, _ctx, session) => {
 
   const parsed = await parseBody(req, SlotBookSchema);
   if (!parsed.ok) return parsed.response;
@@ -99,7 +99,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Etüt rezervasyonu kurum tarafından kapatılmış. Lütfen öğretmeninize başvurun.' }, { status: 403 });
     }
     // 2) Haftalık max etüt sınırı (0 = sınırsız).
-    const maxWeekly = parseInt(etut?.maxWeeklyPerStudent) || 0;
+    const maxWeekly = parseInt(String(etut?.maxWeeklyPerStudent)) || 0;
     if (maxWeekly > 0) {
       const used = await tdb().slotBooking.count({ where: { weekKey, booked: true, studentId: session.id } });
       if (used >= maxWeekly) {
@@ -141,7 +141,7 @@ export async function POST(req) {
 
   // Hedef öğrenciyi belirle (legacyId bazında)
   let targetLegacyStudentId = reqStudentId;
-  let targetStudent;
+  let targetStudent: Prisma.StudentGetPayload<{ include: { class: true } }> | null = null;
 
   if (session.role === 'student') {
     targetLegacyStudentId = session.id;
@@ -173,7 +173,7 @@ export async function POST(req) {
 
   // Branş doğrulaması
   const studentAllowed = allowedBranchesForClass(studentCls);
-  let bookingBranch = branch;
+  let bookingBranch: string | undefined = branch;
   if (!bookingBranch) {
     const candidates = (teacher.branches || []).filter(b => studentAllowed.includes(b));
     if (candidates.length === 1) bookingBranch = candidates[0];
@@ -195,13 +195,13 @@ export async function POST(req) {
 
   if (session.role !== 'director' && session.role !== 'counselor') {
     // Kural 2: Aynı dersten ikinci etüt
-    const branchConflict = studentSlots.some(s => (s.data?.branch || s.dersBranch) === bookingBranch);
+    const branchConflict = studentSlots.some(s => (((s.data as SlotCell | null)?.branch) || s.dersBranch) === bookingBranch);
     if (branchConflict) {
       return NextResponse.json({ error: `Bu öğrenci bu hafta ${bookingBranch} dersinden zaten etüt almış` }, { status: 400 });
     }
     // Kural 3: TYT/AYT/Geometri matematik ailesi
     if (MATH_FAMILY.includes(bookingBranch)) {
-      const mathConflict = studentSlots.some(s => MATH_FAMILY.includes(s.data?.branch || s.dersBranch));
+      const mathConflict = studentSlots.some(s => MATH_FAMILY.includes((((s.data as SlotCell | null)?.branch) || s.dersBranch) as string));
       if (mathConflict) {
         return NextResponse.json({ error: 'Bu öğrenci bu hafta matematik (TYT/AYT/Geometri) etüdü zaten almış' }, { status: 400 });
       }
@@ -232,22 +232,21 @@ export async function POST(req) {
       studentCls: studentCls, dersBranch: bookingBranch, bookedBy: session.role,
       data: bookedData,
     },
-    create: {
+    create: withScope({
       weekKey, teacherId: teacher.id, dayIndex: day, slotId,
       booked: true, disabled: false, fixed: false,
       studentId: targetLegacyStudentId, studentName: targetStudent.name,
       studentCls: studentCls, dersBranch: bookingBranch, bookedBy: session.role,
       data: bookedData,
-    },
+    }),
   });
 
   return NextResponse.json({ ok: true, slot: bookedData });
-}
+});
 
 // DELETE /api/slots - cancel a booking
-export async function DELETE(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
+// Bilinçli inline rol dallanması: iptal kilidi ve sahiplik kontrolleri role bağlı.
+export const DELETE = withAuth(async (req, _ctx, session) => {
 
   const parsed = await parseBody(req, SlotDeleteSchema);
   if (!parsed.ok) return parsed.response;
@@ -266,7 +265,7 @@ export async function DELETE(req) {
   // saatten az kala öğrenci kendi rezervasyonunu iptal edemez. Müdür/rehber/öğretmen MUAF.
   if (session.role === 'student') {
     const etut = await getOrgConfig('etut');
-    const lockH = parseInt(etut?.cancelLockHours) || 0;
+    const lockH = parseInt(String(etut?.cancelLockHours)) || 0;
     if (lockH > 0) {
       const slotTimes = await getDaySlotTimes();
       const slotDef = daySlots(day, slotTimes.days[day]).find(s => s.id === slotId);
@@ -289,7 +288,7 @@ export async function DELETE(req) {
     return NextResponse.json({ error: 'Rezervasyon bulunamadı' }, { status: 404 });
   }
 
-  const cell = (existingRow.data || {});
+  const cell = ((existingRow.data as SlotCell | null) || {});
   if (session.role === 'student' && cell.studentId !== session.id) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
@@ -298,7 +297,7 @@ export async function DELETE(req) {
   }
 
   // Slot'un program şablonundaki durumunu kontrol et (disabled mı yoksa açık mı)
-  const program = await getProgramTemplate(legacyTeacherId);
+  const program = await getProgramTemplate(legacyTeacherId) as Record<string, Record<string, ProgramEntry | undefined> | undefined>;
   const slotEntry = program[String(day)]?.[slotId];
   const disabled = !slotEntry || slotEntry.type !== 'etut';
 
@@ -311,4 +310,4 @@ export async function DELETE(req) {
     },
   });
   return NextResponse.json({ ok: true });
-}
+});

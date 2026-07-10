@@ -5,12 +5,14 @@ import { getClass } from '@/lib/classes';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zName, zId } from '@/lib/validate';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
+import type { Prisma } from '@prisma/client';
 
 import { newId as makeId } from '@/lib/id';
 
 // SQL satırı (class include) → mevcut sözleşme şekli (id/cls = legacyId).
-const studentOut = (s) => ({
+type StudentWithClass = Prisma.StudentGetPayload<{ include: { class: true } }>;
+const studentOut = (s: StudentWithClass) => ({
   id: s.legacyId, name: s.name, username: s.username, cls: s.class?.legacyId || '', group: s.group,
   phone: s.phone || '', parentPhone: s.parentPhone || '', parentName: s.parentName || '', birthDate: s.birthDate || '',
   diplomaNotu: s.diplomaNotu ?? '', obp: s.diplomaNotu ? Math.round(s.diplomaNotu * 5 * 100) / 100 : null,
@@ -24,7 +26,7 @@ const zDiplomaNotu = z.string().max(10).optional(); // mezun diploma notu 50-100
 
 // Diploma notu string'ini doğrula → number (50-100) veya '' döndür; geçersizse null.
 // group !== 'mezun' ise her zaman '' (OBP yalnız mezunda tutulur).
-function normDiplomaNotu(raw, group) {
+function normDiplomaNotu(raw: unknown, group: string): number | '' | null {
   if (group !== 'mezun') return '';
   const s = String(raw ?? '').trim();
   if (s === '') return '';
@@ -86,7 +88,7 @@ export const POST = withAuth('intake', async (req, ctx, session) => {
   if (diploma === null) return NextResponse.json({ error: 'Diploma notu 50 ile 100 arasında olmalı' }, { status: 400 });
 
   // Telefon doğrulama (opsiyonel ama verilmişse geçerli Türk cep olmalı)
-  let normPhone = '';
+  let normPhone: string | null = '';
   if (phone) {
     normPhone = normalizeTurkishMobile(phone);
     if (!normPhone) return NextResponse.json({ error: 'Öğrenci telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
@@ -103,7 +105,7 @@ export const POST = withAuth('intake', async (req, ctx, session) => {
   if (!normParentPhone) return NextResponse.json({ error: 'Veli telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
 
   // 2. iletişim telefonu (opsiyonel ama verilmişse geçerli olmalı)
-  let normParent2Phone = '';
+  let normParent2Phone: string | null = '';
   if (parent2Phone) {
     normParent2Phone = normalizeTurkishMobile(parent2Phone);
     if (!normParent2Phone) return NextResponse.json({ error: '2. iletişim telefonu geçersiz. Örnek: 0532 123 45 67' }, { status: 400 });
@@ -118,13 +120,13 @@ export const POST = withAuth('intake', async (req, ctx, session) => {
   const clsRow = await tdb().class.findFirst({ where: { legacyId: cls } });
   const hash = await bcrypt.hash(initPassword, 10);
   const legacyId = makeId();
-  await tdb().student.create({ data: {
+  await tdb().student.create({ data: withScope({
     legacyId, name, username, passwordHash: hash, classId: clsRow?.id || null, group,
     phone: normPhone, parentPhone: normParentPhone, parentName: (parentName || '').trim(),
     parentRelation: (parentRelation || '').trim(), parentNote: (parentNote || '').trim(),
     parent2Name: (parent2Name || '').trim(), parent2Phone: normParent2Phone, parent2Relation: (parent2Relation || '').trim(),
     birthDate: birthDate || '', diplomaNotu: (diploma === '' ? null : diploma), mustChangePassword: true,
-  } });
+  }) });
   await logAudit({
     ...actorFrom(session),
     action: 'student.create',
@@ -143,13 +145,13 @@ export const PUT = withAuth('intake', async (req) => {
   const s = await tdb().student.findFirst({ where: { legacyId: id }, include: { class: true } });
   if (!s) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
   const group = (await getClass(cls))?.group || s.group;
-  let diploma = s.diplomaNotu ?? '';
+  let diploma: number | '' | null = s.diplomaNotu ?? '';
   if (diplomaNotu !== undefined) {
     diploma = normDiplomaNotu(diplomaNotu, group);
     if (diploma === null) return NextResponse.json({ error: 'Diploma notu 50 ile 100 arasında olmalı' }, { status: 400 });
   } else if (group !== 'mezun') diploma = '';
   const clsRow = await tdb().class.findFirst({ where: { legacyId: cls } });
-  const data = {
+  const data: { name: string; username: string; classId: string | null; group: string; diplomaNotu: number | null; birthDate: string; parentName: string; parentRelation: string; parentNote: string; parent2Name: string; parent2Relation: string; phone?: string; parentPhone?: string; parent2Phone?: string; passwordHash?: string } = {
     name, username: name, classId: clsRow?.id ?? s.classId, group, diplomaNotu: (diploma === '' ? null : diploma),
     birthDate: birthDate !== undefined ? birthDate : (s.birthDate || ''),
     parentName: parentName !== undefined ? (parentName || '').trim() : (s.parentName || ''),

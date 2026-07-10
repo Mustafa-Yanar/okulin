@@ -3,10 +3,25 @@ import { withAuth } from '@/lib/auth';
 import { daySlots as buildDaySlots, MEZUN_ONLY_LESSON_SLOTS, STUDENT_GROUPS } from '@/lib/constants';
 import { getWeekKey, isEditableWeek, initWeekForTeacher, slotStartTime, getDaySlotTimes, getProgramTemplate, setProgramTemplate, deleteProgramTemplate } from '@/lib/slots';
 import { parseBody, z, zId } from '@/lib/validate';
-import { tdb } from '@/lib/sqldb';
+import { tdb, withScope } from '@/lib/sqldb';
+import type { SlotCell } from '@/lib/slots';
 
 // Slot id'sinden slot NUMARASINI çıkar (1-tabanlı). Yeni: d{gün}s{n} · eski: w{n}/e{n}.
-function slotNoFromId(slotId) {
+// Grid hücresi — istemciden gelen program kaydındaki tek giriş.
+interface GridEntry {
+  type?: string;
+  cls?: string;
+  subBranch?: string;
+  fixed?: boolean;
+  studentId?: string | null;
+  studentName?: string;
+  studentCls?: string;
+  [key: string]: unknown;
+}
+// gün ("0".."6") → slotId → giriş
+type ProgramGrid = Record<string, Record<string, GridEntry | null | undefined>>;
+
+function slotNoFromId(slotId: string): number | null {
   const m = /(?:^[we]|s)(\d+)$/.exec(slotId);
   return m ? parseInt(m[1], 10) : null;
 }
@@ -30,14 +45,16 @@ export const GET = withAuth(async (req) => {
 
   // Şablonu oku (grid kısmı; etutSablonlari hariç)
   const fullTemplate = await getProgramTemplate(legacyTeacherId);
-  const { etutSablonlari, ...template } = fullTemplate;
+  // programTemplate Json — grid kısmı gün→slot→giriş şeklinde saklanır
+  const { etutSablonlari, ...template } = fullTemplate as { etutSablonlari?: unknown } & ProgramGrid;
 
   // SlotBooking'den geçici (fixed:false) entry'leri topla
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
-  const effective = JSON.parse(JSON.stringify(template));
+  const effective: ProgramGrid = JSON.parse(JSON.stringify(template));
   for (const dayIdx of Object.keys(effective)) {
     for (const sid of Object.keys(effective[dayIdx] || {})) {
-      if (effective[dayIdx][sid]) effective[dayIdx][sid].fixed = true;
+      const cur = effective[dayIdx][sid];
+      if (cur) cur.fixed = true;
     }
   }
 
@@ -47,11 +64,11 @@ export const GET = withAuth(async (req) => {
       const tmplEntry = template[String(row.dayIndex)]?.[row.slotId];
       if (tmplEntry) continue; // şablonda var, geçici değil
 
-      const cell = row.data || {};
+      const cell = (row.data as SlotCell | null) || {};
       // Geçici ders
       if (cell.lessonType === 'ders' && cell.fixed === false) {
         if (!effective[String(row.dayIndex)]) effective[String(row.dayIndex)] = {};
-        const e = { type: 'ders', cls: cell.cls || '', fixed: false };
+        const e: GridEntry = { type: 'ders', cls: cell.cls || '', fixed: false };
         if (cell.subBranch) e.subBranch = cell.subBranch;
         effective[String(row.dayIndex)][row.slotId] = e;
       }
@@ -73,7 +90,9 @@ export const GET = withAuth(async (req) => {
 export const POST = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, ProgramPostSchema);
   if (!parsed.ok) return parsed.response;
-  const { teacherId: legacyTeacherId, weekKey, program } = parsed.data;
+  const { teacherId: legacyTeacherId, weekKey } = parsed.data;
+  // Derin grid şekli üst seviyede z.record ile doğrulanır; hücre mantığı aşağıda işlenir (şema yorumu).
+  const program = parsed.data.program as ProgramGrid;
 
   if (!isEditableWeek(weekKey)) {
     return NextResponse.json({ error: 'Geçmiş hafta düzenlenemez. Sadece mevcut hafta ve sonraki 2 hafta düzenlenebilir.' }, { status: 400 });
@@ -81,7 +100,7 @@ export const POST = withAuth('manage', async (req) => {
 
   // Geçmiş slotları diff'ten sessizce kaldır
   const templateForGuard = await getProgramTemplate(legacyTeacherId);
-  const { etutSablonlari: _ets, ...gridTemplateForGuard } = templateForGuard;
+  const { etutSablonlari: _ets, ...gridTemplateForGuard } = templateForGuard as { etutSablonlari?: unknown } & ProgramGrid;
   const postSlotTimes = await getDaySlotTimes();
   for (const dayIdx of Object.keys(program)) {
     const di = parseInt(dayIdx);
@@ -128,7 +147,7 @@ export const POST = withAuth('manage', async (req) => {
       const slotNo = slotNoFromId(slotId);
       if (entry?.type !== 'ders' || slotNo == null || slotNo > mezunOnlyCount || !entry.cls) continue;
       const row = classByLegacy.get(entry.cls);
-      const windowNos = row?.slotTemplate?.[String(day)];
+      const windowNos = (row?.slotTemplate as Record<string, number[]> | null)?.[String(day)];
       if (Array.isArray(windowNos) && windowNos.includes(slotNo)) continue; // pencere izni
       const isMezun = row ? row.group === 'mezun' : mezunLegacy.has(entry.cls);
       if (!isMezun) {
@@ -143,7 +162,7 @@ export const POST = withAuth('manage', async (req) => {
     for (const [slotId, entry] of Object.entries(daySlots || {})) {
       if (entry?.type !== 'ders' || !entry.cls || entry.fixed !== true) continue;
       for (const ot of otherTeachers) {
-        const otTemplate = ot.programTemplate || {};
+        const otTemplate = (ot.programTemplate as ProgramGrid | null) || {};
         const otEntry = otTemplate[String(dayIdx)]?.[slotId];
         if (otEntry?.type === 'ders' && otEntry.cls === entry.cls) {
           return NextResponse.json({
@@ -156,8 +175,8 @@ export const POST = withAuth('manage', async (req) => {
 
   // 1) Şablonu güncelle: gelen program'da fixed: true entry'ler + etutSablonlari koru
   const fullOldTemplate = await getProgramTemplate(legacyTeacherId);
-  const { etutSablonlari, ...oldGridTemplate } = fullOldTemplate;
-  const newGridTemplate = JSON.parse(JSON.stringify(oldGridTemplate));
+  const { etutSablonlari, ...oldGridTemplate } = fullOldTemplate as { etutSablonlari?: unknown } & ProgramGrid;
+  const newGridTemplate: ProgramGrid = JSON.parse(JSON.stringify(oldGridTemplate));
 
   for (const [dayIdx, daySlots] of Object.entries(program)) {
     for (const [slotId, entry] of Object.entries(daySlots || {})) {
@@ -167,7 +186,7 @@ export const POST = withAuth('manage', async (req) => {
       }
       if (entry.fixed === true) {
         if (!newGridTemplate[dayIdx]) newGridTemplate[dayIdx] = {};
-        const toStore = { ...entry };
+        const toStore: GridEntry = { ...entry };
         delete toStore.fixed;
         newGridTemplate[dayIdx][slotId] = toStore;
       } else if (entry.fixed === false) {
@@ -177,7 +196,7 @@ export const POST = withAuth('manage', async (req) => {
   }
 
   // etutSablonlari'nı koru
-  const newFullTemplate = { ...newGridTemplate };
+  const newFullTemplate: Record<string, unknown> = { ...newGridTemplate };
   if (etutSablonlari !== undefined) newFullTemplate.etutSablonlari = etutSablonlari;
 
   await setProgramTemplate(legacyTeacherId, newFullTemplate);
@@ -192,7 +211,7 @@ export const POST = withAuth('manage', async (req) => {
       const existingRow = await tdb().slotBooking.findFirst({
         where: { weekKey, teacherId: teacherSql.id, dayIndex: parseInt(dayIdx), slotId },
       });
-      let cell;
+      let cell: SlotCell;
       if (!entry) {
         cell = { booked: false, disabled: true };
       } else if (entry.type === 'ders' && entry.cls) {
@@ -209,12 +228,12 @@ export const POST = withAuth('manage', async (req) => {
         booked: cell.booked ?? false, disabled: cell.disabled ?? true, fixed: cell.fixed ?? false,
         studentId: cell.studentId || null, studentName: cell.studentName || null,
         studentCls: cell.studentCls || null, dersBranch: null, bookedBy: cell.bookedBy || null,
-        data: cell,
+        data: cell as object,
       };
       if (existingRow) {
         await tdb().slotBooking.update({ where: { id: existingRow.id }, data: rowData });
       } else {
-        await tdb().slotBooking.create({ data: { weekKey, teacherId: teacherSql.id, dayIndex: parseInt(dayIdx), slotId, ...rowData } });
+        await tdb().slotBooking.create({ data: withScope({ weekKey, teacherId: teacherSql.id, dayIndex: parseInt(dayIdx), slotId, ...rowData }) });
       }
     }
   }
@@ -232,11 +251,11 @@ export const DELETE = withAuth('manage', async (req) => {
   const { teacherId: legacyTeacherId } = parsed.data;
 
   const full = await getProgramTemplate(legacyTeacherId);
-  const { etutSablonlari, ...grid } = full;
-  const kept = {};
+  const { etutSablonlari, ...grid } = full as { etutSablonlari?: unknown } & ProgramGrid;
+  const kept: Record<string, unknown> = {};
   for (const [dayIdx, daySlots] of Object.entries(grid)) {
     for (const [slotId, entry] of Object.entries(daySlots || {})) {
-      if (entry?.type === 'available') (kept[dayIdx] = kept[dayIdx] || {})[slotId] = entry;
+      if (entry?.type === 'available') ((kept[dayIdx] = (kept[dayIdx] as Record<string, unknown>) || {}) as Record<string, unknown>)[slotId] = entry;
     }
   }
   if (etutSablonlari !== undefined) kept.etutSablonlari = etutSablonlari;
