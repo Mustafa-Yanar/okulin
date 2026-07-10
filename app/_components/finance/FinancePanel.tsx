@@ -11,6 +11,9 @@ import {
 } from 'lucide-react';
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
+import type { Session } from '@/lib/auth';
+import type { PaymentEntry } from '@/lib/finance';
+import type { ShowToast, FinanceDTO, FinanceListItemDTO, InstallmentDTO } from '../types';
 
 const DERSHANE = {
   name: 'Akyazı Çözüm Özel Öğretim Kursu',
@@ -19,21 +22,34 @@ const DERSHANE = {
 
 const METHODS = ['Nakit', 'Havale/EFT', 'Kredi Kartı'];
 
-function fmt(n) {
+function fmt(n: number | undefined): string {
   return (n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function todayISO() {
+function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function isOverdue(dueDate) {
+function isOverdue(dueDate: string | null | undefined): boolean {
   if (!dueDate) return false;
   return new Date(dueDate) < new Date(todayISO());
 }
 
+// Makbuz yazdırma verisi.
+interface ReceiptData {
+  studentName: string;
+  studentCls: string;
+  payment: PaymentEntry;
+  dershane: { name: string; address: string };
+}
+
+interface ReceiptPrintAreaProps {
+  data: ReceiptData;
+  onClose: () => void;
+}
+
 // ── Makbuz yazdırma bileşeni ─────────────────────────────────────────────────
-function ReceiptPrintArea({ data, onClose }) {
+function ReceiptPrintArea({ data, onClose }: ReceiptPrintAreaProps) {
   const { studentName, studentCls, payment, dershane } = data;
 
   // Portal + mount guard: #print-preview body'nin doğrudan çocuğu olsun (print CSS
@@ -111,8 +127,18 @@ function ReceiptPrintArea({ data, onClose }) {
   );
 }
 
+interface AddPaymentModalProps {
+  studentId: string;
+  studentName: string;
+  balance: number;
+  installments: InstallmentDTO[];
+  onClose: () => void;
+  onSuccess: (data: { receiptNo?: string }) => void;
+  showToast: ShowToast;
+}
+
 // ── Ödeme ekleme modalı ──────────────────────────────────────────────────────
-function AddPaymentModal({ studentId, studentName, balance, installments, onClose, onSuccess, showToast }) {
+function AddPaymentModal({ studentId, studentName, balance, installments, onClose, onSuccess, showToast }: AddPaymentModalProps) {
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(todayISO());
   const [method, setMethod] = useState('Nakit');
@@ -122,7 +148,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
 
   const unpaidInstallments = (installments || []).filter(inst => !inst.paid);
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!amount || parseFloat(amount) <= 0) { showToast('Geçerli bir tutar girin', 'error'); return; }
     setSaving(true);
@@ -136,10 +162,10 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
           installmentIdx: installmentIdx !== '' ? parseInt(installmentIdx) : null,
         }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string; receiptNo?: string };
       if (!res.ok) throw new Error(data.error || 'Hata');
       onSuccess(data);
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setSaving(false); }
   }
 
@@ -238,13 +264,32 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
   );
 }
 
+// FinanceRegisterModal'ın öğrenci görünümü — satırdan {id,name,cls} kurulur,
+// alternatif alan adları (studentId/studentName/studentCls) da desteklenir.
+interface RegisterStudent {
+  id?: string;
+  name?: string;
+  cls?: string;
+  studentId?: string;
+  studentName?: string;
+  studentCls?: string;
+}
+
+interface FinanceRegisterModalProps {
+  student: RegisterStudent;
+  existing: FinanceDTO | null;
+  onClose: () => void;
+  onSuccess: (record: FinanceDTO | null) => void;
+  showToast: ShowToast;
+}
+
 // ── Finansal kayıt oluşturma / düzenleme modalı ─────────────────────────────
-function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast }) {
+function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast }: FinanceRegisterModalProps) {
   const [totalFee, setTotalFee] = useState(existing?.totalFee ? String(existing.totalFee) : '');
   const [discount, setDiscount] = useState(existing?.discount ? String(existing.discount) : '0');
   const [plan, setPlan] = useState(existing?.paymentPlan || 'pesin');
   const [installmentCount, setInstallmentCount] = useState(existing?.installments?.length || 3);
-  const [installments, setInstallments] = useState(() => {
+  const [installments, setInstallments] = useState<InstallmentDTO[]>(() => {
     if (existing?.installments?.length) return existing.installments;
     return [];
   });
@@ -252,7 +297,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
 
   const netFee = Math.max(0, (parseFloat(totalFee) || 0) - (parseFloat(discount) || 0));
 
-  function buildInstallments(count, net) {
+  function buildInstallments(count: number, net: number): InstallmentDTO[] {
     const perInst = net > 0 ? Math.round((net / count) * 100) / 100 : 0;
     const today = new Date();
     return Array.from({ length: count }, (_, i) => {
@@ -277,7 +322,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
     }
   }, [plan, installmentCount, totalFee, discount]);
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
     try {
@@ -296,10 +341,10 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
         credentials: 'same-origin',
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string; record: FinanceDTO | null };
       if (!res.ok) throw new Error(data.error || 'Hata');
       onSuccess(data.record);
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setSaving(false); }
   }
 
@@ -388,13 +433,20 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
   );
 }
 
+interface StudentFinanceRowProps {
+  item: FinanceListItemDTO;
+  onRefresh: () => void;
+  showToast: ShowToast;
+  session?: Session | null;
+}
+
 // ── Öğrenci finansal detay satırı ───────────────────────────────────────────
-function StudentFinanceRow({ item, onRefresh, showToast, session }) {
+function StudentFinanceRow({ item, onRefresh, showToast, session }: StudentFinanceRowProps) {
   const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
-  const [printData, setPrintData] = useState(null);
+  const [printData, setPrintData] = useState<ReceiptData | null>(null);
 
   const { studentId, studentName, studentCls, finance } = item;
 
@@ -403,7 +455,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
     : finance.balance < finance.netFee ? 'partial'
     : 'unpaid';
 
-  const statusConfig = {
+  const statusConfig: Record<string, { color: string; label: string; dot: string }> = {
     unregistered: { color: 'bg-gray-100 text-gray-500', label: 'Kayıt Yok', dot: 'bg-gray-400' },
     paid:         { color: 'bg-green-100 text-green-700', label: 'Ödendi', dot: 'bg-green-500' },
     partial:      { color: 'bg-amber-100 text-amber-700', label: 'Kısmen Ödendi', dot: 'bg-amber-500' },
@@ -413,7 +465,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
 
   const overdueInstallments = (finance?.installments || []).filter(inst => !inst.paid && isOverdue(inst.dueDate));
 
-  async function handleDeletePayment(paymentId) {
+  async function handleDeletePayment(paymentId: string) {
     if (!(await confirm({ message: 'Bu ödemeyi geri almak istiyor musunuz?', confirmLabel: 'Geri Al' }))) return;
     try {
       const res = await fetch('/api/finance/payment', {
@@ -422,11 +474,11 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
         credentials: 'same-origin',
         body: JSON.stringify({ studentId, paymentId }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error || 'Hata');
       showToast('Ödeme geri alındı');
       onRefresh();
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
   }
 
   return (
@@ -619,7 +671,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }) {
 }
 
 // ── Filtre dropdown ──────────────────────────────────────────────────────────
-const FILTER_OPTIONS = [
+const FILTER_OPTIONS: { value: string; label: string; dot: string | null }[] = [
   { value: 'all',          label: 'Tümü',           dot: null },
   { value: 'unpaid',       label: 'Ödenmedi',        dot: '#ef4444' },
   { value: 'partial',      label: 'Kısmen Ödendi',   dot: '#f59e0b' },
@@ -628,14 +680,19 @@ const FILTER_OPTIONS = [
   { value: 'unregistered', label: 'Kayıtsız',        dot: '#9ca3af' },
 ];
 
-function FilterDropdown({ value, onChange }) {
+interface FilterDropdownProps {
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function FilterDropdown({ value, onChange }: FilterDropdownProps) {
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const ref = useRef<HTMLDivElement>(null);
   const current = FILTER_OPTIONS.find(o => o.value === value) || FILTER_OPTIONS[0];
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
@@ -695,11 +752,17 @@ function FilterDropdown({ value, onChange }) {
   );
 }
 
+interface FinancePanelProps {
+  session?: Session | null;
+  showToast: ShowToast;
+  initialSearch?: string;
+}
+
 // ── Ana panel ────────────────────────────────────────────────────────────────
 // initialSearch: kayıt akışı kısayolu — yeni kaydedilen öğrencinin adı aramaya
 // önceden yazılır (mount'ta bir kez okunur; kullanıcı serbestçe değiştirir).
-export default function FinancePanel({ session, showToast, initialSearch }) {
-  const { data: financeData, isLoading: loading, mutate: load } = useSWR('/api/finance');
+export default function FinancePanel({ session, showToast, initialSearch }: FinancePanelProps) {
+  const { data: financeData, isLoading: loading, mutate: load } = useSWR<FinanceListItemDTO[]>('/api/finance');
   const list = Array.isArray(financeData) ? financeData : [];
   const [search, setSearch] = useState(initialSearch || '');
   const [filterStatus, setFilterStatus] = useState('all');

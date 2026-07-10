@@ -8,30 +8,58 @@ import {
 } from 'lucide-react';
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
 import { useConfirm } from '../ConfirmProvider';
+import type { Session } from '@/lib/auth';
+import type { ShowToast, FinanceListItemDTO } from '../types';
+import type { PaymentEntry } from '@/lib/finance';
 
-function fmt(n) {
+// app/api/finance/expense/route.ts ExpenseData ile birebir.
+interface ExpenseDTO {
+  id: string;
+  type: 'personnel' | 'general';
+  date: string;
+  description: string;
+  amount: number;
+  personnelId?: string | null;
+  personnelName?: string;
+  period?: string;
+  salary?: number;
+  extras?: { label: string; amount: number }[];
+  category?: string;
+  createdBy?: string;
+  createdByRole?: string;
+  createdAt?: string;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+function fmt(n: number | undefined): string {
   return (n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function todayISO() {
+function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
-function thisMonth() {
+function thisMonth(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
-export default function ExpensePanel({ session, showToast }) {
+interface ExpensePanelProps {
+  session?: Session | null;
+  showToast?: ShowToast;
+}
+
+export default function ExpensePanel({ session, showToast }: ExpensePanelProps) {
   const confirm = useConfirm();
   const [view, setView] = useState('personnel'); // 'personnel' | 'general'
   const [period, setPeriod] = useState(''); // '' = tüm zamanlar, yoksa YYYY-MM
   const [catFilter, setCatFilter] = useState('');
-  const [form, setForm] = useState(null); // {mode:'new'|'edit', type, data}
+  const [form, setForm] = useState<{ mode: 'new' | 'edit'; type: string; data: ExpenseDTO | null } | null>(null);
 
   // Giderler (ana veri) — SWR. mutateExpenses ile silme/ekleme sonrası iyimser güncellenir.
-  const { data: expData, isLoading: loading, mutate: mutateExpenses } = useSWR('/api/finance/expense');
+  const { data: expData, isLoading: loading, mutate: mutateExpenses } = useSWR<ExpenseDTO[]>('/api/finance/expense');
   const expenses = Array.isArray(expData) ? expData : [];
 
   // Gider kategorileri kurum konfigürasyonundan (yoksa sabit liste). "Diğer" daima sonda.
-  const { data: cfgData } = useSWR('/api/config');
+  const { data: cfgData } = useSWR<{ expenseCategories?: string[] }>('/api/config');
   const categories = useMemo(() => {
     const list = Array.isArray(cfgData?.expenseCategories) && cfgData.expenseCategories.length
       ? cfgData.expenseCategories : EXPENSE_CATEGORIES;
@@ -40,9 +68,9 @@ export default function ExpensePanel({ session, showToast }) {
   }, [cfgData]);
 
   // Gelir (öğrenci ödemeleri) — özet için. FinancePanel ile aynı anahtar → SWR paylaşır.
-  const { data: incomeData } = useSWR('/api/finance');
+  const { data: incomeData } = useSWR<FinanceListItemDTO[]>('/api/finance');
   const payments = useMemo(() => {
-    const flat = [];
+    const flat: PaymentEntry[] = [];
     (Array.isArray(incomeData) ? incomeData : []).forEach(item => {
       (item.finance?.payments || []).forEach(p => flat.push(p));
     });
@@ -50,19 +78,19 @@ export default function ExpensePanel({ session, showToast }) {
   }, [incomeData]);
 
   // Personel önerileri — iki endpoint birleşimi (öğretmen + muhasebeci), SWR'a uygun değil → manuel.
-  const [staff, setStaff] = useState([]);
+  const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
     (async () => {
-      const names = [];
+      const names: { id: string; name: string }[] = [];
       try {
         const tRes = await fetch('/api/teachers', { credentials: 'same-origin' });
-        const t = await tRes.json();
+        const t = (await tRes.json()) as { id: string; name: string }[];
         (Array.isArray(t) ? t : []).forEach(x => names.push({ id: x.id, name: x.name }));
       } catch { /* yoksay */ }
       try {
         const aRes = await fetch('/api/accountants', { credentials: 'same-origin' });
         if (aRes.ok) {
-          const a = await aRes.json();
+          const a = (await aRes.json()) as { id: string; name: string }[];
           (Array.isArray(a) ? a : []).forEach(x => names.push({ id: x.id, name: x.name }));
         }
       } catch { /* muhasebeci listesi müdüre özel — sessizce geç */ }
@@ -71,7 +99,7 @@ export default function ExpensePanel({ session, showToast }) {
   }, []);
 
   // Dönem filtresi (client-side)
-  const periodMatch = useCallback((dateStr, periodStr) => {
+  const periodMatch = useCallback((dateStr: string | undefined, periodStr?: string) => {
     if (!period) return true;
     return (periodStr || dateStr?.slice(0, 7)) === period;
   }, [period]);
@@ -93,7 +121,7 @@ export default function ExpensePanel({ session, showToast }) {
     return { income, expense, net: income - expense };
   }, [payments, expenses, periodMatch]);
 
-  async function handleDelete(exp) {
+  async function handleDelete(exp: ExpenseDTO) {
     const label = exp.type === 'personnel' ? exp.personnelName : exp.category;
     if (!(await confirm(`"${label}" gideri (₺${fmt(exp.amount)}) silinsin mi?`))) return;
     try {
@@ -106,13 +134,13 @@ export default function ExpensePanel({ session, showToast }) {
       if (!res.ok) throw new Error('Silinemedi');
       mutateExpenses(expenses.filter(e => e.id !== exp.id), { revalidate: false });
       showToast?.('Gider silindi');
-    } catch (err) { showToast?.(err.message, 'error'); }
+    } catch (err) { showToast?.((err as Error).message, 'error'); }
   }
 
   function openNew() {
     setForm({ mode: 'new', type: view, data: null });
   }
-  function openEdit(exp) {
+  function openEdit(exp: ExpenseDTO) {
     setForm({ mode: 'edit', type: exp.type, data: exp });
   }
 
@@ -210,8 +238,14 @@ export default function ExpensePanel({ session, showToast }) {
   );
 }
 
+interface ExpenseListProps {
+  items: ExpenseDTO[];
+  onEdit: (exp: ExpenseDTO) => void;
+  onDelete: (exp: ExpenseDTO) => void;
+}
+
 // ── Personel ödemeleri listesi ───────────────────────────────────────────────
-function PersonnelList({ items, onEdit, onDelete }) {
+function PersonnelList({ items, onEdit, onDelete }: ExpenseListProps) {
   return (
     <div className="grid gap-2">
       {items.map(e => {
@@ -231,7 +265,7 @@ function PersonnelList({ items, onEdit, onDelete }) {
               </div>
               {(e.extras || []).length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {e.extras.map((x, i) => (
+                  {(e.extras || []).map((x, i) => (
                     <span key={i} className="text-[10px] bg-indigo-50 text-indigo-600 rounded px-1.5 py-0.5">
                       {x.label || 'Ek'}: ₺{fmt(x.amount)}
                     </span>
@@ -255,7 +289,7 @@ function PersonnelList({ items, onEdit, onDelete }) {
 }
 
 // ── Diğer giderler listesi ───────────────────────────────────────────────────
-function GeneralList({ items, onEdit, onDelete }) {
+function GeneralList({ items, onEdit, onDelete }: ExpenseListProps) {
   return (
     <div className="grid gap-2">
       {items.map(e => (
@@ -278,8 +312,19 @@ function GeneralList({ items, onEdit, onDelete }) {
   );
 }
 
+interface ExpenseFormProps {
+  mode: 'new' | 'edit';
+  type: string;
+  initial: ExpenseDTO | null;
+  staff: { id: string; name: string }[];
+  categories: string[];
+  onClose: () => void;
+  onSaved: (rec: ExpenseDTO, isEdit: boolean) => void;
+  showToast?: ShowToast;
+}
+
 // ── Ekleme/düzenleme formu ───────────────────────────────────────────────────
-function ExpenseForm({ mode, type, initial, staff, categories, onClose, onSaved, showToast }) {
+function ExpenseForm({ mode, type, initial, staff, categories, onClose, onSaved, showToast }: ExpenseFormProps) {
   const cats = (Array.isArray(categories) && categories.length) ? categories : EXPENSE_CATEGORIES;
   const isEdit = mode === 'edit';
   // ortak
@@ -289,20 +334,23 @@ function ExpenseForm({ mode, type, initial, staff, categories, onClose, onSaved,
   const [personnelName, setPersonnelName] = useState(initial?.personnelName || '');
   const [period, setPeriod] = useState(initial?.period || thisMonth());
   const [salary, setSalary] = useState(initial?.salary != null ? String(initial.salary) : '');
-  const [extras, setExtras] = useState(initial?.extras?.length ? initial.extras.map(x => ({ ...x })) : []);
+  // Yeni satır boş string amount ile açılır; kayıtlı satır sayı taşır (form içinde karışık).
+  const [extras, setExtras] = useState<{ label: string; amount: number | string }[]>(
+    initial?.extras?.length ? initial.extras.map(x => ({ ...x })) : []
+  );
   // general
   const [category, setCategory] = useState(initial?.category || cats[0]);
   const [amount, setAmount] = useState(initial?.amount != null && type === 'general' ? String(initial.amount) : '');
   const [busy, setBusy] = useState(false);
 
-  const extrasTotal = extras.reduce((s, x) => s + (parseFloat(x.amount) || 0), 0);
+  const extrasTotal = extras.reduce((s, x) => s + (parseFloat(String(x.amount)) || 0), 0);
   const personnelTotal = (parseFloat(salary) || 0) + extrasTotal;
 
   function addExtra() { setExtras(prev => [...prev, { label: '', amount: '' }]); }
-  function setExtra(i, key, val) { setExtras(prev => prev.map((x, j) => j === i ? { ...x, [key]: val } : x)); }
-  function removeExtra(i) { setExtras(prev => prev.filter((_, j) => j !== i)); }
+  function setExtra(i: number, key: 'label' | 'amount', val: string) { setExtras(prev => prev.map((x, j) => j === i ? { ...x, [key]: val } : x)); }
+  function removeExtra(i: number) { setExtras(prev => prev.filter((_, j) => j !== i)); }
 
-  function pickStaff(name) {
+  function pickStaff(name: string) {
     setPersonnelName(name);
   }
 
@@ -315,18 +363,18 @@ function ExpenseForm({ mode, type, initial, staff, categories, onClose, onSaved,
     }
 
     const matched = staff.find(s => s.name === personnelName.trim());
-    const body = type === 'personnel'
+    const body: Record<string, unknown> = type === 'personnel'
       ? {
           type, date, description,
           personnelName: personnelName.trim(),
           personnelId: matched?.id || null,
           period, salary: parseFloat(salary) || 0,
           extras: extras
-            .map(x => ({ label: (x.label || '').trim(), amount: parseFloat(x.amount) || 0 }))
+            .map(x => ({ label: (x.label || '').trim(), amount: parseFloat(String(x.amount)) || 0 }))
             .filter(x => x.amount > 0 || x.label),
         }
       : { type, date, description, category, amount: parseFloat(amount) || 0 };
-    if (isEdit) body.id = initial.id;
+    if (isEdit) body.id = initial!.id;
 
     setBusy(true);
     try {
@@ -336,11 +384,11 @@ function ExpenseForm({ mode, type, initial, staff, categories, onClose, onSaved,
         credentials: 'same-origin',
         body: JSON.stringify(body),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string; record: ExpenseDTO };
       if (!res.ok) throw new Error(data.error || 'Kaydedilemedi');
       onSaved(data.record, isEdit);
     } catch (err) {
-      showToast?.(err.message, 'error');
+      showToast?.((err as Error).message, 'error');
     } finally {
       setBusy(false);
     }
