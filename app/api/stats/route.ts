@@ -8,6 +8,7 @@ export const GET = withAuth(['director', 'counselor', 'accountant'], async (_req
     const [studentCount, teacherCount] = await Promise.all([tdb().student.count(), tdb().teacher.count()]);
     let thisMonthCollection = 0;
     let pendingAmount = 0;
+    // Bilinçli inline rol dallanması: erişim withAuth'ta; rehber finansal rakamları görmez (veri şekillendirme).
     if (session.role !== 'counselor') {
       const today = new Date().toISOString().slice(0, 10);
       const monthPrefix = today.slice(0, 7);

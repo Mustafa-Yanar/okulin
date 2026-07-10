@@ -8,6 +8,8 @@ export const GET = withAuth(['director', 'counselor', 'teacher'], async (_req, c
   const exam = await getExam(String(ctx.params?.id));
   if (!exam) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
 
+  // Bilinçli inline rol dallanması: erişim withAuth'ta; bu yalnız VERİ şekillendirme
+  // (cevap anahtarı + ham satırlar öğretmene gitmez, yöneticiye gider).
   const isManager = session.role === 'director' || session.role === 'counselor';
 
   return NextResponse.json({

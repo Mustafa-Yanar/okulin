@@ -53,6 +53,8 @@ async function studentBookedEtuts(studentId: string, weekKey: string) {
 }
 
 // POST — rezerve et
+// Bilinçli inline rol dallanması: hedef öğrenci ve kural muafiyetleri role + istek
+// içeriğine bağlı (öğrenci kendini, öğretmen kendi etüdüne, yönetici herkesi yazar).
 export const POST = withAuth(async (req, ctx, session) => {
   const parsed = await parseBody(req, PostSchema);
   if (!parsed.ok) return parsed.response;
@@ -169,6 +171,7 @@ export const POST = withAuth(async (req, ctx, session) => {
 });
 
 // DELETE — rezervasyonu iptal et
+// Bilinçli inline rol dallanması: sahiplik kontrolleri role + kayda bağlı.
 export const DELETE = withAuth(async (req, ctx, session) => {
   const parsed = await parseBody(req, DeleteSchema);
   if (!parsed.ok) return parsed.response;
