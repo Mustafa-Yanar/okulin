@@ -3,7 +3,7 @@ import { withAuth, canReadStudent } from '@/lib/auth';
 import { getWeekKey, getTeacherWeekSlots, getAllTeachers, slotStartTime, getDaySlotTimes, getProgramTemplate, type SlotCell, type ProgramEntry } from '@/lib/slots';
 import { ALL_DAYS, daySlots, MEZUN_FORBIDDEN_ETUT_SLOT_NO, slotNoOf, MATH_FAMILY, allowedBranchesForClass } from '@/lib/constants';
 import { parseBody, z, zId } from '@/lib/validate';
-import { tdb, withScope } from '@/lib/sqldb';
+import { tdb } from '@/lib/sqldb';
 import type { Prisma } from '@prisma/client';
 import { currentOrg, currentBranch } from '@/lib/tenant';
 import { getOrgConfig } from '@/lib/config';
@@ -219,10 +219,15 @@ export const POST = withAuth(async (req, _ctx, session) => {
   };
 
   // Atomik upsert — race condition önler (UNIQUE kısıt: orgSlug+branch+weekKey+teacherId+dayIndex+slotId)
+  // DİKKAT: tdb() enjeksiyonu upsert'i KAPSAMAZ (lib/sqldb tasarımı: "route explicit
+  // verir") — create'te orgSlug/branch açıkça geçilmeli. withScope salt tip iddiasıdır;
+  // burada kullanılırsa satırsız haftaya ilk rezervasyon PrismaClientValidationError
+  // ("orgSlug is missing") ile 500 döner.
+  const scope = { orgSlug: currentOrg(), branch: currentBranch() };
   await tdb().slotBooking.upsert({
     where: {
       orgSlug_branch_weekKey_teacherId_dayIndex_slotId: {
-        orgSlug: currentOrg(), branch: currentBranch(),
+        ...scope,
         weekKey, teacherId: teacher.id, dayIndex: day, slotId,
       },
     },
@@ -232,13 +237,14 @@ export const POST = withAuth(async (req, _ctx, session) => {
       studentCls: studentCls, dersBranch: bookingBranch, bookedBy: session.role,
       data: bookedData,
     },
-    create: withScope({
+    create: {
+      ...scope,
       weekKey, teacherId: teacher.id, dayIndex: day, slotId,
       booked: true, disabled: false, fixed: false,
       studentId: targetLegacyStudentId, studentName: targetStudent.name,
       studentCls: studentCls, dersBranch: bookingBranch, bookedBy: session.role,
       data: bookedData,
-    }),
+    },
   });
 
   return NextResponse.json({ ok: true, slot: bookedData });
