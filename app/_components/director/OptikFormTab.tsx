@@ -1,21 +1,33 @@
 'use client';
 import { useState, useRef } from 'react';
 import { Upload, ScanLine, Copy, Check, FileText, Image } from 'lucide-react';
+import type { ShowToast } from '../types';
 
 const CHOICES = ['A', 'B', 'C', 'D', 'E'];
 
-export default function OptikFormTab({ showToast }) {
-  const [preview, setPreview] = useState(null);   // data URL (sadece görüntü için)
+// /api/optik yanıtındaki tek form.
+interface OptikFormResult {
+  page?: number;
+  answers: (string | null)[];
+  total?: number;
+}
+
+interface OptikFormTabProps {
+  showToast: ShowToast;
+}
+
+export default function OptikFormTab({ showToast }: OptikFormTabProps) {
+  const [preview, setPreview] = useState<string | null>(null);   // data URL (sadece görüntü için)
   const [isPdf, setIsPdf] = useState(false);
   const [fileName, setFileName] = useState('');
-  const [file, setFile] = useState(null);
+  const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [forms, setForms] = useState(null);       // [{page, answers, total}]
+  const [forms, setForms] = useState<OptikFormResult[] | null>(null);       // [{page, answers, total}]
   const [raw, setRaw] = useState('');
-  const [copiedIdx, setCopiedIdx] = useState(null);
-  const inputRef = useRef(null);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  function onFileChange(e) {
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
     if (f.size > 20 * 1024 * 1024) { showToast('Dosya 20 MB\'dan büyük', 'error'); return; }
@@ -27,7 +39,7 @@ export default function OptikFormTab({ showToast }) {
     setRaw('');
     if (!pdf) {
       const reader = new FileReader();
-      reader.onload = ev => setPreview(ev.target.result);
+      reader.onload = ev => setPreview(ev.target?.result as string);
       reader.readAsDataURL(f);
     } else {
       setPreview(null);
@@ -43,7 +55,7 @@ export default function OptikFormTab({ showToast }) {
       const fd = new FormData();
       fd.append('image', file);
       const res = await fetch('/api/optik', { method: 'POST', body: fd, credentials: 'same-origin' });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string; forms?: OptikFormResult[]; pageCount?: number; raw?: string };
       if (!res.ok) throw new Error(data.error || 'Hata');
       if (data.forms) {
         setForms(data.forms);
@@ -53,14 +65,14 @@ export default function OptikFormTab({ showToast }) {
         showToast('Form okundu ama parse edilemedi — ham çıktıya bakın', 'error');
       }
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast((err as Error).message, 'error');
     } finally {
       setLoading(false);
     }
   }
 
-  function setAnswer(formIdx, ansIdx, val) {
-    setForms(prev => prev.map((f, i) => {
+  function setAnswer(formIdx: number, ansIdx: number, val: string) {
+    setForms(prev => (prev || []).map((f, i) => {
       if (i !== formIdx) return f;
       const answers = [...f.answers];
       answers[ansIdx] = val || null;
@@ -68,8 +80,8 @@ export default function OptikFormTab({ showToast }) {
     }));
   }
 
-  async function copyForm(idx) {
-    const f = forms[idx];
+  async function copyForm(idx: number) {
+    const f = forms![idx];
     const text = f.answers.map((a, i) => `${i + 1}. ${a ?? '-'}`).join('\n');
     await navigator.clipboard.writeText(text);
     setCopiedIdx(idx);
@@ -82,7 +94,7 @@ export default function OptikFormTab({ showToast }) {
     if (inputRef.current) inputRef.current.value = '';
   }
 
-  function renderAnswerGrid(formIdx, answers) {
+  function renderAnswerGrid(formIdx: number, answers: (string | null)[]) {
     const rows = [];
     for (let i = 0; i < answers.length; i += 10) {
       const chunk = answers.slice(i, i + 10);

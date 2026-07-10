@@ -9,19 +9,21 @@ import React, { useState, useMemo } from 'react';
 import { Lock, Plus, Save, X } from 'lucide-react';
 import { api } from './shared';
 import { useClasses } from '../ClassesContext';
+import type { ClassRecord } from '@/lib/classes';
+import type { ShowToast, TeacherDTO, TeacherPresetDTO } from '../types';
 
 // Öğretmenin girebileceği gruplar (boşsa hepsi).
-function teacherGroups(t) {
+function teacherGroups(t: TeacherDTO): string[] {
   const ag = t.allowedGroups || [];
   return ag.length > 0 ? ag : ['ortaokul', 'lise', 'mezun'];
 }
 
 // Bir öğretmen için seçilebilir şube → o şubede verebileceği dersler.
 // dersler = şubenin ders kümesi (registry) ∩ öğretmenin branşları.
-function eligibleMap(t, registryClasses) {
+function eligibleMap(t: TeacherDTO, registryClasses: ClassRecord[] | null): Record<string, string[]> {
   const groups = teacherGroups(t);
   const branches = new Set(t.branches || []);
-  const map = {}; // cls id -> [course, ...]
+  const map: Record<string, string[]> = {}; // cls id -> [course, ...]
   for (const c of registryClasses || []) {
     if (!groups.includes(c.group)) continue;
     const courses = (c.dersler || []).filter(d => branches.has(d));
@@ -30,9 +32,15 @@ function eligibleMap(t, registryClasses) {
   return map;
 }
 
-export default function TeacherPresets({ teacher, onSaved, showToast }) {
+interface TeacherPresetsProps {
+  teacher: TeacherDTO;
+  onSaved?: (presets: TeacherPresetDTO[]) => void;
+  showToast: ShowToast;
+}
+
+export default function TeacherPresets({ teacher, onSaved, showToast }: TeacherPresetsProps) {
   const { classes: registryClasses } = useClasses();
-  const [presets, setPresets] = useState(() =>
+  const [presets, setPresets] = useState<TeacherPresetDTO[]>(() =>
     Array.isArray(teacher.presets) ? teacher.presets.map(p => ({ cls: p.cls, course: p.course })) : []
   );
   const [selCls, setSelCls] = useState('');
@@ -42,7 +50,7 @@ export default function TeacherPresets({ teacher, onSaved, showToast }) {
   // id → şube adı (görünüm); bilinmeyen id (eski/silinmiş kayıt) ham gösterilir.
   const adOf = useMemo(() => {
     const m = new Map((registryClasses || []).map(c => [c.id, c.ad]));
-    return (cls) => m.get(cls) || cls;
+    return (cls: string) => m.get(cls) || cls;
   }, [registryClasses]);
 
   const elig = useMemo(() => eligibleMap(teacher, registryClasses), [teacher, registryClasses]);
@@ -69,14 +77,14 @@ export default function TeacherPresets({ teacher, onSaved, showToast }) {
     setSelCourse('');
   }
 
-  function remove(i) {
+  function remove(i: number) {
     setPresets(prev => prev.filter((_, idx) => idx !== i));
   }
 
   async function save() {
     setSaving(true);
     try {
-      const res = await api('/api/teachers', {
+      const res = await api<{ presets?: TeacherPresetDTO[] }>('/api/teachers', {
         method: 'PUT',
         body: JSON.stringify({ action: 'set_presets', id: teacher.id, presets }),
       });
@@ -86,7 +94,7 @@ export default function TeacherPresets({ teacher, onSaved, showToast }) {
       showToast('Sabit dersler kaydedildi');
       onSaved?.(saved);
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast((err as Error).message, 'error');
     } finally {
       setSaving(false);
     }

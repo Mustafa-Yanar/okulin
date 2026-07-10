@@ -20,6 +20,34 @@ import EmptyState from '../EmptyState';
 import { useUrlParam } from '../useUrlParam';
 import { useConfirm } from '../ConfirmProvider';
 import { useClasses } from '../ClassesContext';
+import type { ClassRecord } from '@/lib/classes';
+import type { CourseRecord } from '@/lib/courses';
+import type { ShowToast, SlotEntryDTO, StudentDTO } from '../types';
+
+// Panel öğrencisi: DTO + loadAll'un eklediği group alanı.
+type PanelStudent = StudentDTO & { group?: string };
+
+interface SinifOgrenciProps {
+  students?: PanelStudent[];
+  allSlots: SlotEntryDTO[];
+  weekKey?: string;
+  onCancelBooking?: (slot: SlotEntryDTO) => void;
+  onEditStudent?: (s: PanelStudent) => void;
+  onDeleteStudent?: (s: PanelStudent) => void;
+  onHistory?: (s: PanelStudent) => void;
+  pendingGuidance?: Record<string, number>;
+  onGuidanceReviewed?: () => void;
+  onSelectChange?: (id: string | null) => void;
+  onAddStudent?: () => void;
+  onAddCounselor?: () => void;
+  onAddAssistant?: () => void;
+  isCounselor?: boolean;
+  readOnly?: boolean;
+  onClassesChanged?: () => void;
+  showToast?: ShowToast;
+  sektor?: string;
+  classes?: ClassRecord[];
+}
 
 export default function SinifOgrenci({
   students = [], allSlots, weekKey,
@@ -27,34 +55,34 @@ export default function SinifOgrenci({
   pendingGuidance = {}, onGuidanceReviewed, onSelectChange,
   onAddStudent, onAddCounselor, onAddAssistant, isCounselor = false, readOnly = false,
   onClassesChanged, showToast, sektor = 'dershane', classes: classesProp = [],
-}) {
+}: SinifOgrenciProps) {
   const confirm = useConfirm();
   // Paylaşılan sınıf/ders context'i: bu ekranda şube/ders düzenlenince program sekmesi
   // (useClasses ile besleniyor) bayat kalmasın diye her yerel yenilemede context de yenilenir.
   const { reloadClasses } = useClasses();
-  const [classes, setClasses] = useState(classesProp);
-  const [courses, setCourses] = useState([]);
+  const [classes, setClasses] = useState<ClassRecord[]>(classesProp);
+  const [courses, setCourses] = useState<CourseRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('list'); // list | catalog
-  const [editClass, setEditClass] = useState(null); // {} = yeni, kayıt = düzenle
-  const [scheduleCls, setScheduleCls] = useState(null);
-  const [windowCls, setWindowCls] = useState(null); // sınıf program penceresi editörü {id,label,slotTemplate}
+  const [editClass, setEditClass] = useState<Partial<ClassRecord> | null>(null); // {} = yeni, kayıt = düzenle
+  const [scheduleCls, setScheduleCls] = useState<{ cls: string; label: string } | null>(null);
+  const [windowCls, setWindowCls] = useState<{ id: string; label: string; slotTemplate: Record<string, number[]> | null } | null>(null); // sınıf program penceresi editörü
   const [searchQ, setSearchQ] = useState('');
-  const [openClsId, setOpenClsId] = useState(null);
+  const [openClsId, setOpenClsId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useUrlParam('ogrenci');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api('/api/classes');
+      const data = await api<{ classes?: ClassRecord[]; courses?: CourseRecord[] }>('/api/classes');
       setClasses(data.classes || []);
       setCourses(data.courses || []);
       // Paylaşılan context'i de tazele — program sekmesi (haftalık ders yükü tablosu)
       // aynı /api/classes'ı useClasses üzerinden okuyor; yenilenmezse şube/ders
       // değişikliği orada ancak sayfa elle yenilenince görünürdü.
       reloadClasses?.();
-    } catch (err) { showToast?.(err.message, 'error'); }
+    } catch (err) { showToast?.((err as Error).message, 'error'); }
     finally { setLoading(false); }
   }, [showToast, reloadClasses]);
 
@@ -67,7 +95,7 @@ export default function SinifOgrenci({
 
   // class.id → o şubedeki öğrenciler (ada göre sıralı)
   const studentsByClass = useMemo(() => {
-    const m = {};
+    const m: Record<string, PanelStudent[]> = {};
     for (const s of students) (m[s.cls] ||= []).push(s);
     for (const k of Object.keys(m)) m[k].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'tr'));
     return m;
@@ -75,7 +103,7 @@ export default function SinifOgrenci({
 
   // Kademeye göre grupla (sıralı), her kademe içinde şube adına göre.
   const byKademe = useMemo(() => {
-    const m = {};
+    const m: Record<string, ClassRecord[]> = {};
     for (const c of classes) (m[c.kademe || 'ortaokul'] ||= []).push(c);
     for (const k of Object.keys(m)) m[k].sort((a, b) => (a.ad || '').localeCompare(b.ad || '', 'tr'));
     return m;
@@ -95,7 +123,7 @@ export default function SinifOgrenci({
       .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'tr'));
   }, [searchQ, students, classes]);
 
-  async function handleDeleteClass(c) {
+  async function handleDeleteClass(c: ClassRecord) {
     const inClass = studentsByClass[c.id] || [];
     if (inClass.length > 0) {
       if (!(await confirm(`"${c.ad}" şubesinde ${inClass.length} öğrenci var. Şube ve tüm öğrencileri silinsin mi?`))) return;
@@ -109,7 +137,7 @@ export default function SinifOgrenci({
       showToast?.('Şube silindi');
       await load();
       onClassesChanged?.();
-    } catch (err) { showToast?.(err.message, 'error'); }
+    } catch (err) { showToast?.((err as Error).message, 'error'); }
     finally { setBusy(false); }
   }
 
@@ -240,7 +268,7 @@ export default function SinifOgrenci({
                         onToggle={() => setOpenClsId((prev) => (prev === c.id ? null : c.id))}
                         onEdit={() => setEditClass(c)}
                         onSchedule={() => setScheduleCls({ cls: c.id, label: c.ad })}
-                        onWindow={() => setWindowCls({ id: c.id, label: c.ad, slotTemplate: c.slotTemplate || null })}
+                        onWindow={() => setWindowCls({ id: c.id, label: c.ad, slotTemplate: (c.slotTemplate as Record<string, number[]> | null) || null })}
                         onDelete={() => handleDeleteClass(c)}
                         onSelectStudent={setExpandedId}
                         pendingGuidance={pendingGuidance}
@@ -280,10 +308,26 @@ export default function SinifOgrenci({
   );
 }
 
+interface ClassRowProps {
+  c: ClassRecord;
+  courses: CourseRecord[];
+  students: PanelStudent[];
+  isOpen: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+  onSchedule: () => void;
+  onWindow: () => void;
+  onDelete: () => void;
+  onSelectStudent: (id: string) => void;
+  pendingGuidance?: Record<string, number>;
+  readOnly?: boolean;
+  busy: boolean;
+}
+
 // ─── Şube satırı (akordeon: başlık + 3 buton + açılınca öğrenciler) ───────────────────
-function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, onWindow, onDelete, onSelectStudent, pendingGuidance, readOnly = false, busy }) {
+function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, onWindow, onDelete, onSelectStudent, pendingGuidance, readOnly = false, busy }: ClassRowProps) {
   const hasWindow = c.slotTemplate && Object.keys(c.slotTemplate).length > 0;
-  const courseLabel = (key) => courses.find((x) => x.key === key)?.ad || key;
+  const courseLabel = (key: string) => courses.find((x) => x.key === key)?.ad || key;
   const dersler = c.dersler || [];
   const meta = [c.duzey && `${c.duzey}. sınıf`, c.dal && DAL_LABEL[c.dal]].filter(Boolean).join(' · ');
   return (
@@ -331,8 +375,15 @@ function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, 
   );
 }
 
+interface StudentRowProps {
+  s: PanelStudent;
+  subtitle?: string;
+  pending?: number;
+  onClick: () => void;
+}
+
 // ─── Öğrenci satırı (kart) ─────────────────────────────────────────────────────────
-function StudentRow({ s, subtitle, pending, onClick }) {
+function StudentRow({ s, subtitle, pending, onClick }: StudentRowProps) {
   return (
     <button onClick={onClick}
       className="card card-interactive overflow-hidden text-sm w-full flex items-center gap-3 px-3 py-2.5 text-left">
@@ -341,7 +392,7 @@ function StudentRow({ s, subtitle, pending, onClick }) {
           style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', fontWeight: 700 }}>
           {s.name.slice(0, 2).toUpperCase()}
         </div>
-        {pending > 0 && (
+        {(pending ?? 0) > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-700 flex items-center justify-center" style={{ fontWeight: 700 }}>
             {pending}
           </span>

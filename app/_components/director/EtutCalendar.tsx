@@ -4,9 +4,9 @@
 // Faz 2: boş iskelet (saat ekseni 07-23, gün sütunları, tarihli + hafta gezinme).
 // Ders blokları (Faz 3) ve etüt blokları (Faz 4) bu zemine eklenecek.
 
-import React, { useMemo } from 'react';
+import React, { useMemo, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { ALL_DAYS, weekRangeLabel } from '@/lib/constants';
+import { ALL_DAYS, weekRangeLabel, type DayInfo } from '@/lib/constants';
 
 // ─── Zaman ekseni sabitleri ──────────────────────────────────────────────────
 export const CAL_START_HOUR = 7;   // 07:00
@@ -15,24 +15,27 @@ const HOUR_PX = 48;                // her saat satırı yüksekliği (px)
 const TOTAL_HOURS = CAL_END_HOUR - CAL_START_HOUR;
 const GRID_HEIGHT = TOTAL_HOURS * HOUR_PX;
 
+// Takvim günü: DayInfo + o haftadaki tarih bilgisi.
+export type CalDay = DayInfo & { dateNum: number | ''; isToday: boolean };
+
 // "HH:MM" → günün başından dakika
-export function timeToMin(t) {
+export function timeToMin(t: string): number {
   const [h, m] = String(t).split(':').map(Number);
   return h * 60 + m;
 }
 
 // dakika → calendar içinde top (px). CAL_START_HOUR referans alınır.
-export function minToTop(min) {
+export function minToTop(min: number): number {
   return ((min - CAL_START_HOUR * 60) / 60) * HOUR_PX;
 }
 
 // süre (dk) → yükseklik (px)
-export function durationToHeight(durMin) {
+export function durationToHeight(durMin: number): number {
   return (durMin / 60) * HOUR_PX;
 }
 
 // Hafta anahtarından her günün tarihini (gün sayısı) hesapla → [{index, day, dateNum}]
-function daysWithDates(weekKey) {
+function daysWithDates(weekKey: string): CalDay[] {
   try {
     const [year, wStr] = String(weekKey).split('-W');
     const week = parseInt(wStr);
@@ -49,12 +52,21 @@ function daysWithDates(weekKey) {
       return { ...d, dateNum: dt.getDate(), isToday: dt.getTime() === today.getTime() };
     });
   } catch {
-    return ALL_DAYS.map(d => ({ ...d, dateNum: '', isToday: false }));
+    return ALL_DAYS.map(d => ({ ...d, dateNum: '' as const, isToday: false }));
   }
 }
 
+interface CalWeekNavProps {
+  weekKey: string;
+  currentWeek?: string | null;
+  canPrev?: boolean;
+  canNext?: boolean;
+  onPrev?: () => void;
+  onNext?: () => void;
+}
+
 // ─── Hafta gezinme barı ──────────────────────────────────────────────────────
-function WeekNav({ weekKey, currentWeek, canPrev, canNext, onPrev, onNext }) {
+function WeekNav({ weekKey, currentWeek, canPrev, canNext, onPrev, onNext }: CalWeekNavProps) {
   const r = weekRangeLabel(weekKey);
   return (
     <div className="flex items-center gap-2 mb-3 w-fit">
@@ -76,6 +88,18 @@ function WeekNav({ weekKey, currentWeek, canPrev, canNext, onPrev, onNext }) {
   );
 }
 
+interface EtutCalendarProps {
+  weekKey: string;
+  currentWeek?: string | null;
+  canPrev?: boolean;
+  canNext?: boolean;
+  onPrev?: () => void;
+  onNext?: () => void;
+  headerRight?: ReactNode;
+  renderDayContent?: (day: CalDay) => ReactNode;
+  hiddenDayIndexes?: number[];
+}
+
 // ─── Ana bileşen ─────────────────────────────────────────────────────────────
 // Props (Faz 2): weekKey, currentWeek, canPrev, canNext, onPrev, onNext, headerRight
 // renderDayContent(day) → o günün sütununa absolute konumlu blokları döndürür (Faz 3+).
@@ -89,14 +113,14 @@ export default function EtutCalendar({
   headerRight = null,
   renderDayContent,
   hiddenDayIndexes = [],
-}) {
+}: EtutCalendarProps) {
   const days = useMemo(() => {
     const hidden = new Set(hiddenDayIndexes);
     return daysWithDates(weekKey).filter(d => !hidden.has(d.index));
   }, [weekKey, hiddenDayIndexes]);
 
   // Saat etiketleri (07:00 … 23:00)
-  const hourLabels = [];
+  const hourLabels: string[] = [];
   for (let h = CAL_START_HOUR; h <= CAL_END_HOUR; h++) {
     hourLabels.push(`${String(h).padStart(2, '0')}:00`);
   }

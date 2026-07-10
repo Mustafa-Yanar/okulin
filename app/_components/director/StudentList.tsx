@@ -4,25 +4,46 @@
 // sınıf ders programı modalı (ClassScheduleModal).
 import React, { useState, useEffect, useMemo } from 'react';
 import { BookOpen, ClipboardList, Clock, Calendar, ChevronRight, ChevronLeft, Edit3, GraduationCap, Trash2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { classLabel, ALL_DAYS } from '@/lib/constants';
-import { classLabelFrom } from '@/lib/classCatalog';
+import { classLabelFrom, type ClassEntry } from '@/lib/classCatalog';
 import { GROUPS, api, Modal, guidanceSubjectsFor } from './shared';
 import { StudentAttendanceView } from './Attendance';
 import { StudentBookingsView } from '../StudentPanel';
 import RehberlikAccordion from '../rehberlik/RehberlikAccordion';
 import StudentGuidanceView from '../rehberlik/StudentGuidanceView';
 import { useUrlParam } from '../useUrlParam';
+import type { ShowToast, SlotEntryDTO, StudentDTO } from '../types';
 
-export function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceReviewed }) {
+// Panel öğrencisi: DTO + loadAll'un eklediği group alanı.
+type ListStudent = StudentDTO & { group?: string };
+
+// GET /api/class-schedule ders hücresi.
+interface ClassLessonDTO {
+  slotId: string;
+  slotLabel?: string;
+  teacherName?: string;
+  branch?: string;
+  subBranch?: string;
+}
+
+interface StudentExpandedViewProps {
+  student: ListStudent;
+  allSlots: SlotEntryDTO[];
+  onCancelBooking?: (slot: SlotEntryDTO) => void;
+  onGuidanceReviewed?: () => void;
+}
+
+export function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceReviewed }: StudentExpandedViewProps) {
   const [tab, setTab] = useState('rehberlik');
   return (
     <div className="px-3 py-2">
       <div className="pill-tabs mb-3">
-        {[
+        {([
           ['rehberlik', 'Rehberlik', BookOpen],
           ['devamsizlik', 'Devamsızlık Bilgisi', ClipboardList],
           ['etut', 'Etüt Geçmişi', Clock],
-        ].map(([key, label, Icon]) => (
+        ] as [string, string, LucideIcon][]).map(([key, label, Icon]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`pill-tab${tab === key ? ' is-active' : ''}`}>
             <Icon size={12} /> <span>{label}</span>
@@ -47,31 +68,46 @@ export function StudentExpandedView({ student, allSlots, onCancelBooking, onGuid
   );
 }
 
-export function StudentList({ students, classes = [], allSlots, weekKey, onCancelBooking, onEdit, onDelete, onDeleteClass, onHistory, pendingGuidance, onGuidanceReviewed, onSelectChange }) {
+interface StudentListProps {
+  students: ListStudent[];
+  classes?: ClassEntry[];
+  allSlots: SlotEntryDTO[];
+  weekKey?: string;
+  onCancelBooking?: (slot: SlotEntryDTO) => void;
+  onEdit: (s: ListStudent) => void;
+  onDelete: (s: ListStudent) => void;
+  onDeleteClass?: (cls: string, students: ListStudent[]) => void;
+  onHistory?: (s: ListStudent) => void;
+  pendingGuidance?: Record<string, number>;
+  onGuidanceReviewed?: () => void;
+  onSelectChange?: (id: string | null) => void;
+}
+
+export function StudentList({ students, classes = [], allSlots, weekKey, onCancelBooking, onEdit, onDelete, onDeleteClass, onHistory, pendingGuidance, onGuidanceReviewed, onSelectChange }: StudentListProps) {
   const [searchQ, setSearchQ] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
-  const [openCls, setOpenCls] = useState(null);
+  const [openCls, setOpenCls] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useUrlParam('ogrenci'); // inline detay → URL'de görünür
-  const [scheduleCls, setScheduleCls] = useState(null);
+  const [scheduleCls, setScheduleCls] = useState<{ cls: string; label: string } | null>(null);
 
   // Detay açık/kapalı durumunu dışarı bildir (DirectorPanel liste başlığını gizler).
   useEffect(() => { onSelectChange?.(expandedId); }, [expandedId, onSelectChange]);
 
   const grouped = useMemo(() => {
     const q = searchQ.toLowerCase();
-    const groupOrder = { ortaokul: 0, lise: 1, mezun: 2 };
-    const clsSort = cls => cls.startsWith('m') ? parseInt(cls.slice(1)) : parseInt(cls);
+    const groupOrder: Record<string, number> = { ortaokul: 0, lise: 1, mezun: 2 };
+    const clsSort = (cls: string) => cls.startsWith('m') ? parseInt(cls.slice(1)) : parseInt(cls);
     const sorted = students
       .filter(s =>
         (s.name.toLowerCase().includes(q)||s.cls.toLowerCase().includes(q)||s.username?.toLowerCase().includes(q)) &&
         (!filterGroup||s.group===filterGroup)
       )
       .sort((a, b) => {
-        const gDiff = (groupOrder[a.group] ?? 9) - (groupOrder[b.group] ?? 9);
+        const gDiff = (groupOrder[a.group || ''] ?? 9) - (groupOrder[b.group || ''] ?? 9);
         if (gDiff !== 0) return gDiff;
         return clsSort(a.cls) - clsSort(b.cls);
       });
-    const groups = [];
+    const groups: { cls: string; label: string; group?: string; students: ListStudent[] }[] = [];
     for (const s of sorted) {
       if (!groups.length || groups[groups.length-1].cls !== s.cls) {
         groups.push({ cls: s.cls, label: classLabelFrom(classes, s.cls, classLabel), group: s.group, students: [] });
@@ -81,7 +117,7 @@ export function StudentList({ students, classes = [], allSlots, weekKey, onCance
     return groups;
   }, [students, classes, searchQ, filterGroup]);
 
-  const toggle = cls => setOpenCls(prev => prev === cls ? null : cls);
+  const toggle = (cls: string) => setOpenCls(prev => prev === cls ? null : cls);
 
   // İnline detay sayfası — bir öğrenci seçiliyse liste yerine bunu göster (URL'de ?ogrenci=ID).
   const selected = expandedId ? students.find(x => x.id === expandedId) : null;
@@ -172,9 +208,9 @@ export function StudentList({ students, classes = [], allSlots, weekKey, onCance
                             style={{ background: colors.dot, fontWeight:700 }}>
                             {s.name.slice(0,2).toUpperCase()}
                           </div>
-                          {pendingGuidance?.[s.id] > 0 && (
+                          {(pendingGuidance?.[s.id] ?? 0) > 0 && (
                             <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-700 flex items-center justify-center" style={{ fontWeight: 700 }}>
-                              {pendingGuidance[s.id]}
+                              {pendingGuidance![s.id]}
                             </span>
                           )}
                         </div>
@@ -199,15 +235,21 @@ export function StudentList({ students, classes = [], allSlots, weekKey, onCance
   );
 }
 
-export function ClassScheduleModal({ cls, label, onClose }) {
-  const [schedule, setSchedule] = useState(null);
+interface ClassScheduleModalProps {
+  cls: string;
+  label?: string;
+  onClose: () => void;
+}
+
+export function ClassScheduleModal({ cls, label, onClose }: ClassScheduleModalProps) {
+  const [schedule, setSchedule] = useState<Record<number, ClassLessonDTO[]> | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const data = await api(`/api/class-schedule?cls=${encodeURIComponent(cls)}`);
+        const data = await api<{ schedule?: Record<number, ClassLessonDTO[]> }>(`/api/class-schedule?cls=${encodeURIComponent(cls)}`);
         setSchedule(data.schedule || {});
       } catch {
         setSchedule({});
@@ -224,7 +266,7 @@ export function ClassScheduleModal({ cls, label, onClose }) {
 
   const rows = useMemo(() => {
     if (!schedule) return [];
-    const dayLessons = {};
+    const dayLessons: Record<number, ClassLessonDTO[]> = {};
     let maxLessons = 0;
     for (const day of visibleDays) {
       const list = [...(schedule[day.index] || [])];
@@ -236,9 +278,9 @@ export function ClassScheduleModal({ cls, label, onClose }) {
       dayLessons[day.index] = list;
       if (list.length > maxLessons) maxLessons = list.length;
     }
-    const result = [];
+    const result: { lessonNo: number; byDay: Record<number, ClassLessonDTO | null> }[] = [];
     for (let i = 0; i < maxLessons; i++) {
-      const row = { lessonNo: i + 1, byDay: {} };
+      const row: { lessonNo: number; byDay: Record<number, ClassLessonDTO | null> } = { lessonNo: i + 1, byDay: {} };
       for (const day of visibleDays) {
         row.byDay[day.index] = dayLessons[day.index][i] || null;
       }

@@ -13,24 +13,46 @@ import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal, getAdjacentWeek, isSlotPast } from './shared';
 import EtutCalendar, { timeToMin, minToTop, durationToHeight } from './EtutCalendar';
 import { useConfirm } from '../ConfirmProvider';
+import type { EtutSablonu, ProgramEntry } from '@/lib/slots';
+import type { ShowToast, StudentDTO, TeacherDTO } from '../types';
 
-export default function ProgramEditor({ teacher, onClose, showToast, students, inline = false }) {
+// /api/program ızgarası: gün → slotId → giriş.
+type ProgramGrid = Record<string, Record<string, ProgramEntry | null>>;
+type PanelStudent = StudentDTO & { group?: string };
+
+// Etüt Ekle formunun ürettiği taslak.
+interface EtutDraft {
+  dayIndex: number;
+  start: string;
+  end: string;
+  aktif: boolean;
+}
+
+interface ProgramEditorProps {
+  teacher: TeacherDTO;
+  onClose: () => void;
+  showToast: ShowToast;
+  students?: PanelStudent[];
+  inline?: boolean;
+}
+
+export default function ProgramEditor({ teacher, onClose, showToast, students, inline = false }: ProgramEditorProps) {
   const confirm = useConfirm();
   const currentWeek = getWeekKey();
   const maxWeek = getAdjacentWeek(getAdjacentWeek(currentWeek, 1), 1);
   const [weekKey, setWeekKey] = useState(currentWeek);
-  const [program, setProgram] = useState(null);
+  const [program, setProgram] = useState<ProgramGrid | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [offDays, setOffDays] = useState(teacher.offDays || []);
-  const [togglingDay, setTogglingDay] = useState(null);
-  const [dirty, setDirty] = useState({});
+  const [offDays, setOffDays] = useState<number[]>(teacher.offDays || []);
+  const [togglingDay, setTogglingDay] = useState<number | null>(null);
+  const [dirty, setDirty] = useState<Record<string, ProgramEntry | null>>({});
 
   // Etüt şablonları (calendar — serbest saatli, haftadan bağımsız)
-  const [etutSablonlar, setEtutSablonlar] = useState([]);
+  const [etutSablonlar, setEtutSablonlar] = useState<EtutSablonu[]>([]);
   const [showEtutForm, setShowEtutForm] = useState(false);
   const [savingEtut, setSavingEtut] = useState(false);
-  const [selectedEtut, setSelectedEtut] = useState(null); // tıklanan etüt (eylem menüsü)
+  const [selectedEtut, setSelectedEtut] = useState<EtutSablonu | null>(null); // tıklanan etüt (eylem menüsü)
 
   const { slotTimes } = useSlotTimes();
 
@@ -39,7 +61,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     setDirty({});
     (async () => {
       try {
-        const data = await api(`/api/program?teacherId=${teacher.id}&week=${weekKey}`);
+        const data = await api<{ program?: ProgramGrid }>(`/api/program?teacherId=${teacher.id}&week=${weekKey}`);
         setProgram(data.program || {});
       } catch {
         setProgram({});
@@ -53,13 +75,13 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   useEffect(() => {
     (async () => {
       try {
-        const d = await api(`/api/etut-sablon?teacherId=${teacher.id}`);
+        const d = await api<{ sablonlar?: EtutSablonu[] }>(`/api/etut-sablon?teacherId=${teacher.id}`);
         setEtutSablonlar(d.sablonlar || []);
       } catch { setEtutSablonlar([]); }
     })();
   }, [teacher.id]);
 
-  async function saveEtutSablon(sablon) {
+  async function saveEtutSablon(sablon: EtutDraft) {
     // Geçmiş gün/saate etüt eklenemez (server de reddeder; burada erken uyarı).
     if (isSlotPast(weekKey, sablon.dayIndex, sablon.start)) {
       showToast('Geçmiş bir gün/saate etüt eklenemez', 'error');
@@ -67,38 +89,38 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     }
     setSavingEtut(true);
     try {
-      const r = await api('/api/etut-sablon', { method: 'POST', body: JSON.stringify({ teacherId: teacher.id, weekKey, sablon }) });
+      const r = await api<{ sablonlar?: EtutSablonu[] }>('/api/etut-sablon', { method: 'POST', body: JSON.stringify({ teacherId: teacher.id, weekKey, sablon }) });
       setEtutSablonlar(r.sablonlar || []);
       setShowEtutForm(false);
       showToast('Etüt eklendi');
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast((e as Error).message, 'error'); }
     finally { setSavingEtut(false); }
   }
 
-  async function deleteEtutSablon(id) {
+  async function deleteEtutSablon(id: string) {
     try {
-      const r = await api('/api/etut-sablon', { method: 'DELETE', body: JSON.stringify({ teacherId: teacher.id, id }) });
+      const r = await api<{ sablonlar?: EtutSablonu[] }>('/api/etut-sablon', { method: 'DELETE', body: JSON.stringify({ teacherId: teacher.id, id }) });
       setEtutSablonlar(r.sablonlar || []);
       setSelectedEtut(null);
       showToast('Etüt silindi');
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast((e as Error).message, 'error'); }
   }
 
-  async function toggleEtutSablon(id, scope, aktif) {
+  async function toggleEtutSablon(id: string, scope: string, aktif: boolean) {
     try {
-      const r = await api('/api/etut-sablon', {
+      const r = await api<{ sablonlar?: EtutSablonu[] }>('/api/etut-sablon', {
         method: 'PUT',
         body: JSON.stringify({ teacherId: teacher.id, id, scope, weekKey, aktif }),
       });
       setEtutSablonlar(r.sablonlar || []);
       setSelectedEtut(null);
       showToast(aktif ? 'Etüt aktifleştirildi' : (scope === 'week' ? 'Etüt bu hafta pasifleştirildi' : 'Etüt pasifleştirildi'));
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast((e as Error).message, 'error'); }
   }
 
-  async function assignEtutSablon(id, student) {
+  async function assignEtutSablon(id: string, student: { id: string; name: string; cls: string } | null) {
     try {
-      const r = await api('/api/etut-sablon', {
+      const r = await api<{ sablonlar?: EtutSablonu[] }>('/api/etut-sablon', {
         method: 'PATCH',
         body: JSON.stringify({ teacherId: teacher.id, id, student }),
       });
@@ -106,11 +128,11 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
       setEtutSablonlar(list);
       setSelectedEtut(list.find(s => s.id === id) || null);
       showToast(student ? 'Öğrenci atandı' : 'Atama kaldırıldı');
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast((e as Error).message, 'error'); }
   }
 
   // Bir etüt şablonu bu hafta efektif aktif mi? (kalıcı aktif + bu hafta pasif listesinde değil)
-  function etutAktifThisWeek(sb) {
+  function etutAktifThisWeek(sb: EtutSablonu): boolean {
     if (sb.aktif === false) return false;
     if (Array.isArray(sb.pasifHaftalar) && sb.pasifHaftalar.includes(weekKey)) return false;
     return true;
@@ -119,11 +141,11 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   const canPrev = weekKey !== currentWeek;
   const canNext = weekKey !== maxWeek;
 
-  function getEntry(dayIndex, slotId) {
+  function getEntry(dayIndex: number, slotId: string): ProgramEntry | null {
     return program?.[String(dayIndex)]?.[slotId] || null;
   }
 
-  function setEntry(dayIndex, slotId, entry) {
+  function setEntry(dayIndex: number, slotId: string, entry: ProgramEntry) {
     setProgram(prev => ({
       ...prev,
       [String(dayIndex)]: {
@@ -134,7 +156,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     setDirty(prev => ({ ...prev, [`${dayIndex}:${slotId}`]: entry }));
   }
 
-  function clearEntry(dayIndex, slotId) {
+  function clearEntry(dayIndex: number, slotId: string) {
     setProgram(prev => {
       const day = { ...(prev?.[String(dayIndex)] || {}) };
       delete day[slotId];
@@ -146,7 +168,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   async function handleSave() {
     setSaving(true);
     try {
-      const diff = {};
+      const diff: Record<string, Record<string, ProgramEntry | null>> = {};
       for (const [key, entry] of Object.entries(dirty)) {
         const [dayIdx, slotId] = key.split(':');
         if (!diff[dayIdx]) diff[dayIdx] = {};
@@ -156,13 +178,13 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
       showToast('Program kaydedildi ve uygulandı');
       onClose();
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast((err as Error).message, 'error');
     } finally {
       setSaving(false);
     }
   }
 
-  async function toggleOffDay(dayIndex) {
+  async function toggleOffDay(dayIndex: number) {
     const isCurrentlyOff = offDays.includes(dayIndex);
     const willBeOff = !isCurrentlyOff;
     if (willBeOff) {
@@ -174,7 +196,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     }
     setTogglingDay(dayIndex);
     try {
-      const res = await api('/api/teachers', {
+      const res = await api<{ offDays?: number[] }>('/api/teachers', {
         method: 'PUT',
         body: JSON.stringify({ action: 'toggle_off_day', id: teacher.id, dayIndex, off: willBeOff }),
       });
@@ -194,19 +216,19 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
         });
       }
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast((err as Error).message, 'error');
     } finally {
       setTogglingDay(null);
     }
   }
 
   const allowedStudents = students
-    ? students.filter(s => !teacher.allowedGroups?.length || teacher.allowedGroups.includes(s.group))
+    ? students.filter(s => !teacher.allowedGroups?.length || teacher.allowedGroups.includes(s.group || ''))
     : [];
 
   // O günün, [start,end) aralığıyla çakışan efektif AKTİF etüt şablonu var mı?
   // (mola payı hariç — ders slotuyla birebir saat çakışmasını engelliyoruz.)
-  function cakisanAktifEtut(dayIndex, slotStart, slotEnd) {
+  function cakisanAktifEtut(dayIndex: number, slotStart: string, slotEnd: string): EtutSablonu | undefined {
     const s = timeToMin(slotStart), e = timeToMin(slotEnd);
     return etutSablonlar.find(sb =>
       sb.dayIndex === dayIndex &&
@@ -218,7 +240,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   // Ders slotu tek-tık toggle: pasif (boş) → aktif (available); aktif → pasif.
   // Geçmiş slot düzenlenemez. Kayıt "Kaydet ve Uygula" ile toplu (dirty/diff).
   // Çift yönlü çakışma: o saate aktif etüt varsa ders aktif EDİLEMEZ (kapatma serbest).
-  function handleSlotClick(dayIndex, slotId, slotLabel) {
+  function handleSlotClick(dayIndex: number, slotId: string, slotLabel: string) {
     if (isSlotPast(weekKey, dayIndex, slotLabel)) return;
     const entry = getEntry(dayIndex, slotId);
     if (entry?.type === 'available') { clearEntry(dayIndex, slotId); return; }
@@ -384,7 +406,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
           busyRangesForDay={(dayIndex) => {
             // O günün meşgul aralıkları: SADECE aktif (available) ders slotları + etüt şablonları.
             // Pasif/boş ders slotları meşgul değil → o saatlere etüt eklenebilir.
-            const ranges = [];
+            const ranges: { start: string; end: string; label: string }[] = [];
             const slots = daySlots(dayIndex, slotTimes.days?.[dayIndex]);
             for (const slot of slots) {
               const entry = getEntry(dayIndex, slot.id);
@@ -410,7 +432,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
 // Gün + başlangıç + bitiş (serbest süre). Başlangıç seçilince bitiş, kurum
 // varsayılan etüt süresiyle ön-doldurulur (kullanıcı değiştirebilir).
 const ETUT_TIME_OPTS = (() => {
-  const opts = [];
+  const opts: string[] = [];
   for (let min = 7 * 60; min <= 23 * 60; min += 5) {
     const h = Math.floor(min / 60), m = min % 60;
     opts.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
@@ -418,7 +440,7 @@ const ETUT_TIME_OPTS = (() => {
   return opts;
 })();
 
-function addMinutesToTime(t, addMin) {
+function addMinutesToTime(t: string, addMin: number): string {
   const [h, m] = t.split(':').map(Number);
   let total = h * 60 + m + addMin;
   total = Math.min(total, 23 * 60); // calendar sınırı
@@ -426,7 +448,17 @@ function addMinutesToTime(t, addMin) {
   return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
 }
 
-function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, weekKey, saving, onClose, onSave }) {
+interface EtutEkleFormProps {
+  defaultSure: number;
+  molaSure?: number;
+  busyRangesForDay?: (dayIndex: number) => { start: string; end: string; label: string }[];
+  weekKey: string;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (draft: EtutDraft) => void;
+}
+
+function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, weekKey, saving, onClose, onSave }: EtutEkleFormProps) {
   // Geçmiş günleri engelle: gösterilen hafta içinde günü/saati geçmiş slotlara etüt eklenemez.
   // İlk seçilebilir gün = bugün veya sonrası (gösterilen hafta currentWeek ise hafta içi geçmiş günler kapanır).
   const firstValidDay = useMemo(() => {
@@ -442,12 +474,12 @@ function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, weekKey, s
   // Seçili gün+saat geçmişte mi?
   const isPast = isSlotPast(weekKey, dayIndex, start);
 
-  const handleStartChange = (v) => {
+  const handleStartChange = (v: string) => {
     setStart(v);
     setEnd(addMinutesToTime(v, defaultSure)); // bitişi otomatik öner
   };
 
-  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const toMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
   const invalid = toMin(end) <= toMin(start);
 
   // Çakışma + mola kontrolü
@@ -455,7 +487,7 @@ function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, weekKey, s
     const sMin = toMin(start), eMin = toMin(end);
     const ranges = busyRangesForDay ? busyRangesForDay(dayIndex) : [];
     let overlap = false;
-    const molaWarnings = [];
+    const molaWarnings: string[] = [];
     for (const r of ranges) {
       const rs = toMin(r.start), re = toMin(r.end);
       // Üst üste binme (çakışma)
@@ -533,15 +565,25 @@ function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, weekKey, s
   );
 }
 
+interface EtutEylemModalProps {
+  sablon: EtutSablonu;
+  aktif: boolean;
+  allowedStudents?: PanelStudent[];
+  onClose: () => void;
+  onToggle: (id: string, scope: string, aktif: boolean) => void;
+  onAssign: (id: string, student: { id: string; name: string; cls: string } | null) => void;
+  onDelete: (id: string) => void;
+}
+
 // ─── Etüt eylem modalı (tıklanan etüt: aktif/pasif/sil) ──────────────────────
-function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle, onAssign, onDelete }) {
+function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle, onAssign, onDelete }: EtutEylemModalProps) {
   const confirm = useConfirm();
   const gun = ALL_DAYS.find(d => d.index === sablon.dayIndex)?.label || '';
   // Pasifleştirme onayı: "sadece bu hafta" varsayılan İŞARETLİ
   const [pasifMode, setPasifMode] = useState(false); // pasifleştirme onayı gösteriliyor mu
   const [sadeceBuHafta, setSadeceBuHafta] = useState(true);
 
-  function handleStudentSelect(e) {
+  function handleStudentSelect(e: React.ChangeEvent<HTMLSelectElement>) {
     const sid = e.target.value;
     if (!sid) { onAssign(sablon.id, null); return; }
     const s = allowedStudents.find(x => x.id === sid);

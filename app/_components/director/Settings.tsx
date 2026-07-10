@@ -4,15 +4,40 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon, SlidersHorizontal, DoorOpen, Tag, CalendarClock, ShieldCheck } from 'lucide-react';
 import { api, Modal } from './shared';
-import { brandGradient } from '@/lib/branding';
+import { brandGradient, type Branding } from '@/lib/branding';
 import { useConfirm } from '../ConfirmProvider';
+import type { ShowToast } from '../types';
+
+// /api/config yanıtının bu ekranda düzenlenen görünümü — lib/config CONFIG_DEFAULTS
+// ile aynı şekil, ancak dinamik anahtar erişimi (toggleModule/togglePermission) için
+// Record biçiminde gevşetildi (JSON üzerinden geldiği için literal tipler zaten kaybolur).
+interface Classroom {
+  id: string;
+  name: string;
+  capacity: number | null;
+}
+interface OrgConfigView {
+  modules: Record<string, boolean>;
+  etut: { studentSelfBooking?: boolean; cancelLockHours?: number; maxWeeklyPerStudent?: number };
+  permissions: Record<string, Record<string, boolean | undefined> | undefined>;
+  classrooms: Classroom[];
+  expenseCategories: string[];
+  [key: string]: unknown;
+}
+
+interface SettingsBodyProps {
+  current?: string;
+  onSave: (name: string) => void;
+  onBranding?: (b: Branding) => void;
+  showToast: ShowToast;
+}
 
 // Ayarlar bölümlerinin ortak gövdesi — hem modal hem inline kullanır.
-function SettingsBody({ current, onSave, onBranding, showToast }) {
+function SettingsBody({ current, onSave, onBranding, showToast }: SettingsBodyProps) {
   const [name, setName] = useState(current || '');
   const [savingName, setSavingName] = useState(false);
 
-  const submitName = async e => {
+  const submitName = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!name.trim()) return;
     setSavingName(true);
@@ -20,7 +45,7 @@ function SettingsBody({ current, onSave, onBranding, showToast }) {
       await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'update_director_name', name: name.trim() }) });
       onSave(name.trim());
       showToast('İsim güncellendi');
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setSavingName(false); }
   };
 
@@ -52,17 +77,21 @@ function SettingsBody({ current, onSave, onBranding, showToast }) {
   );
 }
 
+interface DirectorSettingsProps extends SettingsBodyProps {
+  onClose?: () => void;
+}
+
 // Modal sürümü (artık kullanılmıyor ama API uyumu için duruyor).
-export function DirectorSettingsModal({ current, onClose, onSave, onBranding, showToast }) {
+export function DirectorSettingsModal({ current, onClose, onSave, onBranding, showToast }: DirectorSettingsProps) {
   return (
-    <Modal title="Ayarlar" onClose={onClose} wide>
+    <Modal title="Ayarlar" onClose={onClose ?? (() => {})} wide>
       <SettingsBody current={current} onSave={onSave} onBranding={onBranding} showToast={showToast} />
     </Modal>
   );
 }
 
 // Inline sürümü — içerik alanında sekme olarak render edilir.
-export function DirectorSettingsInline({ current, onSave, onBranding, showToast }) {
+export function DirectorSettingsInline({ current, onSave, onBranding, showToast }: SettingsBodyProps) {
   return (
     <div className="max-w-2xl">
       <div className="flex items-center gap-3 mb-6">
@@ -80,43 +109,49 @@ export function DirectorSettingsInline({ current, onSave, onBranding, showToast 
   );
 }
 
+// Rehber/müdür yardımcısı liste elemanı.
+interface StaffAccountDTO {
+  id: string;
+  name: string;
+}
+
 // ─── REHBER PERSONELİ ─────────────────────────────────────────────────────────
 // Müdür rehber hesaplarını oluşturur/siler. Rehber = müdür yetkileri eksi muhasebe.
-export function CounselorSection({ showToast }) {
+export function CounselorSection({ showToast }: { showToast: ShowToast }) {
   const confirm = useConfirm();
-  const [list, setList] = useState([]);
+  const [list, setList] = useState<StaffAccountDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: '', password: '', phone: '' });
   const [saving, setSaving] = useState(false);
 
   async function load() {
     setLoading(true);
-    try { const d = await api('/api/counselors'); setList(Array.isArray(d) ? d : []); }
+    try { const d = await api<StaffAccountDTO[]>('/api/counselors'); setList(Array.isArray(d) ? d : []); }
     catch { /* sessiz */ } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
 
-  async function add(e) {
+  async function add(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!form.name.trim()) { showToast('İsim gerekli', 'error'); return; }
     setSaving(true);
     try {
       await api('/api/counselors', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), password: form.password, phone: form.phone }) });
       showToast('Rehber eklendi'); setForm({ name: '', password: '', phone: '' }); load();
-    } catch (e) { showToast(e.message, 'error'); } finally { setSaving(false); }
+    } catch (e) { showToast((e as Error).message, 'error'); } finally { setSaving(false); }
   }
-  async function remove(c) {
+  async function remove(c: StaffAccountDTO) {
     if (!(await confirm(`"${c.name}" rehberi silinsin mi?`))) return;
     try { await api('/api/counselors', { method: 'DELETE', body: JSON.stringify({ id: c.id }) }); showToast('Rehber silindi'); load(); }
-    catch (e) { showToast(e.message, 'error'); }
+    catch (e) { showToast((e as Error).message, 'error'); }
   }
-  async function resetPw(c) {
+  async function resetPw(c: StaffAccountDTO) {
     const pw = prompt(`${c.name} için yeni şifre (en az 6 karakter):`);
     if (!pw) return;
     try {
       await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'reset_password', targetRole: 'counselor', targetId: c.id, newPassword: pw }) });
       showToast('Şifre sıfırlandı — rehber ilk girişte değiştirecek');
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast((e as Error).message, 'error'); }
   }
 
   return (
@@ -170,41 +205,41 @@ export function CounselorSection({ showToast }) {
 // ─── MÜDÜR YARDIMCISI ─────────────────────────────────────────────────────────
 // Müdür, müdür yardımcısı hesapları oluşturur/siler. Müdür yardımcısı = müdürle
 // BİREBİR aynı yetki (oturumda role='director'). CounselorSection deseninin eşi.
-export function AssistantDirectorSection({ showToast }) {
+export function AssistantDirectorSection({ showToast }: { showToast: ShowToast }) {
   const confirm = useConfirm();
-  const [list, setList] = useState([]);
+  const [list, setList] = useState<StaffAccountDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: '', password: '', phone: '' });
   const [saving, setSaving] = useState(false);
 
   async function load() {
     setLoading(true);
-    try { const d = await api('/api/assistant-directors'); setList(Array.isArray(d) ? d : []); }
+    try { const d = await api<StaffAccountDTO[]>('/api/assistant-directors'); setList(Array.isArray(d) ? d : []); }
     catch { /* sessiz */ } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, []);
 
-  async function add(e) {
+  async function add(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!form.name.trim()) { showToast('İsim gerekli', 'error'); return; }
     setSaving(true);
     try {
       await api('/api/assistant-directors', { method: 'POST', body: JSON.stringify({ name: form.name.trim(), password: form.password, phone: form.phone }) });
       showToast('Müdür yardımcısı eklendi'); setForm({ name: '', password: '', phone: '' }); load();
-    } catch (e) { showToast(e.message, 'error'); } finally { setSaving(false); }
+    } catch (e) { showToast((e as Error).message, 'error'); } finally { setSaving(false); }
   }
-  async function remove(a) {
+  async function remove(a: StaffAccountDTO) {
     if (!(await confirm(`"${a.name}" müdür yardımcısı silinsin mi?`))) return;
     try { await api('/api/assistant-directors', { method: 'DELETE', body: JSON.stringify({ id: a.id }) }); showToast('Müdür yardımcısı silindi'); load(); }
-    catch (e) { showToast(e.message, 'error'); }
+    catch (e) { showToast((e as Error).message, 'error'); }
   }
-  async function resetPw(a) {
+  async function resetPw(a: StaffAccountDTO) {
     const pw = prompt(`${a.name} için yeni şifre (en az 6 karakter):`);
     if (!pw) return;
     try {
       await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'reset_password', targetRole: 'assistant_director', targetId: a.id, newPassword: pw }) });
       showToast('Şifre sıfırlandı — müdür yardımcısı ilk girişte değiştirecek');
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast((e as Error).message, 'error'); }
   }
 
   return (
@@ -255,11 +290,20 @@ export function AssistantDirectorSection({ showToast }) {
   );
 }
 
+// GET /api/payment/config yanıtı (gizli anahtarlar yalnız 'tanımlı mı' bayrağı olarak).
+interface PaymentConfigDTO {
+  merchantId?: string;
+  testMode?: boolean;
+  active?: boolean;
+  hasKey?: boolean;
+  hasSalt?: boolean;
+}
+
 // ─── ONLİNE ÖDEME (PayTR) ───────────────────────────────────────────────────────
 // Kurum kendi PayTR mağaza kimlik bilgilerini girer. Para %100 doğrudan kuruma gider.
 // Gizli anahtarlar sunucuda ŞİFRELİ saklanır; burada yalnız "tanımlı mı" gösterilir.
-function PaymentSection({ showToast }) {
-  const [cfg, setCfg] = useState(null);
+function PaymentSection({ showToast }: { showToast: ShowToast }) {
+  const [cfg, setCfg] = useState<PaymentConfigDTO | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [merchantId, setMerchantId] = useState('');
   const [merchantKey, setMerchantKey] = useState('');
@@ -270,28 +314,28 @@ function PaymentSection({ showToast }) {
 
   const load = async () => {
     try {
-      const d = await api('/api/payment/config');
+      const d = await api<PaymentConfigDTO>('/api/payment/config');
       setCfg(d);
       setMerchantId(d.merchantId || '');
       setTestMode(d.testMode ?? true);
       setActive(!!d.active);
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast((e as Error).message, 'error'); }
     setLoaded(true);
   };
   useEffect(() => { load(); }, []);
 
-  const save = async (e) => {
+  const save = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSaving(true);
     try {
-      const body = { merchantId: merchantId.trim(), testMode, active };
+      const body: Record<string, unknown> = { merchantId: merchantId.trim(), testMode, active };
       if (merchantKey.trim()) body.merchantKey = merchantKey.trim();
       if (merchantSalt.trim()) body.merchantSalt = merchantSalt.trim();
-      const r = await api('/api/payment/config', { method: 'POST', body: JSON.stringify(body) });
+      const r = await api<{ config: PaymentConfigDTO }>('/api/payment/config', { method: 'POST', body: JSON.stringify(body) });
       setCfg(r.config);
       setMerchantKey(''); setMerchantSalt(''); // ekranda secret tutma
       showToast('Online ödeme ayarları kaydedildi');
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setSaving(false); }
   };
 
@@ -356,7 +400,7 @@ function PaymentSection({ showToast }) {
 // Modül aç/kapa + derslik (K2) yönetimi. Eksik config = varsayılan davranış (lib/config.js).
 // Bir bölüm kapatılınca ilgili modül UI'dan gizlenir / API reddeder (entegrasyon ayrı iş).
 
-const MODULE_META = {
+const MODULE_META: Record<string, { label: string; desc: string }> = {
   etut:     { label: 'Etüt Sistemi',      desc: 'Etüt rezervasyon ve takvim' },
   finance:  { label: 'Muhasebe / Finans',  desc: 'Ücret, taksit, gider takibi' },
   crm:      { label: 'Aday Öğrenci (CRM)',  desc: 'Ön kayıt hunisi' },
@@ -368,113 +412,113 @@ const MODULE_META = {
   odev:     { label: 'Ödev Takip',          desc: 'Ödev ver / teslim / kontrol' },
 };
 
-function ConfigurationSection({ showToast }) {
+function ConfigurationSection({ showToast }: { showToast: ShowToast }) {
   const confirm = useConfirm();
-  const [config, setConfig] = useState(null);
+  const [config, setConfig] = useState<OrgConfigView | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [savingKey, setSavingKey] = useState(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
   const [room, setRoom] = useState({ name: '', capacity: '' });
   const [newCat, setNewCat] = useState('');
 
   useEffect(() => {
     (async () => {
-      try { setConfig(await api('/api/config')); }
-      catch (e) { showToast(e.message, 'error'); }
+      try { setConfig(await api<OrgConfigView>('/api/config')); }
+      catch (e) { showToast((e as Error).message, 'error'); }
       setLoaded(true);
     })();
   }, []);
 
   // Tek key'i kaydet (optimistik: önce state, sonra sunucu; hata olursa geri al).
-  async function saveKey(key, value, prev) {
+  async function saveKey(key: string, value: unknown, prev?: unknown) {
     setSavingKey(key);
     try {
-      const r = await api('/api/config', { method: 'PATCH', body: JSON.stringify({ patch: { [key]: value } }) });
+      const r = await api<OrgConfigView>('/api/config', { method: 'PATCH', body: JSON.stringify({ patch: { [key]: value } }) });
       setConfig(r);
     } catch (e) {
-      showToast(e.message, 'error');
-      if (prev !== undefined) setConfig(c => ({ ...c, [key]: prev })); // geri al
+      showToast((e as Error).message, 'error');
+      if (prev !== undefined) setConfig(c => (c ? { ...c, [key]: prev } : c)); // geri al
     } finally { setSavingKey(null); }
   }
 
-  function toggleModule(mod) {
-    const prevModules = config.modules;
+  function toggleModule(mod: string) {
+    const prevModules = config!.modules;
     const nextModules = { ...prevModules, [mod]: !prevModules[mod] };
-    setConfig(c => ({ ...c, modules: nextModules })); // optimistik
+    setConfig(c => (c ? { ...c, modules: nextModules } : c)); // optimistik
     saveKey('modules', nextModules, prevModules);
   }
 
   // Etüt kuralı bayrağını aç/kapa (örn. studentSelfBooking).
-  function toggleEtut(flag) {
-    const prev = config.etut;
+  function toggleEtut(flag: 'studentSelfBooking') {
+    const prev = config!.etut;
     const next = { ...prev, [flag]: !prev[flag] };
-    setConfig(c => ({ ...c, etut: next }));
+    setConfig(c => (c ? { ...c, etut: next } : c));
     saveKey('etut', next, prev);
   }
 
   // Etüt sayısal kuralı kaydet (cancelLockHours, maxWeeklyPerStudent). Negatif→0.
-  function setEtutNum(flag, raw) {
+  function setEtutNum(flag: 'cancelLockHours' | 'maxWeeklyPerStudent', raw: string) {
     const val = Math.max(0, parseInt(raw) || 0);
-    const prev = config.etut;
+    const prev = config!.etut;
     if ((prev?.[flag] || 0) === val) return; // değişmediyse PATCH atma
     const next = { ...prev, [flag]: val };
-    setConfig(c => ({ ...c, etut: next }));
+    setConfig(c => (c ? { ...c, etut: next } : c));
     saveKey('etut', next, prev);
   }
 
   // Rol yetki bayrağını aç/kapa (permissions.<role>.<flag>). current: bayrağın
   // EKRANDA görünen değeri — varsayılanı true olan bayraklarda (accountant.intake)
   // "değer hiç yazılmamış" durumunda !undefined yanlış yöne çevirirdi.
-  function togglePermission(role, flag, current) {
-    const prev = config.permissions;
+  function togglePermission(role: string, flag: string, current?: boolean) {
+    const prev = config!.permissions;
     const cur = current !== undefined ? current : !!prev?.[role]?.[flag];
     const next = { ...prev, [role]: { ...(prev?.[role] || {}), [flag]: !cur } };
-    setConfig(c => ({ ...c, permissions: next }));
+    setConfig(c => (c ? { ...c, permissions: next } : c));
     saveKey('permissions', next, prev);
   }
 
-  function addRoom(e) {
+  function addRoom(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const name = room.name.trim();
     if (!name) { showToast('Derslik adı gerekli', 'error'); return; }
     const cap = parseInt(room.capacity);
-    const entry = { id: crypto.randomUUID(), name, capacity: Number.isFinite(cap) && cap > 0 ? cap : null };
-    const prev = config.classrooms;
+    const entry: Classroom = { id: crypto.randomUUID(), name, capacity: Number.isFinite(cap) && cap > 0 ? cap : null };
+    const prev = config!.classrooms;
     const next = [...prev, entry];
-    setConfig(c => ({ ...c, classrooms: next }));
+    setConfig(c => (c ? { ...c, classrooms: next } : c));
     setRoom({ name: '', capacity: '' });
     saveKey('classrooms', next, prev);
   }
 
-  async function removeRoom(r) {
+  async function removeRoom(r: Classroom) {
     if (!(await confirm(`"${r.name}" dersliği silinsin mi?`))) return;
-    const prev = config.classrooms;
+    const prev = config!.classrooms;
     const next = prev.filter(x => x.id !== r.id);
-    setConfig(c => ({ ...c, classrooms: next }));
+    setConfig(c => (c ? { ...c, classrooms: next } : c));
     saveKey('classrooms', next, prev);
   }
 
   // Gider kategorileri — "Diğer" daima sonda, silinemez (sistem kategorisi).
-  function withOtherLast(list) {
+  function withOtherLast(list: string[]): string[] {
     const rest = list.filter(c => c !== 'Diğer');
     return [...rest, 'Diğer'];
   }
-  function addCategory(e) {
+  function addCategory(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const name = newCat.trim();
     if (!name) return;
-    const prev = config.expenseCategories;
+    const prev = config!.expenseCategories;
     if (prev.some(c => c.toLowerCase() === name.toLowerCase())) { showToast('Bu kategori zaten var', 'error'); return; }
     const next = withOtherLast([...prev.filter(c => c !== 'Diğer'), name]);
-    setConfig(c => ({ ...c, expenseCategories: next }));
+    setConfig(c => (c ? { ...c, expenseCategories: next } : c));
     setNewCat('');
     saveKey('expenseCategories', next, prev);
   }
-  async function removeCategory(cat) {
+  async function removeCategory(cat: string) {
     if (cat === 'Diğer') return; // sistem kategorisi
     if (!(await confirm(`"${cat}" kategorisi silinsin mi? (Mevcut kayıtlar etkilenmez)`))) return;
-    const prev = config.expenseCategories;
+    const prev = config!.expenseCategories;
     const next = withOtherLast(prev.filter(c => c !== cat));
-    setConfig(c => ({ ...c, expenseCategories: next }));
+    setConfig(c => (c ? { ...c, expenseCategories: next } : c));
     saveKey('expenseCategories', next, prev);
   }
 
@@ -662,7 +706,7 @@ function ConfigurationSection({ showToast }) {
 }
 
 // ─── KURUM MARKASI ──────────────────────────────────────────────────────────────
-function BrandingSection({ showToast, onBranding }) {
+function BrandingSection({ showToast, onBranding }: { showToast: ShowToast; onBranding?: (b: Branding) => void }) {
   const [name, setName] = useState('');
   const [shortName, setShortName] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
@@ -673,28 +717,28 @@ function BrandingSection({ showToast, onBranding }) {
   useEffect(() => {
     (async () => {
       try {
-        const { branding } = await api('/api/org');
+        const { branding } = await api<{ branding: Branding }>('/api/org');
         setName(branding.name || '');
         setShortName(branding.shortName === branding.name ? '' : (branding.shortName || ''));
         setLogoUrl(branding.logoUrl || '');
         setThemeColor(branding.themeColor || '#6366f1');
-      } catch (e) { showToast(e.message, 'error'); }
+      } catch (e) { showToast((e as Error).message, 'error'); }
       setLoaded(true);
     })();
   }, []);
 
-  const save = async (e) => {
+  const save = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!name.trim()) { showToast('Kurum adı boş olamaz', 'error'); return; }
     setSaving(true);
     try {
-      const res = await api('/api/org', {
+      const res = await api<{ branding?: Branding }>('/api/org', {
         method: 'POST',
         body: JSON.stringify({ name: name.trim(), shortName: shortName.trim(), logoUrl: logoUrl.trim(), themeColor }),
       });
       showToast('Kurum markası güncellendi');
       if (onBranding && res.branding) onBranding(res.branding);
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setSaving(false); }
   };
 
@@ -750,16 +794,16 @@ function BrandingSection({ showToast, onBranding }) {
 }
 
 // ─── BİLDİRİM TESTİ ─────────────────────────────────────────────────────────────
-function PushTestSection({ showToast }) {
+function PushTestSection({ showToast }: { showToast: ShowToast }) {
   const [sending, setSending] = useState(false);
 
   const sendTest = async () => {
     setSending(true);
     try {
-      const r = await api('/api/push', { method: 'POST', body: JSON.stringify({ action: 'test' }) });
+      const r = await api<{ sent: number }>('/api/push', { method: 'POST', body: JSON.stringify({ action: 'test' }) });
       if (r.sent > 0) showToast(`Test bildirimi gönderildi (${r.sent} cihaz)`);
       else showToast('Kayıtlı cihaz yok — önce üstteki zil simgesinden bildirimleri aç', 'info');
-    } catch (e) { showToast(e.message, 'error'); }
+    } catch (e) { showToast((e as Error).message, 'error'); }
     finally { setSending(false); }
   };
 
@@ -774,14 +818,26 @@ function PushTestSection({ showToast }) {
   );
 }
 
-// ─── HATA KAYITLARI (ERROR LOG) ─────────────────────────────────────────────────
-function ErrorLogSection({ showToast }) {
-  const [open, setOpen] = useState(false);
-  const [entries, setEntries] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState(null);
+// GET /api/log hata kaydı satırı.
+interface ErrorLogEntry {
+  ts: string;
+  source?: string;
+  message?: string;
+  stack?: string;
+  componentStack?: string;
+  userName?: string;
+  role?: string;
+  url?: string;
+}
 
-  const SOURCE_LABELS = {
+// ─── HATA KAYITLARI (ERROR LOG) ─────────────────────────────────────────────────
+function ErrorLogSection({ showToast }: { showToast: ShowToast }) {
+  const [open, setOpen] = useState(false);
+  const [entries, setEntries] = useState<ErrorLogEntry[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
     window: { label: 'Tarayıcı', color: '#dc2626' },
     unhandledrejection: { label: 'Promise', color: '#ea580c' },
     react: { label: 'Arayüz', color: '#7c3aed' },
@@ -791,9 +847,9 @@ function ErrorLogSection({ showToast }) {
   const load = async () => {
     setLoading(true);
     try {
-      const data = await api('/api/log');
+      const data = await api<ErrorLogEntry[]>('/api/log');
       setEntries(Array.isArray(data) ? data : []);
-    } catch (e) { showToast(e.message, 'error'); setEntries([]); }
+    } catch (e) { showToast((e as Error).message, 'error'); setEntries([]); }
     finally { setLoading(false); }
   };
 
@@ -803,11 +859,11 @@ function ErrorLogSection({ showToast }) {
     if (next && entries === null) load();
   };
 
-  const fmtTime = (iso) => {
+  const fmtTime = (iso: string) => {
     try {
       const d = new Date(iso);
       const tr = new Date(d.getTime() + 3 * 60 * 60 * 1000);
-      const pad = (n) => String(n).padStart(2, '0');
+      const pad = (n: number) => String(n).padStart(2, '0');
       return `${pad(tr.getUTCDate())}.${pad(tr.getUTCMonth() + 1)}.${tr.getUTCFullYear()} ${pad(tr.getUTCHours())}:${pad(tr.getUTCMinutes())}`;
     } catch { return iso; }
   };
@@ -836,7 +892,7 @@ function ErrorLogSection({ showToast }) {
           ) : (
             <div className="space-y-1.5 max-h-80 overflow-y-auto">
               {entries.map((e, i) => {
-                const meta = SOURCE_LABELS[e.source] || SOURCE_LABELS.manual;
+                const meta = SOURCE_LABELS[e.source || ''] || SOURCE_LABELS.manual;
                 const isOpen = expanded === i;
                 return (
                   <div key={i} className="px-3 py-2 rounded-lg bg-gray-50 border border-gray-100">

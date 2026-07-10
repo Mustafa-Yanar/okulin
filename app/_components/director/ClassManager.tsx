@@ -4,17 +4,21 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Trash2, Edit3, GraduationCap, BookOpen, Check, X as XIcon, Layers,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { api, Modal, FormField } from './shared';
 import { KADEMELER, kademelerForSektor } from '@/lib/institution';
 import LoadingBox from '../Loading';
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
+import type { ClassRecord } from '@/lib/classes';
+import type { CourseRecord } from '@/lib/courses';
+import type { ShowToast } from '../types';
 
 // Şube (sınıf) + ders kataloğu yönetimi. Kurum kendi şubelerini açar/düzenler/siler ve
 // ders kataloğunu (çekirdek + kendi eklediği) yönetir; her şubeye gördüğü dersleri atar.
 // Veri: GET/POST/PATCH/DELETE /api/classes + /api/courses. Detay: hafıza kurum-turu-sinif-modeli.
 
-export const KADEME_LABEL = Object.fromEntries(KADEMELER.map((k) => [k.key, k.label]));
+export const KADEME_LABEL: Record<string, string> = Object.fromEntries(KADEMELER.map((k) => [k.key, k.label]));
 export const KADEME_ORDER = ['ilkokul', 'ortaokul', 'lise', 'mezun'];
 
 const DAL_OPTIONS = [
@@ -24,39 +28,44 @@ const DAL_OPTIONS = [
   { key: 'sozel', label: 'Sözel' },
   { key: 'dil', label: 'Dil' },
 ];
-export const DAL_LABEL = { sayisal: 'Sayısal', ea: 'Eşit Ağırlık', sozel: 'Sözel', dil: 'Dil' };
+export const DAL_LABEL: Record<string, string> = { sayisal: 'Sayısal', ea: 'Eşit Ağırlık', sozel: 'Sözel', dil: 'Dil' };
 
 // Kademeye göre düzey seçenekleri (UI yardımcısı; mezunda düzey yok).
-function duzeylerFor(kademe) {
+function duzeylerFor(kademe: string): string[] {
   if (kademe === 'ilkokul') return ['1', '2', '3', '4'];
   if (kademe === 'ortaokul') return ['5', '6', '7', '8'];
   if (kademe === 'lise') return ['9', '10', '11', '12'];
   return [];
 }
 // Dal seçimi yalnız lise 11/12 ve mezunda anlamlı.
-function dalRelevant(kademe, duzey) {
+function dalRelevant(kademe: string, duzey: string): boolean {
   if (kademe === 'mezun') return true;
   if (kademe === 'lise' && (duzey === '11' || duzey === '12')) return true;
   return false;
 }
 
-export default function ClassManager({ showToast, sektor = 'dershane' }) {
+interface ClassManagerProps {
+  showToast?: ShowToast;
+  sektor?: string;
+}
+
+export default function ClassManager({ showToast, sektor = 'dershane' }: ClassManagerProps) {
   const confirm = useConfirm();
   const [view, setView] = useState('subeler'); // subeler | dersler
-  const [classes, setClasses] = useState([]);
-  const [courses, setCourses] = useState([]);
+  const [classes, setClasses] = useState<ClassRecord[]>([]);
+  const [courses, setCourses] = useState<CourseRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editClass, setEditClass] = useState(null); // {} = yeni, kayıt = düzenle
+  const [editClass, setEditClass] = useState<Partial<ClassRecord> | null>(null); // {} = yeni, kayıt = düzenle
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api('/api/classes');
+      const data = await api<{ classes?: ClassRecord[]; courses?: CourseRecord[] }>('/api/classes');
       setClasses(data.classes || []);
       setCourses(data.courses || []);
     } catch (err) {
-      showToast?.(err.message, 'error');
+      showToast?.((err as Error).message, 'error');
     } finally {
       setLoading(false);
     }
@@ -65,7 +74,7 @@ export default function ClassManager({ showToast, sektor = 'dershane' }) {
   useEffect(() => { load(); }, [load]);
 
   // Kademeye göre grupla (sıralı).
-  const byKademe = {};
+  const byKademe: Record<string, ClassRecord[]> = {};
   for (const c of classes) {
     const k = c.kademe || 'ortaokul';
     (byKademe[k] ||= []).push(c);
@@ -74,7 +83,7 @@ export default function ClassManager({ showToast, sektor = 'dershane' }) {
 
   const activeCourses = courses.filter((c) => c.active !== false);
 
-  async function deleteClass(c) {
+  async function deleteClass(c: ClassRecord) {
     if (!(await confirm(`"${c.ad}" şubesi silinsin mi?`))) return;
     setBusy(true);
     try {
@@ -82,7 +91,7 @@ export default function ClassManager({ showToast, sektor = 'dershane' }) {
       showToast?.('Şube silindi');
       await load();
     } catch (err) {
-      showToast?.(err.message, 'error');
+      showToast?.((err as Error).message, 'error');
     } finally { setBusy(false); }
   }
 
@@ -90,7 +99,7 @@ export default function ClassManager({ showToast, sektor = 'dershane' }) {
     <div>
       {/* Alt sekmeler */}
       <div className="pill-tabs mb-4">
-        {[['subeler', 'Şubeler', Layers], ['dersler', 'Ders Kataloğu', BookOpen]].map(([k, l, Icon]) => (
+        {([['subeler', 'Şubeler', Layers], ['dersler', 'Ders Kataloğu', BookOpen]] as [string, string, LucideIcon][]).map(([k, l, Icon]) => (
           <button key={k} onClick={() => setView(k)}
             className={`pill-tab press-effect${view === k ? ' is-active' : ''}`}>
             <Icon size={13} /> <span>{l}</span>
@@ -148,9 +157,17 @@ export default function ClassManager({ showToast, sektor = 'dershane' }) {
   );
 }
 
+interface ClassCardProps {
+  c: ClassRecord;
+  courses: CourseRecord[];
+  onEdit: () => void;
+  onDelete: () => void;
+  busy: boolean;
+}
+
 // ─── Şube kartı ──────────────────────────────────────────────────────────────────
-function ClassCard({ c, courses, onEdit, onDelete, busy }) {
-  const courseLabel = (key) => courses.find((x) => x.key === key)?.ad || key;
+function ClassCard({ c, courses, onEdit, onDelete, busy }: ClassCardProps) {
+  const courseLabel = (key: string) => courses.find((x) => x.key === key)?.ad || key;
   const dersler = c.dersler || [];
   const meta = [c.duzey && `${c.duzey}. sınıf`, c.dal && DAL_LABEL[c.dal]].filter(Boolean).join(' · ');
   return (
@@ -177,22 +194,31 @@ function ClassCard({ c, courses, onEdit, onDelete, busy }) {
   );
 }
 
+interface ClassFormModalProps {
+  initial: Partial<ClassRecord>;
+  courses: CourseRecord[];
+  sektor?: string;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+  showToast?: ShowToast;
+}
+
 // ─── Şube ekle/düzenle modalı ─────────────────────────────────────────────────────
-export function ClassFormModal({ initial, courses, sektor, onClose, onSaved, showToast }) {
+export function ClassFormModal({ initial, courses, sektor, onClose, onSaved, showToast }: ClassFormModalProps) {
   const isEdit = !!initial.id;
   const [ad, setAd] = useState(initial.ad || '');
   const [kademe, setKademe] = useState(initial.kademe || kademelerForSektor(sektor)[0]);
   const [duzey, setDuzey] = useState(initial.duzey || '');
   const [dal, setDal] = useState(initial.dal || '');
   // Düzenlemede şubenin mevcut dersleri seçili gelir; yenide boş (server şablondan prefill eder).
-  const [dersler, setDersler] = useState(initial.dersler || null); // null = dokunulmadı
+  const [dersler, setDersler] = useState<string[] | null>(initial.dersler || null); // null = dokunulmadı
   const [saving, setSaving] = useState(false);
 
   const allowedKademeler = kademelerForSektor(sektor);
   const duzeyOptions = duzeylerFor(kademe);
   const showDal = dalRelevant(kademe, duzey);
 
-  function toggleDers(key) {
+  function toggleDers(key: string) {
     setDersler((prev) => {
       const cur = prev || [];
       return cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
@@ -227,7 +253,7 @@ export function ClassFormModal({ initial, courses, sektor, onClose, onSaved, sho
       }
       await onSaved();
     } catch (err) {
-      showToast?.(err.message, 'error');
+      showToast?.((err as Error).message, 'error');
     } finally { setSaving(false); }
   }
 
@@ -315,8 +341,14 @@ export function ClassFormModal({ initial, courses, sektor, onClose, onSaved, sho
   );
 }
 
+interface CourseCatalogProps {
+  courses: CourseRecord[];
+  onChanged: () => void | Promise<void>;
+  showToast?: ShowToast;
+}
+
 // ─── Ders kataloğu yönetimi ───────────────────────────────────────────────────────
-export function CourseCatalog({ courses, onChanged, showToast }) {
+export function CourseCatalog({ courses, onChanged, showToast }: CourseCatalogProps) {
   const [yeni, setYeni] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -330,17 +362,17 @@ export function CourseCatalog({ courses, onChanged, showToast }) {
       showToast?.('Ders eklendi');
       await onChanged();
     } catch (err) {
-      showToast?.(err.message, 'error');
+      showToast?.((err as Error).message, 'error');
     } finally { setBusy(false); }
   }
 
-  async function toggleActive(c) {
+  async function toggleActive(c: CourseRecord) {
     setBusy(true);
     try {
       await api('/api/courses', { method: 'PATCH', body: JSON.stringify({ key: c.key, active: c.active === false }) });
       await onChanged();
     } catch (err) {
-      showToast?.(err.message, 'error');
+      showToast?.((err as Error).message, 'error');
     } finally { setBusy(false); }
   }
 

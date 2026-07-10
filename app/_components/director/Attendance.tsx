@@ -8,8 +8,44 @@ import { Phone, ClipboardList, GraduationCap } from 'lucide-react';
 import { getWeekKey, ALL_DAYS } from '@/lib/constants';
 import { api, Modal } from './shared';
 import LoadingBox from '../Loading';
+import type { ShowToast } from '../types';
 
-function AttendanceStudentRow({ student, variant }) {
+// GET /api/attendance/summary — sınıf → ders → yok/geç listeleri.
+interface AttSummaryStudent {
+  id: string;
+  name: string;
+  parentPhone?: string;
+  phone?: string;
+}
+interface AttLesson {
+  lessonNo: number;
+  teacherName?: string;
+  attendanceTaken?: boolean;
+  absent: AttSummaryStudent[];
+  late: AttSummaryStudent[];
+}
+interface ClsSummary {
+  lessons: AttLesson[];
+}
+type AttendanceSummary = Record<string, ClsSummary>;
+
+// GET /api/attendance/student satırı.
+interface StudentAttEntry {
+  date: string;
+  dayLabel?: string;
+  status: string;
+  lessonNo?: number;
+  slotLabel?: string;
+  teacherName?: string;
+  branch?: string;
+  subBranch?: string;
+}
+interface StudentAttData {
+  entries: StudentAttEntry[];
+  summary: { yok: number; gec: number };
+}
+
+function AttendanceStudentRow({ student, variant }: { student: AttSummaryStudent; variant: string }) {
   const colors = variant === 'absent'
     ? { bg: 'bg-red-50', border: 'border-red-100', text: 'text-red-700', btn: 'bg-red-100 hover:bg-red-200 text-red-700' }
     : { bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-700', btn: 'bg-amber-100 hover:bg-amber-200 text-amber-700' };
@@ -31,15 +67,15 @@ function AttendanceStudentRow({ student, variant }) {
   );
 }
 
-function AttendanceSummaryModal({ cls, date, onClose }) {
-  const [summary, setSummary] = useState(null);
+function AttendanceSummaryModal({ cls, date, onClose }: { cls: string; date: string; onClose: () => void }) {
+  const [summary, setSummary] = useState<ClsSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const data = await api(`/api/attendance/summary?date=${date}`);
+        const data = await api<AttendanceSummary>(`/api/attendance/summary?date=${date}`);
         setSummary(data[cls] || null);
       } catch {
         setSummary(null);
@@ -113,15 +149,15 @@ function AttendanceSummaryModal({ cls, date, onClose }) {
   );
 }
 
-export function DirectorAttendanceView({ showToast }) {
+export function DirectorAttendanceView({ showToast }: { showToast?: ShowToast }) {
   const today = new Date();
   const jsDay = today.getDay();
   const todayIndex = jsDay === 0 ? 6 : jsDay - 1;
 
   const [selectedDay, setSelectedDay] = useState(todayIndex);
-  const [summary, setSummary] = useState(null);
+  const [summary, setSummary] = useState<AttendanceSummary | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selectedCls, setSelectedCls] = useState(null);
+  const [selectedCls, setSelectedCls] = useState<string | null>(null);
 
   // Bu haftanın pazartesisi (gün kutucuklarının tarih sayısı buradan türer).
   const weekMonday = useMemo(() => {
@@ -135,7 +171,7 @@ export function DirectorAttendanceView({ showToast }) {
     return mon;
   }, []);
 
-  const dayDate = (idx) => {
+  const dayDate = (idx: number) => {
     const d = new Date(weekMonday);
     d.setUTCDate(weekMonday.getUTCDate() + idx);
     return d;
@@ -151,10 +187,10 @@ export function DirectorAttendanceView({ showToast }) {
       setLoading(true);
       setSummary(null);
       try {
-        const data = await api(`/api/attendance/summary?date=${dateForSelectedDay}`);
+        const data = await api<AttendanceSummary>(`/api/attendance/summary?date=${dateForSelectedDay}`);
         setSummary(data);
       } catch (err) {
-        showToast(err.message, 'error');
+        showToast?.((err as Error).message, 'error');
       } finally {
         setLoading(false);
       }
@@ -205,7 +241,7 @@ export function DirectorAttendanceView({ showToast }) {
       ) : (
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
           {clsList.map(cls => {
-            const data = summary[cls];
+            const data = summary![cls];
             const totalAbsent = data.lessons.reduce((n, l) => n + l.absent.length, 0);
             const totalLate = data.lessons.reduce((n, l) => n + l.late.length, 0);
             const takenCount = data.lessons.filter(l => l.attendanceTaken).length;
@@ -243,14 +279,14 @@ export function DirectorAttendanceView({ showToast }) {
   );
 }
 
-export function StudentAttendanceView({ studentId }) {
-  const [data, setData] = useState(null);
+export function StudentAttendanceView({ studentId }: { studentId: string }) {
+  const [data, setData] = useState<StudentAttData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const d = await api(`/api/attendance/student?studentId=${studentId}`);
+        const d = await api<StudentAttData>(`/api/attendance/student?studentId=${studentId}`);
         setData(d);
       } catch {
         setData({ entries: [], summary: { yok: 0, gec: 0 } });
@@ -267,7 +303,7 @@ export function StudentAttendanceView({ studentId }) {
     </div>
   );
 
-  const byDate = {};
+  const byDate: Record<string, StudentAttEntry[]> = {};
   for (const e of data.entries) {
     if (!byDate[e.date]) byDate[e.date] = [];
     byDate[e.date].push(e);

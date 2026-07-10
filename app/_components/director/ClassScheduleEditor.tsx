@@ -8,17 +8,30 @@
 // Haftadan bağımsız kalıcı şablon (öğretmen offDays gibi). Etüt/hafta navigasyonu yok.
 import React, { useState, useMemo } from 'react';
 import { Save } from 'lucide-react';
-import { ALL_DAYS, daySlots } from '@/lib/constants';
+import { ALL_DAYS, daySlots, type Slot } from '@/lib/constants';
 import { useSlotTimes } from '../SlotTimesContext';
 import { api, Modal } from './shared';
+import type { ShowToast } from '../types';
 
-export default function ClassScheduleEditor({ cls, label, initialTemplate, onClose, onSaved, showToast }) {
+// class.slotTemplate sözleşmesi: { "gün": [slotNo...] } (1-tabanlı).
+type SlotTemplate = Record<string, number[]>;
+
+interface ClassScheduleEditorProps {
+  cls: string;
+  label?: string;
+  initialTemplate?: Record<string | number, number[]> | null;
+  onClose: () => void;
+  onSaved?: (tpl: SlotTemplate | null) => void;
+  showToast?: ShowToast;
+}
+
+export default function ClassScheduleEditor({ cls, label, initialTemplate, onClose, onSaved, showToast }: ClassScheduleEditorProps) {
   const { slotTimes } = useSlotTimes();
   const [saving, setSaving] = useState(false);
 
   // template: { [dayIndex]: Set(slotNo) }
-  const [template, setTemplate] = useState(() => {
-    const t = {};
+  const [template, setTemplate] = useState<Record<number, Set<number>>>(() => {
+    const t: Record<number, Set<number>> = {};
     for (const day of ALL_DAYS) {
       const nos = (initialTemplate && initialTemplate[day.index]) || [];
       t[day.index] = new Set(nos);
@@ -28,7 +41,7 @@ export default function ClassScheduleEditor({ cls, label, initialTemplate, onClo
 
   // Her günün slotları (7-gün model — kendi count/saatleri).
   const daySlotsMap = useMemo(() => {
-    const m = {};
+    const m: Record<number, Slot[]> = {};
     for (const day of ALL_DAYS) m[day.index] = daySlots(day.index, slotTimes.days?.[day.index]);
     return m;
   }, [slotTimes]);
@@ -43,7 +56,7 @@ export default function ClassScheduleEditor({ cls, label, initialTemplate, onClo
     [template],
   );
 
-  function toggle(dayIndex, slotNo) {
+  function toggle(dayIndex: number, slotNo: number) {
     setTemplate(prev => {
       const set = new Set(prev[dayIndex]);
       if (set.has(slotNo)) set.delete(slotNo); else set.add(slotNo);
@@ -52,12 +65,12 @@ export default function ClassScheduleEditor({ cls, label, initialTemplate, onClo
   }
 
   // Bir günün tüm slotlarını aç/kapat (başlığa tıkla).
-  function toggleDay(dayIndex) {
+  function toggleDay(dayIndex: number) {
     const slots = daySlotsMap[dayIndex];
     setTemplate(prev => {
       const cur = prev[dayIndex];
       const allOn = slots.length > 0 && slots.every((_, i) => cur.has(i + 1));
-      const next = new Set();
+      const next = new Set<number>();
       if (!allOn) slots.forEach((_, i) => next.add(i + 1));
       return { ...prev, [dayIndex]: next };
     });
@@ -66,7 +79,7 @@ export default function ClassScheduleEditor({ cls, label, initialTemplate, onClo
   async function handleSave() {
     setSaving(true);
     try {
-      const slotTemplate = {};
+      const slotTemplate: SlotTemplate = {};
       for (const day of ALL_DAYS) {
         const arr = [...template[day.index]].sort((a, b) => a - b);
         if (arr.length) slotTemplate[String(day.index)] = arr;
@@ -79,7 +92,7 @@ export default function ClassScheduleEditor({ cls, label, initialTemplate, onClo
       onSaved?.(Object.keys(slotTemplate).length ? slotTemplate : null);
       onClose();
     } catch (e) {
-      showToast?.(e.message, 'error');
+      showToast?.((e as Error).message, 'error');
     } finally {
       setSaving(false);
     }

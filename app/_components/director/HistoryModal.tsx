@@ -5,20 +5,61 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BookOpen, ClipboardList, Clock } from 'lucide-react';
 import { api, Modal } from './shared';
 
-export default function HistoryModal({ target, onClose, currentWeekKey, currentEntries, inline = false }) {
+// Arşiv satırı (GET /api/archive week.entries elemanı).
+interface ArchiveEntry {
+  day: number;
+  dayLabel: string;
+  slotId: string;
+  slotLabel: string;
+  studentName?: string;
+  studentCls?: string;
+  teacherName?: string;
+  branch?: string;
+}
+interface ArchiveWeek {
+  weekKey?: string;
+  entries: ArchiveEntry[];
+  isCurrent?: boolean;
+}
+// GET /api/attendance/student satırı.
+interface AttendanceEntry {
+  date: string;
+  dayLabel?: string;
+  status: string;
+  isEtut?: boolean;
+  lessonNo?: number;
+  slotLabel?: string;
+  teacherName?: string;
+  branch?: string;
+  subBranch?: string;
+}
+interface AttendanceData {
+  entries: AttendanceEntry[];
+  summary: { yok: number; gec: number };
+}
+
+interface HistoryModalProps {
+  target: { type: string; id: string; name: string };
+  onClose?: () => void;
+  currentWeekKey?: string;
+  currentEntries?: ArchiveEntry[];
+  inline?: boolean;
+}
+
+export default function HistoryModal({ target, onClose, currentWeekKey, currentEntries, inline = false }: HistoryModalProps) {
   const isStudent = target.type === 'student';
   const [activeTab, setActiveTab] = useState('etut');
-  const [weeks, setWeeks] = useState([]);
+  const [weeks, setWeeks] = useState<ArchiveWeek[]>([]);
   const [loading, setLoading] = useState(true);
-  const [attendance, setAttendance] = useState(null);
+  const [attendance, setAttendance] = useState<AttendanceData | null>(null);
   const [attLoading, setAttLoading] = useState(false);
-  const printRef = React.useRef();
+  const printRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const data = await api(`/api/archive?type=${target.type}&id=${target.id}`);
+        const data = await api<{ weeks?: ArchiveWeek[] }>(`/api/archive?type=${target.type}&id=${target.id}`);
         setWeeks(data.weeks || []);
       } catch {}
       setLoading(false);
@@ -30,7 +71,7 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
     (async () => {
       setAttLoading(true);
       try {
-        const data = await api(`/api/attendance/student?studentId=${target.id}`);
+        const data = await api<AttendanceData>(`/api/attendance/student?studentId=${target.id}`);
         setAttendance(data);
       } catch {
         setAttendance({ entries: [], summary: { yok: 0, gec: 0 } });
@@ -40,7 +81,7 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
   }, [activeTab, isStudent, target.id, attendance]);
 
   const allWeeks = useMemo(() => {
-    const result = [];
+    const result: ArchiveWeek[] = [];
     if (currentEntries && currentEntries.length > 0) {
       result.push({ weekKey: currentWeekKey, entries: currentEntries, isCurrent: true });
     }
@@ -67,7 +108,7 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
     allWeeks.forEach(week => {
       const badge = week.isCurrent ? ' <span style="font-size:10px;background-color:#e0e7ff;color:#4338ca;padding:2px 8px;border-radius:99px;font-weight:normal;margin-left:6px;">Bu Hafta</span>' : '';
       html += `<div style="${s.week}"><div style="${s.weekTitle}">${weekLabel(week.weekKey)}${badge}</div><div style="padding:8px 10px;">`;
-      const byDay = {};
+      const byDay: Record<number, { dayLabel: string; entries: ArchiveEntry[] }> = {};
       week.entries.forEach(e => {
         if (!byDay[e.day]) byDay[e.day] = { dayLabel: e.dayLabel, entries: [] };
         byDay[e.day].entries.push(e);
@@ -85,20 +126,20 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
     });
     html += '</body></html>';
     const w = window.open('', '_blank');
-    w.document.write(html);
-    w.document.close();
-    setTimeout(() => w.print(), 300);
+    w!.document.write(html);
+    w!.document.close();
+    setTimeout(() => w!.print(), 300);
   };
 
-  const weekLabel = wk => {
+  const weekLabel = (wk: string | undefined) => {
     try {
-      const [year, week] = wk.split('-W');
+      const [year, week] = wk!.split('-W');
       const jan4 = new Date(parseInt(year), 0, 4);
       const dayOfWeek = jan4.getDay() || 7;
       const monday = new Date(jan4);
       monday.setDate(jan4.getDate() - dayOfWeek + 1 + (parseInt(week) - 1) * 7);
       const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
-      const fmt = d => d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
+      const fmt = (d: Date) => d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' });
       return `${fmt(monday)} – ${fmt(sunday)} ${year}`;
     } catch { return wk; }
   };
@@ -125,7 +166,7 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
         </div>
         <div className="space-y-4" ref={printRef}>
           {allWeeks.map(week => {
-              const byDay = {};
+              const byDay: Record<number, { dayLabel: string; entries: ArchiveEntry[] }> = {};
               week.entries.forEach(e => {
                 if (!byDay[e.day]) byDay[e.day] = { dayLabel: e.dayLabel, entries: [] };
                 byDay[e.day].entries.push(e);
@@ -193,7 +234,7 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
         </div>
         <div className="space-y-1.5">
           {(() => {
-            const byDate = {};
+            const byDate: Record<string, AttendanceEntry[]> = {};
             for (const e of attendance.entries) {
               if (!byDate[e.date]) byDate[e.date] = [];
               byDate[e.date].push(e);
@@ -261,5 +302,5 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
   );
 
   if (inline) return <div className="py-2">{inner}</div>;
-  return <Modal title={modalTitle} onClose={onClose} wide>{inner}</Modal>;
+  return <Modal title={modalTitle} onClose={onClose ?? (() => {})} wide>{inner}</Modal>;
 }

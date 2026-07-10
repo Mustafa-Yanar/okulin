@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useMemo, useCallback, useState } from 'react';
+import type { SlotTime } from '@/lib/constants';
+import type { DaySlotConfig } from '@/lib/slots';
 
 // ─── Sabitler ────────────────────────────────────────────────────────────────
 const START_MIN = 7 * 60;        // 07:00
@@ -18,11 +20,11 @@ const GUNLER = [
   { index: 6, label: 'Pazar',     short: 'Paz', weekend: true  },
 ];
 
-function toMin(t) {
+function toMin(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
 }
-function toTime(min) {
+function toTime(min: number): string {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
@@ -30,22 +32,22 @@ function toTime(min) {
 
 // 07:00 → 23:00 arası 5dk adımlı saat seçenekleri
 const TIME_OPTIONS = (() => {
-  const opts = [];
+  const opts: string[] = [];
   for (let min = START_MIN; min <= END_MIN; min += STEP) opts.push(toTime(min));
   return opts;
 })();
 
 // Bir slot satırı için makul varsayılan üret: önceki slotun bitişinden 10 dk sonra 35 dk'lık.
-function nextDefaultSlot(prevEnd) {
+function nextDefaultSlot(prevEnd: number | null): SlotTime {
   const start = prevEnd != null ? prevEnd + 10 : 9 * 60;
   const end = start + 35;
   return { start: toTime(Math.min(start, END_MIN - 35)), end: toTime(Math.min(end, END_MIN)) };
 }
 
 // count'a göre times dizisini büyüt/küçült (mevcut değerleri koru).
-function resizeTimes(times, count) {
+function resizeTimes(times: SlotTime[], count: number): SlotTime[] {
   const out = times.slice(0, count);
-  let prevEnd = out.length ? toMin(out[out.length - 1].end) : null;
+  let prevEnd: number | null = out.length ? toMin(out[out.length - 1].end) : null;
   while (out.length < count) {
     const slot = nextDefaultSlot(prevEnd);
     out.push(slot);
@@ -54,8 +56,15 @@ function resizeTimes(times, count) {
   return out;
 }
 
+interface SlotRowProps {
+  index: number;
+  slot: SlotTime;
+  prevEnd: number | null;
+  onChange: (index: number, updated: SlotTime) => void;
+}
+
 // ─── Tek slot satırı ─────────────────────────────────────────────────────────
-function SlotRow({ index, slot, prevEnd, onChange }) {
+function SlotRow({ index, slot, prevEnd, onChange }: SlotRowProps) {
   const startM = toMin(slot.start);
   const endM   = toMin(slot.end);
   const endError = endM <= startM;
@@ -86,18 +95,27 @@ function SlotRow({ index, slot, prevEnd, onChange }) {
   );
 }
 
+interface DayCardProps {
+  day: (typeof GUNLER)[number];
+  config: DaySlotConfig;
+  selected: boolean;
+  onToggleSelect: (dayIndex: number) => void;
+  onCountChange: (dayIndex: number, count: number) => void;
+  onTimeChange: (dayIndex: number, times: SlotTime[]) => void;
+}
+
 // ─── Gün kartı ───────────────────────────────────────────────────────────────
-function DayCard({ day, config, selected, onToggleSelect, onCountChange, onTimeChange }) {
+function DayCard({ day, config, selected, onToggleSelect, onCountChange, onTimeChange }: DayCardProps) {
   const count = config.count;
   const times = config.times;
 
-  const handleRowChange = useCallback((idx, updated) => {
+  const handleRowChange = useCallback((idx: number, updated: SlotTime) => {
     const next = times.map((s, i) => (i === idx ? updated : s));
     onTimeChange(day.index, next);
   }, [times, onTimeChange, day.index]);
 
   const errorMsg = useMemo(() => {
-    let prevEnd = null;
+    let prevEnd: number | null = null;
     for (let i = 0; i < times.length; i++) {
       const sM = toMin(times[i].start);
       const eM = toMin(times[i].end);
@@ -108,7 +126,7 @@ function DayCard({ day, config, selected, onToggleSelect, onCountChange, onTimeC
     return null;
   }, [times]);
 
-  let prevEnd = null;
+  let prevEnd: number | null = null;
 
   return (
     <div className="rounded-xl p-3.5" style={{
@@ -150,21 +168,29 @@ function DayCard({ day, config, selected, onToggleSelect, onCountChange, onTimeC
 }
 
 // Süre dropdown seçenekleri (dk)
-const ETUT_SURE_OPTS = [];
+const ETUT_SURE_OPTS: number[] = [];
 for (let m = 20; m <= 180; m += 5) ETUT_SURE_OPTS.push(m);
-const MOLA_SURE_OPTS = [];
+const MOLA_SURE_OPTS: number[] = [];
 for (let m = 0; m <= 60; m += 5) MOLA_SURE_OPTS.push(m);
+
+interface SlotTimeEditorProps {
+  days: Record<number, DaySlotConfig>;
+  etutSuresi?: number;
+  molaSuresi?: number;
+  onDaysChange: (newDays: Record<number, DaySlotConfig>) => void;
+  onMetaChange?: (key: string, val: number) => void;
+}
 
 // ─── Ana bileşen ─────────────────────────────────────────────────────────────
 // Props:
 //   days: { 0: {count, times:[{start,end}]}, ..., 6: {...} }
 //   onDaysChange(newDays)  — days objesi değiştiğinde
 //   etutSuresi, molaSuresi, onMetaChange(key, val)
-export default function SlotTimeEditor({ days, etutSuresi = 60, molaSuresi = 10, onDaysChange, onMetaChange }) {
+export default function SlotTimeEditor({ days, etutSuresi = 60, molaSuresi = 10, onDaysChange, onMetaChange }: SlotTimeEditorProps) {
   // Toplu düzenleme: işaretli günler. Bir işaretli gün düzenlenince tümüne uygulanır.
-  const [selected, setSelected] = useState(() => new Set());
+  const [selected, setSelected] = useState<Set<number>>(() => new Set());
 
-  const toggleSelect = useCallback((dayIndex) => {
+  const toggleSelect = useCallback((dayIndex: number) => {
     setSelected(prev => {
       const next = new Set(prev);
       next.has(dayIndex) ? next.delete(dayIndex) : next.add(dayIndex);
@@ -173,7 +199,7 @@ export default function SlotTimeEditor({ days, etutSuresi = 60, molaSuresi = 10,
   }, []);
 
   // Bir günü güncelle; kaynak gün işaretliyse tüm işaretli günlere aynı config kopyalanır.
-  const applyDay = useCallback((srcDay, newConfig) => {
+  const applyDay = useCallback((srcDay: number, newConfig: DaySlotConfig) => {
     const next = { ...days };
     // Kaynak gün işaretli DEĞİLSE yalnız o günü değiştir; işaretliyse tüm işaretlileri.
     const targets = selected.has(srcDay) ? [...selected] : [srcDay];
@@ -184,12 +210,12 @@ export default function SlotTimeEditor({ days, etutSuresi = 60, molaSuresi = 10,
     onDaysChange(next);
   }, [days, selected, onDaysChange]);
 
-  const handleCountChange = useCallback((dayIndex, count) => {
+  const handleCountChange = useCallback((dayIndex: number, count: number) => {
     const cur = days[dayIndex] || { count: 0, times: [] };
     applyDay(dayIndex, { count, times: resizeTimes(cur.times, count) });
   }, [days, applyDay]);
 
-  const handleTimeChange = useCallback((dayIndex, times) => {
+  const handleTimeChange = useCallback((dayIndex: number, times: SlotTime[]) => {
     applyDay(dayIndex, { count: times.length, times });
   }, [applyDay]);
 

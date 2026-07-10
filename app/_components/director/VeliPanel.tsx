@@ -6,12 +6,19 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronRight, GraduationCap, Phone, KeyRound, Save, UserPlus, X } from 'lucide-react';
 import { classLabel, PARENT_RELATIONS } from '@/lib/constants';
-import { classLabelFrom } from '@/lib/classCatalog';
+import { classLabelFrom, type ClassEntry } from '@/lib/classCatalog';
 import { GROUPS, api } from './shared';
 import { formatTurkishMobile } from '@/lib/phone';
 import { useConfirm } from '../ConfirmProvider';
+import type { ShowToast, StudentDTO } from '../types';
 
-function RelationSelect({ value, onChange, placeholder = 'Yakınlık seç' }) {
+interface RelationSelectProps {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}
+
+function RelationSelect({ value, onChange, placeholder = 'Yakınlık seç' }: RelationSelectProps) {
   return (
     <select className="input" value={value} onChange={e => onChange(e.target.value)}>
       <option value="">{placeholder}</option>
@@ -20,8 +27,14 @@ function RelationSelect({ value, onChange, placeholder = 'Yakınlık seç' }) {
   );
 }
 
+interface VeliDetayProps {
+  student: StudentDTO;
+  onSaved?: () => void;
+  showToast: ShowToast;
+}
+
 // Tek velinin (öğrencinin) açılır detayı — düzenlenebilir form.
-function VeliDetay({ student, onSaved, showToast }) {
+function VeliDetay({ student, onSaved, showToast }: VeliDetayProps) {
   const confirm = useConfirm();
   const [parentName, setParentName] = useState(student.parentName || '');
   const [parentPhone, setParentPhone] = useState(student.parentPhone ? formatTurkishMobile(student.parentPhone) : '');
@@ -49,7 +62,7 @@ function VeliDetay({ student, onSaved, showToast }) {
       });
       showToast('Veli bilgileri kaydedildi');
       onSaved?.();
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setSaving(false); }
   };
 
@@ -60,7 +73,7 @@ function VeliDetay({ student, onSaved, showToast }) {
     try {
       await api('/api/parents', { method: 'POST', body: JSON.stringify({ action: 'reset', phone: student.parentPhone }) });
       showToast('Veli şifresi sıfırlandı (telefon = geçici şifre)');
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setResetting(false); }
   };
 
@@ -128,27 +141,37 @@ function VeliDetay({ student, onSaved, showToast }) {
   );
 }
 
-export default function VeliPanel({ students, classes = [], onChanged, showToast }) {
+// Panel öğrencilere group alanını da ekleyerek geçirir (loadAll zenginleştirmesi).
+type VeliStudent = StudentDTO & { group?: string };
+
+interface VeliPanelProps {
+  students: VeliStudent[];
+  classes?: ClassEntry[];
+  onChanged?: () => void;
+  showToast: ShowToast;
+}
+
+export default function VeliPanel({ students, classes = [], onChanged, showToast }: VeliPanelProps) {
   const [searchQ, setSearchQ] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
-  const [openCls, setOpenCls] = useState(null);
-  const [expandedId, setExpandedId] = useState(null);
+  const [openCls, setOpenCls] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
     const q = searchQ.toLowerCase();
-    const groupOrder = { ortaokul: 0, lise: 1, mezun: 2 };
-    const clsSort = cls => cls.startsWith('m') ? parseInt(cls.slice(1)) : parseInt(cls);
+    const groupOrder: Record<string, number> = { ortaokul: 0, lise: 1, mezun: 2 };
+    const clsSort = (cls: string) => cls.startsWith('m') ? parseInt(cls.slice(1)) : parseInt(cls);
     const sorted = students
       .filter(s =>
         (s.name.toLowerCase().includes(q) || s.cls.toLowerCase().includes(q) || (s.parentName || '').toLowerCase().includes(q) || (s.parentPhone || '').includes(q)) &&
         (!filterGroup || s.group === filterGroup)
       )
       .sort((a, b) => {
-        const gDiff = (groupOrder[a.group] ?? 9) - (groupOrder[b.group] ?? 9);
+        const gDiff = (groupOrder[a.group || ''] ?? 9) - (groupOrder[b.group || ''] ?? 9);
         if (gDiff !== 0) return gDiff;
         return clsSort(a.cls) - clsSort(b.cls);
       });
-    const groups = [];
+    const groups: { cls: string; label: string; group?: string; students: VeliStudent[] }[] = [];
     for (const s of sorted) {
       if (!groups.length || groups[groups.length - 1].cls !== s.cls) {
         groups.push({ cls: s.cls, label: classLabelFrom(classes, s.cls, classLabel), group: s.group, students: [] });
@@ -158,7 +181,7 @@ export default function VeliPanel({ students, classes = [], onChanged, showToast
     return groups;
   }, [students, classes, searchQ, filterGroup]);
 
-  const toggle = cls => { setOpenCls(prev => prev === cls ? null : cls); setExpandedId(null); };
+  const toggle = (cls: string) => { setOpenCls(prev => prev === cls ? null : cls); setExpandedId(null); };
 
   return (
     <div>

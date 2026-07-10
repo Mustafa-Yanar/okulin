@@ -6,13 +6,28 @@ import { Plus, Wallet, Edit3, Trash2, X } from 'lucide-react';
 import FinancePanel from '../finance/FinancePanel';
 import ExpensePanel from '../finance/ExpensePanel';
 import { useConfirm } from '../ConfirmProvider';
+import type { Session } from '@/lib/auth';
+import type { ShowToast } from '../types';
 
-export default function DirectorMuhasebeTab({ session, showToast }) {
+// GET /api/accountants liste elemanı.
+interface AccountantDTO {
+  id: string;
+  name: string;
+  username: string;
+  phone?: string;
+}
+
+interface DirectorMuhasebeTabProps {
+  session?: Session | null;
+  showToast: ShowToast;
+}
+
+export default function DirectorMuhasebeTab({ session, showToast }: DirectorMuhasebeTabProps) {
   const confirm = useConfirm();
   const [subTab, setSubTab] = useState('finance');
-  const [accountants, setAccountants] = useState([]);
+  const [accountants, setAccountants] = useState<AccountantDTO[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [editAcc, setEditAcc] = useState(null);
+  const [editAcc, setEditAcc] = useState<AccountantDTO | null>(null);
   const [form, setForm] = useState({ name: '', password: '', phone: '' });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -21,7 +36,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
     setLoading(true);
     try {
       const res = await fetch('/api/accountants', { credentials: 'same-origin' });
-      const data = await res.json();
+      const data = (await res.json()) as AccountantDTO[];
       setAccountants(Array.isArray(data) ? data : []);
     } catch { showToast('Muhasebeciler yüklenemedi', 'error'); }
     finally { setLoading(false); }
@@ -30,9 +45,9 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
   useEffect(() => { if (subTab === 'accountants') loadAccountants(); }, [subTab]);
 
   function openNew() { setEditAcc(null); setForm({ name: '', password: '', phone: '' }); setShowForm(true); }
-  function openEdit(a) { setEditAcc(a); setForm({ name: a.name, password: '', phone: a.phone || '' }); setShowForm(true); }
+  function openEdit(a: AccountantDTO) { setEditAcc(a); setForm({ name: a.name, password: '', phone: a.phone || '' }); setShowForm(true); }
 
-  async function handleSave(e) {
+  async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!form.name.trim()) { showToast('İsim gerekli', 'error'); return; }
     setSaving(true);
@@ -46,16 +61,16 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
         credentials: 'same-origin',
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error || 'Hata');
       showToast(editAcc ? 'Muhasebeci güncellendi' : 'Muhasebeci eklendi');
       setShowForm(false);
       loadAccountants();
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setSaving(false); }
   }
 
-  async function handleDelete(id, name) {
+  async function handleDelete(id: string, name: string) {
     if (!(await confirm(`"${name}" isimli muhasebeci silinsin mi?`))) return;
     try {
       const res = await fetch('/api/accountants', {
@@ -67,7 +82,7 @@ export default function DirectorMuhasebeTab({ session, showToast }) {
       if (!res.ok) throw new Error('Silme hatası');
       showToast('Muhasebeci silindi');
       loadAccountants();
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
   }
 
   return (

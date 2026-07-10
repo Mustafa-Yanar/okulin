@@ -580,7 +580,7 @@ interface SolvePayload {
 
 interface ProgramOlusturucuProps {
   api: ApiFn;
-  showToast?: ShowToast;
+  showToast: ShowToast; // TeacherPresets zorunlu ister; panel her zaman geçer
   branding?: Branding | null;
 }
 
