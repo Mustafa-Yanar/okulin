@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
-import { slotStartTime, getProgramTemplate, setProgramTemplate } from '@/lib/slots';
+import { slotStartTime, getProgramTemplate, setProgramTemplate, type EtutSablonu } from '@/lib/slots';
 import { getWeekKey } from '@/lib/constants';
 
 // Etüt şablonları — öğretmenin haftadan bağımsız, serbest saatli etüt blokları.
@@ -46,15 +46,15 @@ const AssignSchema = z.object({
   }).nullable(),
 });
 
-function toMin(t) {
+function toMin(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
 }
 
 // programTemplate'ten etutSablonlari oku, değiştir, geri yaz
-async function updateSablonlar(teacherId, mutFn) {
+async function updateSablonlar(teacherId: string, mutFn: (list: EtutSablonu[]) => EtutSablonu[]) {
   const fullTemplate = await getProgramTemplate(teacherId);
-  const list = Array.isArray(fullTemplate.etutSablonlari) ? fullTemplate.etutSablonlari : [];
+  const list: EtutSablonu[] = Array.isArray(fullTemplate.etutSablonlari) ? (fullTemplate.etutSablonlari as EtutSablonu[]) : [];
   const newList = mutFn(list);
   await setProgramTemplate(teacherId, { ...fullTemplate, etutSablonlari: newList });
   return newList;
@@ -66,7 +66,7 @@ export const GET = withAuth(async (req) => {
   if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
 
   const fullTemplate = await getProgramTemplate(teacherId);
-  return NextResponse.json({ sablonlar: fullTemplate.etutSablonlari || [] });
+  return NextResponse.json({ sablonlar: (fullTemplate.etutSablonlari as EtutSablonu[] | undefined) || [] });
 });
 
 // POST /api/etut-sablon → şablon ekle (id yoksa) veya güncelle (id varsa)
@@ -117,7 +117,7 @@ export const PUT = withAuth('manage', async (req) => {
       if (aktif) sb.pasifHaftalar = [];
     } else {
       const set = new Set(Array.isArray(sb.pasifHaftalar) ? sb.pasifHaftalar : []);
-      if (aktif) set.delete(weekKey); else set.add(weekKey);
+      if (aktif) set.delete(weekKey as string); else set.add(weekKey as string);
       sb.pasifHaftalar = Array.from(set);
     }
     const updated = [...list];

@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { getExam, saveExam, getNameMap, normName, getAllStudents } from '@/lib/deneme/store';
 import { gradeFlat } from '@/lib/deneme/grade';
 import { parseBody, z } from '@/lib/validate';
-
-function isManager(s) {
-  return s && (s.role === 'director' || s.role === 'counselor');
-}
 
 import { newSortableId as rowId } from '@/lib/id';
 
@@ -29,28 +25,26 @@ const AddSchema = z.object({
 
 // Sınava öğrenci satırı ekle (optik/manuel/.dat). Anahtar varsa anında puanlar,
 // isimden öğrenci eşleştirir (kalıcı namemap + öğrenci adı/kullanıcı adı).
-export async function POST(req, { params }) {
-  const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+export const POST = withAuth(['director', 'counselor'], async (req, ctx) => {
 
   const parsed = await parseBody(req, AddSchema);
   if (!parsed.ok) return parsed.response;
   const { source = 'optik', kitapcik = 'A', students } = parsed.data;
 
-  const exam = await getExam(params.id);
+  const exam = await getExam(String(ctx.params?.id));
   if (!exam) return NextResponse.json({ error: 'Sınav bulunamadı' }, { status: 404 });
   if (!Array.isArray(exam.rows)) exam.rows = [];
 
   // İsim → studentId eşleştirme kaynakları
   const nameMap = await getNameMap();
   const allStudents = await getAllStudents();
-  const byName = {};
+  const byName: Record<string, string> = {};
   for (const s of allStudents) {
     byName[normName(s.name)] = s.id;
     if (s.username) byName[normName(s.username)] = s.id;
   }
 
-  const unmatched = [];
+  const unmatched: string[] = [];
   let added = 0;
   let matched = 0;
 
@@ -86,20 +80,18 @@ export async function POST(req, { params }) {
     rowCount: exam.rows.length,
     graded: students.length > 0 && !!gradeFlat(exam, students[0].answers, kitapcik),
   });
-}
+});
 
 // Bir satırı sil. ?rowId=...
-export async function DELETE(req, { params }) {
-  const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+export const DELETE = withAuth(['director', 'counselor'], async (req, ctx) => {
 
   const { searchParams } = new URL(req.url);
   const rid = searchParams.get('rowId');
   if (!rid) return NextResponse.json({ error: 'rowId gerekli' }, { status: 400 });
 
-  const exam = await getExam(params.id);
+  const exam = await getExam(String(ctx.params?.id));
   if (!exam) return NextResponse.json({ error: 'Sınav bulunamadı' }, { status: 404 });
   exam.rows = (exam.rows || []).filter((r) => r.id !== rid);
   await saveExam(exam);
   return NextResponse.json({ ok: true, rowCount: exam.rows.length });
-}
+});

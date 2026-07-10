@@ -1,5 +1,8 @@
 const { defineConfig } = require('@playwright/test');
 
+// Giriş bilgileri .env.local'den (Playwright kendiliğinden okumaz; Next'in yükleyicisi kullanılır).
+require('@next/env').loadEnvConfig(process.cwd());
+
 // okulin uçtan uca smoke testleri. Hedef site OKULIN_BASE_URL env'inden gelir
 // (varsayılan canlı testkurs). Giriş bilgileri ASLA dosyada değil — env'den okunur.
 module.exports = defineConfig({

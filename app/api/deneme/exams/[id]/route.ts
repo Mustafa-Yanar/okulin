@@ -1,17 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { getExam, deleteExam } from '@/lib/deneme/store';
 import { rankedList } from '@/lib/deneme/analysis';
 
 // Deneme detayı — sıralı liste. Müdür ve öğretmen görür (tüm öğrenciler).
-export async function GET(_req, { params }) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
-  if ((session.role !== 'director' && session.role !== 'counselor') && session.role !== 'teacher') {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-
-  const exam = await getExam(params.id);
+export const GET = withAuth(['director', 'counselor', 'teacher'], async (_req, ctx, session) => {
+  const exam = await getExam(String(ctx.params?.id));
   if (!exam) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
 
   const isManager = session.role === 'director' || session.role === 'counselor';
@@ -43,14 +37,10 @@ export async function GET(_req, { params }) {
     },
     ranking: rankedList(exam),
   });
-}
+});
 
 // Deneme sil (müdür)
-export async function DELETE(_req, { params }) {
-  const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
-  await deleteExam(params.id);
+export const DELETE = withAuth(['director', 'counselor'], async (_req, ctx) => {
+  await deleteExam(String(ctx.params?.id));
   return NextResponse.json({ ok: true });
-}
+});

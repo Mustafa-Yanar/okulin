@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withAuth, canManage } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
-import { getAllTeachers, getAllStudents, slotStartTime, getProgramTemplate, setProgramTemplate } from '@/lib/slots';
+import { getAllTeachers, getAllStudents, slotStartTime, getProgramTemplate, setProgramTemplate, type EtutSablonu } from '@/lib/slots';
 import {
   ALL_DAYS,
   getWeekKey,
@@ -29,7 +29,7 @@ const DeleteSchema = z.object({
 });
 
 // Bir şablon verilen haftada efektif aktif mi?
-function aktifThisWeek(sb, weekKey) {
+function aktifThisWeek(sb: EtutSablonu, weekKey: string): boolean {
   if (sb.aktif === false) return false;
   if (Array.isArray(sb.pasifHaftalar) && sb.pasifHaftalar.includes(weekKey)) return false;
   return true;
@@ -37,12 +37,12 @@ function aktifThisWeek(sb, weekKey) {
 
 // Bir öğrencinin bu hafta yazılı olduğu TÜM etüt şablonlarını (tüm öğretmenlerde) topla.
 // [{ teacherId, sb }] döner. Çakışma kontrolleri için.
-async function studentBookedEtuts(studentId, weekKey) {
+async function studentBookedEtuts(studentId: string, weekKey: string) {
   const teachers = await getAllTeachers();
-  const out = [];
+  const out: { teacherId: string; sb: EtutSablonu }[] = [];
   for (const t of teachers) {
     const prog = await getProgramTemplate(t.id); // SQL-aware
-    const list = Array.isArray(prog.etutSablonlari) ? prog.etutSablonlari : [];
+    const list: EtutSablonu[] = Array.isArray(prog.etutSablonlari) ? (prog.etutSablonlari as EtutSablonu[]) : [];
     for (const sb of list) {
       if (sb.studentId === studentId && aktifThisWeek(sb, weekKey)) {
         out.push({ teacherId: t.id, sb });
@@ -62,7 +62,7 @@ export const POST = withAuth(async (req, ctx, session) => {
   const manager = await canManage(session);
 
   // Hedef öğrenci: öğrenci kendini, müdür/öğretmen başkasını yazabilir
-  let targetStudentId;
+  let targetStudentId: string | undefined;
   if (session.role === 'student') {
     targetStudentId = session.id;
   } else if (session.role === 'teacher') {
@@ -96,7 +96,7 @@ export const POST = withAuth(async (req, ctx, session) => {
 
   // Şablonu bul
   const template = await getProgramTemplate(teacherId); // SQL-aware
-  const list = Array.isArray(template.etutSablonlari) ? template.etutSablonlari : [];
+  const list: EtutSablonu[] = Array.isArray(template.etutSablonlari) ? (template.etutSablonlari as EtutSablonu[]) : [];
   const idx = list.findIndex(s => s.id === etutId);
   if (idx === -1) return NextResponse.json({ error: 'Etüt bulunamadı' }, { status: 404 });
   const sb = { ...list[idx] };
@@ -120,7 +120,7 @@ export const POST = withAuth(async (req, ctx, session) => {
 
   // Branş (ders) doğrulaması — öğretmen verebilmeli VE öğrenci sınıfı görebilmeli
   const studentAllowed = allowedBranchesForClass(targetStudent.cls);
-  let bookingBranch = branch;
+  let bookingBranch: string | undefined = branch;
   if (!bookingBranch) {
     const candidates = (teacher.branches || []).filter(b => studentAllowed.includes(b));
     if (candidates.length === 1) bookingBranch = candidates[0];
@@ -147,7 +147,7 @@ export const POST = withAuth(async (req, ctx, session) => {
     }
     // Kural 3: Matematik ailesi (TYT/AYT/Geometri) — yalnız birinden
     if (MATH_FAMILY.includes(bookingBranch)) {
-      const mathConflict = booked.some(b => MATH_FAMILY.includes(b.sb.branch));
+      const mathConflict = booked.some(b => MATH_FAMILY.includes(b.sb.branch as string));
       if (mathConflict) {
         return NextResponse.json({ error: 'Bu öğrenci bu hafta matematik (TYT/AYT/Geometri) etüdü zaten almış' }, { status: 400 });
       }
@@ -175,7 +175,7 @@ export const DELETE = withAuth(async (req, ctx, session) => {
   const { teacherId, etutId } = parsed.data;
 
   const template = await getProgramTemplate(teacherId); // SQL-aware
-  const list = Array.isArray(template.etutSablonlari) ? template.etutSablonlari : [];
+  const list: EtutSablonu[] = Array.isArray(template.etutSablonlari) ? (template.etutSablonlari as EtutSablonu[]) : [];
   const idx = list.findIndex(s => s.id === etutId);
   if (idx === -1) return NextResponse.json({ error: 'Etüt bulunamadı' }, { status: 404 });
   const sb = { ...list[idx] };

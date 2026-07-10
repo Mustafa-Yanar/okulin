@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { buildStudentPoints } from '@/lib/deneme/store';
 
 // Giriş yapan öğrencinin kişisel deneme analizi (eskiden yeniye).
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
+// Bilinçli inline rol kontrolü: öğrenci-dışı roller hata değil boş liste alır (mevcut sözleşme).
+export const GET = withAuth(async (_req, _ctx, session) => {
   if (session.role !== 'student') {
     return NextResponse.json({ points: [], notStudent: true });
   }
-  const points = await buildStudentPoints(session.id);
+  const points = await buildStudentPoints(session.id || '');
   return NextResponse.json({ name: session.name, points });
-}
+});

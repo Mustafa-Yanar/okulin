@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { getExam, saveExam, getNameMap, saveNameMap } from '@/lib/deneme/store';
 import { parseBody, z } from '@/lib/validate';
 
@@ -14,16 +14,12 @@ const MatchSchema = z.object({
 // İsim/satırı öğrenci id'sine bağlar (kalıcı namemap'e de yazar).
 // body: { matches: [{ rowId?, excelName, studentId }] }  (boş studentId = eşleşmeyi kaldır)
 // rowId verilirse o satır; yoksa isimle eşleşen ilk satır güncellenir.
-export async function POST(req, { params }) {
-  const session = await getSession();
-  if (!session || (session.role !== 'director' && session.role !== 'counselor')) {
-    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  }
+export const POST = withAuth(['director', 'counselor'], async (req, ctx) => {
 
   const parsed = await parseBody(req, MatchSchema);
   if (!parsed.ok) return parsed.response;
   const { matches } = parsed.data;
-  const exam = await getExam(params.id);
+  const exam = await getExam(String(ctx.params?.id));
   if (!exam) return NextResponse.json({ error: 'Deneme bulunamadı' }, { status: 404 });
 
   const nameMap = await getNameMap();
@@ -40,4 +36,4 @@ export async function POST(req, { params }) {
   await saveExam(exam);
   await saveNameMap(nameMap);
   return NextResponse.json({ ok: true });
-}
+});

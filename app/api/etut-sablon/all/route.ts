@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getSession, canReadStudent } from '@/lib/auth';
-import { getAllTeachers, getProgramTemplate } from '@/lib/slots';
+import { withAuth, canReadStudent } from '@/lib/auth';
+import { getAllTeachers, getProgramTemplate, type EtutSablonu } from '@/lib/slots';
 import { ALL_DAYS, getWeekKey } from '@/lib/constants';
 
 // GET /api/etut-sablon/all?week=YYYY-Www
@@ -10,15 +10,14 @@ import { ALL_DAYS, getWeekKey } from '@/lib/constants';
 // Şablon kaynağı getProgramTemplate (SQL-aware): SQL modunda Teacher.programTemplate.
 
 // Bir şablon verilen haftada efektif aktif mi? (kalıcı aktif + bu hafta pasif listesinde değil)
-function aktifThisWeek(sb, weekKey) {
+function aktifThisWeek(sb: EtutSablonu, weekKey: string): boolean {
   if (sb.aktif === false) return false;
   if (Array.isArray(sb.pasifHaftalar) && sb.pasifHaftalar.includes(weekKey)) return false;
   return true;
 }
 
-export async function GET(req) {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
+// Bilinçli inline rol dallanması: veli yalnız kendi çocuğunun etütlerini görür.
+export const GET = withAuth(async (req, _ctx, session) => {
 
   const { searchParams } = new URL(req.url);
   const weekKey = searchParams.get('week') || getWeekKey();
@@ -26,10 +25,10 @@ export async function GET(req) {
   const teachers = await getAllTeachers();
   const dayLabel = Object.fromEntries(ALL_DAYS.map(d => [d.index, d.label]));
 
-  const etutler = [];
+  const etutler: Record<string, unknown>[] = [];
   for (const teacher of teachers) {
     const prog = await getProgramTemplate(teacher.id); // SQL-aware
-    const list = Array.isArray(prog.etutSablonlari) ? prog.etutSablonlari : [];
+    const list: EtutSablonu[] = Array.isArray(prog.etutSablonlari) ? (prog.etutSablonlari as EtutSablonu[]) : [];
     for (const sb of list) {
       if (!aktifThisWeek(sb, weekKey)) continue;
       etutler.push({
@@ -61,4 +60,4 @@ export async function GET(req) {
   }
 
   return NextResponse.json({ weekKey, etutler });
-}
+});

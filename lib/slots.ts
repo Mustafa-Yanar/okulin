@@ -44,6 +44,22 @@ export interface SlotCell {
   bookedAt?: string;
 }
 
+// Öğretmenin serbest etüt şablonu (programTemplate.etutSablonlari listesi elemanı).
+export interface EtutSablonu {
+  id: string;
+  dayIndex: number;
+  start: string;
+  end: string;
+  aktif?: boolean;
+  pasifHaftalar?: string[];
+  studentId?: string;
+  studentName?: string;
+  studentCls?: string;
+  branch?: string;
+  bookedBy?: string;
+  bookedAt?: string;
+}
+
 // Öğretmen program şablonundaki tek giriş (programTemplate Json).
 export interface ProgramEntry {
   type?: string;

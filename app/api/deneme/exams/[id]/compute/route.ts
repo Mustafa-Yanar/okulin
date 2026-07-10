@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { getExam, saveExam } from '@/lib/deneme/store';
 import { gradeFlat, hasAnswerKey } from '@/lib/deneme/grade';
 import { computePuanlar } from '@/lib/deneme/score';
@@ -7,18 +7,12 @@ import { notifyExamResults } from '@/lib/notify';
 
 export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
-function isManager(s) {
-  return s && (s.role === 'director' || s.role === 'counselor');
-}
-
 // Hesapla: tüm satırları ham cevaplardan + güncel cevap anahtarıyla yeniden puanla.
 // (Anahtar satırlardan SONRA girilmiş olabilir → results boş kalmış olabilir.) Her satıra
 // results + toplamNet + puan yazılır; öğrenci paneli/grafiği güncel netleri görür.
-export async function POST(_req, { params }) {
-  const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+export const POST = withAuth(['director', 'counselor'], async (_req, ctx) => {
 
-  const exam = await getExam(params.id);
+  const exam = await getExam(String(ctx.params?.id));
   if (!exam) return NextResponse.json({ error: 'Sınav bulunamadı' }, { status: 404 });
   const rows = Array.isArray(exam.rows) ? exam.rows : [];
 
@@ -30,7 +24,7 @@ export async function POST(_req, { params }) {
   let graded = 0;
   let sumNet = 0;
   for (const row of rows) {
-    const g = gradeFlat(exam, row.rawAnswers || [], row.kitapcik || 'A');
+    const g = gradeFlat(exam, (row.rawAnswers as (string | null)[] | undefined) || [], row.kitapcik || 'A');
     if (g) {
       row.results = g.results;
       row.toplamNet = g.toplamNet;
@@ -55,4 +49,4 @@ export async function POST(_req, { params }) {
     graded,
     ortalamaNet: rows.length ? Math.round((sumNet / rows.length) * 100) / 100 : 0,
   });
-}
+});

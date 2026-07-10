@@ -1,4 +1,20 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(vercel ls *)",
+      "Bash(gcloud run services logs read *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push)",
+      "Bash(npm run build)",
+      "Bash(npm test)",
+      "Bash(npm run test:e2e)",
+      "Bash(npx tsc --noEmit)",
+      "mcp__claude_ai_Google_Drive__search_files",
+      "mcp__claude_ai_Google_Drive__download_file_content",
+      "mcp__claude_ai_Google_Drive__list_recent_files"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

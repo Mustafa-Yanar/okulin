@@ -1,22 +1,17 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { withAuth } from '@/lib/auth';
 import { listExams, saveExam, addExamToIndex } from '@/lib/deneme/store';
 import { getTemplate, flatSubjects } from '@/lib/deneme/template';
 import { parseBody, z } from '@/lib/validate';
 
-function isManager(s) {
-  return s && (s.role === 'director' || s.role === 'counselor');
-}
-
 import { newSortableId as uuid } from '@/lib/id';
+import type { DenemeExam } from '@/lib/deneme/types';
 
 // Deneme listesi (meta) — giriş yapan herkes görür.
-export async function GET() {
-  const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
+export const GET = withAuth(async () => {
   const index = await listExams();
   return NextResponse.json({ exams: index });
-}
+});
 
 const CreateSchema = z.object({
   name: z.string().min(1).max(200),
@@ -26,9 +21,7 @@ const CreateSchema = z.object({
 });
 
 // Yeni boş sınav oluştur (müdür/rehber). Cevap anahtarı ve veri sonra eklenir.
-export async function POST(req) {
-  const session = await getSession();
-  if (!isManager(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+export const POST = withAuth(['director', 'counselor'], async (req) => {
 
   const parsed = await parseBody(req, CreateSchema);
   if (!parsed.ok) return parsed.response;
@@ -40,7 +33,7 @@ export async function POST(req) {
 
   const id = uuid();
   const iso = date ? new Date(date).toISOString() : new Date().toISOString();
-  const exam = {
+  const exam: DenemeExam = {
     id,
     name: name.trim(),
     examType,
@@ -55,7 +48,7 @@ export async function POST(req) {
   await saveExam(exam);
 
   const meta = { id, name: exam.name, examType, category: null, date: iso, createdAt: exam.createdAt };
-  await addExamToIndex(meta);
+  await addExamToIndex();
 
   return NextResponse.json({ ok: true, examId: id, exam: meta });
-}
+});
