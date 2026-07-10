@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { headers } from 'next/headers';
 import bcrypt from 'bcryptjs';
 import { tenantRedis, currentOrg } from '@/lib/tenant';
 import { orgFromHost } from '@/lib/org';
 import { normalizeBranding } from '@/lib/branding';
-import { getSession, setSession, clearSession } from '@/lib/auth';
+import { getSession, setSession, clearSession, type Session } from '@/lib/auth';
 import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait, safeLimit } from '@/lib/ratelimit';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { normalizeTurkishMobile } from '@/lib/phone';
@@ -12,20 +12,56 @@ import { parseBody, z, zName, zPassword, zNewPassword, zId } from '@/lib/validat
 import { sendOtp } from '@/lib/sms';
 import { getOrgConfig } from '@/lib/config';
 import { tdb } from '@/lib/sqldb';
+import type { ParentChild } from '@/lib/parents';
+
+// Bilinçli withAuth istisnası: bu route'un kendisi LOGIN ucu — oturum burada kurulur.
+// GET login ekranı için oturumsuz da çalışır; POST action'larının oturum gerektirenleri
+// (change_password, reset_password, update_director_name) kendi içinde getSession doğrular.
+
+// Rol tablolarından dönen kayıtların ortak görünümü (model başına alan farkları opsiyonel).
+interface RoleRow {
+  legacyId?: string;
+  name?: string | null;
+  phone?: string | null;
+  passwordHash: string;
+  mustChangePassword?: boolean;
+  branches?: string[];
+  allowedGroups?: string[];
+  class?: { legacyId: string } | null;
+  group?: string;
+  children?: unknown;
+}
+
+// makeLoginResponse'un beklediği eski (Redis) kayıt şekli.
+interface LegacyRec {
+  id: string;
+  name: string;
+  phone: string | null;
+  passwordHash: string;
+  mustChangePassword: boolean;
+  branches?: string[];
+  allowedGroups?: string[];
+  cls?: string;
+  group?: string;
+  children?: ParentChild[];
+  // eski kayıt fallback alanları (teacher)
+  branch?: string;
+  extraBranches?: string[];
+}
 
 // SQL rol satırını makeLoginResponse'un beklediği eski (Redis) kayıt şekline çevirir.
 // id = legacyId (parent: phone); student.cls = class.legacyId (cuid DEĞİL).
-function sqlRecToLegacy(role, r) {
+function sqlRecToLegacy(role: string, r: (RoleRow & { phone?: string | null }) | null): LegacyRec | null {
   if (!r) return null;
-  const base = { name: r.name, phone: r.phone || null, passwordHash: r.passwordHash, mustChangePassword: !!r.mustChangePassword };
-  if (role === 'teacher') return { ...base, id: r.legacyId, branches: r.branches || [], allowedGroups: r.allowedGroups || [] };
-  if (role === 'student') return { ...base, id: r.legacyId, cls: r.class?.legacyId || '', group: r.group };
-  if (role === 'parent') return { ...base, id: r.phone, name: r.name || '', children: r.children || [] };
-  return { ...base, id: r.legacyId }; // accountant | counselor | assistant_director
+  const base = { name: r.name || '', phone: r.phone || null, passwordHash: r.passwordHash, mustChangePassword: !!r.mustChangePassword };
+  if (role === 'teacher') return { ...base, id: r.legacyId || '', branches: r.branches || [], allowedGroups: r.allowedGroups || [] };
+  if (role === 'student') return { ...base, id: r.legacyId || '', cls: r.class?.legacyId || '', group: r.group };
+  if (role === 'parent') return { ...base, id: r.phone || '', name: r.name || '', children: ((r.children as ParentChild[] | null) || []) };
+  return { ...base, id: r.legacyId || '' }; // accountant | counselor | assistant_director
 }
 
 // Telefon numarasının ortasını maskele: "0532***67"
-function maskPhone(phone) {
+function maskPhone(phone: string | null | undefined): string {
   if (!phone || phone.length < 7) return '***';
   return phone.slice(0, 4) + '***' + phone.slice(-2);
 }
@@ -54,13 +90,15 @@ export async function GET() {
   return NextResponse.json({ session, directorExists: !!directorExists, branding: normalizeBranding(orgRec), modules, etut, permissions });
 }
 
-export async function POST(req) {
+export async function POST(req: NextRequest) {
   const redis = tenantRedis(); // OTP cihaz tanıma alt-sistemi — hâlâ Redis (bkz aşağı NOT)
   const parsed = await parseBody(req, AuthSchema);
   if (!parsed.ok) return parsed.response;
-  const { action, username, password, newPassword, targetId, targetRole, name } = parsed.data;
+  const data = parsed.data;
+  const { action } = data;
 
   if (action === 'login') {
+    const { username, password } = data;
     // Rate limit kontrolü — IP + username birleşik key
     const ip = getClientIp(req);
     const rlKey = `${ip}:${(username || 'anon').toLowerCase()}`;
@@ -75,15 +113,15 @@ export async function POST(req) {
     // Katı rol seçimi + akıllı yönlendirme. Kullanıcı bir rol kartı seçer; bilgileri
     // doğru ama seçtiği rol hesabın gerçek rolüyle uyuşmuyorsa, doğru girişe yönlendir.
     // selectedRole yoksa (eski client) kapı devre dışı — geri uyumlu.
-    const selectedRole = parsed.data.role;
-    const CATEGORY_LABEL = { student: 'Öğrenci', parent: 'Veli', teacher: 'Öğretmen', management: 'Yönetim' };
-    function roleCategory(role) {
+    const selectedRole = data.role;
+    const CATEGORY_LABEL: Record<string, string> = { student: 'Öğrenci', parent: 'Veli', teacher: 'Öğretmen', management: 'Yönetim' };
+    function roleCategory(role: string): string {
       if (role === 'student') return 'student';
       if (role === 'parent') return 'parent';
       if (role === 'teacher') return 'teacher';
       return 'management'; // director, accountant, org_admin, superadmin
     }
-    function gateMismatch(actualRole) {
+    function gateMismatch(actualRole: string): NextResponse | null {
       if (!selectedRole) return null;
       const actualCat = roleCategory(actualRole);
       if (actualCat === selectedRole) return null;
@@ -97,7 +135,7 @@ export async function POST(req) {
     // NOT: cihaz tanıma alt-sistemi (device:*) SQL'e taşınmadı — kısa ömürlü/geçici veri,
     // Redis TTL doğası ile uyumlu. Ayrı bir göç işi.
     const deviceToken = req.cookies.get('device_token')?.value;
-    async function isKnownDevice(roleCategory) {
+    async function isKnownDevice(roleCategory: string): Promise<boolean> {
       if (!deviceToken) return false;
       const key = `device:${roleCategory}:${username}:${deviceToken}`;
       const data = await redis.get(key);
@@ -105,7 +143,7 @@ export async function POST(req) {
     }
 
     // Cihaz tanınmadığında OTP akışını başlat (telefon varsa SMS gönder).
-    async function maybeOtp(roleCategory, phone) {
+    async function maybeOtp(roleCategory: string, phone: string | null): Promise<NextResponse | null> {
       const known = await isKnownDevice(roleCategory);
       if (known) return null; // null = OTP yok, normal login devam etsin
       if (!phone) return null; // telefon kayıtlı değil → OTP atla (geri uyumluluk)
@@ -114,7 +152,7 @@ export async function POST(req) {
     }
 
     // Kayıttan oturum yanıtı üret (rol bazlı payload).
-    async function makeLoginResponse(role, rec) {
+    async function makeLoginResponse(role: string, rec: LegacyRec): Promise<NextResponse> {
       const gate = gateMismatch(role);
       if (gate) return gate;
 
@@ -124,10 +162,10 @@ export async function POST(req) {
       const otpRes = await maybeOtp(cat, phone);
       if (otpRes) return otpRes;
 
-      let payload;
+      let payload: Session;
       if (role === 'teacher') {
         const branches = Array.isArray(rec.branches) ? rec.branches
-          : [rec.branch, ...(rec.extraBranches || [])].filter(Boolean); // eski kayıt fallback
+          : [rec.branch, ...(rec.extraBranches || [])].filter((b): b is string => Boolean(b)); // eski kayıt fallback
         payload = { role: 'teacher', id: rec.id, name: rec.name, branches, allowedGroups: rec.allowedGroups || [], mustChangePassword: !!rec.mustChangePassword };
       } else if (role === 'student') {
         payload = { role: 'student', id: rec.id, name: rec.name, cls: rec.cls, group: rec.group, mustChangePassword: !!rec.mustChangePassword };
@@ -169,7 +207,7 @@ export async function POST(req) {
       if (superadmin && superadmin.username === username) {
         const ok = await bcrypt.compare(password, superadmin.passwordHash);
         if (ok) {
-          const saName = superadmin.name || 'Süper Admin';
+          const saName = (superadmin as { name?: string }).name || 'Süper Admin';
           const res = NextResponse.json({ role: 'superadmin', name: saName });
           await setSession(res, { role: 'superadmin', id: 'superadmin', name: saName });
           return res;
@@ -189,7 +227,7 @@ export async function POST(req) {
         const gate = gateMismatch('org_admin'); if (gate) return gate;
         // Org admin için cihaz tanıma yok
         const res = NextResponse.json({ role: 'org_admin', name: orgAdmin.name });
-        await setSession(res, { role: 'org_admin', id: 'org_admin', name: orgAdmin.name });
+        await setSession(res, { role: 'org_admin', id: 'org_admin', name: orgAdmin.name || undefined });
         return res;
       }
     }
@@ -201,7 +239,7 @@ export async function POST(req) {
       if (ok) {
         const gate = gateMismatch('director'); if (gate) return gate;
         // Director: cihaz tanıma uygula (Director kaydında telefon yok → OTP atlanır)
-        const otpRes = await maybeOtp('management', director.phone || null);
+        const otpRes = await maybeOtp('management', (director as { phone?: string | null }).phone || null);
         if (otpRes) return otpRes;
         const res = NextResponse.json({ role: 'director', name: director.name });
         await setSession(res, { role: 'director', id: 'director', name: director.name });
@@ -212,38 +250,41 @@ export async function POST(req) {
     // Rol tablolarını username ile doğrudan sorgula.
     // Sıra: assistant_director→accountant→counselor→teacher→student, sonra veli.
     const normP = normalizeTurkishMobile(username);
-    const tryRole = async (role, sqlRec) => {
+    const tryRole = async (role: string, sqlRec: RoleRow | null): Promise<NextResponse | null> => {
       const rec = sqlRecToLegacy(role, sqlRec);
       if (!rec) return null;
       const ok = await bcrypt.compare(password, rec.passwordHash);
       if (!ok) return null;
       return makeLoginResponse(role, rec);
     };
-    let r;
+    let r: NextResponse | null;
     r = await tryRole('assistant_director', await tdb().assistantDirector.findFirst({ where: { username } })); if (r) return r;
     r = await tryRole('accountant', await tdb().accountant.findFirst({ where: { username } })); if (r) return r;
     r = await tryRole('counselor', await tdb().counselor.findFirst({ where: { username } })); if (r) return r;
     r = await tryRole('teacher', await tdb().teacher.findFirst({ where: { username } })); if (r) return r;
     r = await tryRole('student', await tdb().student.findFirst({ where: { username }, include: { class: { select: { legacyId: true } } } })); if (r) return r;
     // Veli: kullanıcı adı = telefon (ham veya kanonik); kayıtlı phone kanonik.
-    const phones = [username, normP].filter(Boolean);
+    const phones = [username, normP].filter((p): p is string => Boolean(p));
     const parent = phones.length ? await tdb().parent.findFirst({ where: { phone: { in: phones } } }) : null;
     r = await tryRole('parent', parent); if (r) return r;
     return NextResponse.json({ error: 'Kullanıcı adı veya şifre hatalı' }, { status: 401 });
   }
 
   if (action === 'setup_director') {
+    const { username, password, name } = data;
     const directorName = name || 'Müdür';
     const hash = await bcrypt.hash(password, 10);
     const exists = await tdb().director.findFirst();
     if (exists) return NextResponse.json({ error: 'Müdür zaten kayıtlı' }, { status: 400 });
-    await tdb().director.create({ data: { username, passwordHash: hash, name: directorName } });
+    const { withScope } = await import('@/lib/sqldb');
+    await tdb().director.create({ data: withScope({ username, passwordHash: hash, name: directorName }) });
     const res = NextResponse.json({ ok: true });
     await setSession(res, { role: 'director', id: 'director', name: directorName });
     return res;
   }
 
   if (action === 'update_director_name') {
+    const { name } = data;
     const session = await getSession();
     if (!session || session.role !== 'director') return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     const dir = await tdb().director.findFirst();
@@ -262,6 +303,7 @@ export async function POST(req) {
 
   // Kendi şifresini değiştir (mevcut şifre doğrulanır)
   if (action === 'change_password') {
+    const { password, newPassword } = data;
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
 
@@ -278,17 +320,22 @@ export async function POST(req) {
 
     // Şifre değiştirme yardımcısı — başarılı değişimde mustChangePassword:false setler
     // ve session JWT'sini yeniler (frontend, yeni mustChange durumunu görsün).
-    async function updatePasswordFor(roleKey, sessionPayloadFields) {
+    // Dinamik model erişimi: rol → Prisma delegesi eşlemesi statik ifade edilemez (cast gerekçeli).
+    async function updatePasswordFor(roleKey: string, sessionPayloadFields: Record<string, unknown>): Promise<NextResponse> {
+      const db = tdb() as unknown as Record<string, {
+        findFirst: (a: { where: Record<string, string | undefined> }) => Promise<{ id: string; passwordHash: string } | null>;
+        update: (a: { where: { id: string }; data: { passwordHash: string; mustChangePassword: boolean } }) => Promise<unknown>;
+      }>;
       const rec = roleKey === 'parent'
-        ? await tdb().parent.findFirst({ where: { phone: session.id } })
-        : await tdb()[roleKey].findFirst({ where: { legacyId: session.id } });
+        ? await db.parent.findFirst({ where: { phone: session!.id } })
+        : await db[roleKey].findFirst({ where: { legacyId: session!.id } });
       if (!rec) return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
       const ok = await bcrypt.compare(password, rec.passwordHash);
       if (!ok) return NextResponse.json({ error: 'Mevcut şifre hatalı' }, { status: 400 });
       const newHash = await bcrypt.hash(newPassword, 10);
-      await tdb()[roleKey].update({ where: { id: rec.id }, data: { passwordHash: newHash, mustChangePassword: false } });
+      await db[roleKey].update({ where: { id: rec.id }, data: { passwordHash: newHash, mustChangePassword: false } });
       const res = NextResponse.json({ ok: true });
-      await setSession(res, { ...session, mustChangePassword: false, ...sessionPayloadFields });
+      await setSession(res, { ...session!, mustChangePassword: false, ...sessionPayloadFields });
       return res;
     }
 
@@ -318,6 +365,7 @@ export async function POST(req) {
 
   // Müdür başkasının şifresini sıfırlar
   if (action === 'reset_password') {
+    const { targetRole, targetId, newPassword } = data;
     const session = await getSession();
     if (!session || session.role !== 'director') {
       return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
@@ -325,13 +373,18 @@ export async function POST(req) {
 
     const hash = await bcrypt.hash(newPassword, 10);
 
-    const labels = { teacher: 'Öğretmen', student: 'Öğrenci', accountant: 'Muhasebeci', counselor: 'Rehber', assistant_director: 'Müdür yardımcısı' };
+    const labels: Record<string, string> = { teacher: 'Öğretmen', student: 'Öğrenci', accountant: 'Muhasebeci', counselor: 'Rehber', assistant_director: 'Müdür yardımcısı' };
     // targetRole snake_case olabilir; Prisma model adı camelCase.
-    const MODEL = { assistant_director: 'assistantDirector' };
+    const MODEL: Record<string, string> = { assistant_director: 'assistantDirector' };
     const model = MODEL[targetRole] || targetRole;
-    const rec = await tdb()[model].findFirst({ where: { legacyId: targetId } });
+    // Dinamik model erişimi: rol → Prisma delegesi eşlemesi statik ifade edilemez (cast gerekçeli).
+    const db = tdb() as unknown as Record<string, {
+      findFirst: (a: { where: { legacyId: string } }) => Promise<{ id: string; name?: string | null } | null>;
+      update: (a: { where: { id: string }; data: { passwordHash: string; mustChangePassword: boolean } }) => Promise<unknown>;
+    }>;
+    const rec = await db[model].findFirst({ where: { legacyId: targetId } });
     if (!rec) return NextResponse.json({ error: `${labels[targetRole]} bulunamadı` }, { status: 404 });
-    await tdb()[model].update({ where: { id: rec.id }, data: { passwordHash: hash, mustChangePassword: true } });
+    await db[model].update({ where: { id: rec.id }, data: { passwordHash: hash, mustChangePassword: true } });
     await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: targetRole, id: targetId, name: rec.name || targetId }, detail: `${labels[targetRole]} şifresi sıfırlandı: ${rec.name || targetId}` });
     return NextResponse.json({ ok: true });
   }

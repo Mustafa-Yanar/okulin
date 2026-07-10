@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import type { Redis } from '@upstash/redis';
 
 // GET /api/backup
 // Redis verisini VE tüm PostgreSQL tablolarını snapshot olarak GitHub backup
@@ -25,12 +26,14 @@ const SQL_BACKUP_DIR = 'backups-sql'; // PostgreSQL tablo dökümleri (sql-v1)
 // → yeni model eklenince backup otomatik kapsar. Tüm kurumların verisi dahildir.
 async function snapshotSql() {
   const models = Prisma.dmmf.datamodel.models.map((m) => m.name);
-  const tables = {};
+  const tables: Record<string, unknown[]> = {};
   let total = 0;
+  // Dinamik model erişimi: dmmf'ten gelen model listesi statik tiple ifade edilemez (cast gerekçeli).
+  const rawDb = prisma as unknown as Record<string, { findMany?: () => Promise<unknown[]> } | undefined>;
   for (const name of models) {
     const prop = name.charAt(0).toLowerCase() + name.slice(1);
-    if (typeof prisma[prop]?.findMany !== 'function') continue;
-    const rows = await prisma[prop].findMany();
+    if (typeof rawDb[prop]?.findMany !== 'function') continue;
+    const rows = await rawDb[prop]!.findMany!();
     tables[name] = rows;
     total += rows.length;
   }
@@ -41,7 +44,8 @@ async function snapshotSql() {
 export const maxDuration = 120;
 
 // Tek anahtarı tipine uygun komutla pipeline'a ekle (set/list'e get çağırmayız → WRONGTYPE yok).
-function readByType(p, key, type) {
+type Pipe = ReturnType<Redis['pipeline']>;
+function readByType(p: Pipe, key: string, type: string) {
   if (type === 'string') p.get(key);
   else if (type === 'set') p.smembers(key);
   else if (type === 'list') p.lrange(key, 0, -1);
@@ -53,11 +57,11 @@ function readByType(p, key, type) {
 // 2300+ anahtarı tek tek `await` ile okumak ~3 dk sürer (fonksiyon timeout'unu aşar);
 // chunk'lı pipeline ~20 round-trip'e indirir. Pipeline TİPE UYGUN kurulduğu için
 // (set/list/hash'e get yok) WRONGTYPE oluşmaz. Format: data[key] = { type, val }.
-async function snapshotAll(client) {
+async function snapshotAll(client: Redis) {
   const CHUNK = 256;
 
   // 1. Tüm anahtarları topla
-  const allKeys = [];
+  const allKeys: string[] = [];
   let cursor = '0';
   do {
     const [next, keys] = await client.scan(cursor, { count: 300 });
@@ -66,7 +70,7 @@ async function snapshotAll(client) {
   } while (cursor !== '0');
 
   // 2. Tipleri chunk'lı pipeline ile al (`type` WRONGTYPE fırlatmaz)
-  const types = new Array(allKeys.length);
+  const types: unknown[] = new Array(allKeys.length);
   for (let i = 0; i < allKeys.length; i += CHUNK) {
     const slice = allKeys.slice(i, i + CHUNK);
     const tp = client.pipeline();
@@ -77,16 +81,16 @@ async function snapshotAll(client) {
 
   // 3. Yalnız bilinen tipleri, tipe uygun komutla chunk'lı oku
   const KNOWN = new Set(['string', 'set', 'list', 'hash', 'zset']);
-  const work = [];
+  const work: [string, string][] = [];
   for (let i = 0; i < allKeys.length; i++) {
-    if (KNOWN.has(types[i])) work.push([allKeys[i], types[i]]);
+    if (KNOWN.has(types[i] as string)) work.push([allKeys[i], types[i] as string]);
   }
 
-  const data = {};
+  const data: Record<string, { type: string; val: unknown }> = {};
   let total = 0;
   for (let i = 0; i < work.length; i += CHUNK) {
     const slice = work.slice(i, i + CHUNK);
-    let results;
+    let results: unknown[];
     try {
       const vp = client.pipeline();
       slice.forEach(([k, t]) => readByType(vp, k, t));
@@ -129,7 +133,7 @@ function nowStamp() {
   return new Date().toISOString();
 }
 
-async function ghFetch(token, repo, path, opts = {}) {
+async function ghFetch(token: string, repo: string, path: string, opts: RequestInit = {}) {
   const res = await fetch(`https://api.github.com/repos/${repo}/${path}`, {
     ...opts,
     headers: {
@@ -142,17 +146,19 @@ async function ghFetch(token, repo, path, opts = {}) {
   return res;
 }
 
-async function listBackupFiles(token, repo, dir = BACKUP_DIR) {
+interface BackupFile { name: string; path: string; sha: string }
+
+async function listBackupFiles(token: string, repo: string, dir = BACKUP_DIR): Promise<BackupFile[]> {
   const res = await ghFetch(token, repo, `contents/${dir}`);
   if (res.status === 404) return [];
   if (!res.ok) throw new Error(`GitHub listele başarısız: ${res.status}`);
-  const data = await res.json();
+  const data: { type: string; name: string; path: string; sha: string }[] = await res.json();
   return data
     .filter(f => f.type === 'file' && f.name.endsWith('.json'))
     .map(f => ({ name: f.name, path: f.path, sha: f.sha }));
 }
 
-async function deleteBackupFile(token, repo, file) {
+async function deleteBackupFile(token: string, repo: string, file: BackupFile) {
   const res = await ghFetch(token, repo, `contents/${file.path}`, {
     method: 'DELETE',
     body: JSON.stringify({
@@ -163,7 +169,8 @@ async function deleteBackupFile(token, repo, file) {
   return res.ok;
 }
 
-async function uploadBackup(token, repo, filename, contentB64) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function uploadBackup(token: string, repo: string, filename: string, contentB64: string) {
   const res = await ghFetch(token, repo, `contents/${BACKUP_DIR}/${filename}`, {
     method: 'PUT',
     body: JSON.stringify({
@@ -174,7 +181,8 @@ async function uploadBackup(token, repo, filename, contentB64) {
   return res;
 }
 
-export async function GET(req) {
+// Bilinçli withAuth istisnası: cron/manuel yedek ucu — oturum yok, CRON_SECRET Bearer doğrulanır.
+export async function GET(req: Request) {
   // Auth: CRON_SECRET header'ı zorunlu
   const auth = req.headers.get('authorization');
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -201,7 +209,7 @@ export async function GET(req) {
   const sizeKB = (Buffer.byteLength(jsonStr, 'utf-8') / 1024).toFixed(1);
 
   // Sağlık kontrolü: önceki yedek varsa boyut çok küçülmüşse uyar (ama yine de yaz)
-  let warning = null;
+  let warning: string | null = null;
   try {
     const existing = await listBackupFiles(token, repo);
     if (existing.length > 0) {
@@ -219,7 +227,7 @@ export async function GET(req) {
       }
     }
   } catch (e) {
-    warning = `Sağlık kontrolü başarısız: ${e.message}`;
+    warning = `Sağlık kontrolü başarısız: ${e instanceof Error ? e.message : e}`;
   }
 
   // 3. GitHub'a yükle (varsa üzerine yaz)
@@ -227,7 +235,7 @@ export async function GET(req) {
   const contentB64 = Buffer.from(jsonStr, 'utf-8').toString('base64');
 
   // Dosya zaten varsa sha lazım
-  let existingSha = null;
+  let existingSha: string | null = null;
   const checkRes = await ghFetch(token, repo, `contents/${BACKUP_DIR}/${filename}`);
   if (checkRes.ok) {
     const meta = await checkRes.json();
@@ -269,12 +277,12 @@ export async function GET(req) {
       if (ok) deleted++;
     }
   } catch (e) {
-    warning = (warning ? warning + ' | ' : '') + `Rotation hatası: ${e.message}`;
+    warning = (warning ? warning + ' | ' : '') + `Rotation hatası: ${e instanceof Error ? e.message : e}`;
   }
 
   // 5. SQL dump — Neon Free 6 saat PITR boşluğunu kapatan soğuk yedek.
   //    Ayrı klasör (backups-sql), ayrı format (sql-v1), aynı 30 gün rotasyon.
-  let sqlResult = null;
+  let sqlResult: { rowCount: number; sizeKB: number } | null = null;
   try {
     const { tables, total: sqlTotal } = await snapshotSql();
     const sqlPayload = { snapshotAt: nowStamp(), rowCount: sqlTotal, format: 'sql-v1', tables };
@@ -282,7 +290,7 @@ export async function GET(req) {
     const sqlSizeKB = (Buffer.byteLength(sqlStr, 'utf-8') / 1024).toFixed(1);
     const sqlB64 = Buffer.from(sqlStr, 'utf-8').toString('base64');
 
-    let sqlSha = null;
+    let sqlSha: string | null = null;
     const sqlCheck = await ghFetch(token, repo, `contents/${SQL_BACKUP_DIR}/${filename}`);
     if (sqlCheck.ok) sqlSha = (await sqlCheck.json()).sha;
 
@@ -310,7 +318,7 @@ export async function GET(req) {
       if (m && m[1] < cutoffStr) await deleteBackupFile(token, repo, f);
     }
   } catch (e) {
-    warning = (warning ? warning + ' | ' : '') + `SQL yedek hatası: ${e.message}`;
+    warning = (warning ? warning + ' | ' : '') + `SQL yedek hatası: ${e instanceof Error ? e.message : e}`;
   }
 
   return NextResponse.json({
