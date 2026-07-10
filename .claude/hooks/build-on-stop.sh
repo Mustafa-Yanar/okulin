@@ -5,9 +5,15 @@
 # (kaynak değişmemişse) hiç build etmez → boşa çalışmaz.
 cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null || exit 0
 
-# Değişiklik yoksa çık (working tree + staged)
-if git diff --quiet -- '*.js' '*.jsx' '*.py' 2>/dev/null \
-   && git diff --cached --quiet -- '*.js' '*.jsx' '*.py' 2>/dev/null; then
+# Değişiklik yoksa çık (working tree + staged) — TS göçü sonrası .ts/.tsx dahil
+if git diff --quiet -- '*.js' '*.jsx' '*.ts' '*.tsx' '*.py' 2>/dev/null \
+   && git diff --cached --quiet -- '*.js' '*.jsx' '*.ts' '*.tsx' '*.py' 2>/dev/null; then
+  exit 0
+fi
+
+# Başka bir oturum build ediyorsa atla — iki 'next build' aynı .next dizininde
+# çakışıp sahte ENOENT kırığı üretiyor (2026-07-10'da yaşandı). O build zaten sonucu raporlar.
+if pgrep -f "next build" >/dev/null 2>&1; then
   exit 0
 fi
 
