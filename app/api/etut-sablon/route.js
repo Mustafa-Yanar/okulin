@@ -18,18 +18,18 @@ const SaveSchema = z.object({
   teacherId: zId,
   weekKey: z.string().max(40).optional(),
   sablon: z.object({
-    id: z.string().max(20).optional(),
+    id: zId.optional(),
     dayIndex: zDay,
     start: zTime,
     end: zTime,
     aktif: z.boolean().optional(),
   }),
 });
-const DeleteSchema = z.object({ teacherId: zId, id: z.string().max(20) });
+const DeleteSchema = z.object({ teacherId: zId, id: zId });
 
 const ToggleSchema = z.object({
   teacherId: zId,
-  id: z.string().max(20),
+  id: zId,
   scope: z.enum(['all', 'week']),
   weekKey: z.string().max(40).optional(),
   aktif: z.boolean(),
@@ -37,11 +37,12 @@ const ToggleSchema = z.object({
 
 const AssignSchema = z.object({
   teacherId: zId,
-  id: z.string().max(20),
+  id: zId,
   student: z.object({
     id: zId,
     name: z.string().max(120),
-    cls: z.string().max(20).optional(),
+    // cls = sınıf legacyId'si — yeni sınıflar 's_'+UUID (38 kr), classes route max(60) ile uyumlu
+    cls: z.string().max(60).optional(),
   }).nullable(),
 });
 
