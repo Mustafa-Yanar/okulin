@@ -9,29 +9,54 @@ import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
 import { api } from '../shared';
+import type { ShowToast, TeacherDTO } from '../types';
 
 
-function fmtDate(iso) {
+// GET /api/announcements liste elemanı — gönderen listesinde audienceLabel/recipientCount/
+// readCount, alıcı gelen kutusunda read dolu gelir (aynı uç, rol dallanması; route.ts).
+interface AnnouncementItemDTO {
+  id?: string;
+  title?: string;
+  body?: string;
+  senderName?: string;
+  createdAt?: string;
+  audienceLabel?: string;
+  recipientCount?: number;
+  readCount?: number;
+  read?: boolean;
+}
+// GET /api/announcements?id=… okundu detayı.
+interface ReadDetailDTO {
+  id?: string;
+  title?: string;
+  recipients: { id: string; name: string; read: boolean }[];
+}
+
+function fmtDate(iso: string | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   return d.toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-// ════════════════════ GÖNDEREN (müdür + rehber) ════════════════════
-export function AnnouncementSender({ showToast }) {
-  const confirm = useConfirm();
-  const { data, isLoading: loading, mutate } = useSWR('/api/announcements');
-  const list = data?.announcements || [];
-  const [detail, setDetail] = useState(null); // kim okudu modalı
+interface AnnouncementSenderProps {
+  showToast?: ShowToast;
+}
 
-  async function remove(a) {
+// ════════════════════ GÖNDEREN (müdür + rehber) ════════════════════
+export function AnnouncementSender({ showToast }: AnnouncementSenderProps) {
+  const confirm = useConfirm();
+  const { data, isLoading: loading, mutate } = useSWR<{ announcements?: AnnouncementItemDTO[] }>('/api/announcements');
+  const list = data?.announcements || [];
+  const [detail, setDetail] = useState<AnnouncementItemDTO | null>(null); // kim okudu modalı
+
+  async function remove(a: AnnouncementItemDTO) {
     if (!(await confirm(`"${a.title}" duyurusu silinsin mi?`))) return;
     try {
-      await api(`/api/announcements?id=${encodeURIComponent(a.id)}`, { method: 'DELETE' });
+      await api(`/api/announcements?id=${encodeURIComponent(a.id || '')}`, { method: 'DELETE' });
       mutate({ announcements: list.filter(x => x.id !== a.id) }, { revalidate: false });
       showToast?.('Duyuru silindi');
     }
-    catch (e) { showToast?.(e.message, 'error'); }
+    catch (e) { showToast?.((e as Error).message, 'error'); }
   }
 
   return (
@@ -72,7 +97,12 @@ export function AnnouncementSender({ showToast }) {
   );
 }
 
-function Composer({ showToast, onSent }) {
+interface ComposerProps {
+  showToast?: ShowToast;
+  onSent?: () => void;
+}
+
+function Composer({ showToast, onSent }: ComposerProps) {
   const { classes } = useClasses();
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -80,11 +110,11 @@ function Composer({ showToast, onSent }) {
   const [scope, setScope] = useState('all');       // all | group | class | selected
   const [group, setGroup] = useState('lise');
   const [cls, setCls] = useState('');
-  const [teacherIds, setTeacherIds] = useState([]); // teacher 'selected'
+  const [teacherIds, setTeacherIds] = useState<string[]>([]); // teacher 'selected'
   const [busy, setBusy] = useState(false);
 
   // Öğretmen 'selected' için liste — yalnız role==='teacher' iken çek (koşullu SWR anahtarı).
-  const { data: teachersData } = useSWR(role === 'teacher' ? '/api/teachers' : null);
+  const { data: teachersData } = useSWR<TeacherDTO[]>(role === 'teacher' ? '/api/teachers' : null);
   const teachers = Array.isArray(teachersData) ? teachersData : [];
 
   // Rol değişince kapsamı geçerli hale getir
@@ -99,7 +129,7 @@ function Composer({ showToast, onSent }) {
 
   async function send() {
     if (!title.trim() || !body.trim()) return showToast?.('Başlık ve içerik gerekli', 'error');
-    const audience = { role, scope };
+    const audience: { role: string; scope: string; group?: string; cls?: string; ids?: string[] } = { role, scope };
     if (scope === 'group') audience.group = group;
     if (scope === 'class') { if (!cls) return showToast?.('Sınıf seçin', 'error'); audience.cls = cls; }
     if (scope === 'selected') {
@@ -109,11 +139,11 @@ function Composer({ showToast, onSent }) {
     }
     setBusy(true);
     try {
-      const r = await api('/api/announcements', { method: 'POST', body: JSON.stringify({ action: 'send', title: title.trim(), body: body.trim(), audience }) });
+      const r = await api<{ recipientCount: number }>('/api/announcements', { method: 'POST', body: JSON.stringify({ action: 'send', title: title.trim(), body: body.trim(), audience }) });
       showToast?.(`${r.recipientCount} kişiye gönderildi`);
       setTitle(''); setBody(''); setTeacherIds([]);
       onSent?.();
-    } catch (e) { showToast?.(e.message, 'error'); } finally { setBusy(false); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); } finally { setBusy(false); }
   }
 
   const scopeOptions = role === 'teacher'
@@ -182,10 +212,15 @@ function Composer({ showToast, onSent }) {
   );
 }
 
-function ReadDetailModal({ ann, onClose }) {
-  const [data, setData] = useState(null);
+interface ReadDetailModalProps {
+  ann: AnnouncementItemDTO;
+  onClose: () => void;
+}
+
+function ReadDetailModal({ ann, onClose }: ReadDetailModalProps) {
+  const [data, setData] = useState<ReadDetailDTO | null>(null);
   useEffect(() => {
-    api(`/api/announcements?id=${encodeURIComponent(ann.id)}`).then(setData).catch(() => setData({ recipients: [] }));
+    api<ReadDetailDTO>(`/api/announcements?id=${encodeURIComponent(ann.id || '')}`).then(setData).catch(() => setData({ recipients: [] }));
   }, [ann.id]);
   const readCount = data?.recipients?.filter(r => r.read).length || 0;
   return (
@@ -212,15 +247,19 @@ function ReadDetailModal({ ann, onClose }) {
   );
 }
 
-// ════════════════════ ALICI GELEN KUTUSU (öğretmen/öğrenci/veli) ════════════════════
-export function AnnouncementInbox({ showToast }) {
-  const { data, isLoading: loading, mutate } = useSWR('/api/announcements');
-  const list = data?.announcements || [];
-  const [openId, setOpenId] = useState(null);
+interface AnnouncementInboxProps {
+  showToast?: ShowToast;
+}
 
-  async function toggle(a) {
+// ════════════════════ ALICI GELEN KUTUSU (öğretmen/öğrenci/veli) ════════════════════
+export function AnnouncementInbox({ showToast }: AnnouncementInboxProps) {
+  const { data, isLoading: loading, mutate } = useSWR<{ announcements?: AnnouncementItemDTO[] }>('/api/announcements');
+  const list = data?.announcements || [];
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  async function toggle(a: AnnouncementItemDTO) {
     if (openId === a.id) { setOpenId(null); return; }
-    setOpenId(a.id);
+    setOpenId(a.id || null);
     if (!a.read) {
       // Okundu işaretini iyimser uygula (refetch yok), sonra sunucuya bildir.
       mutate({ announcements: list.map(x => x.id === a.id ? { ...x, read: true } : x) }, { revalidate: false });
