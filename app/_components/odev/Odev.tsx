@@ -10,43 +10,95 @@ import { groupedClasses } from '@/lib/classCatalog';
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
 import { api } from '../shared';
+import type { ShowToast } from '../types';
 
 
-function fmtDate(iso) {
+// app/api/odev/route.ts Submission — öğrenci istemcisi teslim geri alırken null,
+// iyimser güncellemede kısmi nesne kurar; alanlar bu yüzden opsiyonel.
+interface OdevSubDTO {
+  status: string | null;
+  note?: string;
+  score?: string;
+  feedback?: string;
+  studentId?: string;
+  submittedAt?: string;
+  checkedAt?: string;
+}
+interface OdevChildDTO {
+  childId?: string;
+  childName?: string;
+  cls?: string;
+  sub: OdevSubDTO | null;
+}
+// GET /api/odev liste elemanı — rol dallanmasına göre alanlar dolar:
+// yönetici/öğretmen submittedCount/rosterCount, öğrenci sub, veli children.
+interface OdevListItemDTO {
+  id: string;
+  title: string;
+  desc?: string;
+  branch?: string;
+  dueDate?: string;
+  classes?: string[];
+  createdBy?: string;
+  createdByName?: string;
+  createdByRole?: string;
+  createdAt?: string;
+  submittedCount?: number;
+  rosterCount?: number;
+  sub?: OdevSubDTO | null;
+  children?: OdevChildDTO[];
+}
+// GET /api/odev?id=… kontrol ekranı satırı.
+interface SubmissionRowDTO {
+  studentId: string;
+  name: string;
+  cls: string;
+  sub: OdevSubDTO | null;
+}
+
+type ClassGroup = ReturnType<typeof groupedClasses>[number];
+
+function fmtDate(iso: string | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   return d.toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
-function fmtDue(ymd) {
+function fmtDue(ymd: string | undefined): string {
   if (!ymd) return '';
   const d = new Date(ymd + 'T00:00:00');
-  if (isNaN(d)) return ymd;
+  if (isNaN(d.getTime())) return ymd;
   return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', weekday: 'short' });
 }
-function isOverdue(ymd) {
+function isOverdue(ymd: string | undefined): boolean {
   if (!ymd) return false;
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const d = new Date(ymd + 'T00:00:00');
-  return !isNaN(d) && d < today;
+  return !isNaN(d.getTime()) && d < today;
+}
+
+interface OdevManagerProps {
+  showToast?: ShowToast;
+  userRole?: string;
+  userId?: string;
 }
 
 // ════════════════════ YÖNETİCİ / ÖĞRETMEN (ver + kontrol) ════════════════════
-export function OdevManager({ showToast, userRole, userId }) {
+export function OdevManager({ showToast, userRole, userId }: OdevManagerProps) {
   const confirm = useConfirm();
-  const { data, isLoading: loading, mutate } = useSWR('/api/odev');
+  const { data, isLoading: loading, mutate } = useSWR<{ odevler?: OdevListItemDTO[] }>('/api/odev');
   const list = data?.odevler || [];
-  const [detail, setDetail] = useState(null); // kontrol modalı
+  const [detail, setDetail] = useState<OdevListItemDTO | null>(null); // kontrol modalı
 
-  async function remove(o) {
+  async function remove(o: OdevListItemDTO) {
     if (!(await confirm(`"${o.title}" ödevi silinsin mi? Teslim kayıtları da silinir.`))) return;
     try {
       await api(`/api/odev?id=${encodeURIComponent(o.id)}`, { method: 'DELETE' });
       mutate({ odevler: list.filter(x => x.id !== o.id) }, { revalidate: false });
       showToast?.('Ödev silindi');
-    } catch (e) { showToast?.(e.message, 'error'); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); }
   }
 
-  function canDelete(o) {
+  function canDelete(o: OdevListItemDTO) {
     return userRole !== 'teacher' || o.createdBy === userId;
   }
 
@@ -97,21 +149,26 @@ export function OdevManager({ showToast, userRole, userId }) {
   );
 }
 
-function OdevComposer({ showToast, onSent }) {
+interface OdevComposerProps {
+  showToast?: ShowToast;
+  onSent?: () => void;
+}
+
+function OdevComposer({ showToast, onSent }: OdevComposerProps) {
   const { classes } = useClasses();
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [branch, setBranch] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [sel, setSel] = useState([]); // seçili şube id'leri
+  const [sel, setSel] = useState<string[]>([]); // seçili şube id'leri
   const [busy, setBusy] = useState(false);
 
   const groups = groupedClasses(classes);
 
-  function toggle(id) {
+  function toggle(id: string) {
     setSel(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   }
-  function toggleGroup(g) {
+  function toggleGroup(g: ClassGroup) {
     const ids = g.items.map(i => i.id);
     const allOn = ids.every(id => sel.includes(id));
     setSel(p => allOn ? p.filter(x => !ids.includes(x)) : [...new Set([...p, ...ids])]);
@@ -122,14 +179,14 @@ function OdevComposer({ showToast, onSent }) {
     if (sel.length === 0) return showToast?.('En az bir sınıf seçin', 'error');
     setBusy(true);
     try {
-      const r = await api('/api/odev', {
+      const r = await api<{ ok: boolean; id: string; rosterCount: number }>('/api/odev', {
         method: 'POST',
         body: JSON.stringify({ action: 'create', title: title.trim(), desc: desc.trim(), branch: branch.trim(), dueDate, classes: sel }),
       });
       showToast?.(`Ödev verildi (${r.rosterCount} öğrenci)`);
       setTitle(''); setDesc(''); setBranch(''); setDueDate(''); setSel([]);
       onSent?.();
-    } catch (e) { showToast?.(e.message, 'error'); } finally { setBusy(false); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); } finally { setBusy(false); }
   }
 
   return (
@@ -194,20 +251,27 @@ function OdevComposer({ showToast, onSent }) {
   );
 }
 
-// Kontrol modalı — roster + her öğrencinin teslim durumu, puan/geri bildirim.
-function KontrolModal({ odev, onClose, onChanged, showToast }) {
-  const { data, isLoading, mutate } = useSWR(`/api/odev?id=${encodeURIComponent(odev.id)}`);
-  const subs = data?.submissions || [];
-  const [editing, setEditing] = useState(null); // studentId
+interface KontrolModalProps {
+  odev: OdevListItemDTO;
+  onClose: () => void;
+  onChanged?: () => void;
+  showToast?: ShowToast;
+}
 
-  async function check(studentId, score, feedback, done = true) {
+// Kontrol modalı — roster + her öğrencinin teslim durumu, puan/geri bildirim.
+function KontrolModal({ odev, onClose, onChanged, showToast }: KontrolModalProps) {
+  const { data, isLoading, mutate } = useSWR<{ odev?: OdevListItemDTO; submissions?: SubmissionRowDTO[] }>(`/api/odev?id=${encodeURIComponent(odev.id)}`);
+  const subs = data?.submissions || [];
+  const [editing, setEditing] = useState<string | null>(null); // studentId
+
+  async function check(studentId: string, score: string, feedback: string, done = true) {
     try {
       await api('/api/odev', { method: 'POST', body: JSON.stringify({ action: 'check', id: odev.id, studentId, score, feedback, done }) });
       await mutate();
       onChanged?.(); // liste sayısı güncellensin
       setEditing(null);
       showToast?.(done ? 'Kontrol edildi' : 'Kontrol kaldırıldı');
-    } catch (e) { showToast?.(e.message, 'error'); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); }
   }
 
   const teslimSayisi = subs.filter(s => s.sub).length;
@@ -261,7 +325,13 @@ function KontrolModal({ odev, onClose, onChanged, showToast }) {
   );
 }
 
-function CheckForm({ initial, onSave, onCancel }) {
+interface CheckFormProps {
+  initial: OdevSubDTO | null;
+  onSave: (score: string, fb: string) => void;
+  onCancel: () => void;
+}
+
+function CheckForm({ initial, onSave, onCancel }: CheckFormProps) {
   const [score, setScore] = useState(initial?.score || '');
   const [fb, setFb] = useState(initial?.feedback || '');
   return (
@@ -280,9 +350,13 @@ function CheckForm({ initial, onSave, onCancel }) {
   );
 }
 
+interface OdevStudentProps {
+  showToast?: ShowToast;
+}
+
 // ════════════════════ ÖĞRENCİ (teslim) ════════════════════
-export function OdevStudent({ showToast }) {
-  const { data, isLoading: loading, mutate } = useSWR('/api/odev');
+export function OdevStudent({ showToast }: OdevStudentProps) {
+  const { data, isLoading: loading, mutate } = useSWR<{ odevler?: OdevListItemDTO[] }>('/api/odev');
   const list = data?.odevler || [];
 
   if (loading) return <p className="text-caption py-8 text-center">Yükleniyor…</p>;
@@ -297,7 +371,14 @@ export function OdevStudent({ showToast }) {
   );
 }
 
-function StudentOdevCard({ odev, mutate, list, showToast }) {
+interface StudentOdevCardProps {
+  odev: OdevListItemDTO;
+  mutate: (data?: { odevler: OdevListItemDTO[] }, opts?: { revalidate: boolean }) => void;
+  list: OdevListItemDTO[];
+  showToast?: ShowToast;
+}
+
+function StudentOdevCard({ odev, mutate, list, showToast }: StudentOdevCardProps) {
   const st = odev.sub?.status; // teslim | kontrol | undefined
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState(odev.sub?.note || '');
@@ -307,12 +388,12 @@ function StudentOdevCard({ odev, mutate, list, showToast }) {
   async function submit(done = true) {
     setBusy(true);
     try {
-      const r = await api('/api/odev', { method: 'POST', body: JSON.stringify({ action: 'submit', id: odev.id, note: note.trim(), done }) });
+      const r = await api<{ ok: boolean; status: string | null }>('/api/odev', { method: 'POST', body: JSON.stringify({ action: 'submit', id: odev.id, note: note.trim(), done }) });
       const newSub = done ? { ...(odev.sub || {}), status: r.status, note: note.trim() } : null;
       mutate({ odevler: list.map(x => x.id === odev.id ? { ...x, sub: newSub } : x) }, { revalidate: false });
       setOpen(false);
       showToast?.(done ? 'Teslim edildi' : 'Teslim geri alındı');
-    } catch (e) { showToast?.(e.message, 'error'); } finally { setBusy(false); }
+    } catch (e) { showToast?.((e as Error).message, 'error'); } finally { setBusy(false); }
   }
 
   return (
@@ -346,8 +427,8 @@ function StudentOdevCard({ odev, mutate, list, showToast }) {
         {/* Öğretmen kontrol ettiyse puan + geri bildirim */}
         {st === 'kontrol' && (odev.sub?.score || odev.sub?.feedback) && (
           <div className="mt-2 rounded-lg p-2 text-sm" style={{ background: 'var(--bg-surface-2)' }}>
-            {odev.sub.score && <span className="font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Puan: {odev.sub.score}</span>}
-            {odev.sub.feedback && <p style={{ color: 'var(--text-secondary)' }}>{odev.sub.feedback}</p>}
+            {odev.sub?.score && <span className="font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Puan: {odev.sub.score}</span>}
+            {odev.sub?.feedback && <p style={{ color: 'var(--text-secondary)' }}>{odev.sub.feedback}</p>}
           </div>
         )}
 
@@ -380,10 +461,15 @@ function StudentOdevCard({ odev, mutate, list, showToast }) {
   );
 }
 
+interface OdevParentProps {
+  showToast?: ShowToast;
+  childId?: string;
+}
+
 // ════════════════════ VELİ (salt-okunur takip) ════════════════════
 // childId verilirse yalnız o çocuğun ödevleri/durumu gösterilir (panel çocuk seçiciyle uyumlu).
-export function OdevParent({ showToast, childId }) {
-  const { data, isLoading: loading } = useSWR('/api/odev');
+export function OdevParent({ showToast, childId }: OdevParentProps) {
+  const { data, isLoading: loading } = useSWR<{ odevler?: OdevListItemDTO[] }>('/api/odev');
   const all = data?.odevler || [];
   const list = childId
     ? all
