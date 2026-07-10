@@ -28,6 +28,11 @@ export const POST = withAuth('manage', async (req) => {
   } catch {
     return NextResponse.json({ error: 'Geçersiz istek' }, { status: 400 });
   }
+  // Şekil koruması: JSON olarak geçerli ama obje olmayan gövde (string/dizi/null)
+  // çözücüye sızarsa Python tarafı 500 üretir — girişte 400 ile kesilir.
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return NextResponse.json({ error: 'Geçersiz istek' }, { status: 400 });
+  }
 
   try {
     const res = await fetch(solverUrl(), {
