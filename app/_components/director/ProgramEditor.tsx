@@ -338,27 +338,33 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                 className={`absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left transition-colors ${dolu || etutEngel ? '' : 'ders-slot-bos'}`}
                 style={{
                   top, height, zIndex: 1,
-                  background: isDers ? 'color-mix(in srgb, #6366f1 22%, transparent)'
-                    : aktif ? 'color-mix(in srgb, #3b82f6 22%, transparent)'
+                  // Atanan ders (sınıf yerleşmiş) → dolu mor, öne çıkar.
+                  // Boş/müsait ders saati → soluk mavi + kesikli, geri planda.
+                  background: isDers ? 'color-mix(in srgb, #6366f1 20%, transparent)'
+                    : aktif ? 'color-mix(in srgb, #3b82f6 8%, transparent)'
                     : 'var(--bg-muted, #f1f5f9)',
-                  border: isDers ? '1px solid #6366f1' : aktif ? '1px solid #3b82f6' : '1px dashed var(--border-subtle)',
-                  borderLeft: isDers ? '3px solid #6366f1' : aktif ? '3px solid #3b82f6' : '1px dashed var(--border-subtle)',
+                  border: isDers ? '1.5px solid #6366f1'
+                    : aktif ? '1px dashed #93c5fd'
+                    : '1px dashed var(--border-subtle)',
+                  borderLeft: isDers ? '4px solid #4f46e5'
+                    : aktif ? '3px dashed #60a5fa'
+                    : '1px dashed var(--border-subtle)',
                   opacity: past ? 0.4 : etutEngel ? 0.5 : 1,
                   cursor: isDers ? 'default' : past || etutEngel ? 'not-allowed' : 'pointer',
                 }}
                 title={past ? 'Geçmiş saat — düzenlenemez'
                   : isDers ? `${slot.start}–${slot.end} · ${dersAd}${dersBrans ? ' — ' + dersBrans : ''} (Ders Programı Oluştur'dan yerleşti)`
-                  : aktif ? `${slot.start}–${slot.end} · Ders saati (müsait) — tıkla: kapat`
+                  : aktif ? `${slot.start}–${slot.end} · Boş ders saati (müsait) — tıkla: kapat`
                   : etutEngel ? `${slot.start}–${slot.end} — bu saatte aktif etüt var, ders eklenemez`
                   : `${slot.start}–${slot.end} — tıkla: ders saati aç`}>
                 {isDers ? (
                   <>
-                    <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{dersAd || 'Ders'}</div>
-                    {height >= 28 && dersBrans && <div className="text-[8px] leading-tight truncate" style={{ color: 'var(--text-muted)' }}>{dersBrans}</div>}
+                    <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{dersAd || 'Ders'}</div>
+                    {height >= 28 && dersBrans && <div className="text-[8px] leading-tight truncate" style={{ color: '#6366f1' }}>{dersBrans}</div>}
                   </>
                 ) : aktif ? (
                   <>
-                    <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Ders</div>
+                    <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 500, color: '#60a5fa' }}>Boş</div>
                     {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{slot.start}</div>}
                   </>
                 ) : (
