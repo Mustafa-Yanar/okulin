@@ -16,9 +16,24 @@ export const runtime = 'nodejs'; // Prisma Node çalışma zamanı gerektirir
 
 const AUDIT_RETENTION_DAYS = 90; // lib/audit.ts eski Redis TTL'i
 const ERRLOG_RETENTION_DAYS = 30; // lib/errlog.ts eski Redis TTL'i
+// NotifLog = "bir kez bildir" idempotency kaydı (att:<date>:<sid>, deneme:<examId>:<phone>).
+// dedupeKey geçmiş tarihe/sınava bağlı → süre geçince bir daha kontrol edilmez, ölü ağırlık.
+// 90 gün fazlasıyla güvenli (aynı gün/sınav 90 gün sonra tekrar bildirilmez).
+const NOTIFLOG_RETENTION_DAYS = 90;
 
 function cutoff(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+}
+
+// Bir tabloyu cutoff'tan eski kayıtlardan best-effort temizler (hatası diğerlerini düşürmez).
+async function purge(label: string, fn: () => Promise<{ count: number }>): Promise<number> {
+  try {
+    const r = await fn();
+    return r.count;
+  } catch (e) {
+    console.warn(`[cleanup] ${label} temizliği başarısız:`, e instanceof Error ? e.message : e);
+    return 0;
+  }
 }
 
 export async function GET(req: Request) {
@@ -27,24 +42,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const auditCutoff = cutoff(AUDIT_RETENTION_DAYS);
-  const errCutoff = cutoff(ERRLOG_RETENTION_DAYS);
+  const auditDeleted = await purge('auditLog',
+    () => prisma.auditLog.deleteMany({ where: { at: { lt: cutoff(AUDIT_RETENTION_DAYS) } } }));
+  const errDeleted = await purge('errLog',
+    () => prisma.errLog.deleteMany({ where: { at: { lt: cutoff(ERRLOG_RETENTION_DAYS) } } }));
+  const notifDeleted = await purge('notifLog',
+    () => prisma.notifLog.deleteMany({ where: { at: { lt: cutoff(NOTIFLOG_RETENTION_DAYS) } } }));
 
-  // Bir tablonun hatası diğerini düşürmesin (best-effort temizlik).
-  let auditDeleted = 0;
-  let errDeleted = 0;
-  try {
-    const r = await prisma.auditLog.deleteMany({ where: { at: { lt: auditCutoff } } });
-    auditDeleted = r.count;
-  } catch (e) {
-    console.warn('[cleanup] auditLog temizliği başarısız:', e instanceof Error ? e.message : e);
-  }
-  try {
-    const r = await prisma.errLog.deleteMany({ where: { at: { lt: errCutoff } } });
-    errDeleted = r.count;
-  } catch (e) {
-    console.warn('[cleanup] errLog temizliği başarısız:', e instanceof Error ? e.message : e);
-  }
-
-  return NextResponse.json({ ok: true, auditDeleted, errDeleted });
+  return NextResponse.json({ ok: true, auditDeleted, errDeleted, notifDeleted });
 }
