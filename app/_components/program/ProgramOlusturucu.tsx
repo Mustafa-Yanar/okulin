@@ -617,23 +617,23 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
                 </p>
 
                 {(() => { const sg = feasSuggestion(feasResult); return sg ? (
-                  <div className="text-xs mt-1.5 p-2 rounded-lg" style={{background:'#eef2ff', border:'1px solid #c7d2fe'}}>
-                    <span style={{color:'#4338ca', fontWeight:700}}>Sistem önerisi:</span>{' '}
-                    <b style={{color:'#3730a3'}}>{sg.text}</b>
+                  <div className="text-xs mt-1.5 p-2 rounded-lg bg-indigo-50 border border-indigo-200">
+                    <span className="text-indigo-700" style={{fontWeight:700}}>Sistem önerisi:</span>{' '}
+                    <b className="text-indigo-800">{sg.text}</b>
                     <span className="text-gray-500"> — {sg.why}. Bu yalnızca bir öneridir; aşağıdaki diğer seçenekler de programı çözer.</span>
                   </div>
                 ) : null; })()}
 
                 {feasResult.cheapFix.length > 0 && (
-                  <div className="text-xs mt-1.5 p-2 rounded-lg border border-gray-200" style={{background:'#fff'}}>
-                    <div style={{fontWeight:700, color:'#374151'}}>Mevcut günü uzatma</div>
+                  <div className="text-xs mt-1.5 p-2 rounded-lg border border-gray-200 bg-white">
+                    <div className="text-gray-700" style={{fontWeight:700}}>Mevcut günü uzatma</div>
                     <p className="text-gray-500 mt-0.5">
                       Öğretmen o gün zaten geliyor; yalnızca erken gelir veya geç çıkar. Mevcut hiçbir
                       düzeni bozmaz; ders saati başına ücret ödeyen kurumda ek saat maliyetidir.
                     </p>
                     <ul className="mt-1 space-y-1">
                       {feasResult.cheapFix.map((s, i) => (
-                        <li key={i} style={{color:'#374151'}}>
+                        <li key={i} className="text-gray-700">
                           • <b>{s.name}</b> — {DAYS[s.day]} {s.slots.join('. ve ')}. dersi müsait işaretleyin
                         </li>
                       ))}
@@ -642,8 +642,8 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
                 )}
 
                 {feasResult.swapFix?.length > 0 && (
-                  <div className="text-xs mt-1.5 p-2 rounded-lg border border-gray-200" style={{background:'#fff'}}>
-                    <div style={{fontWeight:700, color:'#374151'}}>Gün değişikliği (takas)</div>
+                  <div className="text-xs mt-1.5 p-2 rounded-lg border border-gray-200 bg-white">
+                    <div className="text-gray-700" style={{fontWeight:700}}>Gün değişikliği (takas)</div>
                     <p className="text-gray-500 mt-0.5">
                       Ek ders saati gerektirmez — toplam yük aynı kalır. Ancak öğretmenin haftalık
                       düzeni değişir ve eski gününden kapasite eksilir; öğretmenin o gün başka bir
@@ -651,7 +651,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
                     </p>
                     <ul className="mt-1 space-y-1">
                       {feasResult.swapFix.map((s, i) => (
-                        <li key={i} style={{color:'#374151'}}>
+                        <li key={i} className="text-gray-700">
                           • <b>{s.name}</b> — <b>{DAYS[s.fromDay]}</b> yerine <b>{DAYS[s.toDay]}</b> gelsin
                         </li>
                       ))}
@@ -660,15 +660,15 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
                 )}
 
                 {feasResult.costlyFix.length > 0 && (
-                  <div className="text-xs mt-1.5 p-2 rounded-lg border border-gray-200" style={{background:'#fff'}}>
-                    <div style={{fontWeight:700, color:'#374151'}}>Yeni gün açma</div>
+                  <div className="text-xs mt-1.5 p-2 rounded-lg border border-gray-200 bg-white">
+                    <div className="text-gray-700" style={{fontWeight:700}}>Yeni gün açma</div>
                     <p className="text-gray-500 mt-0.5">
                       Öğretmenin hiç gelmediği bir gün açılır — yol ve tam gün maliyetiyle en büyük
                       değişikliktir; buna karşılık kapasiteyi kalıcı olarak genişletir.
                     </p>
                     <ul className="mt-1 space-y-1">
                       {feasResult.costlyFix.map((s, i) => (
-                        <li key={i} style={{color:'#374151'}}>
+                        <li key={i} className="text-gray-700">
                           • <b>{s.name}</b> — {DAYS[s.day]} {s.slots.join('. ve ')}. ders
                         </li>
                       ))}
@@ -797,7 +797,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
 
       {/* Çakışma uyarısı */}
       {conflicts?.checked && conflicts.items.length > 0 && (
-        <div className="card p-4 border-amber-200" style={{background:'#fffbeb'}}>
+        <div className="card p-4 border-amber-200 bg-amber-50">
           <div className="flex items-start gap-2 mb-2">
             <AlertTriangle size={15} className="text-amber-500 mt-0.5 shrink-0" />
             <div>

@@ -276,10 +276,8 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
                 setSelUnplaced(null);
                 return n;
               })}
-              className="!px-3 !py-1.5 flex items-center gap-1.5 text-xs rounded-lg border"
-              style={editMode
-                ? {background:'#4f46e5', color:'#fff', borderColor:'#4f46e5', fontWeight:600}
-                : {background:'#fff', color:'#4f46e5', borderColor:'#c7d2fe', fontWeight:600}}>
+              className={`!px-3 !py-1.5 flex items-center gap-1.5 text-xs rounded-lg border ${editMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200'}`}
+              style={{fontWeight:600}}>
               <Pencil size={13}/> {editMode ? 'Düzenleme Açık' : 'Düzenle'}
             </button>
           )}
@@ -302,17 +300,17 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
 
       {/* Düzenleme modu bilgi bandı */}
       {editMode && (
-        <div className="text-[11px] p-2 rounded-lg" style={{background:'#eef2ff', border:'1px solid #c7d2fe', color:'#4338ca'}}>
+        <div className="text-[11px] p-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700">
           {selBlock ? (
             <>
               Seçili: <b>{selBlock.course}</b> — {labelOf(selBlock.cls)}, {DAYS[selBlock.day]} ({selBlock.len} saat).{' '}
-              <span style={{color:'#166534', fontWeight:600}}>Yeşil hücreler</span> geçerli hedefler
-              {swapTargets.size > 0 && <>, <span style={{color:'#b45309', fontWeight:600}}>turuncu çerçeveli dersler</span> takas edilebilir</>}.
+              <span className="text-green-800" style={{fontWeight:600}}>Yeşil hücreler</span> geçerli hedefler
+              {swapTargets.size > 0 && <>, <span className="text-amber-700" style={{fontWeight:600}}>turuncu çerçeveli dersler</span> takas edilebilir</>}.
               {validTargets.size === 0 && swapTargets.size === 0 && <b> Bu blok için kurallara uyan başka konum yok.</b>}
               {' '}Vazgeçmek için bloğa tekrar tıklayın.
               <button onClick={unassignSel}
-                className="ml-2 px-1.5 py-0.5 rounded border text-[10px]"
-                style={{background:'#fff', color:'#b91c1c', borderColor:'#fecaca', fontWeight:600}}
+                className="ml-2 px-1.5 py-0.5 rounded border text-[10px] bg-white text-red-700 border-red-200"
+                style={{fontWeight:600}}
                 title="Bloğu gridden çıkarıp Yerleşemeyen listesine taşır — yer açmak veya öğretmen değiştirmek için">
                 Açığa al
               </button>
@@ -333,10 +331,8 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
                     return (
                       <button key={tid}
                         onClick={() => setSelUnplaced(su => ({ ...su!, teacherId: tid }))}
-                        className="ml-1 px-1.5 py-0.5 rounded border text-[10px]"
-                        style={cur
-                          ? {background:'#4f46e5', color:'#fff', borderColor:'#4f46e5', fontWeight:600}
-                          : {background:'#fff', color:'#4338ca', borderColor:'#c7d2fe'}}>
+                        className={`ml-1 px-1.5 py-0.5 rounded border text-[10px] ${cur ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-700 border-indigo-200'}`}
+                        style={cur ? {fontWeight:600} : undefined}>
                         {teacherById[tid]?.name} ({result.tLoad[tid] || 0} saat{upMeta.presetTeacherId === tid ? ' · ön eşleştirme' : ''})
                       </button>
                     );
@@ -344,7 +340,7 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
                 </>
               )}
               {upTeacherId && (validTargets.size > 0
-                ? <> <span style={{color:'#166534', fontWeight:600}}>Yeşil hücreler</span> geçerli hedefler — tıklayınca yerleşir.</>
+                ? <> <span className="text-green-800" style={{fontWeight:600}}>Yeşil hücreler</span> geçerli hedefler — tıklayınca yerleşir.</>
                 : <b> Bu öğretmenle kurallara uyan boş yer yok — {upMeta.fixedTeacherId
                     ? 'bir bloğu taşıyıp/açığa alıp yer açın (öğretmeni değiştirmek için önce bu sınıf-dersin diğer bloklarını açığa alın)'
                     : 'başka öğretmen seçin ya da bir bloğu taşıyıp/açığa alıp yer açın'}.</b>)}
@@ -360,7 +356,7 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
 
       {/* Yerleşemeyen dersler — düzenleme modunda parça parça seçilebilir (elle yerleştirme) */}
       {result.unplaced.length>0 && (
-        <details className="rounded-xl border border-red-100 p-3 text-xs" style={{background:'#fef2f2aa'}} open={editMode || undefined}>
+        <details className="rounded-xl border border-red-100 p-3 text-xs bg-red-50" open={editMode || undefined}>
           <summary className="cursor-pointer text-red-600 flex items-center gap-1.5" style={{fontWeight:700}}>
             <AlertTriangle size={13}/> Yerleşemeyen ({result.unplaced.length})
             {editMode && <span className="text-[10px] text-gray-400" style={{fontWeight:400}}>— yerleştirmek için parçaya tıklayın</span>}
@@ -372,11 +368,9 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
                 return (
                   <button key={i}
                     onClick={() => { setSel(null); setSelUnplaced(active ? null : { idx: i, teacherId: null }); }}
-                    className="px-2 py-1 rounded-lg border text-[11px]"
+                    className={`px-2 py-1 rounded-lg border text-[11px] ${active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-red-700 border-red-200'}`}
                     title={u.reason}
-                    style={active
-                      ? {background:'#4f46e5', color:'#fff', borderColor:'#4f46e5', fontWeight:600}
-                      : {background:'#fff', color:'#b91c1c', borderColor:'#fecaca'}}>
+                    style={active ? {fontWeight:600} : undefined}>
                     {labelOf(u.cls)} — {u.course} ({unplacedMeta[i]?.hours || 2} saat)
                   </button>
                 );
