@@ -360,7 +360,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                 {isDers ? (
                   <div className="text-[11px] leading-tight truncate">
                     <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{dersAd || 'Ders'}</span>
-                    {dersBrans && <span className="text-indigo-700" style={{ fontWeight: 600 }}>{' · '}{dersBrans}</span>}
+                    {dersBrans && <span className="text-indigo-800" style={{ fontWeight: 600 }}>{' · '}{dersBrans}</span>}
                   </div>
                 ) : aktif ? (
                   <div className="text-[11px] leading-tight truncate">
