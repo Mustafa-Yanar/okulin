@@ -4,15 +4,15 @@
 > Detaylı mimari bağlam gerekirse: AGENTS.md (otomatik yüklenmiyor, ihtiyaçta oku)
 
 ## Proje
-Eğitim/etüt takip uygulaması — Next.js 14 (App Router) + Upstash Redis + Prisma/PostgreSQL + Tailwind + Vercel.
+Eğitim/etüt takip uygulaması — Next.js 14 (App Router, TypeScript) + Prisma/PostgreSQL (ana veri) + Upstash Redis (rate-limit/OTP/arşiv/backup) + Tailwind + Vercel. CP-SAT çözücü Cloud Run'da.
 Canlı: okulin.com | Test kurumu: testkurs.okulin.com
 
 ## Klasör Yapısı
-- `app/page.js` — ana SPA (müdür/öğretmen/öğrenci panelleri)
-- `app/api/` — 60+ API route
+- `app/page.tsx` — ana SPA sarmalayıcı → `app/_components/AppContent.tsx` (müdür/öğretmen/öğrenci panelleri)
+- `app/api/` — 73 API route (hepsi `route.ts`, `withAuth` yetki wrapper'ı)
 - `app/_components/` — UI bileşenleri (director/finance/program/rehberlik/odev/davranis/crm/form/library/etkinlik)
-- `lib/` — auth.js, db.js, redis.js, prisma.js, tenant.js, constants.js, slots.js, finance.js, push.js, org.js
-- `api/solve.py` + `api/solver/` — Python CP-SAT çözücü (Next'in app/api'sinden AYRI)
+- `lib/` — hepsi `.ts`: auth, sqldb (`tdb`), prisma, db/redis/tenant, constants, slots, finance, config, org, institution, push, notify, id, errors
+- `solver-service/` (Cloud Run FastAPI) + `api/solver/` (local harness) — Python CP-SAT; `api/solve.py` SİLİNDİ (Next'in app/api'sinden AYRI)
 - `prisma/schema.prisma` — veritabanı şeması
 - `e2e/` — Playwright testleri | `scripts/` — tek seferlik araçlar
 
