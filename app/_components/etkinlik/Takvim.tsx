@@ -35,6 +35,9 @@ interface EtkinlikDTO {
   startDate: string;
   endDate?: string;
   classes?: string[];
+  startTime?: string;
+  endTime?: string;
+  proctorIds?: string[];
   createdBy?: string;
   createdByName?: string;
   createdByRole?: string;
@@ -47,8 +50,14 @@ interface EtkinlikResponse {
   canManage?: boolean;
 }
 
+interface TeacherLite {
+  id: string;
+  name: string;
+}
+
 type ClassGroup = ReturnType<typeof groupedClasses>[number];
 type ClassMap = Map<string, string>;
+type TeacherMap = Map<string, string>;
 
 function parseYmd(ymd: string | undefined): Date | null {
   if (!ymd) return null;
@@ -80,18 +89,20 @@ function rangeLabel(ev: EtkinlikDTO): string {
 interface EventCardProps {
   ev: EtkinlikDTO;
   classMap: ClassMap;
+  teacherMap: TeacherMap;
   onEdit?: (ev: EtkinlikDTO) => void;
   onDelete?: (ev: EtkinlikDTO) => void;
 }
 
 // ════════════════════ Ortak etkinlik kartı ════════════════════
-function EventCard({ ev, classMap, onEdit, onDelete }: EventCardProps) {
+function EventCard({ ev, classMap, teacherMap, onEdit, onDelete }: EventCardProps) {
   const t = TYPE_MAP[ev.type] || TYPE_MAP.diger;
   const d = parseYmd(ev.startDate);
   const cl = Array.isArray(ev.classes) ? ev.classes : [];
   const scope = cl.length === 0
     ? 'Herkese açık'
     : cl.map(c => classMap.get(c) || c).join(', ');
+  const proctorNames = (ev.proctorIds || []).map(id => teacherMap.get(id) || id);
 
   return (
     <div className="rounded-xl p-3 flex gap-3" style={{ border: '1px solid var(--border-subtle)', borderLeft: `3px solid ${t.color}` }}>
@@ -116,8 +127,12 @@ function EventCard({ ev, classMap, onEdit, onDelete }: EventCardProps) {
         <div className="flex items-center gap-2 mt-1 flex-wrap text-caption">
           <span className="badge" style={{ background: `color-mix(in srgb, ${t.color} 16%, transparent)`, color: t.color, border: `1px solid color-mix(in srgb, ${t.color} 30%, transparent)` }}>{t.label}</span>
           <span style={{ color: 'var(--text-secondary)' }}>{rangeLabel(ev)}</span>
+          {ev.startTime && ev.endTime && <span style={{ color: 'var(--text-secondary)' }}>{ev.startTime}–{ev.endTime}</span>}
           <span className="flex items-center gap-1" style={{ color: 'var(--text-muted)' }}><Users size={11} /> {scope}</span>
         </div>
+        {proctorNames.length > 0 && (
+          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Gözetmen: {proctorNames.join(', ')}</p>
+        )}
         {ev.desc && <p className="text-sm mt-1.5 whitespace-pre-wrap" style={{ color: 'var(--text-secondary)' }}>{ev.desc}</p>}
       </div>
     </div>
@@ -127,12 +142,13 @@ function EventCard({ ev, classMap, onEdit, onDelete }: EventCardProps) {
 interface MonthGroupsProps {
   events: EtkinlikDTO[];
   classMap: ClassMap;
+  teacherMap: TeacherMap;
   onEdit?: (ev: EtkinlikDTO) => void;
   onDelete?: (ev: EtkinlikDTO) => void;
 }
 
 // Aylara göre grupla + render
-function MonthGroups({ events, classMap, onEdit, onDelete }: MonthGroupsProps) {
+function MonthGroups({ events, classMap, teacherMap, onEdit, onDelete }: MonthGroupsProps) {
   const groups = useMemo(() => {
     const map = new Map<string, EtkinlikDTO[]>();
     events.forEach(ev => {
@@ -149,7 +165,7 @@ function MonthGroups({ events, classMap, onEdit, onDelete }: MonthGroupsProps) {
         <div key={k}>
           <h4 className="text-xs uppercase tracking-wide mb-2" style={{ fontWeight: 700, color: 'var(--text-muted)' }}>{monthLabel(evs[0].startDate)}</h4>
           <div className="flex flex-col gap-2">
-            {evs.map(ev => <EventCard key={ev.id} ev={ev} classMap={classMap} onEdit={onEdit} onDelete={onDelete} />)}
+            {evs.map(ev => <EventCard key={ev.id} ev={ev} classMap={classMap} teacherMap={teacherMap} onEdit={onEdit} onDelete={onDelete} />)}
           </div>
         </div>
       ))}
@@ -160,6 +176,11 @@ function MonthGroups({ events, classMap, onEdit, onDelete }: MonthGroupsProps) {
 function useClassMap(): ClassMap {
   const { classes } = useClasses();
   return useMemo(() => new Map((classes || []).map(c => [c.id, c.ad])), [classes]);
+}
+
+function useTeacherMap(): TeacherMap {
+  const { data } = useSWR<TeacherLite[]>('/api/teachers');
+  return useMemo(() => new Map((data || []).map(t => [t.id, t.name])), [data]);
 }
 
 // Yaklaşan + geçmiş ayrımı (paylaşılan)
@@ -179,6 +200,7 @@ export function TakvimManager({ showToast }: TakvimManagerProps) {
   const { data, isLoading, mutate } = useSWR<EtkinlikResponse>('/api/etkinlik');
   const list = data?.etkinlikler || [];
   const classMap = useClassMap();
+  const teacherMap = useTeacherMap();
   const [editing, setEditing] = useState<EtkinlikDTO | null>(null); // düzenlenen etkinlik
   const [showPast, setShowPast] = useState(false);
   const { upcoming, past } = splitEvents(list);
@@ -203,7 +225,7 @@ export function TakvimManager({ showToast }: TakvimManagerProps) {
       ) : upcoming.length === 0 ? (
         <EmptyState icon={CalendarDays} title="Yaklaşan etkinlik yok" description="Yukarıdan tatil, sınav, toplantı ekleyin." />
       ) : (
-        <MonthGroups events={upcoming} classMap={classMap} onEdit={setEditing} onDelete={remove} />
+        <MonthGroups events={upcoming} classMap={classMap} teacherMap={teacherMap} onEdit={setEditing} onDelete={remove} />
       )}
 
       {past.length > 0 && (
@@ -212,7 +234,7 @@ export function TakvimManager({ showToast }: TakvimManagerProps) {
             <ChevronDown size={15} className={`transition-transform ${showPast ? 'rotate-180' : ''}`} />
             Geçmiş etkinlikler ({past.length})
           </button>
-          {showPast && <div className="mt-3 opacity-75"><MonthGroups events={past} classMap={classMap} onEdit={setEditing} onDelete={remove} /></div>}
+          {showPast && <div className="mt-3 opacity-75"><MonthGroups events={past} classMap={classMap} teacherMap={teacherMap} onEdit={setEditing} onDelete={remove} /></div>}
         </div>
       )}
     </div>
@@ -234,9 +256,14 @@ function TakvimComposer({ showToast, editing, onDone, onCancel }: TakvimComposer
   const [type, setType] = useState('etkinlik');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [proctorIds, setProctorIds] = useState<string[]>([]);
   const [sel, setSel] = useState<string[]>([]); // boş = herkes
   const [busy, setBusy] = useState(false);
   const [edId, setEdId] = useState<string | null>(null);
+  const { data: teachersData } = useSWR<TeacherLite[]>(type === 'sinav' ? '/api/teachers' : null);
+  const teachers = teachersData || [];
 
   // editing değişince formu doldur
   useEffect(() => {
@@ -247,13 +274,18 @@ function TakvimComposer({ showToast, editing, onDone, onCancel }: TakvimComposer
       setType(editing.type || 'etkinlik');
       setStartDate(editing.startDate || '');
       setEndDate(editing.endDate || '');
+      setStartTime(editing.startTime || '');
+      setEndTime(editing.endTime || '');
+      setProctorIds(Array.isArray(editing.proctorIds) ? editing.proctorIds : []);
       setSel(Array.isArray(editing.classes) ? editing.classes : []);
     }
   }, [editing]);
 
   function reset() {
-    setEdId(null); setTitle(''); setDesc(''); setType('etkinlik'); setStartDate(''); setEndDate(''); setSel([]);
+    setEdId(null); setTitle(''); setDesc(''); setType('etkinlik'); setStartDate(''); setEndDate('');
+    setStartTime(''); setEndTime(''); setProctorIds([]); setSel([]);
   }
+  function toggleProctor(id: string) { setProctorIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); }
   function toggle(id: string) { setSel(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); }
   function toggleGroup(g: ClassGroup) {
     const ids = g.items.map(i => i.id);
@@ -270,6 +302,8 @@ function TakvimComposer({ showToast, editing, onDone, onCancel }: TakvimComposer
         action: edId ? 'update' : 'create',
         ...(edId ? { id: edId } : {}),
         title: title.trim(), desc: desc.trim(), type, startDate, endDate, classes: sel,
+        ...(startTime ? { startTime } : {}), ...(endTime ? { endTime } : {}),
+        ...(type === 'sinav' && proctorIds.length > 0 ? { proctorIds } : {}),
       };
       await api('/api/etkinlik', { method: 'POST', body: JSON.stringify(body) });
       showToast?.(edId ? 'Etkinlik güncellendi' : 'Etkinlik eklendi');
@@ -313,7 +347,39 @@ function TakvimComposer({ showToast, editing, onDone, onCancel }: TakvimComposer
           Bitiş (ops.)
           <input type="date" value={endDate} min={startDate || undefined} onChange={e => setEndDate(e.target.value)} className="input !w-auto !text-xs !py-1.5 !px-2" />
         </label>
+        <label className="text-xs flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
+          Saat (ops.)
+          <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="input !w-auto !text-xs !py-1.5 !px-2" />
+        </label>
+        <label className="text-xs flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
+          –
+          <input type="time" value={endTime} min={startTime || undefined} onChange={e => setEndTime(e.target.value)} className="input !w-auto !text-xs !py-1.5 !px-2" />
+        </label>
       </div>
+
+      {type === 'sinav' && (
+        <div className="rounded-lg p-2.5 mb-2" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+          <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
+            Gözetmen: <span style={{ color: proctorIds.length === 0 ? 'var(--text-secondary)' : 'var(--text-muted)' }}>{proctorIds.length === 0 ? 'atanmadı' : `${proctorIds.length} öğretmen`}</span>
+          </p>
+          {teachers.length === 0 ? (
+            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Öğretmen bulunamadı</span>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {teachers.map(t => {
+                const on = proctorIds.includes(t.id);
+                return (
+                  <button key={t.id} onClick={() => toggleProctor(t.id)}
+                    className={`text-xs px-2 py-1 rounded-md flex items-center gap-1 ${on ? 'bg-indigo-600 text-white' : 'hover:bg-[var(--bg-muted)]'}`}
+                    style={on ? undefined : { border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
+                    {on && <Check size={11} />} {t.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2} placeholder="Açıklama (opsiyonel)" className="input !text-sm mb-2 resize-y" />
 
@@ -362,6 +428,7 @@ export function TakvimView() {
   const { data, isLoading } = useSWR<EtkinlikResponse>('/api/etkinlik');
   const list = data?.etkinlikler || [];
   const classMap = useClassMap();
+  const teacherMap = useTeacherMap();
   const [showPast, setShowPast] = useState(false);
   const { upcoming, past } = splitEvents(list);
 
@@ -371,7 +438,7 @@ export function TakvimView() {
   return (
     <div className="max-w-2xl">
       {upcoming.length > 0 ? (
-        <MonthGroups events={upcoming} classMap={classMap} />
+        <MonthGroups events={upcoming} classMap={classMap} teacherMap={teacherMap} />
       ) : (
         <p className="text-caption py-4">Yaklaşan etkinlik yok.</p>
       )}
@@ -381,7 +448,7 @@ export function TakvimView() {
             <ChevronDown size={15} className={`transition-transform ${showPast ? 'rotate-180' : ''}`} />
             Geçmiş etkinlikler ({past.length})
           </button>
-          {showPast && <div className="mt-3 opacity-75"><MonthGroups events={past} classMap={classMap} /></div>}
+          {showPast && <div className="mt-3 opacity-75"><MonthGroups events={past} classMap={classMap} teacherMap={teacherMap} /></div>}
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withAuth, canReadStudent } from '@/lib/auth';
-import { getWeekKey, getTeacherWeekSlots, getAllTeachers, slotStartTime, getDaySlotTimes, getProgramTemplate, type SlotCell, type ProgramEntry } from '@/lib/slots';
+import { getWeekKey, getTeacherWeekSlots, getAllTeachers, slotStartTime, getDaySlotTimes, getProgramTemplate, getWeekEvents, findBlockingEvent, dateStrForWeekDay, type SlotCell, type ProgramEntry } from '@/lib/slots';
 import { ALL_DAYS, daySlots, MEZUN_FORBIDDEN_ETUT_SLOT_NO, slotNoOf, MATH_FAMILY, allowedBranchesForClass } from '@/lib/constants';
 import { parseBody, z, zId } from '@/lib/validate';
 import { tdb } from '@/lib/sqldb';
@@ -26,22 +26,42 @@ export const GET = withAuth(async (req, _ctx, session) => {
   const { searchParams } = new URL(req.url);
   const weekKey = searchParams.get('week') || getWeekKey();
   const teacherId = searchParams.get('teacherId'); // legacyId
+  const slotTimes = await getDaySlotTimes();
+  // Haftanın aktif (kurum geneli) etkinlikleri — tek sorgu, her hücreye tekrar tekrar sorgu atmadan uygulanır.
+  const weekEvents = await getWeekEvents(weekKey);
+
+  // Kurum geneli (sınıf hedefsiz) etkinlik (tatil vb.) çakışan, henüz boş/kapalı hücreleri işaretler.
+  // Rezervasyonu OLAN hücrelere dokunmaz (mevcut veri korunur, çakışma varsa yönetici görür/çözer).
+  function applyEventBlock(dayIndex: number, cells: SlotCell[]): SlotCell[] {
+    const dateStr = dateStrForWeekDay(weekKey, dayIndex);
+    const events = weekEvents.get(dateStr);
+    if (!events) return cells;
+    const slots = daySlots(dayIndex, slotTimes.days[dayIndex]);
+    return cells.map((cell, i) => {
+      if (cell.booked || !cell.disabled) return cell;
+      const slot = slots[i];
+      if (!slot) return cell;
+      const blocking = findBlockingEvent(events, null, slot.start, slot.end);
+      return blocking ? { ...cell, eventBlocked: true, eventTitle: blocking.title } : cell;
+    });
+  }
 
   if (teacherId) {
     const grid = await getTeacherWeekSlots(teacherId, weekKey);
+    for (const day of ALL_DAYS) grid[day.index] = applyEventBlock(day.index, grid[day.index]);
     return NextResponse.json({ weekKey, grid });
   }
 
   const teachers = await getAllTeachers(); // id=legacyId
-  const slotTimes = await getDaySlotTimes();
   const allSlots: ({ teacherId: string; teacherName: string; branches: string[]; allowedGroups: string[]; day: number; dayLabel: string; weekend: boolean; slotId: string; slotLabel: string } & SlotCell)[] = [];
 
   for (const teacher of teachers) {
     const grid = await getTeacherWeekSlots(teacher.id, weekKey);
     for (const day of ALL_DAYS) {
       const slots = daySlots(day.index, slotTimes.days[day.index]);
+      const cells = applyEventBlock(day.index, grid[day.index]);
       for (let s = 0; s < slots.length; s++) {
-        const slotData = grid[day.index][s] || { booked: false, disabled: true };
+        const slotData = cells[s] || { booked: false, disabled: true };
         allSlots.push({
           teacherId: teacher.id,
           teacherName: teacher.name,
@@ -159,6 +179,17 @@ export const POST = withAuth(async (req, _ctx, session) => {
 
   const studentCls = targetStudent.class?.legacyId || null;
   const studentGroup = targetStudent.group || '';
+
+  // Aktif etkinlik (tatil veya öğrencinin sınıfını hedefleyen sınav/etkinlik) kontrolü.
+  // Müdür/rehber forceOpen ile geçebilir (şablon-kapalı slot bypass'ıyla simetrik).
+  if (!(forceOpen && (session.role === 'director' || session.role === 'counselor')) && slotDef) {
+    const dateStr = dateStrForWeekDay(weekKey, day);
+    const weekEvents = await getWeekEvents(weekKey);
+    const blocking = findBlockingEvent(weekEvents.get(dateStr), studentCls, slotDef.start, slotDef.end);
+    if (blocking) {
+      return NextResponse.json({ error: `Bu tarihte "${blocking.title}" etkinliği aktif — rezervasyon yapılamaz` }, { status: 400 });
+    }
+  }
 
   // Grup erişim kontrolü
   const allowedGroups = teacher.allowedGroups || [];

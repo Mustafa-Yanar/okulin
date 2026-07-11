@@ -126,6 +126,28 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
         </Wrap>
       );
     }
+    if (slotData.eventBlocked) {
+      if (isDirector && !isPast) {
+        return (
+          <Wrap className="py-1 px-1">
+            <button
+              onClick={() => onCellClick(dayIndex, slotIdx, slotData, true)}
+              title={`"${slotData.eventTitle || 'Etkinlik'}" aktif — yine de aç ve rezervasyon yap`}
+              className="w-full rounded-lg py-2 px-1 text-center border border-dashed border-rose-300 bg-rose-100 hover:border-rose-400 hover:bg-rose-200 transition-colors text-[10px] text-rose-700 truncate"
+            >
+              {slotData.eventTitle || 'Etkinlik'}
+            </button>
+          </Wrap>
+        );
+      }
+      return (
+        <Wrap className="py-1 px-1">
+          <div className="rounded-lg py-2 px-1 text-center text-[10px] text-rose-700 bg-rose-100 border border-rose-200 select-none truncate" title={slotData.eventTitle || 'Etkinlik'}>
+            {slotData.eventTitle || 'Etkinlik'}
+          </div>
+        </Wrap>
+      );
+    }
     if (isDirector) {
       if (isPast) {
         return (
@@ -139,7 +161,7 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
           <button
             onClick={() => onCellClick(dayIndex, slotIdx, slotData, true)}
             title="Ek slot aç ve rezervasyon yap"
-            className="w-full rounded-lg py-2 px-1 text-center border border-dashed border-amber-400 bg-amber-50 hover:border-amber-500 hover:bg-amber-100 transition-colors text-xs text-amber-400 hover:text-amber-600"
+            className="w-full rounded-lg py-2 px-1 text-center border border-dashed border-amber-400 bg-amber-50 hover:border-amber-500 hover:bg-amber-100 transition-colors text-xs text-amber-600 hover:text-amber-700"
           >
             +
           </button>
@@ -164,7 +186,7 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
     const colorMap: Record<string, { bg: string; border: string; name: string; sub: string; label: string }> = {
       student: { bg: 'bg-indigo-50', border: 'border-indigo-100', name: 'text-indigo-700', sub: 'text-indigo-400', label: 'Öğrenci' },
       teacher: { bg: 'bg-emerald-50', border: 'border-emerald-100', name: 'text-emerald-700', sub: 'text-emerald-400', label: 'Öğretmen' },
-      director: { bg: 'bg-amber-50', border: 'border-amber-100', name: 'text-amber-700', sub: 'text-amber-400', label: 'Müdür' },
+      director: { bg: 'bg-amber-50', border: 'border-amber-100', name: 'text-amber-700', sub: 'text-amber-600', label: 'Müdür' },
     };
     const c = colorMap[bookedBy] || colorMap.student;
 

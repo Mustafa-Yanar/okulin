@@ -42,6 +42,9 @@ export interface SlotCell {
   studentCls?: string | null;
   bookedBy?: string | null;
   bookedAt?: string;
+  // Etkinlik takvimi entegrasyonu: aktif tatil/etkinlik yüzünden kapalı (route.ts /api/slots GET doldurur).
+  eventBlocked?: boolean;
+  eventTitle?: string;
 }
 
 // Öğretmenin serbest etüt şablonu (programTemplate.etutSablonlari listesi elemanı).
@@ -375,4 +378,80 @@ export async function deleteProgramTemplate(legacyTeacherId: string): Promise<vo
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
   if (!teacher) return;
   await tdb().teacher.update({ where: { id: teacher.id }, data: { programTemplate: Prisma.DbNull } });
+}
+
+// ── ETKİNLİK TAKVİMİ ENTEGRASYONU (tatil/sınav vb. → slot otomatik pasifleşmesi) ──────────────
+
+function toYmd(d: Date): string {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// weekKey + gün indexi (0=Pzt..6=Paz) → o günün takvim tarihi (YYYY-MM-DD).
+export function dateStrForWeekDay(weekKey: string, dayIndex: number): string {
+  const d = getMondayOfWeek(weekKey);
+  d.setDate(d.getDate() + dayIndex);
+  return toYmd(d);
+}
+
+export interface EtkinlikBlock {
+  title: string;
+  type: string;
+  startTime?: string;
+  endTime?: string;
+  classes: string[];
+}
+
+// Etkinlik.data Json şeklinin bu modülün ihtiyaç duyduğu alt kümesi (route.ts'teki EtkinlikData ile örtüşür).
+interface EtkinlikDataForBlock {
+  classes?: string[];
+  startTime?: string;
+  endTime?: string;
+}
+
+// Bir haftanın (Pazartesi..Pazar) her günü için aktif etkinlikleri TEK sorguda getirir.
+// Tarih aralığı çakışan tüm Etkinlik satırları çekilir, sonra 7 güne dağıtılır (N+1 önlenir).
+export async function getWeekEvents(weekKey: string): Promise<Map<string, EtkinlikBlock[]>> {
+  const monday = getMondayOfWeek(weekKey);
+  const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
+  const mondayStr = toYmd(monday), sundayStr = toYmd(sunday);
+
+  const rows = await tdb().etkinlik.findMany({
+    where: { startDate: { lte: sundayStr }, OR: [{ endDate: null }, { endDate: { gte: mondayStr } }] },
+  });
+
+  const map = new Map<string, EtkinlikBlock[]>();
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday); d.setDate(d.getDate() + i);
+    const ds = toYmd(d);
+    const active = rows
+      .filter(r => r.startDate <= ds && (!r.endDate || r.endDate >= ds))
+      .map(r => {
+        const data = (r.data as EtkinlikDataForBlock | null) || {};
+        return {
+          title: r.title, type: r.type,
+          startTime: data.startTime, endTime: data.endTime,
+          classes: Array.isArray(data.classes) ? data.classes : [],
+        };
+      });
+    if (active.length) map.set(ds, active);
+  }
+  return map;
+}
+
+// Verilen gün için aktif etkinlik listesi içinde, hedef sınıf + slot saat aralığıyla çakışan
+// bir engelleyici var mı? classId null ise yalnız kurum geneli (sınıf hedefsiz) etkinlikler sayılır
+// (grid seviyesi görsel kapatma — henüz öğrenciye özel değil). classId verilirse sınıf-hedefli
+// etkinlikler de dahil edilir (rezervasyon anındaki gerçek kontrol).
+export function findBlockingEvent(
+  events: EtkinlikBlock[] | undefined, classId: string | null, slotStart: string, slotEnd: string,
+): EtkinlikBlock | null {
+  if (!events || events.length === 0) return null;
+  for (const ev of events) {
+    const isGeneral = ev.classes.length === 0;
+    if (!isGeneral && (!classId || !ev.classes.includes(classId))) continue;
+    if (ev.startTime && ev.endTime && !(slotStart < ev.endTime && slotEnd > ev.startTime)) continue;
+    return ev;
+  }
+  return null;
 }

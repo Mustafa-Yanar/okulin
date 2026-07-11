@@ -20,6 +20,7 @@ const TYPE_LABEL: Record<string, string> = {
   tatil: 'Tatil', sinav: 'Sınav', toplanti: 'Toplantı', gezi: 'Gezi', etkinlik: 'Etkinlik', diger: 'Diğer',
 };
 
+const zHHMM = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const baseFields = {
   title: z.string().min(1).max(160),
   desc: z.string().max(2000).optional(),
@@ -27,10 +28,17 @@ const baseFields = {
   startDate: z.string().min(8).max(20), // YYYY-MM-DD
   endDate: z.string().max(20).optional(), // çok günlü etkinlik bitişi (ops.)
   classes: z.array(z.string().min(1).max(60)).max(60).optional(), // boş/yok = herkes
+  startTime: zHHMM.optional(), // saat aralığı (ops.) — HH:MM
+  endTime: zHHMM.optional(),
+  proctorIds: z.array(z.string().min(1).max(60)).max(30).optional(), // sınav gözetmeni (öğretmen legacyId)
 };
 const CreateSchema = z.object({ action: z.literal('create'), ...baseFields });
 const UpdateSchema = z.object({ action: z.literal('update'), id: zId, ...baseFields });
-const BodySchema = z.discriminatedUnion('action', [CreateSchema, UpdateSchema]);
+const BulkTatilSchema = z.object({
+  action: z.literal('bulkTatil'),
+  dates: z.array(z.string().min(8).max(20)).min(1).max(60),
+});
+const BodySchema = z.discriminatedUnion('action', [CreateSchema, UpdateSchema, BulkTatilSchema]);
 
 // Etkinlik.data Json şekli.
 interface EtkinlikData {
@@ -41,6 +49,9 @@ interface EtkinlikData {
   startDate: string;
   endDate?: string;
   classes?: string[];
+  startTime?: string;
+  endTime?: string;
+  proctorIds?: string[];
   createdBy?: string;
   createdByName?: string;
   createdByRole?: string;
@@ -96,12 +107,47 @@ export const POST = withAuth((s: Session) => isManager(s), async (req, _ctx, ses
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
 
-  const { title, desc, type, startDate, endDate, classes } = data;
+  // ── Toplu tatil ekle (Ders Saatleri modülünden çoklu-gün seçimi) ──
+  if (data.action === 'bulkTatil') {
+    const existingTatil = await tdb().etkinlik.findMany({ where: { type: 'tatil' } });
+    const existingDates = new Set(existingTatil.map(r => r.startDate));
+    const uniqueDates = [...new Set(data.dates)].filter(d => !existingDates.has(d)).sort();
+    const created: string[] = [];
+    for (const d of uniqueDates) {
+      const id = genId();
+      const rec = {
+        id, title: 'Tatil', desc: '', type: 'tatil', startDate: d, endDate: '', classes: [],
+        createdBy: session.id, createdByName: session.name || '', createdByRole: session.role,
+        createdAt: new Date().toISOString(),
+      };
+      await tdb().etkinlik.create({ data: withScope({ legacyId: id, title: 'Tatil', type: 'tatil', startDate: d, endDate: null, data: rec }) });
+      created.push(d);
+    }
+    if (created.length > 0) {
+      await logAudit({
+        ...actorFrom(session),
+        action: 'etkinlik.create',
+        target: { type: 'etkinlik', id: 'bulk', name: 'Tatil günleri' },
+        detail: `Ders Saatleri modülünden ${created.length} tatil günü eklendi: ${created.join(', ')}`,
+      });
+    }
+    return NextResponse.json({ ok: true, created: created.length });
+  }
+
+  const { title, desc, type, startDate, endDate, classes, startTime, endTime, proctorIds } = data;
 
   // Geçerli şube id'leri (registry-aware). Boş → herkes.
   const valid: string[] = [];
   if (Array.isArray(classes) && classes.length > 0) {
     for (const c of classes) { if (await getClass(c)) valid.push(c); }
+  }
+  // Saat aralığı: ikisi de gelmeli ve bitiş başlangıçtan sonra olmalı, aksi hâlde yok say.
+  const timeRange = startTime && endTime && endTime > startTime ? { startTime, endTime } : {};
+  // Gözetmen: yalnız sınav tipinde anlamlı; gerçek öğretmen kayıtlarına karşı doğrula.
+  let validProctors: string[] = [];
+  if (type === 'sinav' && Array.isArray(proctorIds) && proctorIds.length > 0) {
+    const teacherRows = await tdb().teacher.findMany({ where: { legacyId: { in: proctorIds } } });
+    validProctors = teacherRows.map(t => t.legacyId);
   }
   // endDate < startDate ise yok say
   const end = endDate && endDate >= startDate ? endDate : '';
@@ -113,6 +159,7 @@ export const POST = withAuth((s: Session) => isManager(s), async (req, _ctx, ses
     const updated = {
       ...(existing.data as object),
       title, desc: desc || '', type, startDate, endDate: end, classes: valid,
+      proctorIds: validProctors, ...timeRange,
       updatedAt: new Date().toISOString(),
     };
     await tdb().etkinlik.update({ where: { id: existing.id }, data: { title, type, startDate, endDate: end || null, data: updated } });
@@ -129,6 +176,7 @@ export const POST = withAuth((s: Session) => isManager(s), async (req, _ctx, ses
   const id = genId();
   const rec = {
     id, title, desc: desc || '', type, startDate, endDate: end, classes: valid,
+    proctorIds: validProctors, ...timeRange,
     createdBy: session.id, createdByName: session.name || '', createdByRole: session.role,
     createdAt: new Date().toISOString(),
   };

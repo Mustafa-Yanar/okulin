@@ -24,6 +24,7 @@ import { TakvimManager } from './etkinlik/Takvim';
 import { FormManager } from './form/Formlar';
 import { OnKayitManager } from './crm/OnKayit';
 import SlotTimeEditor from './director/SlotTimeEditor';
+import HolidayPicker from './director/HolidayPicker';
 import { useSlotTimes as useSlotTimesCtx } from './SlotTimesContext';
 import type { Session } from '@/lib/auth';
 import type { Branding } from '@/lib/branding';
@@ -362,6 +363,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
                   {savingSlotTimes ? 'Kaydediliyor…' : 'Saatleri Kaydet'}
                 </button>
               </div>
+              <HolidayPicker showToast={showToast} />
             </>
           )}
         </div>
