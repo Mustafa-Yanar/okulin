@@ -358,17 +358,17 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                   : etutEngel ? `${slot.start}–${slot.end} — bu saatte aktif etüt var, ders eklenemez`
                   : `${slot.start}–${slot.end} — tıkla: ders saati aç`}>
                 {isDers ? (
-                  <>
-                    <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{dersAd || 'Ders'}</div>
-                    {height >= 28 && dersBrans && <div className="text-[8px] leading-tight truncate" style={{ color: '#6366f1' }}>{dersBrans}</div>}
-                  </>
+                  <div className="text-[11px] leading-tight truncate">
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{dersAd || 'Ders'}</span>
+                    {dersBrans && <span style={{ color: '#6366f1' }}>{' · '}{dersBrans}</span>}
+                  </div>
                 ) : aktif ? (
-                  <>
-                    <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 500, color: '#60a5fa' }}>Boş</div>
-                    {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{slot.start}</div>}
-                  </>
+                  <div className="text-[11px] leading-tight truncate">
+                    <span style={{ fontWeight: 600, color: '#60a5fa' }}>Boş</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{' · '}{slot.start}</span>
+                  </div>
                 ) : (
-                  <div className="text-[8px] leading-tight truncate" style={{ color: 'var(--text-muted)' }}>
+                  <div className="text-[10px] leading-tight truncate" style={{ color: 'var(--text-muted)' }}>
                     {etutEngel ? '' : height >= 28 ? `${slot.start} +` : '+'}
                   </div>
                 )}
