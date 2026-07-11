@@ -5,6 +5,7 @@ import { parseBody, z, zName, zPassword } from '@/lib/validate';
 import { generateOrgCode, formatCode, hostForOrg } from '@/lib/orgcode';
 import { addProjectDomain } from '@/lib/vercel';
 import { normalizeFacets } from '@/lib/institution';
+import { normalizeTurkishMobile } from '@/lib/phone';
 import { tdb, withScope } from '@/lib/sqldb';
 import { prisma } from '@/lib/prisma';
 
@@ -62,7 +63,8 @@ export const GET = withAuth(['superadmin'], async () => {
     o.branchCount = o.type === 'multi' ? await tdb().branch.count({ where: { orgSlug: o.slug } }) : 1;
   }
 
-  return NextResponse.json({ orgs });
+  const sa = await tdb().superAdmin.findFirst();
+  return NextResponse.json({ orgs, superadmin: { hasPhone: !!sa?.phone } });
 });
 
 const CreateOrgSchema = z.object({
@@ -87,7 +89,7 @@ const CreateOrgSchema = z.object({
 });
 
 const UpdateOrgSchema = z.object({
-  action: z.enum(['toggle_active', 'reset_director', 'rename', 'change_own_password', 'provision_domain']),
+  action: z.enum(['toggle_active', 'reset_director', 'rename', 'change_own_password', 'provision_domain', 'set_own_phone']),
   slug: z.string().min(2).max(40).optional(),
   // toggle_active: ilave alan yok
   // reset_director / change_own_password:
@@ -96,6 +98,8 @@ const UpdateOrgSchema = z.object({
   // rename:
   name: z.string().min(1).max(120).optional(),
   shortName: z.string().max(60).optional(),
+  // set_own_phone: boş string = 2FA kapat
+  phone: z.string().max(30).optional(),
 });
 
 // POST /api/superadmin — yeni kurum + müdür oluştur
@@ -179,8 +183,7 @@ export const PATCH = withAuth(['superadmin'], async (req) => {
   if (!parsed.ok) return parsed.response;
   const { action, slug, newPassword, name, shortName } = parsed.data;
 
-  if (!slug) return NextResponse.json({ error: 'slug gerekli' }, { status: 400 });
-
+  // Kendine-özel action'lar (kurum değil, süper-adminin kendi hesabı) — slug ZORUNLU DEĞİL.
   if (action === 'change_own_password') {
     const { currentPassword, newPassword: newPw } = parsed.data;
     if (!currentPassword || !newPw) return NextResponse.json({ error: 'currentPassword ve newPassword gerekli' }, { status: 400 });
@@ -190,6 +193,23 @@ export const PATCH = withAuth(['superadmin'], async (req) => {
     await tdb().superAdmin.update({ where: { id: sa.id }, data: { passwordHash: await bcrypt.hash(newPw, 10) } });
     return NextResponse.json({ ok: true });
   }
+  if (action === 'set_own_phone') {
+    const { phone } = parsed.data;
+    const sa = await tdb().superAdmin.findFirst();
+    if (!sa) return NextResponse.json({ error: 'Superadmin kaydı bulunamadı' }, { status: 404 });
+    if (!phone || !phone.trim()) {
+      // Boş → 2FA kapat
+      await tdb().superAdmin.update({ where: { id: sa.id }, data: { phone: null } });
+      return NextResponse.json({ ok: true, hasPhone: false });
+    }
+    const norm = normalizeTurkishMobile(phone);
+    if (!norm) return NextResponse.json({ error: 'Geçersiz telefon numarası' }, { status: 400 });
+    await tdb().superAdmin.update({ where: { id: sa.id }, data: { phone: norm } });
+    return NextResponse.json({ ok: true, hasPhone: true });
+  }
+
+  if (!slug) return NextResponse.json({ error: 'slug gerekli' }, { status: 400 });
+
   if (action === 'provision_domain') {
     const domain = hostForOrg(slug, 'main');
     const result = await addProjectDomain(domain);

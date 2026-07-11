@@ -30,9 +30,11 @@ model Org {
 }
 
 model SuperAdmin {
-  id           String @id @default(cuid())
-  username     String @unique
+  id           String  @id @default(cuid())
+  username     String  @unique
   passwordHash String
+  // 2FA (SMS OTP, mevcut Twilio Verify altyapısı). null = 2FA kapalı — login normal akar.
+  phone        String?
 }
 
 // Kurum şubeleri (org:<slug>:branches + org:<slug>:branch:<x> Redis karşılığı).

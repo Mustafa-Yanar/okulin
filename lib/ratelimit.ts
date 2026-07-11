@@ -87,6 +87,17 @@ export function getClientIp(req: Request): string {
   return 'unknown';
 }
 
+// Süper-admin IP kısıtı — env `SUPERADMIN_ALLOWED_IPS` (virgülle ayrılmış liste).
+// Tanımsız/boş = kısıt YOK (varsayılan). Tek hesabın dinamik/değişken IP'den kilitlenme
+// riskini sıfırlamak için bilinçli tercih — kurulunca yalnız listedeki IP'ler girebilir.
+export function isSuperadminIpAllowed(ip: string): boolean {
+  const raw = process.env.SUPERADMIN_ALLOWED_IPS;
+  if (!raw || !raw.trim()) return true;
+  const allowed = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  if (allowed.length === 0) return true;
+  return allowed.includes(ip);
+}
+
 // Kalan süreyi insan-okunabilir Türkçe metne çevirir
 // reset: ms epoch
 export function formatResetWait(reset: number): string {

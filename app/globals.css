@@ -599,6 +599,7 @@ html.dark .bg-amber-50,   html.dark .bg-amber-100   { background: var(--color-wa
 /* Accent kenarlıklar */
 html.dark .border-slate-100  { border-color: var(--border-subtle) !important; }
 html.dark .border-slate-200  { border-color: var(--border-light) !important; }
+html.dark .border-slate-300  { border-color: var(--border-light) !important; }
 html.dark .border-indigo-100, html.dark .border-indigo-200,
 html.dark .border-blue-100,   html.dark .border-violet-100 { border-color: var(--color-info-border) !important; }
 html.dark .border-amber-100,  html.dark .border-amber-200  { border-color: var(--color-warning-border) !important; }
@@ -617,6 +618,15 @@ html.dark .text-emerald-600,html.dark .text-emerald-700  { color: var(--color-su
 html.dark .text-red-600,    html.dark .text-red-700,     html.dark .text-red-800,
 html.dark .text-rose-600,   html.dark .text-rose-700     { color: var(--color-danger) !important; }
 html.dark .text-amber-600,  html.dark .text-amber-700,   html.dark .text-amber-800 { color: var(--color-warning) !important; }
+
+/* text-slate-500/600/700/800 (SuperAdminPanel vb.) — açık kart koyu temada var(--bg-surface-2)'ye
+   döner ama metin ham slate-* kalırsa kontrast kırılır. Ton koyulaştıkça daha okunur metin rengi. */
+html.dark .text-slate-500 { color: var(--text-muted) !important; }
+html.dark .text-slate-600 { color: var(--text-secondary) !important; }
+html.dark .text-slate-700,
+html.dark .text-slate-800 { color: var(--text-primary) !important; }
+html.dark .disabled\:bg-slate-100:disabled  { background: var(--bg-muted) !important; }
+html.dark .disabled\:text-slate-400:disabled { color: var(--text-muted) !important; }
 
 /* Hover tint zeminleri (indigo-50/red-50 yukarıda zaten var — burada eksikler) */
 html.dark .hover\:bg-slate-50:hover   { background: var(--bg-surface-2) !important; }

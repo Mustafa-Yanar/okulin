@@ -23,6 +23,11 @@ const THIRTY_DAYS = 60 * 60 * 24 * 30;
 interface OtpIdentity { phone: string | null; pushRole: string; pushId: string; }
 
 async function getOtpIdentity(username: string, roleCategory: string): Promise<OtpIdentity | null> {
+  if (roleCategory === 'superadmin') {
+    const sa = await tdb().superAdmin.findFirst({ where: { username } });
+    if (!sa) return null;
+    return { phone: sa.phone || null, pushRole: 'superadmin', pushId: 'superadmin' };
+  }
   if (roleCategory === 'management') {
     const dir = await tdb().director.findFirst({ where: { username } });
     // NOT: Director modelinde phone kolonu yok → telefonsuz → OTP'ye hiç girmez (push moot).

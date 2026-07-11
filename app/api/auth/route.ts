@@ -5,7 +5,7 @@ import { tenantRedis, currentOrg } from '@/lib/tenant';
 import { orgFromHost } from '@/lib/org';
 import { normalizeBranding } from '@/lib/branding';
 import { getSession, setSession, clearSession, type Session } from '@/lib/auth';
-import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait, safeLimit } from '@/lib/ratelimit';
+import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait, safeLimit, isSuperadminIpAllowed } from '@/lib/ratelimit';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { parseBody, z, zName, zPassword, zNewPassword, zId } from '@/lib/validate';
@@ -215,11 +215,18 @@ export async function POST(req: NextRequest) {
       if (orgFromHost(host)) {
         return NextResponse.json({ error: 'Süper yönetici girişi bu adresten yapılamaz.' }, { status: 403 });
       }
+      // IP kısıtı — SUPERADMIN_ALLOWED_IPS tanımlıysa yalnız listedeki IP'ler girebilir.
+      if (!isSuperadminIpAllowed(getClientIp(req))) {
+        return NextResponse.json({ error: 'Süper yönetici girişi bu ağdan yapılamaz.' }, { status: 403 });
+      }
       const superadmin = await tdb().superAdmin.findFirst({ where: { username } });
       if (superadmin && superadmin.username === username) {
         const ok = await bcrypt.compare(password, superadmin.passwordHash);
         if (ok) {
           const saName = (superadmin as { name?: string }).name || 'Süper Admin';
+          // 2FA: telefon kayıtlıysa + cihaz tanınmıyorsa OTP iste (mevcut cihaz-tanıma altyapısı).
+          const otpRes = await maybeOtp('superadmin', superadmin.phone || null);
+          if (otpRes) return otpRes;
           const res = NextResponse.json({ role: 'superadmin', name: saName });
           await setSession(res, { role: 'superadmin', id: 'superadmin', name: saName });
           return res;

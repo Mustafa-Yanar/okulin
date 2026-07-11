@@ -1,10 +1,11 @@
 'use client';
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Trash2, Lock, Inbox, Phone, Mail, Globe, CheckCircle2, AlertTriangle, Copy, Check } from 'lucide-react';
+import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Trash2, Lock, Inbox, Phone, Smartphone, Mail, Globe, CheckCircle2, AlertTriangle, Copy, Check, Moon, Sun } from 'lucide-react';
 import { SEKTORLER, MULKIYETLER, KADEMELER, kademelerForSektor, defaultKademeler } from '@/lib/institution';
 import type { Kademe } from '@/lib/institution';
 import type { Session } from '@/lib/auth';
+import { useDarkMode } from './ThemeToggle';
 
 // GET /api/superadmin kurum satırı.
 interface OrgDTO {
@@ -436,6 +437,80 @@ function ChangeOwnPasswordModal({ onClose, onDone }: { onClose: () => void; onDo
   );
 }
 
+// ── İki Adımlı Doğrulama (2FA) Telefon Modalı ───────────────────────────────
+
+function SetPhoneModal({ hasPhone, onClose, onDone }: { hasPhone: boolean; onClose: () => void; onDone: () => void }) {
+  const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/superadmin', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_own_phone', phone }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) { setError(data.error || 'Hata'); return; }
+      onDone();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function disable2fa() {
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/superadmin', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_own_phone', phone: '' }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) { setError(data.error || 'Hata'); return; }
+      onDone();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="modal w-full max-w-sm p-6" role="dialog" aria-modal="true" aria-labelledby="phone-title">
+        <h2 id="phone-title" className="text-base font-semibold mb-1">İki Adımlı Doğrulama (SMS)</h2>
+        <p className="text-sm text-slate-500 mb-4">
+          {hasPhone
+            ? 'Şu an 2FA aktif. Yeni bir telefon girip güncelleyebilir veya kapatabilirsin.'
+            : 'Telefon eklersen, tanınmayan bir cihazdan giriş yapıldığında SMS kodu istenir.'}
+        </p>
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          <Field label="Telefon (05XX XXX XX XX)" id="sa-phone">
+            <Input id="sa-phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="0532 123 45 67" />
+          </Field>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex gap-2 justify-end mt-1">
+            {hasPhone && (
+              <button type="button" onClick={disable2fa} disabled={loading}
+                className="px-3 py-1.5 rounded text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">
+                2FA'yı Kapat
+              </button>
+            )}
+            <button type="button" onClick={onClose} className="btn-ghost !px-3 !py-2 text-sm">İptal</button>
+            <button type="submit" disabled={loading || !phone.trim()} className="btn-primary !px-4 !py-2 text-sm">
+              {loading ? 'Kaydediliyor…' : 'Kaydet'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── Kurum Sil Onay Modalı ────────────────────────────────────────────────────
 
 function DeleteConfirmModal({ org, onClose, onDone }: OrgModalProps) {
@@ -563,6 +638,7 @@ function DemoRequests() {
 type ModalState =
   | { type: 'new' }
   | { type: 'chpw' }
+  | { type: 'phone' }
   | { type: 'reset' | 'rename' | 'delete'; org: OrgDTO }
   | null;
 
@@ -572,11 +648,13 @@ interface SuperAdminPanelProps {
 }
 
 export default function SuperAdminPanel({ session, onLogout }: SuperAdminPanelProps) {
-  const { data: orgsData, isLoading: loading, mutate: loadOrgs } = useSWR<{ orgs?: OrgDTO[] }>('/api/superadmin');
+  const { data: orgsData, isLoading: loading, mutate: loadOrgs } = useSWR<{ orgs?: OrgDTO[]; superadmin?: { hasPhone?: boolean } }>('/api/superadmin');
   const orgs = orgsData?.orgs || [];
+  const hasPhone = !!orgsData?.superadmin?.hasPhone;
   const [modal, setModal] = useState<ModalState>(null); // null | {type, org?}
   const [provisioning, setProvisioning] = useState<string | null>(null); // domain ekleniyor (slug)
   const [domainNote, setDomainNote] = useState<{ ok: boolean; text: string } | null>(null); // { ok, text }
+  const { dark, toggle: toggleDark } = useDarkMode();
 
   async function toggleActive(org: OrgDTO) {
     await fetch('/api/superadmin', {
@@ -620,26 +698,42 @@ export default function SuperAdminPanel({ session, onLogout }: SuperAdminPanelPr
   function afterAction() { setModal(null); loadOrgs(); }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-indigo-700 text-white px-4 py-3 flex items-center justify-between shadow">
+    <div className="min-h-screen" style={{ background: 'var(--bg-base)' }}>
+      {/* Header — sabit koyu yüzey (login sayfasıyla aynı marka: kurum-üstü rol, temadan bağımsız kimlik) */}
+      <header className="text-white px-4 py-3 flex items-center justify-between shadow"
+        style={{ background: 'linear-gradient(135deg,#0f172a,#334155)' }}>
         <div className="flex items-center gap-2">
           <Building2 size={20} />
           <span className="font-semibold">Süper Admin</span>
-          <span className="text-indigo-300 text-sm ml-2">— {session?.name}</span>
+          <span className="text-slate-300 text-sm ml-2">— {session?.name}</span>
         </div>
         <div className="flex items-center gap-3">
           <button
+            onClick={toggleDark}
+            title={dark ? 'Aydınlık temaya geç' : 'Karanlık temaya geç'}
+            aria-label={dark ? 'Aydınlık temaya geç' : 'Karanlık temaya geç'}
+            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white"
+          >
+            {dark ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
+          <button
+            onClick={() => setModal({ type: 'phone' })}
+            title={hasPhone ? '2FA aktif — telefonu yönet' : '2FA kapalı — telefon ekle'}
+            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white"
+          >
+            <Smartphone size={15} /> 2FA {hasPhone ? <CheckCircle2 size={13} style={{ color: '#4ade80' }} /> : null}
+          </button>
+          <button
             onClick={() => setModal({ type: 'chpw' })}
             title="Şifremi değiştir"
-            className="flex items-center gap-1.5 text-sm text-indigo-200 hover:text-white"
+            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white"
           >
             <Lock size={15} /> Şifre
           </button>
           <button
             onClick={onLogout}
             aria-label="Çıkış yap"
-            className="flex items-center gap-1.5 text-sm text-indigo-200 hover:text-white"
+            className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white"
           >
             <LogOut size={16} /> Çıkış
           </button>
@@ -791,6 +885,9 @@ export default function SuperAdminPanel({ session, onLogout }: SuperAdminPanelPr
       )}
       {modal?.type === 'chpw' && (
         <ChangeOwnPasswordModal onClose={closeModal} onDone={() => { setModal(null); }} />
+      )}
+      {modal?.type === 'phone' && (
+        <SetPhoneModal hasPhone={hasPhone} onClose={closeModal} onDone={() => { setModal(null); loadOrgs(); }} />
       )}
     </div>
   );

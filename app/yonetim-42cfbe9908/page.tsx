@@ -17,6 +17,11 @@ export default function SuperAdminPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [maskedPhone, setMaskedPhone] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState('');
 
   // Mevcut oturumu kontrol et (sayfa yenilenince panel açık kalsın).
   const loadSession = useCallback(async () => {
@@ -40,7 +45,13 @@ export default function SuperAdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'login', role: 'superadmin', username, password }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; role?: string; name?: string };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; role?: string; name?: string; needsOtp?: boolean; phone?: string };
+      if (data.needsOtp) {
+        setMaskedPhone(data.phone || '');
+        setOtpStep(true);
+        setLoading(false);
+        return;
+      }
       if (!res.ok || data.role !== 'superadmin') {
         setError(data.error || 'Giriş başarısız.');
         setLoading(false);
@@ -50,6 +61,33 @@ export default function SuperAdminPage() {
     } catch {
       setError('Bağlantı hatası.');
       setLoading(false);
+    }
+  }
+
+  async function submitOtp(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setOtpError('');
+    setOtpLoading(true);
+    try {
+      const verifyRes = await fetch('/api/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: otpCode, username, role: 'superadmin' }),
+      });
+      const verifyData = (await verifyRes.json().catch(() => ({}))) as { error?: string };
+      if (!verifyRes.ok) { setOtpError(verifyData.error || 'Kod yanlış'); setOtpLoading(false); return; }
+
+      const loginRes = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', role: 'superadmin', username, password }),
+      });
+      const loginData = (await loginRes.json().catch(() => ({}))) as { error?: string; role?: string; name?: string };
+      if (!loginRes.ok || loginData.role !== 'superadmin') { setOtpError(loginData.error || 'Giriş başarısız'); setOtpLoading(false); return; }
+      setSession({ role: 'superadmin', id: 'superadmin', name: loginData.name });
+    } catch {
+      setOtpError('Bağlantı hatası.');
+      setOtpLoading(false);
     }
   }
 
@@ -65,6 +103,10 @@ export default function SuperAdminPage() {
     setUsername('');
     setPassword('');
     setLoading(false);
+    setOtpStep(false);
+    setOtpCode('');
+    setMaskedPhone('');
+    setOtpError('');
   }
 
   // Yükleniyor
@@ -79,6 +121,49 @@ export default function SuperAdminPage() {
   // Süper-admin oturumu açık → panel (URL gizli yolda kalır)
   if (session) {
     return <SuperAdminPanel session={session} onLogout={logout} />;
+  }
+
+  // 2FA adımı — telefon kayıtlıysa ve cihaz tanınmıyorsa
+  if (otpStep) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg-base)' }}>
+        <div className="card-elevated w-full max-w-sm p-8">
+          <div className="text-center mb-6">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{ background: 'color-mix(in srgb, #0f172a 15%, transparent)' }}>
+              <span style={{ fontSize: 28 }}>📱</span>
+            </div>
+            <h1 className="text-lg font-700 mb-1" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Kimliğini doğrula</h1>
+            <p className="text-body-sm">
+              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{maskedPhone}</span> numaralı telefona SMS gönderdik.
+            </p>
+            <p className="text-caption mt-1">Gelen kodu girin</p>
+          </div>
+          <form onSubmit={submitOtp} className="space-y-4">
+            <input
+              className={`input text-center text-2xl tracking-widest ${otpError ? 'input-error' : ''}`}
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="000000"
+              maxLength={6}
+              value={otpCode}
+              onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+              autoFocus
+              required
+            />
+            {otpError && <p className="input-hint input-hint--error">{otpError}</p>}
+            <button className="btn-primary w-full" disabled={otpLoading || otpCode.length < 4}>
+              {otpLoading ? 'Doğrulanıyor…' : 'Doğrula ve Giriş Yap'}
+            </button>
+          </form>
+          <button onClick={() => { setOtpStep(false); setOtpCode(''); setOtpError(''); }}
+            className="mt-4 w-full text-center text-xs text-gray-400 hover:text-gray-600 transition-colors">
+            ← Geri dön
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Giriş formu
