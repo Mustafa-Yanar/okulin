@@ -8,6 +8,7 @@
 import { tdb, tenant } from '@/lib/sqldb';
 import { prisma } from '@/lib/prisma';
 import { newId } from '@/lib/id';
+import { HttpError } from '@/lib/errors';
 
 // Finance.payments Json ledger'ındaki tek ödeme kaydı.
 export interface PaymentEntry {
@@ -32,15 +33,14 @@ export interface ApplyPaymentOpts {
   branchOverride?: string;
 }
 
-export type ApplyPaymentResult =
-  | { ok: false; error: string; status: number }
-  | {
-      ok: true;
-      record: { studentId: string; studentName: string; studentCls: string; netFee: number; payments: PaymentEntry[]; balance: number };
-      payment: PaymentEntry;
-      balance: number;
-      receiptNo: string;
-    };
+// Başarı yükü. İş-kuralı ihlalinde (kayıt yok / geçersiz tutar / taksit zaten ödendi)
+// fonksiyon HttpError FIRLATIR — hata dönüşü yoktur (lib↔route tek hata sözleşmesi).
+export interface ApplyPaymentResult {
+  record: { studentId: string; studentName: string; studentCls: string; netFee: number; payments: PaymentEntry[]; balance: number };
+  payment: PaymentEntry;
+  balance: number;
+  receiptNo: string;
+}
 
 // Makbuz no: TenantConfig.receiptCounter atomik artır.
 export async function generateReceiptNoSql(orgOverride?: string, branchOverride?: string): Promise<string> {
@@ -60,20 +60,20 @@ export async function applyInstallmentPaymentSql(opts: ApplyPaymentOpts): Promis
   const { studentId, amount, installmentIdx, method, note, date, recordedBy, orgOverride, branchOverride } = opts;
   const t = tdb(orgOverride, branchOverride);
   const stu = await t.student.findFirst({ where: { legacyId: studentId }, include: { class: true } });
-  if (!stu) return { ok: false, error: 'Finansal kayıt bulunamadı', status: 404 };
+  if (!stu) throw new HttpError(404, 'Finansal kayıt bulunamadı');
   const record = await t.finance.findFirst({ where: { studentId: stu.id }, include: { installments: { orderBy: { idx: 'asc' } } } });
-  if (!record) return { ok: false, error: 'Finansal kayıt bulunamadı', status: 404 };
+  if (!record) throw new HttpError(404, 'Finansal kayıt bulunamadı');
 
   const installments = record.installments;
   const explicit = installmentIdx !== null && installmentIdx !== undefined && installmentIdx >= 0;
   const targetInst = explicit
     ? installments.find((i) => i.idx === installmentIdx)
     : installments.find((i) => !i.paid);
-  if (explicit && targetInst?.paid) return { ok: false, error: 'Bu taksit zaten ödenmiş', status: 400 };
+  if (explicit && targetInst?.paid) throw new HttpError(400, 'Bu taksit zaten ödenmiş');
 
   // parseFloat: eski davranış korunur (number da string de gelebilir → String() ile coerce)
   const payAmount = (explicit && targetInst) ? (parseFloat(String(targetInst.amount)) || 0) : parseFloat(String(amount));
-  if (!payAmount || payAmount <= 0) return { ok: false, error: 'Geçersiz ödeme tutarı', status: 400 };
+  if (!payAmount || payAmount <= 0) throw new HttpError(400, 'Geçersiz ödeme tutarı');
 
   const receiptNo = await generateReceiptNoSql(orgOverride, branchOverride);
   const paymentDate = date || new Date().toISOString().slice(0, 10);
@@ -92,5 +92,5 @@ export async function applyInstallmentPaymentSql(opts: ApplyPaymentOpts): Promis
   await t.finance.update({ where: { id: record.id }, data: { payments: payments as unknown as object } });
 
   const recOut = { studentId, studentName: stu.name, studentCls: stu.class?.legacyId || '', netFee: record.netFee, payments, balance };
-  return { ok: true, record: recOut, payment, balance, receiptNo };
+  return { record: recOut, payment, balance, receiptNo };
 }

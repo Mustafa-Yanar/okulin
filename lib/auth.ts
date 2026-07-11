@@ -3,6 +3,7 @@ import { cookies, headers } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'crypto';
 import { DEFAULT_ORG } from './org';
+import { errorResponse } from './errors';
 
 // Oturum payload'u — JWT claim'leri. JWTPayload'ı genişletir (ek alanlar unknown
 // olarak erişilebilir; role/id/name gibi bilinenler tipli).
@@ -130,7 +131,13 @@ export function withAuth(modeOrHandler: AuthMode | AuthedHandler, maybeHandler?:
     else if (typeof mode === 'function') ok = await mode(session);
     // mode === 'auth' → giriş yeterli
     if (!ok) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-    return handler(req, ctx, session);
+    // Servis katmanı iş-kuralı ihlalinde HttpError fırlatır → tek noktada { error }+status'a
+    // çevrilir (route re-translate etmez). Diğer hatalar yeniden fırlar (gerçek 500).
+    try {
+      return await handler(req, ctx, session);
+    } catch (e) {
+      return errorResponse(e);
+    }
   };
 }
 

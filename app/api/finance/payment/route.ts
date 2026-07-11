@@ -20,10 +20,8 @@ export const POST = withAuth(['director', 'accountant'], async (req, _ctx, sessi
   if (!parsed.ok) return parsed.response;
   const { studentId, amount, date, method, note, installmentIdx } = parsed.data;
 
-  const result = await applyInstallmentPaymentSql({ studentId, amount, installmentIdx, method, note, date, recordedBy: session.name });
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status || 400 });
-
-  const { record, payment, balance, receiptNo } = result;
+  // İş-kuralı ihlalinde applyInstallmentPaymentSql HttpError fırlatır → withAuth çevirir.
+  const { record, payment, balance, receiptNo } = await applyInstallmentPaymentSql({ studentId, amount, installmentIdx, method, note, date, recordedBy: session.name });
   await logAudit({
     ...actorFrom(session),
     action: 'finance.payment',

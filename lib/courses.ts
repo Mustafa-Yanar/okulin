@@ -1,5 +1,6 @@
 import { BRANCHES_BY_GROUP, COL_COURSES, MATH_FAMILY } from '@/lib/constants';
 import { tdb, withScope } from '@/lib/sqldb';
+import { HttpError } from '@/lib/errors';
 import type { Course } from '@prisma/client';
 
 // Ders kataloğu registry — sabit-koddan veriye geçiş (kurum kendi dersini ekler/çıkarır).
@@ -75,38 +76,38 @@ export function courseKeyFromName(ad: string): string {
   return slug || ('ders-' + Math.random().toString(36).slice(2, 8));
 }
 
-// Yeni ders ekle (benzersiz key üret, core:false). SQL-aware. Döner: { ok, course }
-export async function createCourse(ad: string) {
+// Yeni ders ekle (benzersiz key üret, core:false). SQL-aware. Döner: yeni CourseRecord.
+export async function createCourse(ad: string): Promise<CourseRecord> {
   const name = String(ad).trim();
   const existing = await tdb().course.findMany({ select: { key: true } });
   const set = new Set(existing.map((c) => c.key));
   let key = courseKeyFromName(name);
   if (set.has(key)) { let i = 2; while (set.has(`${key}-${i}`)) i++; key = `${key}-${i}`; }
   await tdb().course.create({ data: withScope({ key, ad: name, core: false, family: null, active: true }) });
-  return { ok: true as const, course: { key, ad: name, core: false, family: null, active: true, seeded: true } };
+  return { key, ad: name, core: false, family: null, active: true, seeded: true };
 }
 
 // Ders güncelle: ad değiştir ve/veya active aç-kapa (soft delete = active:false). SQL-aware.
-export async function updateCourse(key: string, { ad, active }: { ad?: string; active?: boolean }) {
+// Ders yoksa HttpError(404) fırlatır (route re-translate etmez; withAuth çevirir).
+export async function updateCourse(key: string, { ad, active }: { ad?: string; active?: boolean }): Promise<CourseRecord> {
   const existing = await tdb().course.findFirst({ where: { key } });
-  if (!existing) return { ok: false as const, status: 404, error: 'Ders bulunamadı' };
+  if (!existing) throw new HttpError(404, 'Ders bulunamadı');
   const data: { ad?: string; active?: boolean } = {};
   if (ad !== undefined) data.ad = String(ad).trim();
   if (active !== undefined) data.active = active;
   const u = await tdb().course.update({ where: { id: existing.id }, data });
-  return { ok: true as const, course: { key: u.key, ad: u.ad, core: u.core, family: u.family, active: u.active } };
+  return { key: u.key, ad: u.ad, core: u.core, family: u.family, active: u.active !== false, seeded: true };
 }
 
 // Dersi KALICI sil — yalnız hiçbir şubede (Class.dersler) kullanılmıyorsa. SQL-aware.
-// Kullanılıyorsa 409: veri bütünlüğü için önce şubelerden çıkarılmalı ya da pasifleştirilmeli.
-// (Pasifleştirme geçmişi korur; kalıcı silme kaydı tamamen kaldırır.)
-export async function deleteCourse(key: string) {
+// Kullanılıyorsa HttpError(409): veri bütünlüğü için önce şubelerden çıkarılmalı ya da
+// pasifleştirilmeli. (Pasifleştirme geçmişi korur; kalıcı silme kaydı tamamen kaldırır.)
+export async function deleteCourse(key: string): Promise<void> {
   const classRows = await tdb().class.findMany({ select: { dersler: true } });
   const used = classRows.some((c) => (c.dersler || []).includes(key));
   if (used) {
-    return { ok: false as const, status: 409, error: 'Bu ders bir veya daha fazla şubede kullanılıyor. Önce şubelerden çıkarın ya da pasifleştirin.' };
+    throw new HttpError(409, 'Bu ders bir veya daha fazla şubede kullanılıyor. Önce şubelerden çıkarın ya da pasifleştirin.');
   }
   const existing = await tdb().course.findFirst({ where: { key } });
   if (existing) await tdb().course.delete({ where: { id: existing.id } });
-  return { ok: true as const };
 }

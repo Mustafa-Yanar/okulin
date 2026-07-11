@@ -3,6 +3,7 @@ import type { PaymentConfigData } from '@/lib/payment';
 import { decryptSecret } from '@/lib/payment/crypto';
 import { getProvider } from '@/lib/payment';
 import { applyInstallmentPaymentSql } from '@/lib/finance';
+import { HttpError } from '@/lib/errors';
 import { tdb } from '@/lib/sqldb';
 import { prisma } from '@/lib/prisma';
 
@@ -106,11 +107,18 @@ export async function POST(req: Request) {
       orgOverride: order.org,
       branchOverride: order.branch,
     };
-    const result = await applyInstallmentPaymentSql(paymentOpts);
-
-    if (!result.ok) {
-      await patchOrder(merchantOid, order, { status: 'error', error: result.error, at: new Date().toISOString() });
-      return ok();
+    let result;
+    try {
+      result = await applyInstallmentPaymentSql(paymentOpts);
+    } catch (e) {
+      // İş-kuralı ihlali (kayıt yok / geçersiz tutar / taksit zaten ödendi) → HttpError:
+      // terminal 'error' işaretle + OK dön (tekrar deneme istemeyiz). Altyapı hataları
+      // (HttpError DEĞİL) yeniden fırlar → dıştaki catch claim'i geri alır (pending → PayTR tekrar dener).
+      if (e instanceof HttpError) {
+        await patchOrder(merchantOid, order, { status: 'error', error: e.message, at: new Date().toISOString() });
+        return ok();
+      }
+      throw e;
     }
 
     await patchOrder(merchantOid, order, { status: 'paid', paidAt: new Date().toISOString(), receiptNo: result.receiptNo });

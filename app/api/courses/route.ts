@@ -20,7 +20,7 @@ export const POST = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, CreateCourseSchema);
   if (!parsed.ok) return parsed.response;
 
-  const { course } = await createCourse(parsed.data.ad); // SQL-aware
+  const course = await createCourse(parsed.data.ad); // SQL-aware
   return NextResponse.json({ ok: true, course });
 });
 
@@ -36,9 +36,8 @@ export const PATCH = withAuth('manage', async (req) => {
   if (!parsed.ok) return parsed.response;
   const { key, ad, active } = parsed.data;
 
-  const r = await updateCourse(key, { ad, active }); // SQL-aware
-  if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status || 400 });
-  return NextResponse.json({ ok: true, course: r.course });
+  const course = await updateCourse(key, { ad, active }); // SQL-aware (yoksa HttpError 404)
+  return NextResponse.json({ ok: true, course });
 });
 
 // DELETE /api/courses — hard:true ise KALICI sil (kullanılmıyorsa), değilse pasifleştir
@@ -49,12 +48,10 @@ export const DELETE = withAuth('manage', async (req) => {
   const { key, hard } = parsed.data;
 
   if (hard) {
-    const r = await deleteCourse(key); // kalıcı sil, SQL-aware (kullanımda ise 409)
-    if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status || 400 });
+    await deleteCourse(key); // kalıcı sil, SQL-aware (kullanımda ise HttpError 409)
     return NextResponse.json({ ok: true, deleted: true });
   }
 
-  const r = await updateCourse(key, { active: false }); // soft delete, SQL-aware
-  if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status || 400 });
+  await updateCourse(key, { active: false }); // soft delete, SQL-aware
   return NextResponse.json({ ok: true });
 });
