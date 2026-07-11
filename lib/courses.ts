@@ -96,3 +96,17 @@ export async function updateCourse(key: string, { ad, active }: { ad?: string; a
   const u = await tdb().course.update({ where: { id: existing.id }, data });
   return { ok: true as const, course: { key: u.key, ad: u.ad, core: u.core, family: u.family, active: u.active } };
 }
+
+// Dersi KALICI sil — yalnız hiçbir şubede (Class.dersler) kullanılmıyorsa. SQL-aware.
+// Kullanılıyorsa 409: veri bütünlüğü için önce şubelerden çıkarılmalı ya da pasifleştirilmeli.
+// (Pasifleştirme geçmişi korur; kalıcı silme kaydı tamamen kaldırır.)
+export async function deleteCourse(key: string) {
+  const classRows = await tdb().class.findMany({ select: { dersler: true } });
+  const used = classRows.some((c) => (c.dersler || []).includes(key));
+  if (used) {
+    return { ok: false as const, status: 409, error: 'Bu ders bir veya daha fazla şubede kullanılıyor. Önce şubelerden çıkarın ya da pasifleştirin.' };
+  }
+  const existing = await tdb().course.findFirst({ where: { key } });
+  if (existing) await tdb().course.delete({ where: { id: existing.id } });
+  return { ok: true as const };
+}

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
-import { getCourses, createCourse, updateCourse } from '@/lib/courses';
+import { getCourses, createCourse, updateCourse, deleteCourse } from '@/lib/courses';
 
 export const runtime = 'nodejs';
 
@@ -41,11 +41,18 @@ export const PATCH = withAuth('manage', async (req) => {
   return NextResponse.json({ ok: true, course: r.course });
 });
 
-// DELETE /api/courses — dersi pasifleştir (soft delete; geçmiş/program bozulmaz).
+// DELETE /api/courses — hard:true ise KALICI sil (kullanılmıyorsa), değilse pasifleştir
+// (soft delete; geçmiş/program bozulmaz). Kalıcı silme kullanılan derste 409 döner.
 export const DELETE = withAuth('manage', async (req) => {
-  const parsed = await parseBody(req, z.object({ key: z.string().min(1).max(80) }));
+  const parsed = await parseBody(req, z.object({ key: z.string().min(1).max(80), hard: z.boolean().optional() }));
   if (!parsed.ok) return parsed.response;
-  const { key } = parsed.data;
+  const { key, hard } = parsed.data;
+
+  if (hard) {
+    const r = await deleteCourse(key); // kalıcı sil, SQL-aware (kullanımda ise 409)
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status || 400 });
+    return NextResponse.json({ ok: true, deleted: true });
+  }
 
   const r = await updateCourse(key, { active: false }); // soft delete, SQL-aware
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status || 400 });

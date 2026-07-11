@@ -351,6 +351,19 @@ interface CourseCatalogProps {
 export function CourseCatalog({ courses, onChanged, showToast }: CourseCatalogProps) {
   const [yeni, setYeni] = useState('');
   const [busy, setBusy] = useState(false);
+  const confirm = useConfirm();
+
+  async function hardDelete(c: CourseRecord) {
+    if (!(await confirm(`"${c.ad}" dersi kalıcı olarak silinsin mi? Bu işlem geri alınamaz.`))) return;
+    setBusy(true);
+    try {
+      await api('/api/courses', { method: 'DELETE', body: JSON.stringify({ key: c.key, hard: true }) });
+      showToast?.('Ders kalıcı olarak silindi');
+      await onChanged();
+    } catch (err) {
+      showToast?.((err as Error).message, 'error');
+    } finally { setBusy(false); }
+  }
 
   async function ekle() {
     const ad = yeni.trim();
@@ -394,8 +407,8 @@ export function CourseCatalog({ courses, onChanged, showToast }: CourseCatalogPr
       </div>
 
       <p className="text-caption mb-2">
-        Ders eklemek için üstteki alanı kullan; çıkarmak için pasifleştir. Pasif ders yeni şubelere
-        atanamaz (geçmiş kayıtlar korunur).
+        <b>Pasifleştir:</b> ders listede kalır, yeni şubelere atanamaz (geçmiş kayıtlar korunur).{' '}
+        <b>Kalıcı Sil:</b> dersi tamamen kaldırır — yalnız hiçbir şubede kullanılmıyorsa.
       </p>
 
       <div className="space-y-1.5">
@@ -409,10 +422,17 @@ export function CourseCatalog({ courses, onChanged, showToast }: CourseCatalogPr
                 <span className="truncate" style={{ fontWeight: 600 }}>{c.ad}</span>
                 {inactive && <span className="text-caption">pasif</span>}
               </div>
-              <button className="btn-ghost !px-3 !py-1.5 text-sm flex items-center gap-1"
-                onClick={() => toggleActive(c)} disabled={busy}>
-                {inactive ? (<><Check size={13} /> Aktifleştir</>) : (<><XIcon size={13} /> Pasifleştir</>)}
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button className="btn-ghost !px-3 !py-1.5 text-sm flex items-center gap-1"
+                  onClick={() => toggleActive(c)} disabled={busy}>
+                  {inactive ? (<><Check size={13} /> Aktifleştir</>) : (<><XIcon size={13} /> Pasifleştir</>)}
+                </button>
+                <button className="btn-ghost !px-3 !py-1.5 text-sm flex items-center gap-1"
+                  style={{ color: 'var(--color-danger)' }} onClick={() => hardDelete(c)}
+                  disabled={busy} aria-label="Kalıcı sil">
+                  <Trash2 size={13} /> Sil
+                </button>
+              </div>
             </div>
           );
         })}
