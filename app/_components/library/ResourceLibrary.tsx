@@ -6,12 +6,11 @@ import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
 import {
   BookOpen, FileText, Youtube, Link2, Plus, Trash2, X, Upload,
-  ExternalLink, Play, Filter, GraduationCap, ChevronDown,
+  ExternalLink, Play, Filter,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useClasses } from '../ClassesContext';
 import { groupedClasses, classShort } from '@/lib/classCatalog';
-import { MEBI_LINKS } from '@/lib/mebi-links';
 import type { ShowToast } from '../types';
 
 const TYPE_META: Record<string, { label: string; icon: LucideIcon; color: string; bg: string }> = {
@@ -109,9 +108,6 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
         )}
       </div>
 
-      {/* Küratörlü ücretsiz MEB/MEBİ kaynakları — salt link, herkese görünür */}
-      <FreeResourcesShelf />
-
       {/* Filtreler */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <Filter size={14} className="text-slate-400" />
@@ -196,42 +192,6 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
       )}
 
       {video && <VideoModal url={video.url} title={video.title} onClose={() => setVideo(null)} />}
-    </div>
-  );
-}
-
-// ----- Ücretsiz MEB/MEBİ kaynak rafı (küratörlü, salt link, kurum kurulumu gerekmez) -----
-function FreeResourcesShelf() {
-  const [open, setOpen] = useState(true);
-  return (
-    <div className="mb-4 border rounded-xl overflow-hidden" style={{ borderColor: 'var(--border)' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-3.5 py-2.5 hover:brightness-95"
-        style={{ background: 'var(--surface-2, #f8fafc)' }}
-      >
-        <span className="flex items-center gap-2">
-          <GraduationCap size={17} className="text-emerald-600" />
-          <span className="text-sm font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Ücretsiz Eğitim Kaynakları</span>
-          <span className="text-[10px] bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">MEB · ücretsiz</span>
-        </span>
-        <ChevronDown size={16} className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-          {MEBI_LINKS.map(l => (
-            <a key={l.id} href={l.url} target="_blank" rel="noopener noreferrer"
-              className="card p-3 flex flex-col gap-1 hover:border-emerald-300 transition group">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-600 leading-tight" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{l.title}</p>
-                <ExternalLink size={13} className="text-slate-300 group-hover:text-emerald-500 shrink-0" />
-              </div>
-              <p className="text-body-sm leading-snug">{l.desc}</p>
-              <span className="text-[10px] text-slate-400 mt-0.5">{l.tag}</span>
-            </a>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
