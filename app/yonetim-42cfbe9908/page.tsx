@@ -9,9 +9,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import SuperAdminPanel from '../_components/SuperAdminPanel';
+import type { Session } from '@/lib/auth';
 
 export default function SuperAdminPage() {
-  const [session, setSession] = useState(undefined); // undefined=yükleniyor, null=yok
+  const [session, setSession] = useState<Session | null | undefined>(undefined); // undefined=yükleniyor, null=yok
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -21,7 +22,7 @@ export default function SuperAdminPage() {
   const loadSession = useCallback(async () => {
     try {
       const res = await fetch('/api/auth');
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { session?: Session };
       setSession(data.session && data.session.role === 'superadmin' ? data.session : null);
     } catch {
       setSession(null);
@@ -29,7 +30,7 @@ export default function SuperAdminPage() {
   }, []);
   useEffect(() => { loadSession(); }, [loadSession]);
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -39,7 +40,7 @@ export default function SuperAdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'login', role: 'superadmin', username, password }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string; role?: string; name?: string };
       if (!res.ok || data.role !== 'superadmin') {
         setError(data.error || 'Giriş başarısız.');
         setLoading(false);

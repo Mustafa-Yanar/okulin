@@ -1,5 +1,7 @@
 import './globals.css';
 import { cache } from 'react';
+import type { ReactNode } from 'react';
+import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import { resolveOrg, isApexHost, PLATFORM_BRANDING } from '@/lib/org';
 import { normalizeBranding } from '@/lib/branding';
@@ -29,7 +31,7 @@ const getIsApex = cache(() => {
   try { return isApexHost(headers().get('host')); } catch { return false; }
 });
 
-export async function generateMetadata() {
+export async function generateMetadata(): Promise<Metadata> {
   const b = await getBranding();
   const apex = getIsApex();
   // Kuruma özel ikon: logo varsa onu kullan (iOS apple-touch + genel), yoksa varsayılan.
@@ -58,7 +60,7 @@ export async function generateMetadata() {
   };
 }
 
-export async function generateViewport() {
+export async function generateViewport(): Promise<Viewport> {
   const b = await getBranding();
   return {
     themeColor: b.themeColor,
@@ -68,7 +70,7 @@ export async function generateViewport() {
   };
 }
 
-export default function RootLayout({ children }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   const apex = getIsApex();
   return (
     <html lang="tr">
