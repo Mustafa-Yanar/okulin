@@ -5,6 +5,7 @@
 
 import { getTemplate, flatSubjects, AYT_PUAN_TURU } from './template';
 import { computePuanlar, mergeYks } from './score';
+import { shortDate } from './analysis';
 import type { DenemeExam } from './types';
 
 const LIST_LABELS: Record<string, string> = { TYT: 'TYT', SAY: 'Sayısal', EA: 'Eşit Ağırlık', SOZ: 'Sözel', LGS: 'LGS' };
@@ -112,6 +113,117 @@ export function buildReports(exam: DenemeExam | null | undefined, opts: { studen
     exam: { id: exam.id, name: exam.name, examType: exam.examType, date: exam.date },
     lists,
   };
+}
+
+// ─── Sınıf/şube bazlı karşılaştırmalı rapor + trend ────────────────────────
+// buildReports satır-bazlı sıralama verir; müdür raporunda ayrıca SINIF bazında
+// kıyaslama gerekir. Bu iki fonksiyon eşleşmiş (sınıfı bilinen) öğrencileri sınıfa
+// göre gruplayıp ortalamaları çıkarır. opts.studentInfoById.cls = görünen sınıf adı.
+
+// Tek sınıfın (bir liste içindeki) ortalamaları.
+export interface ClassAgg {
+  cls: string;
+  count: number;
+  subjects: Record<string, number>; // ders key → ortalama net
+  toplamNet: number;
+  puan: number | null;
+  rank?: number;
+}
+
+// Tek sınavın SINIF karşılaştırması: her puan-türü listesi için sınıfları
+// (ortalama net/puan) topluca sıralar. buildReports'u yeniden kullanır.
+export function buildClassReport(
+  exam: DenemeExam | null | undefined,
+  opts: { studentInfoById?: StudentInfoById } = {}
+) {
+  const base = buildReports(exam, opts);
+  if (!base.exam) return { exam: null, lists: [] };
+
+  const lists = base.lists.map((list) => {
+    const subjKeys = list.subjects.map((s) => s.key);
+    const byCls = new Map<string, ReportRow[]>();
+    for (const r of list.rows) {
+      if (!r.cls) continue; // yalnız sınıfı bilinen (eşleşmiş) öğrenciler
+      const arr = byCls.get(r.cls) || [];
+      arr.push(r);
+      byCls.set(r.cls, arr);
+    }
+
+    const classes: ClassAgg[] = [...byCls.entries()].map(([cls, rws]) => {
+      const n = rws.length || 1;
+      const subjects: Record<string, number> = {};
+      for (const k of subjKeys) {
+        subjects[k] = round2(rws.reduce((s, r) => s + (r.subjects[k]?.net || 0), 0) / n);
+      }
+      const toplamNet = round2(rws.reduce((s, r) => s + (r.toplamNet || 0), 0) / n);
+      const puanVals = rws.map((r) => r.puan).filter((p): p is number => p != null);
+      const puan = puanVals.length ? round2(puanVals.reduce((s, p) => s + p, 0) / puanVals.length) : null;
+      return { cls, count: rws.length, subjects, toplamNet, puan };
+    });
+
+    classes.sort((a, b) => {
+      if (a.puan != null && b.puan != null) return b.puan - a.puan;
+      return b.toplamNet - a.toplamNet;
+    });
+    classes.forEach((c, i) => { c.rank = i + 1; });
+
+    return { key: list.key, label: list.label, subjects: list.subjects, classes, ortalama: list.ortalama };
+  });
+
+  return { exam: base.exam, lists };
+}
+
+// Trend serisinin tek noktası (bir sınav).
+export interface TrendPoint {
+  examId: string;
+  name: string;
+  date: string | null;
+  dateLabel: string;
+  classAvgs: Record<string, number>; // görünen sınıf adı → ortalama toplam net
+  schoolAvg: number;
+}
+
+// Sınıf gelişim trendi: aynı türden (eskiden yeniye sıralı, HESAPLANMIŞ) sınavlarda
+// her sınıfın ortalama toplam netinin zaman serisi + okul ortalaması. toplamNet
+// liste-bağımsız (satır başına) olduğundan tür başına tek seri yeterli.
+export function buildClassTrend(
+  exams: DenemeExam[],
+  opts: { studentInfoById?: StudentInfoById } = {}
+) {
+  const infoById = opts.studentInfoById || {};
+  const classSet = new Set<string>();
+
+  const points: TrendPoint[] = exams.map((exam) => {
+    const rows = Array.isArray(exam.rows) ? exam.rows : [];
+    const agg = new Map<string, { sum: number; n: number }>();
+    let schoolSum = 0;
+    let schoolN = 0;
+    for (const r of rows) {
+      const info = r.studentId ? infoById[r.studentId] : null;
+      const cls = info?.cls || '';
+      if (!cls) continue;
+      const net = typeof r.toplamNet === 'number' ? r.toplamNet : 0;
+      const b = agg.get(cls) || { sum: 0, n: 0 };
+      b.sum += net;
+      b.n += 1;
+      agg.set(cls, b);
+      schoolSum += net;
+      schoolN += 1;
+      classSet.add(cls);
+    }
+    const classAvgs: Record<string, number> = {};
+    for (const [cls, b] of agg) classAvgs[cls] = round2(b.sum / b.n);
+    return {
+      examId: exam.id,
+      name: exam.name,
+      date: exam.date ?? null,
+      dateLabel: shortDate(exam.date),
+      classAvgs,
+      schoolAvg: schoolN ? round2(schoolSum / schoolN) : 0,
+    };
+  });
+
+  return { classes: [...classSet].sort((a, b) => a.localeCompare(b, 'tr')), points };
 }
 
 interface MergeRow {

@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, ChevronLeft, KeyRound, Upload, BarChart3, GitMerge } from 'lucide-react';
+import { Plus, Trash2, ChevronLeft, KeyRound, Upload, BarChart3, GitMerge, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import AnswerKeyForm from './AnswerKeyForm';
 import VeriGirisi, { type ExamRowDTO } from './VeriGirisi';
 import SonucListesi from './SonucListesi';
+import SinifRaporu from './SinifRaporu';
 import MergeListesi, { type ExamSummaryDTO } from './MergeListesi';
 import { useConfirm } from '../ConfirmProvider';
 import type { DenemeExam } from '@/lib/deneme/types';
@@ -63,10 +64,17 @@ export default function DirectorDenemeYonetimi({ showToast }: DirectorDenemeYone
     return <MergeListesi exams={exams} showToast={showToast} onBack={() => setMode('list')} />;
   }
 
+  if (mode === 'rapor') {
+    return <SinifRaporu showToast={showToast} onBack={() => setMode('list')} />;
+  }
+
   // Liste
   return (
     <div className="space-y-3">
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-2 flex-wrap">
+        <button onClick={() => setMode('rapor')} className="btn-ghost !px-4 !py-2 flex items-center gap-2">
+          <Users size={16} /> Sınıf Raporu
+        </button>
         <button onClick={() => setMode('merge')} className="btn-ghost !px-4 !py-2 flex items-center gap-2">
           <GitMerge size={16} /> TYT+AYT Birleştir
         </button>

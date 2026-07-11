@@ -66,6 +66,17 @@ export async function saveExam(exam: DenemeExam): Promise<void> {
   }
 }
 
+// Aynı türdeki TÜM sınavları (gömülü-rows, rows dahil) tarihe göre eskiden yeniye getir.
+// Sınıf raporu/trend tek sorguda tüm satırlara ihtiyaç duyar (N+1'i kaldırır).
+export async function getExamsByType(examType: string): Promise<DenemeExam[]> {
+  const rows = await tdb().exam.findMany({
+    where: { examType },
+    include: { rows: true },
+    orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+  });
+  return rows.map(sqlExamToObj).filter((e): e is DenemeExam => e !== null);
+}
+
 // Sınav listesi (meta, en yeni başta).
 export async function listExams() {
   const rows = await tdb().exam.findMany({ orderBy: { createdAt: 'desc' } });

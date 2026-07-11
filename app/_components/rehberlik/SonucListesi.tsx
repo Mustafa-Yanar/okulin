@@ -164,8 +164,8 @@ function ListeTablosu({ list }: { list: ReportListDTO }) {
   );
 }
 
-// Uzun ders adını başlık için kısalt (tooltip tam adı taşır).
-function kisalt(label: string): string {
+// Uzun ders adını başlık için kısalt (tooltip tam adı taşır). SinifRaporu da kullanır.
+export function kisalt(label: string): string {
   const map: Record<string, string> = {
     Türkçe: 'Tür', Matematik: 'Mat', Geometri: 'Geo', Fizik: 'Fiz', Kimya: 'Kim',
     Biyoloji: 'Biy', Tarih: 'Tar', Coğrafya: 'Coğ', 'Din Kültürü': 'Din', Felsefe: 'Fel',
