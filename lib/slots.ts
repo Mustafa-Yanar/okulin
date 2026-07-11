@@ -206,7 +206,11 @@ function computeCellFromEntry(entry: ProgramEntry | undefined, existing: SlotCel
       booked: false, disabled: true, lessonType: 'ders',
       cls: entry.cls || '', fixed: true,
     };
-    if (entry.subBranch) gridEntry.subBranch = entry.subBranch;
+    // Ders adı: program-solve yerleşimi 'branch' (a.course) alanına, manuel düzenleme
+    // 'subBranch' alanına yazıyor. Grid tüketicileri (class-schedule, sınıf ders programı
+    // modalı) subBranch/branch okur — ikisine de yaz ki ders adı sınıf programında görünsün.
+    const dersAd = entry.subBranch || entry.branch;
+    if (dersAd) { gridEntry.subBranch = dersAd; gridEntry.branch = dersAd; }
     return gridEntry;
   }
   // Şablondan gelen sabit ETÜT (rezervasyon)
