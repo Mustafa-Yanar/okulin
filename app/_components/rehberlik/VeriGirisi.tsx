@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { upload } from '@vercel/blob/client';
 import { Upload, ScanLine, FileText, Image as ImageIcon, Trash2, Plus, Save, ChevronDown, Keyboard, HardDriveDownload, AlertTriangle } from 'lucide-react';
 import { getTemplate, boxLength, normalizeRaw, CHOICES } from '@/lib/deneme/template';
 import { parseDat, datSupports, type ParseDatResult } from '@/lib/deneme/dat';
@@ -217,7 +218,7 @@ function OptikEkle({ exam, kitapcik, onChanged, showToast }: OptikEkleProps) {
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > 20 * 1024 * 1024) return showToast("Dosya 20 MB'dan büyük", 'error');
+    if (f.size > 50 * 1024 * 1024) return showToast("Dosya 50 MB'dan büyük", 'error');
     const pdf = f.type === 'application/pdf';
     setFile(f); setIsPdf(pdf); setFileName(f.name); setForms(null);
     if (!pdf) { const r = new FileReader(); r.onload = (ev) => setPreview(ev.target?.result as string); r.readAsDataURL(f); }
@@ -228,9 +229,17 @@ function OptikEkle({ exam, kitapcik, onChanged, showToast }: OptikEkleProps) {
     if (!file) return;
     setLoading(true); setForms(null);
     try {
-      const fd = new FormData();
-      fd.append('image', file);
-      const res = await fetch('/api/optik', { method: 'POST', body: fd, credentials: 'same-origin' });
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/optik/upload',
+        contentType: file.type,
+      });
+      const res = await fetch('/api/optik', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ url: blob.url, mimeType: file.type }),
+      });
       const data = (await res.json().catch(() => ({}))) as { error?: string; forms?: Omit<OptikForm, 'name'>[]; pageCount?: number };
       if (!res.ok) throw new Error(data.error || 'Hata');
       if (data.forms) {

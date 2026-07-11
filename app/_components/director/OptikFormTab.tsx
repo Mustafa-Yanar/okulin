@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef } from 'react';
+import { upload } from '@vercel/blob/client';
 import { Upload, ScanLine, Copy, Check, FileText, Image } from 'lucide-react';
 import type { ShowToast } from '../types';
 
@@ -30,7 +31,7 @@ export default function OptikFormTab({ showToast }: OptikFormTabProps) {
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (f.size > 20 * 1024 * 1024) { showToast('Dosya 20 MB\'dan büyük', 'error'); return; }
+    if (f.size > 50 * 1024 * 1024) { showToast('Dosya 50 MB\'dan büyük', 'error'); return; }
     const pdf = f.type === 'application/pdf';
     setFile(f);
     setIsPdf(pdf);
@@ -52,9 +53,17 @@ export default function OptikFormTab({ showToast }: OptikFormTabProps) {
     setForms(null);
     setRaw('');
     try {
-      const fd = new FormData();
-      fd.append('image', file);
-      const res = await fetch('/api/optik', { method: 'POST', body: fd, credentials: 'same-origin' });
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/optik/upload',
+        contentType: file.type,
+      });
+      const res = await fetch('/api/optik', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ url: blob.url, mimeType: file.type }),
+      });
       const data = (await res.json().catch(() => ({}))) as { error?: string; forms?: OptikFormResult[]; pageCount?: number; raw?: string };
       if (!res.ok) throw new Error(data.error || 'Hata');
       if (data.forms) {
@@ -150,7 +159,7 @@ export default function OptikFormTab({ showToast }: OptikFormTabProps) {
               <span className="flex items-center gap-1"><FileText size={12} /> PDF (tarayıcı/MFP)</span>
               <span className="flex items-center gap-1"><Image size={12} /> JPG/PNG (fotoğraf)</span>
             </p>
-            <p className="text-xs text-slate-300">Maks 20 MB</p>
+            <p className="text-xs text-slate-300">Maks 50 MB</p>
           </div>
         )}
         <input ref={inputRef} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="hidden" onChange={onFileChange} />
