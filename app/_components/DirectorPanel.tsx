@@ -1,23 +1,18 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, CalendarRange, CalendarDays, LayoutGrid, List, Eye
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { useSlotTimes } from './SlotTimesContext';
+import { Clock, Eye } from 'lucide-react';
 import ProgramOlusturucu from './program/ProgramOlusturucu';
-import { TeacherBookingsList } from './TeacherPanel';
 
-import { ALL_DAYS, getWeekKey, daySlots as buildDaySlots, allBranches } from '@/lib/constants';
-import { GROUPS, api, Modal, getAdjacentWeek, WeekNav, SectionHeader } from './director/shared';
+import { getWeekKey, allBranches } from '@/lib/constants';
+import { api, Modal, SectionHeader } from './director/shared';
 import { TeacherForm, StudentForm, ImportModal, type TeacherFormPayload, type StudentFormPayload } from './director/Forms';
 import DirectorMuhasebeTab from './director/MuhasebeTab';
 import HistoryModal from './director/HistoryModal';
 import SinifOgrenci from './director/SinifOgrenci';
+import TeachersTab from './director/TeachersTab';
 import RehberlikHub from './rehberlik/RehberlikHub';
 import VeliPanel from './director/VeliPanel';
-import ProgramEditor from './director/ProgramEditor';
 import { useUrlTab } from './useUrlTab';
 import { useUrlParam } from './useUrlParam';
 import LoadingBox, { SkeletonList } from './Loading';
@@ -112,7 +107,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [historyTarget, setHistoryTarget] = useState<{ type: string; id: string; name: string } | null>(null);
   const [pendingGuidance, setPendingGuidance] = useState<Record<string, number>>({});
 
-  const { slotTimes } = useSlotTimes();
   const confirm = useConfirm();
 
   const loadPendingGuidance = useCallback(async () => {
@@ -222,235 +216,32 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       )}
 
       {/* TEACHERS TAB — öğretmen listesi + inline detay sayfası (?ogretmen=ID) */}
-      {tab === 'teachers' && (() => {
-        const selT = expandedTeacherId ? teachers.find(x => x.id === expandedTeacherId) : null;
-
-        // İnline detay sayfası — bir öğretmen seçiliyse liste yerine bunu göster.
-        if (expandedTeacherId && selT) {
-          const t = selT;
-          const slotsReady = selectedTeacherForSlots?.id === t.id && teacherSlots;
-          return (
-            <div>
-              <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-                <button onClick={() => setExpandedTeacherId(null)}
-                  className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5">
-                  <ChevronLeft size={16} /> Geri
-                </button>
-                {!readOnly && (
-                <div className="flex gap-2 shrink-0">
-                  <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5" onClick={() => { setEditTeacher(t); setShowTeacherForm(true); }}>
-                    <Edit3 size={14} /> Düzenle
-                  </button>
-                  <button className="btn-ghost btn-ghost-danger !px-3 !py-2 text-sm flex items-center gap-1.5" onClick={async () => {
-                    if (!(await confirm(`${t.name} silinsin mi?`))) return;
-                    try { await api('/api/teachers',{method:'DELETE',body:JSON.stringify({id:t.id})}); showToast('Öğretmen silindi'); setExpandedTeacherId(null); loadAll(weekKey); } catch(err){showToast((err as Error).message,'error');}
-                  }}>
-                    <Trash2 size={14} /> Sil
-                  </button>
-                </div>
-                )}
-              </div>
-              <div className="card overflow-hidden">
-                {/* Başlık kartı */}
-                <div className="flex items-center gap-3 px-5 py-4 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
-                  <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
-                    {t.photoUrl
-                      ? <img src={t.photoUrl} alt={t.name} className="w-full h-full object-cover" />
-                      : <User size={24} className="text-gray-400" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-subheading">{t.name}</h3>
-                    <div className="text-caption">{(t.branches||[]).join(', ')}</div>
-                    <div className="flex gap-1 mt-1 flex-wrap">
-                      {(t.allowedGroups||[]).map(g => <span key={g} className="badge badge-info">{GROUPS[g]}</span>)}
-                      {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'var(--bg-muted)',color:'var(--text-muted)' }}>Tüm gruplar</span>}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="px-4 py-3" style={{ background: 'var(--bg-surface-2)' }}>
-                  {/* Sekme başlığı + tarih nav (sadece Etütler sekmesinde) */}
-                  <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-                    <div className="pill-tabs grow sm:grow-0">
-                      {([['etutler','Etütler',CalendarRange],['gecmis','Etüt Geçmişi',Clock],['program','Program',CalendarDays]] as [string, string, LucideIcon][]).map(([k,l,Icon]) => (
-                        <button key={k} onClick={() => setExpandedTeacherTab(k)}
-                          className={`pill-tab press-effect${expandedTeacherTab === k ? ' is-active' : ''}`}>
-                          <Icon size={12} /> <span>{l}</span>
-                        </button>
-                      ))}
-                    </div>
-                    {expandedTeacherTab === 'etutler' && (
-                      <WeekNav weekKey={weekKey} onPrev={() => handleWeekChange(getAdjacentWeek(weekKey,-1))} onNext={() => handleWeekChange(getAdjacentWeek(weekKey,1))} />
-                    )}
-                  </div>
-
-                  {/* Etütler sekmesi */}
-                  {expandedTeacherTab === 'etutler' && (
-                    slotsReady ? (
-                      <TeacherBookingsList
-                        bookedList={(() => {
-                          const items: {
-                            dayIndex: number; dayLabel: string; slotId: string; slotLabel: string; slotIdx: number;
-                            studentName?: string | null; studentCls?: string; studentId?: string | null; bookedBy: string; fixed: boolean;
-                          }[] = [];
-                          ALL_DAYS.forEach(day => {
-                            buildDaySlots(day.index, slotTimes.days?.[day.index]).forEach((slot, slotIdx) => {
-                              const sd = teacherSlots?.[day.index]?.[slotIdx];
-                              if (sd?.booked) items.push({
-                                dayIndex: day.index, dayLabel: day.label,
-                                slotId: slot.id, slotLabel: slot.label, slotIdx,
-                                studentName: sd.studentName,
-                                studentCls: (sd.studentCls||'').toUpperCase(),
-                                studentId: sd.studentId,
-                                bookedBy: sd.bookedBy || 'student',
-                                fixed: !!sd.fixed,
-                              });
-                            });
-                          });
-                          return items;
-                        })()}
-                        listColorMap={{
-                          student:  { badge: 'tag-student',  label: 'Öğrenci' },
-                          teacher:  { badge: 'tag-teacher',  label: 'Öğretmen' },
-                          director: { badge: 'tag-director', label: 'Müdür' },
-                        }}
-                        onCancel={item => handleCancel({ teacherId: t.id, day: item.dayIndex, slotId: item.slotId })}
-                        canCancelAll
-                      />
-                    ) : (
-                      <LoadingBox height="h-24" />
-                    )
-                  )}
-
-                  {/* Etüt Geçmişi sekmesi — inline */}
-                  {expandedTeacherTab === 'gecmis' && (
-                    <HistoryModal
-                      inline
-                      target={{ type: 'teacher', id: t.id, name: t.name }}
-                      onClose={() => setExpandedTeacherTab('etutler')}
-                      currentWeekKey={weekKey}
-                      currentEntries={(() => {
-                        if (selectedTeacherForSlots?.id !== t.id || !teacherSlots) return [];
-                        const items: {
-                          day: number; dayLabel: string; slotId: string; slotLabel: string;
-                          studentName?: string | null; studentCls?: string | null;
-                        }[] = [];
-                        ALL_DAYS.forEach(day => {
-                          buildDaySlots(day.index, slotTimes.days?.[day.index]).forEach((slot, slotIdx) => {
-                            const sd = teacherSlots[day.index]?.[slotIdx];
-                            if (sd?.booked) items.push({
-                              day: day.index, dayLabel: day.label,
-                              slotId: slot.id, slotLabel: slot.label,
-                              studentName: sd.studentName,
-                              studentCls: (sd.studentCls||'').toUpperCase(),
-                            });
-                          });
-                        });
-                        return items;
-                      })()}
-                    />
-                  )}
-
-                  {/* Program sekmesi — inline */}
-                  {expandedTeacherTab === 'program' && (
-                    <ProgramEditor
-                      key={`prog-${t.id}`}
-                      inline
-                      teacher={t}
-                      students={students}
-                      showToast={showToast}
-                      onClose={() => setExpandedTeacherTab('etutler')}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        }
-
-        // Liste / kart görünümü
-        return (
-          <div>
-            <SectionHeader title="Öğretmen" count={teachers.length}>
-              <div className="pill-tabs shrink-0" role="group" aria-label="Görünüm modu" style={{ width:'fit-content' }}>
-                <button
-                  type="button"
-                  className={`pill-tab !px-2.5 !flex-none ${teacherView === 'list' ? 'is-active' : ''}`}
-                  aria-pressed={teacherView === 'list'}
-                  title="Liste görünümü"
-                  onClick={() => changeTeacherView('list')}
-                >
-                  <List size={15} />
-                </button>
-                <button
-                  type="button"
-                  className={`pill-tab !px-2.5 !flex-none ${teacherView === 'grid' ? 'is-active' : ''}`}
-                  aria-pressed={teacherView === 'grid'}
-                  title="Kart görünümü"
-                  onClick={() => changeTeacherView('grid')}
-                >
-                  <LayoutGrid size={15} />
-                </button>
-              </div>
-              {!readOnly && (
-              <button className="btn-primary !px-4 !py-2 flex items-center gap-1.5 text-sm shrink-0" onClick={() => { setEditTeacher(null); setShowTeacherForm(true); }}>
-                <Plus size={14} /> Öğretmen Ekle
-              </button>
-              )}
-            </SectionHeader>
-            {teachers.length === 0 ? (
-              <EmptyState card icon={Users} title="Henüz öğretmen eklenmemiş" description="Yeni öğretmen ekleyerek başlayın." />
-            ) : teacherView === 'grid' ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {teachers.map(t => (
-                  <button
-                    key={t.id}
-                    className="card card-interactive press-effect flex flex-col items-center text-center gap-2 p-4"
-                    onClick={() => { setExpandedTeacherTab('etutler'); setExpandedTeacherId(t.id); }}
-                  >
-                    <div className="w-16 h-16 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
-                      {t.photoUrl
-                        ? <img src={t.photoUrl} alt={t.name} className="w-full h-full object-cover" />
-                        : <User size={30} className="text-gray-400" />}
-                    </div>
-                    <div className="min-w-0 w-full">
-                      <div className="font-semibold truncate">{t.name}</div>
-                      <div className="text-caption truncate">{(t.branches||[]).join(', ')}</div>
-                    </div>
-                    <div className="flex gap-1 flex-wrap justify-center">
-                      {(t.allowedGroups||[]).map(g => <span key={g} className="badge badge-info">{GROUPS[g]}</span>)}
-                      {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'var(--bg-muted)',color:'var(--text-muted)' }}>Tüm gruplar</span>}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                {teachers.map(t => (
-                  <div key={t.id} className="card card-interactive overflow-hidden">
-                    <button className="w-full flex items-center gap-3 px-4 py-3.5 text-left" onClick={() => { setExpandedTeacherTab('etutler'); setExpandedTeacherId(t.id); }}>
-                      <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
-                        {t.photoUrl
-                          ? <img src={t.photoUrl} alt={t.name} className="w-full h-full object-cover" />
-                          : <User size={22} className="text-gray-400" />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold">{t.name}</div>
-                        <div className="text-caption">{(t.branches||[]).join(', ')}</div>
-                        <div className="flex gap-1 mt-1 flex-wrap">
-                          {(t.allowedGroups||[]).map(g => <span key={g} className="badge badge-info">{GROUPS[g]}</span>)}
-                          {(t.allowedGroups||[]).length===0 && <span className="badge" style={{ background:'var(--bg-muted)',color:'var(--text-muted)' }}>Tüm gruplar</span>}
-                        </div>
-                      </div>
-                      <ChevronRight size={16} className="text-gray-400 shrink-0 ml-2" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })()}
+      {tab === 'teachers' && (
+        <TeachersTab
+          teachers={teachers}
+          students={students}
+          weekKey={weekKey}
+          readOnly={readOnly}
+          teacherSlots={teacherSlots}
+          selectedTeacherForSlots={selectedTeacherForSlots}
+          expandedTeacherId={expandedTeacherId}
+          expandedTeacherTab={expandedTeacherTab}
+          setExpandedTeacherTab={setExpandedTeacherTab}
+          teacherView={teacherView}
+          onChangeView={changeTeacherView}
+          showToast={showToast}
+          onBack={() => setExpandedTeacherId(null)}
+          onSelectTeacher={id => { setExpandedTeacherTab('etutler'); setExpandedTeacherId(id); }}
+          onEditTeacher={t => { setEditTeacher(t); setShowTeacherForm(true); }}
+          onAddTeacher={() => { setEditTeacher(null); setShowTeacherForm(true); }}
+          onDeleteTeacher={async t => {
+            if (!(await confirm(`${t.name} silinsin mi?`))) return;
+            try { await api('/api/teachers',{method:'DELETE',body:JSON.stringify({id:t.id})}); showToast('Öğretmen silindi'); setExpandedTeacherId(null); loadAll(weekKey); } catch(err){showToast((err as Error).message,'error');}
+          }}
+          onWeekChange={handleWeekChange}
+          onCancelBooking={(teacherId, day, slotId) => handleCancel({ teacherId, day, slotId })}
+        />
+      )}
 
       {/* SINIF / ÖĞRENCİ TAB — eski Sınıflar + Rehberlik birleşik */}
       {tab === 'students' && (
