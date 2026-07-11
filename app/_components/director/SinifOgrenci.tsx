@@ -13,6 +13,7 @@ import { classLabel } from '@/lib/constants';
 import { classLabelFrom } from '@/lib/classCatalog';
 import { api } from './shared';
 import { StudentExpandedView, ClassScheduleModal } from './StudentList';
+import type { BookingSlotEntry, BookingCancelArgs } from '../StudentPanel';
 import ClassScheduleEditor from './ClassScheduleEditor';
 import { ClassFormModal, CourseCatalog, KADEME_LABEL, KADEME_ORDER, DAL_LABEL } from './ClassManager';
 import LoadingBox from '../Loading';
@@ -29,9 +30,9 @@ type PanelStudent = StudentDTO & { group?: string };
 
 interface SinifOgrenciProps {
   students?: PanelStudent[];
-  allSlots: SlotEntryDTO[];
+  allSlots: BookingSlotEntry[];
   weekKey?: string;
-  onCancelBooking?: (slot: SlotEntryDTO) => void;
+  onCancelBooking?: (args: BookingCancelArgs) => void;
   onEditStudent?: (s: PanelStudent) => void;
   onDeleteStudent?: (s: PanelStudent) => void;
   onHistory?: (s: PanelStudent) => void;

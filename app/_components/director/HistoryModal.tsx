@@ -5,16 +5,21 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BookOpen, ClipboardList, Clock } from 'lucide-react';
 import { api, Modal } from './shared';
 
-// Arşiv satırı (GET /api/archive week.entries elemanı).
+// Arşiv satırı (GET /api/archive week.entries elemanı). "Bu hafta" satırları
+// canlı slot verisinden kurulur; oradan gelen ek alanlar da opsiyonel taşınır.
 interface ArchiveEntry {
   day: number;
   dayLabel: string;
   slotId: string;
   slotLabel: string;
-  studentName?: string;
-  studentCls?: string;
+  studentId?: string | null;
+  studentName?: string | null;
+  studentCls?: string | null;
+  teacherId?: string;
   teacherName?: string;
   branch?: string;
+  bookedBy?: string | null;
+  fixed?: boolean;
 }
 interface ArchiveWeek {
   weekKey?: string;

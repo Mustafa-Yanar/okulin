@@ -8,13 +8,49 @@ import {
   ALL_DAYS,
   daySlots as buildDaySlots,
 } from '@/lib/constants';
+import type { DayInfo, Slot } from '@/lib/constants';
+import type { SlotCell as SlotCellData, ProgramEntry } from '@/lib/slots';
 import { useClasses } from './ClassesContext';
 import { useSlotTimes } from './SlotTimesContext';
 import { classLabelFrom, coursesForClass } from '@/lib/classCatalog';
 import { isSlotPast } from './shared';
+import type { Session } from '@/lib/auth';
+import type { StudentDTO } from './types';
+
+// Grid'in ihtiyaç duyduğu asgari öğretmen görünümü — TeacherPanel oturumdan kurar,
+// DirectorPanel tam TeacherDTO geçirir (yapısal olarak uyumlu).
+export interface SlotTeacher {
+  id: string;
+  name?: string;
+  branches?: string[];
+  allowedGroups?: string[];
+}
+
+// /api/slots grid yanıtı: gün → slotIdx → hücre. Program: gün → slotId → giriş.
+type TeacherGrid = Record<number, SlotCellData[]>;
+type ProgramGrid = Record<string, Record<string, ProgramEntry | null>>;
+type PanelStudent = StudentDTO & { group?: string };
+
+// Rezervasyon onayı argümanları (DirectorPanel/TeacherPanel handleBook sözleşmesi).
+export interface BookArgs {
+  teacherId: string;
+  day: number;
+  slotId: string;
+  studentId: string;
+  weekKey: string;
+  forceOpen?: boolean;
+  fixed?: boolean;
+  branch: string;
+}
+export interface CancelArgs {
+  teacherId: string;
+  day: number;
+  slotId: string;
+  weekKey: string;
+}
 
 // Helper: Modal Component
-function Modal({ title, onClose, children }) {
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div role="dialog" aria-modal="true" aria-label="Slot detayı" className="modal w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
@@ -31,7 +67,7 @@ function Modal({ title, onClose, children }) {
 }
 
 // Helper: FormField
-function FormField({ label, children }) {
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-4">
       <label className="block text-xs text-gray-500 font-600 mb-1.5" style={{ fontWeight: 600 }}>{label}</label>
@@ -41,7 +77,7 @@ function FormField({ label, children }) {
 }
 
 // Helper: Label
-function Label({ children }) {
+function Label({ children }: { children: React.ReactNode }) {
   return (
     <label className="block text-xs text-gray-500 font-600 mb-1.5" style={{ fontWeight: 600 }}>{children}</label>
   );
@@ -49,17 +85,31 @@ function Label({ children }) {
 
 // Helper: ders saati geçip geçmediğini denetleme
 
+interface SlotCellProps {
+  slotData: SlotCellData;
+  progEntry?: ProgramEntry | null;
+  slot: Slot;
+  dayIndex: number;
+  slotIdx: number;
+  session: Session;
+  teacher: SlotTeacher;
+  onCellClick: (dayIndex: number, slotIdx: number, slotData: SlotCellData, isForceOpen?: boolean) => void;
+  onCancel: (args: CancelArgs) => void;
+  weekKey: string;
+  asDiv?: boolean;
+}
+
 // SlotCell — desktop'ta <td>, mobile'da <div> olarak sarılır (asDiv prop'u).
 // İçindeki tüm <td className="py-1 px-1"> wrapper'ları Wrap ile parametrize edildi.
-function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teacher, onCellClick, onCancel, weekKey, asDiv = false }) {
+function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teacher, onCellClick, onCancel, weekKey, asDiv = false }: SlotCellProps) {
   const Wrap = asDiv ? 'div' : 'td';
   const isDirector = session.role === 'director';
   const isPast = isSlotPast(weekKey, dayIndex, slot.label);
   const isLessonFromProg = progEntry?.type === 'ders';
   const isLessonFromGrid = slotData?.lessonType === 'ders';
   const isLesson = isLessonFromProg || isLessonFromGrid;
-  const lessonCls = isLessonFromProg ? progEntry.cls : slotData?.cls;
-  const lessonSubBranch = isLessonFromProg ? progEntry.subBranch : slotData?.subBranch;
+  const lessonCls = isLessonFromProg ? progEntry?.cls : slotData?.cls;
+  const lessonSubBranch = isLessonFromProg ? progEntry?.subBranch : slotData?.subBranch;
   const lessonIsTemp = slotData?.lessonType === 'ders' && slotData.fixed === false;
 
   if (slotData.disabled) {
@@ -111,7 +161,7 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
 
     const clsDisplay = (slotData.studentCls || '').toUpperCase();
 
-    const colorMap = {
+    const colorMap: Record<string, { bg: string; border: string; name: string; sub: string; label: string }> = {
       student: { bg: 'bg-indigo-50', border: 'border-indigo-100', name: 'text-indigo-700', sub: 'text-indigo-400', label: 'Öğrenci' },
       teacher: { bg: 'bg-emerald-50', border: 'border-emerald-100', name: 'text-emerald-700', sub: 'text-emerald-400', label: 'Öğretmen' },
       director: { bg: 'bg-amber-50', border: 'border-amber-100', name: 'text-amber-700', sub: 'text-amber-400', label: 'Müdür' },
@@ -158,9 +208,21 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
   );
 }
 
+interface MobileDayCardProps {
+  day: DayInfo;
+  slots: Slot[];
+  grid?: TeacherGrid | null;
+  program?: ProgramGrid | null;
+  teacher: SlotTeacher;
+  weekKey: string;
+  session: Session;
+  onCellClick: (dayIndex: number, slotIdx: number, slotData: SlotCellData, isForceOpen?: boolean) => void;
+  onCancel: (args: CancelArgs) => void;
+}
+
 // MobileDayCard — bir günün tüm slot'larını dikey kart olarak gösterir (mobile).
 // Boş, kapalı + geçmiş ve ders olmayan slot'ları gizler (kalabalığı azaltır).
-function MobileDayCard({ day, slots, grid, program, teacher, weekKey, session, onCellClick, onCancel }) {
+function MobileDayCard({ day, slots, grid, program, teacher, weekKey, session, onCellClick, onCancel }: MobileDayCardProps) {
 
   // Hangi slot'lar gösterilsin? Boş + disabled + geçmiş olanları atla.
   const visibleEntries = slots.map((slot, slotIdx) => {
@@ -175,7 +237,7 @@ function MobileDayCard({ day, slots, grid, program, teacher, weekKey, session, o
     const showForDirector = isDirector && !isPast;
     if (!isLesson && !slotData.booked && !isAvailable && !showForDirector) return null;
     return { slot, slotIdx, slotData, progEntry };
-  }).filter(Boolean);
+  }).filter((x): x is NonNullable<typeof x> => Boolean(x));
 
   if (visibleEntries.length === 0) return null;
 
@@ -216,18 +278,30 @@ function MobileDayCard({ day, slots, grid, program, teacher, weekKey, session, o
   );
 }
 
-export default function SlotGrid({ grid, program, teacher, weekKey, session, students, onBook, onCancel, hideEmptyDays }) {
+interface SlotGridProps {
+  grid?: TeacherGrid | null;
+  program?: ProgramGrid | null;
+  teacher: SlotTeacher;
+  weekKey: string;
+  session: Session;
+  students?: PanelStudent[] | null;
+  onBook: (args: BookArgs) => void | Promise<void>;
+  onCancel: (args: CancelArgs) => void;
+  hideEmptyDays?: boolean;
+}
+
+export default function SlotGrid({ grid, program, teacher, weekKey, session, students, onBook, onCancel, hideEmptyDays }: SlotGridProps) {
   const { classes } = useClasses();
   const { slotTimes } = useSlotTimes();
   // Her gün için slot listesi (7-gün model: gün-başına farklı sayı/saat).
   const daySlotsMap = useMemo(() => {
-    const map = {};
+    const map: Record<number, Slot[]> = {};
     for (const day of ALL_DAYS) map[day.index] = buildDaySlots(day.index, slotTimes.days?.[day.index]);
     return map;
   }, [slotTimes]);
-  const [bookingSlot, setBookingSlot] = useState(null);
+  const [bookingSlot, setBookingSlot] = useState<{ dayIndex: number; slotIdx: number; slotId: string; slotLabel: string; dayLabel: string; forceOpen: boolean } | null>(null);
   const [searchQ, setSearchQ] = useState('');
-  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedStudent, setSelectedStudent] = useState<PanelStudent | null>(null);
   const [fixedBooking, setFixedBooking] = useState(false);
   const [bookingBranch, setBookingBranch] = useState('');
 
@@ -244,7 +318,7 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
     const q = searchQ.toLowerCase();
     const allowedGroups = teacher.allowedGroups || [];
     return students.filter(s => {
-      if (allowedGroups.length === 0 || !allowedGroups.includes(s.group)) return false;
+      if (allowedGroups.length === 0 || !allowedGroups.includes(s.group || '')) return false;
       if (!q) return true;
       return s.name.toLowerCase().includes(q) ||
         s.cls.toLowerCase().includes(q) ||
@@ -270,13 +344,13 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
     });
   }, [grid, program, hideEmptyDays, daySlotsMap]);
 
-  const handleCellClick = (dayIndex, slotIdx, slotData, isForceOpen = false) => {
+  const handleCellClick = (dayIndex: number, slotIdx: number, slotData: SlotCellData, isForceOpen = false) => {
     if (slotData.booked) return;
     if (slotData.disabled && !isForceOpen) return;
     const slot = (daySlotsMap[dayIndex] || [])[slotIdx];
     if (!slot) return;
     const day = ALL_DAYS.find(d => d.index === dayIndex);
-    setBookingSlot({ dayIndex, slotIdx, slotId: slot.id, slotLabel: slot.label, dayLabel: day.label, forceOpen: isForceOpen });
+    setBookingSlot({ dayIndex, slotIdx, slotId: slot.id, slotLabel: slot.label, dayLabel: day!.label, forceOpen: isForceOpen });
     setSearchQ('');
     setSelectedStudent(null);
     setFixedBooking(false);

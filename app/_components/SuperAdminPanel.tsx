@@ -3,17 +3,44 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Trash2, Lock, Inbox, Phone, Mail, Globe, CheckCircle2, AlertTriangle, Copy, Check } from 'lucide-react';
 import { SEKTORLER, MULKIYETLER, KADEMELER, kademelerForSektor, defaultKademeler } from '@/lib/institution';
+import type { Kademe } from '@/lib/institution';
+import type { Session } from '@/lib/auth';
+
+// GET /api/superadmin kurum satırı.
+interface OrgDTO {
+  slug: string;
+  name: string;
+  shortName?: string;
+  type?: string;
+  sektor?: string;
+  mulkiyet?: string;
+  active?: boolean;
+  code?: string;
+  directorUsername?: string;
+  branchCount?: number;
+  createdAt?: string;
+}
+// GET /api/superadmin/demo talep satırı.
+interface DemoRequestDTO {
+  id: string;
+  name?: string;
+  org?: string;
+  phone?: string;
+  email?: string;
+  ts?: string | number;
+  note?: string;
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function slugify(s) {
+function slugify(s: string): string {
   return s.toLowerCase()
     .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's')
     .replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-function Field({ label, id, children }) {
+function Field({ label, id, children }: { label: string; id: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-xs font-medium text-slate-600">{label}</label>
@@ -22,7 +49,7 @@ function Field({ label, id, children }) {
   );
 }
 
-function Input({ id, ...props }) {
+function Input({ id, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       id={id}
@@ -34,7 +61,17 @@ function Input({ id, ...props }) {
 
 // ── Yeni Kurum Modalı ────────────────────────────────────────────────────────
 
-function NewOrgModal({ onClose, onCreated }) {
+// POST /api/superadmin create yanıtı (başarı ekranı verisi).
+interface CreateOrgResult {
+  slug?: string;
+  code: string;
+  domain: string;
+  domainProvisioned?: boolean;
+  domainWarning?: string;
+  error?: string;
+}
+
+function NewOrgModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [form, setForm] = useState({
     name: '', slug: '', shortName: '', type: 'single',
     sektor: 'dershane', mulkiyet: 'ozel', kademeler: defaultKademeler('dershane'),
@@ -44,10 +81,10 @@ function NewOrgModal({ onClose, onCreated }) {
   const [slugManual, setSlugManual] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState(null); // başarı ekranı: { slug, code, domain, domainProvisioned, domainWarning }
+  const [result, setResult] = useState<CreateOrgResult | null>(null); // başarı ekranı: { slug, code, domain, domainProvisioned, domainWarning }
   const [copied, setCopied] = useState(false);
 
-  function set(k, v) {
+  function set(k: string, v: string) {
     setForm(prev => {
       const next = { ...prev, [k]: v };
       if (k === 'name' && !slugManual) next.slug = slugify(v);
@@ -60,14 +97,14 @@ function NewOrgModal({ onClose, onCreated }) {
     });
   }
 
-  function toggleKademe(key) {
+  function toggleKademe(key: Kademe) {
     setForm(prev => {
       const has = prev.kademeler.includes(key);
       return { ...prev, kademeler: has ? prev.kademeler.filter(x => x !== key) : [...prev.kademeler, key] };
     });
   }
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -77,7 +114,7 @@ function NewOrgModal({ onClose, onCreated }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create', ...form }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as CreateOrgResult;
       if (!res.ok) { setError(data.error || 'Hata'); return; }
       setResult(data); // formu kapatma — kod + domain durumunu göster
     } finally {
@@ -243,12 +280,18 @@ function NewOrgModal({ onClose, onCreated }) {
 
 // ── Müdür Şifre Sıfırla Modalı ───────────────────────────────────────────────
 
-function ResetPasswordModal({ org, onClose, onDone }) {
+interface OrgModalProps {
+  org: OrgDTO;
+  onClose: () => void;
+  onDone: () => void;
+}
+
+function ResetPasswordModal({ org, onClose, onDone }: OrgModalProps) {
   const [pw, setPw] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -258,7 +301,7 @@ function ResetPasswordModal({ org, onClose, onDone }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'reset_director', slug: org.slug, newPassword: pw }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) { setError(data.error || 'Hata'); return; }
       onDone();
     } finally {
@@ -290,13 +333,13 @@ function ResetPasswordModal({ org, onClose, onDone }) {
 
 // ── Ad Düzenle Modalı ────────────────────────────────────────────────────────
 
-function RenameModal({ org, onClose, onDone }) {
+function RenameModal({ org, onClose, onDone }: OrgModalProps) {
   const [name, setName] = useState(org.name);
   const [shortName, setShortName] = useState(org.shortName || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -306,7 +349,7 @@ function RenameModal({ org, onClose, onDone }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'rename', slug: org.slug, name, shortName }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) { setError(data.error || 'Hata'); return; }
       onDone();
     } finally {
@@ -340,14 +383,14 @@ function RenameModal({ org, onClose, onDone }) {
 
 // ── Kendi Şifresini Değiştir Modalı ─────────────────────────────────────────
 
-function ChangeOwnPasswordModal({ onClose, onDone }) {
+function ChangeOwnPasswordModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [form, setForm] = useState({ current: '', next: '', confirm: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  function set(k, v) { setForm(prev => ({ ...prev, [k]: v })); }
+  function set(k: string, v: string) { setForm(prev => ({ ...prev, [k]: v })); }
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (form.next !== form.confirm) { setError('Yeni şifreler eşleşmiyor'); return; }
     setError('');
@@ -358,7 +401,7 @@ function ChangeOwnPasswordModal({ onClose, onDone }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'change_own_password', currentPassword: form.current, newPassword: form.next }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) { setError(data.error || 'Hata'); return; }
       onDone();
     } finally {
@@ -395,12 +438,12 @@ function ChangeOwnPasswordModal({ onClose, onDone }) {
 
 // ── Kurum Sil Onay Modalı ────────────────────────────────────────────────────
 
-function DeleteConfirmModal({ org, onClose, onDone }) {
+function DeleteConfirmModal({ org, onClose, onDone }: OrgModalProps) {
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (confirm !== org.slug) { setError('Slug eşleşmiyor'); return; }
     setError('');
@@ -411,7 +454,7 @@ function DeleteConfirmModal({ org, onClose, onDone }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slug: org.slug }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) { setError(data.error || 'Hata'); return; }
       onDone();
     } finally {
@@ -446,10 +489,10 @@ function DeleteConfirmModal({ org, onClose, onDone }) {
 // ── Demo / İletişim Talepleri ────────────────────────────────────────────────
 
 function DemoRequests() {
-  const { data: demoData, isLoading: loading, mutate } = useSWR('/api/superadmin/demo');
+  const { data: demoData, isLoading: loading, mutate } = useSWR<{ requests?: DemoRequestDTO[] }>('/api/superadmin/demo');
   const items = demoData?.requests || [];
 
-  async function remove(id) {
+  async function remove(id: string) {
     await fetch('/api/superadmin/demo', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -517,14 +560,25 @@ function DemoRequests() {
 
 // ── Ana Panel ────────────────────────────────────────────────────────────────
 
-export default function SuperAdminPanel({ session, onLogout }) {
-  const { data: orgsData, isLoading: loading, mutate: loadOrgs } = useSWR('/api/superadmin');
-  const orgs = orgsData?.orgs || [];
-  const [modal, setModal] = useState(null); // null | {type, org?}
-  const [provisioning, setProvisioning] = useState(null); // domain ekleniyor (slug)
-  const [domainNote, setDomainNote] = useState(null); // { ok, text }
+type ModalState =
+  | { type: 'new' }
+  | { type: 'chpw' }
+  | { type: 'reset' | 'rename' | 'delete'; org: OrgDTO }
+  | null;
 
-  async function toggleActive(org) {
+interface SuperAdminPanelProps {
+  session?: Session | null;
+  onLogout: () => void;
+}
+
+export default function SuperAdminPanel({ session, onLogout }: SuperAdminPanelProps) {
+  const { data: orgsData, isLoading: loading, mutate: loadOrgs } = useSWR<{ orgs?: OrgDTO[] }>('/api/superadmin');
+  const orgs = orgsData?.orgs || [];
+  const [modal, setModal] = useState<ModalState>(null); // null | {type, org?}
+  const [provisioning, setProvisioning] = useState<string | null>(null); // domain ekleniyor (slug)
+  const [domainNote, setDomainNote] = useState<{ ok: boolean; text: string } | null>(null); // { ok, text }
+
+  async function toggleActive(org: OrgDTO) {
     await fetch('/api/superadmin', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -534,7 +588,7 @@ export default function SuperAdminPanel({ session, onLogout }) {
   }
 
   // Subdomain'i Vercel projesine (yeniden) ekle — mevcut kurum veya başarısız onboarding için.
-  async function provisionDomain(org) {
+  async function provisionDomain(org: OrgDTO) {
     setProvisioning(org.slug);
     setDomainNote(null);
     try {
@@ -543,7 +597,7 @@ export default function SuperAdminPanel({ session, onLogout }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'provision_domain', slug: org.slug }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string; domain?: string; alreadyExists?: boolean };
       if (!res.ok) {
         setDomainNote({ ok: false, text: `${org.slug}.okulin.com eklenemedi: ${data.error || 'hata'}` });
       } else {
@@ -600,7 +654,7 @@ export default function SuperAdminPanel({ session, onLogout }) {
           </h1>
           <div className="flex gap-2">
             <button
-              onClick={loadOrgs}
+              onClick={() => loadOrgs()}
               aria-label="Yenile"
               className="btn-icon"
             >
@@ -654,7 +708,7 @@ export default function SuperAdminPanel({ session, onLogout }) {
                   <div className="text-xs text-slate-400 mt-0.5 flex gap-3 flex-wrap items-center">
                     {org.code && (
                       <button
-                        onClick={() => { navigator.clipboard?.writeText(org.code); }}
+                        onClick={() => { navigator.clipboard?.writeText(org.code!); }}
                         title="Kurum kodunu kopyala"
                         className="font-mono font-700 px-2 py-0.5 rounded"
                         style={{ fontWeight: 700, color: '#6366f1', background: 'color-mix(in srgb, #6366f1 12%, transparent)' }}>

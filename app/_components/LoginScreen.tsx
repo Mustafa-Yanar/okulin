@@ -1,22 +1,45 @@
 import React, { useState } from 'react';
 import { GraduationCap, Users, BookMarked, Shield } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { BrandHeader, FormField } from './ui-components';
-import { brandGradient } from '@/lib/branding';
+import { brandGradient, type Branding } from '@/lib/branding';
 import { api } from './client-api';
+import type { Session } from '@/lib/auth';
+import type { ShowToast } from './types';
 
-const LOGIN_ROLES = [
+interface LoginRole {
+  key: string;
+  label: string;
+  desc: string;
+  icon: LucideIcon;
+  field: string;
+  placeholder: string;
+  type: string;
+}
+
+const LOGIN_ROLES: LoginRole[] = [
   { key: 'student',    label: 'Öğrenci',  desc: 'Öğrenci girişi',   icon: GraduationCap, field: 'Kullanıcı Adı', placeholder: 'kullanici_adi',  type: 'text' },
   { key: 'parent',     label: 'Veli',     desc: 'Veli girişi',      icon: Users,         field: 'Telefon',       placeholder: '05XX XXX XX XX', type: 'tel'  },
   { key: 'teacher',    label: 'Öğretmen', desc: 'Öğretmen girişi',  icon: BookMarked,    field: 'Kullanıcı Adı', placeholder: 'kullanici_adi',  type: 'text' },
   { key: 'management', label: 'Yönetim',  desc: 'Müdür / Muhasebe',  icon: Shield,        field: 'Kullanıcı Adı', placeholder: 'kullanici_adi',  type: 'text' },
 ];
 
-export default function LoginScreen({ onLogin, directorExists, showToast, branding }) {
+// POST /api/auth login yanıtı: başarıda session alanları, OTP akışında needsOtp/phone.
+type LoginResponse = Session & { error?: string; correctRole?: string; needsOtp?: boolean; phone?: string };
+
+interface LoginScreenProps {
+  onLogin: (session: Session) => void;
+  directorExists?: boolean;
+  showToast: ShowToast;
+  branding?: Branding | null;
+}
+
+export default function LoginScreen({ onLogin, directorExists, showToast, branding }: LoginScreenProps) {
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [selectedRole, setSelectedRole] = useState(null);
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [otpStep, setOtpStep] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [maskedPhone, setMaskedPhone] = useState('');
@@ -24,22 +47,22 @@ export default function LoginScreen({ onLogin, directorExists, showToast, brandi
   const isSetup = !directorExists;
   const current = LOGIN_ROLES.find(r => r.key === selectedRole);
 
-  const submitSetup = async (e) => {
+  const submitSetup = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     try {
       await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'setup_director', username, password, name }) });
       showToast('Müdür hesabı oluşturuldu');
-      const status = await api('/api/auth');
+      const status = await api<{ session: Session }>('/api/auth');
       onLogin(status.session);
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast((err as Error).message, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const submitLogin = async (e) => {
+  const submitLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     try {
@@ -49,7 +72,7 @@ export default function LoginScreen({ onLogin, directorExists, showToast, brandi
         credentials: 'same-origin',
         body: JSON.stringify({ action: 'login', username, password, role: selectedRole }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as LoginResponse;
       if (!res.ok) {
         if (data.correctRole && data.correctRole !== selectedRole) {
           setSelectedRole(data.correctRole);
@@ -63,13 +86,13 @@ export default function LoginScreen({ onLogin, directorExists, showToast, brandi
       }
       onLogin(data);
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast((err as Error).message, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const submitOtp = async (e) => {
+  const submitOtp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setOtpLoading(true);
     try {
@@ -79,20 +102,20 @@ export default function LoginScreen({ onLogin, directorExists, showToast, brandi
         credentials: 'same-origin',
         body: JSON.stringify({ code: otpCode, username, role: selectedRole }),
       });
-      const verifyData = await verifyRes.json().catch(() => ({}));
+      const verifyData = (await verifyRes.json().catch(() => ({}))) as { error?: string };
       if (!verifyRes.ok) throw new Error(verifyData.error || 'Kod yanlış');
-      
+
       const loginRes = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         body: JSON.stringify({ action: 'login', username, password, role: selectedRole }),
       });
-      const loginData = await loginRes.json().catch(() => ({}));
+      const loginData = (await loginRes.json().catch(() => ({}))) as LoginResponse;
       if (!loginRes.ok) throw new Error(loginData.error || 'Giriş başarısız');
       onLogin(loginData);
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast((err as Error).message, 'error');
     } finally {
       setOtpLoading(false);
     }
@@ -189,20 +212,20 @@ export default function LoginScreen({ onLogin, directorExists, showToast, brandi
     );
   }
 
-  const Icon = current.icon;
+  const Icon = current!.icon;
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="card-elevated w-full max-w-sm p-8">
-        <BrandHeader branding={branding} subtitle={`${current.label} girişi`} />
+        <BrandHeader branding={branding} subtitle={`${current!.label} girişi`} />
         <div className="flex items-center justify-center gap-2 mb-5">
           <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white" style={{ background: brandGradient(branding?.themeColor) }}>
             <Icon size={17} />
           </div>
-          <span className="font-700 text-gray-700" style={{ fontWeight: 700 }}>{current.label}</span>
+          <span className="font-700 text-gray-700" style={{ fontWeight: 700 }}>{current!.label}</span>
         </div>
         <form onSubmit={submitLogin} className="space-y-4">
-          <FormField label={current.field}>
-            <input className="input" type={current.type} value={username} onChange={e => setUsername(e.target.value)} placeholder={current.placeholder} required autoFocus />
+          <FormField label={current!.field}>
+            <input className="input" type={current!.type} value={username} onChange={e => setUsername(e.target.value)} placeholder={current!.placeholder} required autoFocus />
           </FormField>
           <FormField label="Şifre">
             <input className="input" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />

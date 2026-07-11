@@ -6,13 +6,23 @@ import {
   CreditCard, TrendingDown, ChevronLeft, ChevronRight,
   BookMarked, Calendar, CalendarDays, GraduationCap, Star, Clock, Settings, LayoutGrid, Contact, NotebookPen, ListChecks, UserPlus, Award,
 } from 'lucide-react';
-import { brandGradient } from '@/lib/branding';
+import type { LucideIcon } from 'lucide-react';
+import { brandGradient, type Branding } from '@/lib/branding';
 import ThemeToggle from './ThemeToggle';
 import NotificationButton from './NotificationButton';
+import type { Session } from '@/lib/auth';
+import type { ShowToast } from './types';
 
 // ─── Sekme tanımları (rol bazlı) ────────────────────────────────────────────────
 
-const ITEMS_BY_ROLE = {
+interface SidebarItem {
+  group: string | null;
+  key: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+const ITEMS_BY_ROLE: Record<string, SidebarItem[]> = {
   director: [
     { group: 'Akademik', key: 'teachers',    label: 'Öğretmen',          icon: Users },
     { group: 'Akademik', key: 'students',    label: 'Sınıf/Öğrenci',     icon: GraduationCap },
@@ -82,7 +92,7 @@ const ITEMS_BY_ROLE = {
 
 // Sidebar sekme key'i → kurum modül key'i (lib/config CONFIG_DEFAULTS.modules).
 // Burada OLMAYAN sekmeler her zaman görünür (program, yoklama, ayarlar vb. — temel).
-const TAB_TO_MODULE = {
+const TAB_TO_MODULE: Record<string, string> = {
   muhasebe: 'finance', finance: 'finance', expenses: 'finance', odeme: 'finance',
   kutuphane: 'lms',
   onkayit: 'crm',
@@ -102,8 +112,8 @@ const READONLY_HIDDEN_TABS = ['ders-programi', 'onkayit'];
 // Kapalı modüle ait sekmeler gizlenir. counselorReadOnly: salt-okunur rehberde üretim
 // sekmelerini (program oluştur, ön kayıt) ayrıca gizle. accountantIntake=false:
 // muhasebecinin Kayıt grubu (ön kayıt + öğrenciler) gizlenir — yalnız finans kalır.
-function buildItems(role, modules, counselorReadOnly, accountantIntake) {
-  const items = ITEMS_BY_ROLE[role] || [];
+function buildItems(role: string | undefined, modules: Record<string, boolean> | null | undefined, counselorReadOnly?: boolean, accountantIntake?: boolean): SidebarItem[] {
+  const items = ITEMS_BY_ROLE[role || ''] || [];
   let filtered = counselorReadOnly
     ? items.filter((it) => !READONLY_HIDDEN_TABS.includes(it.key))
     : items;
@@ -119,7 +129,14 @@ function buildItems(role, modules, counselorReadOnly, accountantIntake) {
 
 // ─── Nav öğesi ─────────────────────────────────────────────────────────────────
 
-function NavItem({ item, active, collapsed, onClick }) {
+interface NavItemProps {
+  item: SidebarItem;
+  active: boolean;
+  collapsed?: boolean;
+  onClick: (key: string) => void;
+}
+
+function NavItem({ item, active, collapsed, onClick }: NavItemProps) {
   const Icon = item.icon;
   return (
     <button
@@ -141,6 +158,22 @@ function NavItem({ item, active, collapsed, onClick }) {
 
 // ─── Ana Sidebar ───────────────────────────────────────────────────────────────
 
+interface SidebarProps {
+  session?: Session | null;
+  branding?: Branding | null;
+  modules?: Record<string, boolean> | null;
+  counselorReadOnly?: boolean;
+  accountantIntake?: boolean;
+  activeTab?: string | null;
+  onTabChange: (key: string) => void;
+  collapsed: boolean;
+  onCollapse?: () => void;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+  showToast: ShowToast;
+  onSettings?: () => void;
+}
+
 export default function Sidebar({
   session,
   branding,
@@ -155,20 +188,20 @@ export default function Sidebar({
   onMobileClose,
   showToast,
   onSettings,
-}) {
+}: SidebarProps) {
   const items = buildItems(session?.role, modules, counselorReadOnly, accountantIntake);
 
   // Grup akordeon durumu (yalnız gruplu roller: müdür/rehber). Varsayılan: hepsi açık.
   // false = kapalı; absent/true = açık. localStorage'da kalıcı, oturumlar arası korunur.
-  const [openGroups, setOpenGroups] = React.useState({});
+  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({});
   useEffect(() => {
     try {
       const raw = localStorage.getItem('okulin:sidebarGroups');
       if (raw) setOpenGroups(JSON.parse(raw));
     } catch {}
   }, []);
-  const isGroupOpen = (g) => openGroups?.[g] !== false;
-  const toggleGroup = (g) => {
+  const isGroupOpen = (g: string) => openGroups?.[g] !== false;
+  const toggleGroup = (g: string) => {
     setOpenGroups(prev => {
       const cur = prev || {};
       const next = { ...cur, [g]: cur[g] === false ? true : false };
@@ -184,14 +217,14 @@ export default function Sidebar({
     }
   }, [mobileOpen]);
 
-  const groups = [];
-  const seen = new Set();
+  const groups: string[] = [];
+  const seen = new Set<string>();
   for (const item of items) {
     const g = item.group || '__top__';
     if (!seen.has(g)) { seen.add(g); groups.push(g); }
   }
 
-  function handleTabClick(key) {
+  function handleTabClick(key: string) {
     onTabChange(key);
     onMobileClose?.();
   }

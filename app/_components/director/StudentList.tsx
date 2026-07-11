@@ -9,11 +9,11 @@ import { classLabel, ALL_DAYS } from '@/lib/constants';
 import { classLabelFrom, type ClassEntry } from '@/lib/classCatalog';
 import { GROUPS, api, Modal, guidanceSubjectsFor } from './shared';
 import { StudentAttendanceView } from './Attendance';
-import { StudentBookingsView } from '../StudentPanel';
+import { StudentBookingsView, type BookingSlotEntry, type BookingCancelArgs } from '../StudentPanel';
 import RehberlikAccordion from '../rehberlik/RehberlikAccordion';
 import StudentGuidanceView from '../rehberlik/StudentGuidanceView';
 import { useUrlParam } from '../useUrlParam';
-import type { ShowToast, SlotEntryDTO, StudentDTO } from '../types';
+import type { ShowToast, StudentDTO } from '../types';
 
 // Panel öğrencisi: DTO + loadAll'un eklediği group alanı.
 type ListStudent = StudentDTO & { group?: string };
@@ -29,8 +29,8 @@ interface ClassLessonDTO {
 
 interface StudentExpandedViewProps {
   student: ListStudent;
-  allSlots: SlotEntryDTO[];
-  onCancelBooking?: (slot: SlotEntryDTO) => void;
+  allSlots: BookingSlotEntry[];
+  onCancelBooking?: (args: BookingCancelArgs) => void;
   onGuidanceReviewed?: () => void;
 }
 
@@ -71,9 +71,9 @@ export function StudentExpandedView({ student, allSlots, onCancelBooking, onGuid
 interface StudentListProps {
   students: ListStudent[];
   classes?: ClassEntry[];
-  allSlots: SlotEntryDTO[];
+  allSlots: BookingSlotEntry[];
   weekKey?: string;
-  onCancelBooking?: (slot: SlotEntryDTO) => void;
+  onCancelBooking?: (args: BookingCancelArgs) => void;
   onEdit: (s: ListStudent) => void;
   onDelete: (s: ListStudent) => void;
   onDeleteClass?: (cls: string, students: ListStudent[]) => void;

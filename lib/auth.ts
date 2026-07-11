@@ -13,6 +13,14 @@ export interface Session extends JWTPayload {
   username?: string;
   org?: string;
   branch?: string;
+  // öğrenci oturumu: sınıf/şube kodu + köprü grubu (login payload'ında yazılır)
+  cls?: string;
+  group?: string;
+  // öğretmen oturumu: branşlar + izinli gruplar (login payload'ında yazılır)
+  branches?: string[];
+  allowedGroups?: string[];
+  // veli oturumu: veli adı (öğrenci formundaki Veli Adı'ndan)
+  parentName?: string;
   // veli: kendi çocukları — eski token'larda düz id listesi, yenilerde {id,...} listesi
   children?: ({ id?: string; name?: string; cls?: string } | string)[];
   mustChangePassword?: boolean;

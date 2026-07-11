@@ -14,7 +14,7 @@ import {
 } from '@/lib/constants';
 import { subjectMatchesBranch } from '@/lib/deneme/branch';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
-import SlotGrid from './SlotGrid';
+import SlotGrid, { type BookArgs } from './SlotGrid';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementInbox } from './announcements/Announcements';
 import { OdevManager } from './odev/Odev';
@@ -27,6 +27,9 @@ import { useClasses } from './ClassesContext';
 import { classLabelFrom } from '@/lib/classCatalog';
 import { useUrlTab } from './useUrlTab';
 import { api, getAdjacentWeek, isSlotPast, WeekNav } from './shared';
+import type { Session } from '@/lib/auth';
+import type { SlotCell as SlotCellData, ProgramEntry } from '@/lib/slots';
+import type { ShowToast, StudentDTO } from './types';
 
 // Helper API Fetcher
 
@@ -34,14 +37,44 @@ import { api, getAdjacentWeek, isSlotPast, WeekNav } from './shared';
 
 // Helper: ders saati geçip geçmediğini denetleme
 
+// /api/slots grid + /api/program ızgara şekilleri.
+type TeacherGrid = Record<number, SlotCellData[]>;
+type ProgramGrid = Record<string, Record<string, ProgramEntry | null>>;
+
+// Liste görünümündeki rezervasyon satırı (grid'den düzleştirilir).
+interface BookedItem {
+  dayIndex: number;
+  dayLabel: string;
+  slotId: string;
+  slotLabel: string;
+  slotIdx: number;
+  studentName?: string | null;
+  studentCls?: string;
+  studentId?: string | null;
+  bookedBy: string;
+  fixed: boolean;
+}
+
+// GET /api/etut-sablon/all satırı (yoklamaya giren birebir etütler).
+interface EtutAllDTO {
+  id: string;
+  teacherId: string;
+  dayIndex: number;
+  start?: string;
+  end?: string;
+  branch?: string;
+  studentId?: string | null;
+  studentName?: string | null;
+  studentCls?: string | null;
+}
 
 // Lucide Chevron Icon Helpers inside WeekNav
-function ChevronLeft({ size, className }) {
+function ChevronLeft({ size, className }: { size: number; className?: string }) {
   return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15 18-6-6 6-6"/></svg>;
 }
 
 // Rehberlik ders listesi seçimi
-function guidanceSubjectsFor(cls) {
+function guidanceSubjectsFor(cls: string | undefined): string[] {
   if (!cls) return [];
   if (cls.startsWith('7')) {
     return ['Türkçe', 'Matematik', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İngilizce'];
@@ -99,15 +132,22 @@ function guidanceSubjectsFor(cls) {
   return [];
 }
 
-const GROUPS = { ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
+const GROUPS: Record<string, string> = { ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
 
-export function TeacherBookingsList({ bookedList, listColorMap, onCancel, canCancelAll }) {
-  const [openDays, setOpenDays] = useState({});
+interface TeacherBookingsListProps {
+  bookedList: BookedItem[];
+  listColorMap: Record<string, { badge: string; label: string }>;
+  onCancel: (item: BookedItem) => void;
+  canCancelAll?: boolean;
+}
+
+export function TeacherBookingsList({ bookedList, listColorMap, onCancel, canCancelAll }: TeacherBookingsListProps) {
+  const [openDays, setOpenDays] = useState<Record<string | number, boolean>>({});
   const { slotTimes } = useSlotTimes();
-  const toggleDay = key => setOpenDays(p => ({ ...p, [key]: !p[key] }));
+  const toggleDay = (key: string | number) => setOpenDays(p => ({ ...p, [key]: !p[key] }));
 
   const days = useMemo(() => {
-    const map = {};
+    const map: Record<number, { dayIndex: number; dayLabel: string; items: BookedItem[] }> = {};
     for (const item of bookedList) {
       if (!map[item.dayIndex]) map[item.dayIndex] = { dayIndex: item.dayIndex, dayLabel: item.dayLabel, items: [] };
       map[item.dayIndex].items.push(item);
@@ -178,15 +218,21 @@ export function TeacherBookingsList({ bookedList, listColorMap, onCancel, canCan
   );
 }
 
-function TeacherAttendancePanel({ session, weekKey, showToast }) {
-  const [program, setProgram] = useState(null);
-  const [etutler, setEtutler] = useState([]); // bu öğretmenin bu hafta efektif aktif + öğrenci atanmış etütleri
-  const [students, setStudents] = useState([]);
+interface TeacherAttendancePanelProps {
+  session: Session;
+  weekKey: string;
+  showToast: ShowToast;
+}
+
+function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendancePanelProps) {
+  const [program, setProgram] = useState<ProgramGrid | null>(null);
+  const [etutler, setEtutler] = useState<EtutAllDTO[]>([]); // bu öğretmenin bu hafta efektif aktif + öğrenci atanmış etütleri
+  const [students, setStudents] = useState<StudentDTO[]>([]);
   const [loading, setLoading] = useState(true);
-  const [openDays, setOpenDays] = useState({});
-  const [openLessons, setOpenLessons] = useState({});
-  const [attendance, setAttendance] = useState({});
-  const [saving, setSaving] = useState({});
+  const [openDays, setOpenDays] = useState<Record<string | number, boolean>>({});
+  const [openLessons, setOpenLessons] = useState<Record<string, boolean>>({});
+  const [attendance, setAttendance] = useState<Record<string, Record<string, string>>>({});
+  const [saving, setSaving] = useState<Record<string, boolean>>({});
   const { slotTimes } = useSlotTimes();
 
   const mondayYMD = useMemo(() => {
@@ -199,7 +245,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
     return mon;
   }, [weekKey]);
 
-  function dateForDay(dayIndex) {
+  function dateForDay(dayIndex: number): string {
     const d = new Date(mondayYMD);
     d.setUTCDate(mondayYMD.getUTCDate() + dayIndex);
     return d.toISOString().slice(0, 10);
@@ -210,16 +256,16 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
       setLoading(true);
       try {
         const [progData, stuData, etutData] = await Promise.all([
-          api(`/api/program?teacherId=${session.id}&week=${weekKey}`),
-          api('/api/students'),
-          api(`/api/etut-sablon/all?week=${weekKey}`).catch(() => ({ etutler: [] })),
+          api<{ program?: ProgramGrid }>(`/api/program?teacherId=${session.id}&week=${weekKey}`),
+          api<StudentDTO[]>('/api/students'),
+          api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${weekKey}`).catch(() => ({ etutler: [] as EtutAllDTO[] })),
         ]);
         setProgram(progData?.program || {});
         setStudents(stuData);
         // Sadece bu öğretmenin, öğrenci atanmış (booked) etütleri yoklamaya girer.
         setEtutler((etutData.etutler || []).filter(e => e.teacherId === session.id && e.studentId));
       } catch (err) {
-        showToast(err.message, 'error');
+        showToast((err as Error).message, 'error');
       } finally {
         setLoading(false);
       }
@@ -231,7 +277,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
     return ALL_DAYS.map(day => {
       const dayProg = program[String(day.index)] || {};
       const slots = buildDaySlots(day.index, slotTimes.days?.[day.index]);
-      const lessons = [];
+      const lessons: { lessonNo: number; cls: string }[] = [];
       let lessonNo = 0;
       for (const slot of slots) {
         const entry = dayProg[slot.id];
@@ -246,29 +292,29 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
         .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
       if (lessons.length === 0 && dayEtuts.length === 0) return null;
       return { dayIndex: day.index, dayLabel: day.label, lessons, etuts: dayEtuts };
-    }).filter(Boolean);
+    }).filter((d): d is NonNullable<typeof d> => Boolean(d));
   }, [program, slotTimes, etutler]);
 
-  const studentsForCls = useCallback((cls) => {
+  const studentsForCls = useCallback((cls: string) => {
     return students.filter(s => s.cls === cls);
   }, [students]);
 
-  async function loadAttendance(date, cls, lessonNo) {
+  async function loadAttendance(date: string, cls: string, lessonNo: number | string) {
     const key = `${date}_${cls}_${lessonNo}`;
     if (attendance[key] !== undefined) return;
     try {
-      const data = await api(`/api/attendance?date=${date}&teacherId=${session.id}&cls=${cls}&lessonNo=${lessonNo}`);
+      const data = await api<Record<string, string>>(`/api/attendance?date=${date}&teacherId=${session.id}&cls=${cls}&lessonNo=${lessonNo}`);
       setAttendance(prev => ({ ...prev, [key]: data }));
     } catch {
       setAttendance(prev => ({ ...prev, [key]: {} }));
     }
   }
 
-  function toggleDay(dayIndex) {
+  function toggleDay(dayIndex: number) {
     setOpenDays(p => ({ ...p, [dayIndex]: !p[dayIndex] }));
   }
 
-  function toggleLesson(dayIndex, lessonNo, cls) {
+  function toggleLesson(dayIndex: number, lessonNo: number | string, cls: string) {
     const key = `${dayIndex}_${lessonNo}`;
     if (!openLessons[key]) {
       const date = dateForDay(dayIndex);
@@ -277,7 +323,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
     setOpenLessons(p => ({ ...p, [key]: !p[key] }));
   }
 
-  function setStatus(date, cls, lessonNo, studentId, status) {
+  function setStatus(date: string, cls: string, lessonNo: number | string, studentId: string, status: string) {
     const key = `${date}_${cls}_${lessonNo}`;
     setAttendance(prev => ({
       ...prev,
@@ -285,7 +331,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
     }));
   }
 
-  async function saveAttendance(dayIndex, cls, lessonNo) {
+  async function saveAttendance(dayIndex: number, cls: string, lessonNo: number | string) {
     const date = dateForDay(dayIndex);
     const key = `${date}_${cls}_${lessonNo}`;
     setSaving(p => ({ ...p, [key]: true }));
@@ -296,7 +342,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
       });
       showToast('Yoklama kaydedildi', 'success');
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast((err as Error).message, 'error');
     } finally {
       setSaving(p => ({ ...p, [key]: false }));
     }
@@ -417,7 +463,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
                   const lOpen = !!openLessons[lk];
                   const attKey = `${date}_${cls}_${lessonNo}`;
                   const att = attendance[attKey] || {};
-                  const current = att[e.studentId];
+                  const current = att[e.studentId!];
                   return (
                     <div key={lessonNo} className="rounded-xl overflow-hidden border border-violet-100">
                       <button onClick={() => toggleLesson(day.dayIndex, lessonNo, cls)}
@@ -442,7 +488,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
                             <div className="flex gap-1 shrink-0 ml-2">
                               {STATUS_OPTS.map(opt => (
                                 <button key={opt.value}
-                                  onClick={() => setStatus(date, cls, lessonNo, e.studentId, opt.value)}
+                                  onClick={() => setStatus(date, cls, lessonNo, e.studentId!, opt.value)}
                                   className={`text-[11px] px-2.5 py-1 rounded-lg border font-600 transition-all ${current === opt.value ? opt.active : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
                                   style={{ fontWeight: 600 }}>
                                   {opt.label}
@@ -471,21 +517,26 @@ function TeacherAttendancePanel({ session, weekKey, showToast }) {
   );
 }
 
-function TeacherStudentsView({ students, branches = [] }) {
+interface TeacherStudentsViewProps {
+  students: StudentDTO[];
+  branches?: string[];
+}
+
+function TeacherStudentsView({ students, branches = [] }: TeacherStudentsViewProps) {
   const { classes } = useClasses();
-  const subjectMatchesAny = (subject) =>
+  const subjectMatchesAny = (subject: string) =>
     branches.length === 0 || branches.some(b => subjectMatchesBranch(subject, b));
-  const filterSubjectsAny = (subjects) =>
+  const filterSubjectsAny = (subjects: string[]) =>
     branches.length === 0 ? subjects : subjects.filter(subjectMatchesAny);
-  const [expandedId, setExpandedId] = useState(null);
-  const [openCls, setOpenCls] = useState(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [openCls, setOpenCls] = useState<string | null>(null);
   const [searchQ, setSearchQ] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
 
   const grouped = useMemo(() => {
     const q = searchQ.toLowerCase();
-    const groupOrder = { ortaokul: 0, lise: 1, mezun: 2 };
-    const clsSort = (cls) => (cls.startsWith('m') ? parseInt(cls.slice(1)) : parseInt(cls));
+    const groupOrder: Record<string, number> = { ortaokul: 0, lise: 1, mezun: 2 };
+    const clsSort = (cls: string) => (cls.startsWith('m') ? parseInt(cls.slice(1)) : parseInt(cls));
     const sorted = students
       .filter(
         (s) =>
@@ -499,7 +550,7 @@ function TeacherStudentsView({ students, branches = [] }) {
         if (gDiff !== 0) return gDiff;
         return clsSort(a.cls) - clsSort(b.cls);
       });
-    const groups = [];
+    const groups: { cls: string; label: string; group?: string; students: StudentDTO[] }[] = [];
     for (const s of sorted) {
       if (!groups.length || groups[groups.length - 1].cls !== s.cls) {
         groups.push({ cls: s.cls, label: classLabelFrom(classes, s.cls, classLabel), group: s.group, students: [] });
@@ -509,7 +560,7 @@ function TeacherStudentsView({ students, branches = [] }) {
     return groups;
   }, [students, classes, searchQ, filterGroup]);
 
-  const toggle = (cls) => setOpenCls(prev => prev === cls ? null : cls);
+  const toggle = (cls: string) => setOpenCls(prev => prev === cls ? null : cls);
 
   return (
     <div>
@@ -615,11 +666,18 @@ function TeacherStudentsView({ students, branches = [] }) {
   );
 }
 
-export default function TeacherPanel({ session, showToast, externalTab, onExternalTabChange }) {
+interface TeacherPanelProps {
+  session: Session;
+  showToast: ShowToast;
+  externalTab?: string | null;
+  onExternalTabChange?: (key: string) => void;
+}
+
+export default function TeacherPanel({ session, showToast, externalTab, onExternalTabChange }: TeacherPanelProps) {
   const [weekKey, setWeekKey] = useState(getWeekKey());
-  const [slots, setSlots] = useState(null);
-  const [program, setProgram] = useState({});
-  const [students, setStudents] = useState([]);
+  const [slots, setSlots] = useState<TeacherGrid | null | undefined>(null);
+  const [program, setProgram] = useState<ProgramGrid>({});
+  const [students, setStudents] = useState<StudentDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTabInternal] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama', 'odev', 'davranis', 'ogrenciler', 'kutuphane', 'duyurular', 'takvim', 'formlar']);
   const [viewMode, setViewMode] = useState('table');
@@ -630,26 +688,26 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalTab]);
 
-  const setActiveTab = useCallback((key) => {
+  const setActiveTab = useCallback((key: string) => {
     setActiveTabInternal(key);
     onExternalTabChange?.(key);
   }, [setActiveTabInternal, onExternalTabChange]);
 
-  const loadData = useCallback(async (wk) => {
+  const loadData = useCallback(async (wk?: string) => {
     setLoading(true);
     try {
       const resolvedWeek = wk || getWeekKey();
       if (!wk) setWeekKey(resolvedWeek);
       const [slotsData, stuData, progData] = await Promise.all([
-        api(`/api/slots?teacherId=${session.id}&week=${resolvedWeek}`),
-        api('/api/students'),
-        api(`/api/program?teacherId=${session.id}`),
+        api<{ weekKey?: string; grid?: TeacherGrid }>(`/api/slots?teacherId=${session.id}&week=${resolvedWeek}`),
+        api<StudentDTO[]>('/api/students'),
+        api<{ program?: ProgramGrid }>(`/api/program?teacherId=${session.id}`),
       ]);
       setSlots(slotsData.grid);
       setStudents(stuData);
       setProgram(progData?.program || {});
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast((err as Error).message, 'error');
     } finally {
       setLoading(false);
     }
@@ -657,34 +715,34 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const handleWeekChange = async (newWeek) => {
+  const handleWeekChange = async (newWeek: string) => {
     setWeekKey(newWeek);
     const [slotsData, progData] = await Promise.all([
-      api(`/api/slots?teacherId=${session.id}&week=${newWeek}`),
-      api(`/api/program?teacherId=${session.id}&week=${newWeek}`),
+      api<{ weekKey?: string; grid?: TeacherGrid }>(`/api/slots?teacherId=${session.id}&week=${newWeek}`),
+      api<{ program?: ProgramGrid }>(`/api/program?teacherId=${session.id}&week=${newWeek}`),
     ]);
     setSlots(slotsData.grid);
     setProgram(progData?.program || {});
   };
 
-  const handleBook = async (params) => {
+  const handleBook = async (params: BookArgs) => {
     try {
       await api('/api/slots', { method: 'POST', body: JSON.stringify(params) });
       showToast('Rezervasyon yapıldı');
       handleWeekChange(params.weekKey || weekKey);
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
   };
 
-  const handleCancel = async (params) => {
+  const handleCancel = async (params: { teacherId: string; day: number; slotId: string }) => {
     try {
       await api('/api/slots', { method: 'DELETE', body: JSON.stringify({ ...params, weekKey }) });
       showToast('Rezervasyon iptal edildi');
       handleWeekChange(weekKey);
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
   };
 
   // Yalnız badge + label render ediliyor (TeacherBookingsList); tema-uyumlu pill sınıfları.
-  const listColorMap = {
+  const listColorMap: Record<string, { badge: string; label: string }> = {
     student:  { badge: 'tag-student',  label: 'Öğrenci' },
     teacher:  { badge: 'tag-teacher',  label: 'Öğretmen' },
     director: { badge: 'tag-director', label: 'Müdür' },
@@ -692,7 +750,7 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
 
   const bookedList = useMemo(() => {
     if (!slots) return [];
-    const items = [];
+    const items: BookedItem[] = [];
     ALL_DAYS.forEach(day => {
       const daySlots = buildDaySlots(day.index, slotTimes.days?.[day.index]);
       daySlots.forEach((slot, slotIdx) => {
@@ -750,13 +808,13 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
           {viewMode === 'table' ? (
             <>
               <div className="card p-4">
-                <SlotGrid grid={slots} program={program} teacher={{ id: session.id, name: session.name, branches: session.branches || [], allowedGroups: session.allowedGroups }} weekKey={weekKey} session={session} students={students} onBook={handleBook} onCancel={handleCancel} hideEmptyDays />
+                <SlotGrid grid={slots} program={program} teacher={{ id: session.id!, name: session.name, branches: session.branches || [], allowedGroups: session.allowedGroups }} weekKey={weekKey} session={session} students={students} onBook={handleBook} onCancel={handleCancel} hideEmptyDays />
               </div>
               <p className="text-xs text-gray-400 mt-3 text-center">✕ = kapalı saat &nbsp;·&nbsp; + = rezervasyon yapılabilir</p>
             </>
           ) : (
             <TeacherBookingsList bookedList={bookedList} listColorMap={listColorMap}
-              onCancel={item => handleCancel({ teacherId: session.id, day: item.dayIndex, slotId: item.slotId })} />
+              onCancel={item => handleCancel({ teacherId: session.id!, day: item.dayIndex, slotId: item.slotId })} />
           )}
         </>
       )}

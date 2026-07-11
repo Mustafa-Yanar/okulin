@@ -25,6 +25,8 @@ import {
   ALL_DAYS
 } from '@/lib/constants';
 import { api, getAdjacentWeek, isSlotPast, WeekNav } from './shared';
+import type { Session } from '@/lib/auth';
+import type { ShowToast } from './types';
 
 // Helper API Fetcher
 
@@ -32,17 +34,76 @@ import { api, getAdjacentWeek, isSlotPast, WeekNav } from './shared';
 
 // Helper: ders saati geçip geçmediğini denetleme
 
+// Etüt şablonundan türetilen slot-benzeri satır — AvailableTree/StudentBookingsView
+// ortak şekli (ParentPanel /api/slots satırlarını da bu şekle karıştırır).
+export interface BookingSlotEntry {
+  kind?: string;
+  etutId?: string;
+  teacherId: string;
+  teacherName?: string;
+  branches?: string[];
+  allowedGroups?: string[];
+  day: number;
+  dayLabel?: string;
+  start?: string;
+  end?: string;
+  slotId: string;
+  slotLabel: string;
+  booked?: boolean;
+  disabled?: boolean;
+  fixed?: boolean;
+  studentId?: string | null;
+  studentName?: string | null;
+  branch?: string;
+  bookedBy?: string | null;
+}
+
+// GET /api/etut-sablon/all etüt satırı.
+interface EtutAllDTO {
+  id: string;
+  teacherId: string;
+  teacherName?: string;
+  branches?: string[];
+  allowedGroups?: string[];
+  dayIndex: number;
+  dayLabel?: string;
+  start: string;
+  end: string;
+  booked?: boolean;
+  studentId?: string | null;
+  studentName?: string | null;
+  branch?: string;
+  bookedBy?: string;
+}
+
+// Rezervasyon/iptal argümanları (AvailableTree onBook / BookingsView onCancel).
+interface BookEtutArgs {
+  teacherId: string;
+  day: number;
+  slotId: string;
+  branch: string;
+  kind?: string;
+  etutId?: string;
+}
+export interface BookingCancelArgs {
+  teacherId: string;
+  day: number;
+  slotId: string;
+  kind?: string;
+  etutId?: string;
+}
+type CancelEtutArgs = BookingCancelArgs;
 
 // Lucide Chevron Icon Helpers inside WeekNav
-function ChevronLeft({ size, className }) {
+function ChevronLeft({ size, className }: { size: number; className?: string }) {
   return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15 18-6-6 6-6"/></svg>;
 }
-function ChevronRight({ size, className }) {
-  return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9 18 6-6-6-6"/></svg>;
+function ChevronRight({ size, className, style }: { size: number; className?: string; style?: React.CSSProperties }) {
+  return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style}><path d="m9 18 6-6-6-6"/></svg>;
 }
 
 // Rehberlik ders listesi seçimi
-function guidanceSubjectsFor(cls) {
+function guidanceSubjectsFor(cls: string | undefined): string[] {
   if (!cls) return [];
   if (cls.startsWith('7')) {
     return ['Türkçe', 'Matematik', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İngilizce'];
@@ -100,18 +161,24 @@ function guidanceSubjectsFor(cls) {
   return [];
 }
 
-const GROUPS = { ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
+const GROUPS: Record<string, string> = { ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
+
+interface AvailableTreeProps {
+  available: BookingSlotEntry[];
+  onBook: (args: BookEtutArgs) => void;
+  selectableBranchesFor?: (s: BookingSlotEntry) => string[];
+}
 
 // ─── AVAILABLE TREE ────────────────────────────────────────────────────────────
-function AvailableTree({ available, onBook, selectableBranchesFor }) {
-  const [openTeachers, setOpenTeachers] = useState({});
-  const [openDays, setOpenDays] = useState({});
+function AvailableTree({ available, onBook, selectableBranchesFor }: AvailableTreeProps) {
+  const [openTeachers, setOpenTeachers] = useState<Record<string, boolean>>({});
+  const [openDays, setOpenDays] = useState<Record<string, boolean>>({});
 
   const tree = useMemo(() => {
-    const map = {};
+    const map: Record<string, { id: string; name: string; branches: string[]; days: Record<number, { dayIndex: number; dayLabel?: string; slots: BookingSlotEntry[] }> }> = {};
     for (const s of available) {
       if (!map[s.teacherId]) {
-        map[s.teacherId] = { id: s.teacherId, name: s.teacherName, branches: s.branches || [], days: {} };
+        map[s.teacherId] = { id: s.teacherId, name: s.teacherName || '', branches: s.branches || [], days: {} };
       }
       const dayKey = s.day;
       if (!map[s.teacherId].days[dayKey]) {
@@ -127,8 +194,8 @@ function AvailableTree({ available, onBook, selectableBranchesFor }) {
       }));
   }, [available]);
 
-  const toggleTeacher = id => setOpenTeachers(p => ({ ...p, [id]: !p[id] }));
-  const toggleDay = key => setOpenDays(p => ({ ...p, [key]: !p[key] }));
+  const toggleTeacher = (id: string) => setOpenTeachers(p => ({ ...p, [id]: !p[id] }));
+  const toggleDay = (key: string) => setOpenDays(p => ({ ...p, [key]: !p[key] }));
 
   if (tree.length === 0) {
     return <EmptyState card icon={Calendar} title="Uygun etüt bulunamadı" description="Bu hafta için seçebileceğin etüt yok." />;
@@ -215,12 +282,18 @@ function AvailableTree({ available, onBook, selectableBranchesFor }) {
   );
 }
 
-// ─── STUDENT BOOKINGS VIEW ─────────────────────────────────────────────────────
-export function StudentBookingsView({ student, allSlots, onCancel }) {
-  const [openDays, setOpenDays] = useState({});
+interface StudentBookingsViewProps {
+  student: { id?: string };
+  allSlots: BookingSlotEntry[];
+  onCancel?: (args: CancelEtutArgs) => void;
+}
 
-  const bookedByLabel = { student: 'Öğrenci', teacher: 'Öğretmen', director: 'Müdür', counselor: 'Rehber' };
-  const bookedByColor = {
+// ─── STUDENT BOOKINGS VIEW ─────────────────────────────────────────────────────
+export function StudentBookingsView({ student, allSlots, onCancel }: StudentBookingsViewProps) {
+  const [openDays, setOpenDays] = useState<Record<string | number, boolean>>({});
+
+  const bookedByLabel: Record<string, string> = { student: 'Öğrenci', teacher: 'Öğretmen', director: 'Müdür', counselor: 'Rehber' };
+  const bookedByColor: Record<string, string> = {
     student: 'bg-indigo-100 text-indigo-600',
     teacher: 'bg-emerald-100 text-emerald-600',
     director: 'bg-amber-100 text-amber-600',
@@ -229,7 +302,7 @@ export function StudentBookingsView({ student, allSlots, onCancel }) {
 
   const days = useMemo(() => {
     const bookedSlots = allSlots.filter(s => s.booked && s.studentId === student.id);
-    const map = {};
+    const map: Record<number, { dayIndex: number; dayLabel?: string; slots: BookingSlotEntry[] }> = {};
     for (const s of bookedSlots) {
       if (!map[s.day]) map[s.day] = { dayIndex: s.day, dayLabel: s.dayLabel, slots: [] };
       map[s.day].slots.push(s);
@@ -239,7 +312,7 @@ export function StudentBookingsView({ student, allSlots, onCancel }) {
       .map(d => ({ ...d, slots: d.slots.sort((a, b) => a.slotId.localeCompare(b.slotId)) }));
   }, [allSlots, student.id]);
 
-  const toggleDay = key => setOpenDays(p => ({ ...p, [key]: !p[key] }));
+  const toggleDay = (key: string | number) => setOpenDays(p => ({ ...p, [key]: !p[key] }));
 
   if (days.length === 0) {
     return <EmptyState compact icon={BookOpen} title="Bu hafta hiç etüt yok" />;
@@ -281,8 +354,8 @@ export function StudentBookingsView({ student, allSlots, onCancel }) {
                       {s.fixed && (
                         <span className="badge" style={{ background: 'color-mix(in srgb, #7c3aed 12%, transparent)', color: '#7c3aed' }}>Sabit</span>
                       )}
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-500 ${bookedByColor[s.bookedBy] || bookedByColor.student}`} style={{ fontWeight: 500 }}>
-                        {bookedByLabel[s.bookedBy] || 'Öğrenci'}
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-500 ${bookedByColor[s.bookedBy || ''] || bookedByColor.student}`} style={{ fontWeight: 500 }}>
+                        {bookedByLabel[s.bookedBy || ''] || 'Öğrenci'}
                       </span>
                       {onCancel && (
                         <button onClick={() => onCancel({ teacherId: s.teacherId, day: s.day, slotId: s.slotId, kind: s.kind, etutId: s.etutId })}
@@ -302,28 +375,36 @@ export function StudentBookingsView({ student, allSlots, onCancel }) {
   );
 }
 
+// Öğrencinin haftalık D/Y/B girişleri — inputlar boş string de taşır.
+type GuidanceEntries = Record<string, { correct?: number | string; wrong?: number | string; empty?: number | string }>;
+
+interface StudentGuidancePanelProps {
+  session: Session;
+  showToast: ShowToast;
+}
+
 // ─── STUDENT GUIDANCE PANEL ────────────────────────────────────────────────────
-function StudentGuidancePanel({ session, showToast }) {
+function StudentGuidancePanel({ session, showToast }: StudentGuidancePanelProps) {
   const subjects = useMemo(() => guidanceSubjectsFor(session.cls), [session.cls]);
-  const [entries, setEntries] = useState({});
+  const [entries, setEntries] = useState<GuidanceEntries>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [reviewed, setReviewed] = useState(false);
-  const [submittedAt, setSubmittedAt] = useState(null);
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const data = await api('/api/guidance');
+        const data = await api<{ entries?: GuidanceEntries; reviewed?: boolean; submittedAt?: string | null }>('/api/guidance');
         setEntries(data.entries || {});
         setReviewed(!!data.reviewed);
         setSubmittedAt(data.submittedAt || null);
-      } catch (e) { showToast(e.message, 'error'); }
+      } catch (e) { showToast((e as Error).message, 'error'); }
       setLoading(false);
     })();
   }, []);
 
-  function setVal(subject, field, value) {
+  function setVal(subject: string, field: 'correct' | 'wrong' | 'empty', value: string) {
     const v = value === '' ? '' : Math.max(0, parseInt(value) || 0);
     setEntries(prev => ({
       ...prev,
@@ -334,12 +415,12 @@ function StudentGuidancePanel({ session, showToast }) {
   async function handleSave() {
     setSaving(true);
     try {
-      const payload = {};
+      const payload: Record<string, { correct: number; wrong: number; empty: number }> = {};
       for (const [subject, val] of Object.entries(entries)) {
         if (!val) continue;
-        const c = parseInt(val.correct) || 0;
-        const w = parseInt(val.wrong) || 0;
-        const em = parseInt(val.empty) || 0;
+        const c = parseInt(String(val.correct)) || 0;
+        const w = parseInt(String(val.wrong)) || 0;
+        const em = parseInt(String(val.empty)) || 0;
         if (c === 0 && w === 0 && em === 0) continue;
         payload[subject] = { correct: c, wrong: w, empty: em };
       }
@@ -348,7 +429,7 @@ function StudentGuidancePanel({ session, showToast }) {
       setSubmittedAt(new Date().toISOString());
       showToast('Rehberlik bilgileri kaydedildi');
     } catch (e) {
-      showToast(e.message, 'error');
+      showToast((e as Error).message, 'error');
     } finally {
       setSaving(false);
     }
@@ -383,7 +464,7 @@ function StudentGuidancePanel({ session, showToast }) {
           <tbody>
             {subjects.map(subject => {
               const val = entries[subject] || { correct: '', wrong: '', empty: '' };
-              const total = (parseInt(val.correct) || 0) + (parseInt(val.wrong) || 0) + (parseInt(val.empty) || 0);
+              const total = (parseInt(String(val.correct)) || 0) + (parseInt(String(val.wrong)) || 0) + (parseInt(String(val.empty)) || 0);
               return (
                 <tr key={subject} className="border-t border-gray-50">
                   <td className="px-3 py-2 text-sm text-gray-700 font-500" style={{ fontWeight: 500 }}>{subject}</td>
@@ -411,15 +492,23 @@ function StudentGuidancePanel({ session, showToast }) {
 }
 
 // ─── STUDENT EXPANDED VIEW (Rehberlik Details) ──────────────────────────────────
-export function StudentGuidancePanelWrapper({ session, showToast }) {
+export function StudentGuidancePanelWrapper({ session, showToast }: StudentGuidancePanelProps) {
   return <StudentGuidancePanel session={session} showToast={showToast} />;
 }
 
+interface StudentPanelProps {
+  session: Session;
+  showToast: ShowToast;
+  externalTab?: string | null;
+  onExternalTabChange?: (key: string) => void;
+  selfBookingAllowed?: boolean;
+}
+
 // ─── MAIN STUDENT PANEL ────────────────────────────────────────────────────────
-export default function StudentPanel({ session, showToast, externalTab, onExternalTabChange, selfBookingAllowed = true }) {
+export default function StudentPanel({ session, showToast, externalTab, onExternalTabChange, selfBookingAllowed = true }: StudentPanelProps) {
   const { classes } = useClasses();
   const [weekKey, setWeekKey] = useState(getWeekKey());
-  const [allSlots, setAllSlots] = useState([]);
+  const [allSlots, setAllSlots] = useState<BookingSlotEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterBranch, setFilterBranch] = useState('');
   const [filterTeacher, setFilterTeacher] = useState('');
@@ -431,20 +520,20 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalTab]);
 
-  const setTab = useCallback((key) => {
+  const setTab = useCallback((key: string) => {
     setTabInternal(key);
     onExternalTabChange?.(key);
   }, [setTabInternal, onExternalTabChange]);
 
-  const loadData = useCallback(async (wk) => {
+  const loadData = useCallback(async (wk?: string) => {
     setLoading(true);
     try {
       const resolvedWeek = wk || getWeekKey();
       if (!wk) setWeekKey(resolvedWeek);
       // Sadece yeni serbest etüt şablonları (eski slot-etüt /api/slots emekli edildi — Faz 7c-3).
-      const etutData = await api(`/api/etut-sablon/all?week=${resolvedWeek}`);
+      const etutData = await api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${resolvedWeek}`);
       // Yeni etütleri slot-benzeri şekle çevir (AvailableTree/BookingsView aynı bileşeni kullanır).
-      const etutList = (etutData.etutler || []).map(e => ({
+      const etutList: BookingSlotEntry[] = (etutData.etutler || []).map(e => ({
         kind: 'etut',
         etutId: e.id,
         teacherId: e.teacherId,
@@ -465,14 +554,14 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
         bookedBy: e.bookedBy || (e.studentId ? 'student' : undefined),
       }));
       setAllSlots(etutList);
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setLoading(false); }
   }, [showToast]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
   const teachers = useMemo(() => {
-    const seen = new Set();
+    const seen = new Set<string>();
     return allSlots.filter(s => { if (seen.has(s.teacherId)) return false; seen.add(s.teacherId); return true; })
       .map(s => ({ id: s.teacherId, name: s.teacherName }));
   }, [allSlots]);
@@ -480,13 +569,13 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
   const myBookings = useMemo(() => allSlots.filter(s => s.booked && s.studentId === session.id), [allSlots, session.id]);
   // Registry'de şubenin ders listesi varsa onu kullan (özel şube/özel ders), yoksa constants fallback.
   const studentAllowedBranches = useMemo(
-    () => coursesForClass(classes, session.cls) ?? allowedBranchesForClass(session.cls),
+    () => coursesForClass(classes, session.cls || '') ?? allowedBranchesForClass(session.cls),
     [classes, session.cls]
   );
   const bookedBranches = useMemo(() => new Set(myBookings.map(b => b.branch).filter(Boolean)), [myBookings]);
-  const mathTaken = useMemo(() => myBookings.some(b => MATH_FAMILY.includes(b.branch)), [myBookings]);
+  const mathTaken = useMemo(() => myBookings.some(b => MATH_FAMILY.includes(b.branch || '')), [myBookings]);
 
-  const selectableBranchesFor = useCallback((s) => {
+  const selectableBranchesFor = useCallback((s: BookingSlotEntry) => {
     return (s.branches || []).filter(b => {
       if (!studentAllowedBranches.includes(b)) return false;
       if (bookedBranches.has(b)) return false;
@@ -499,7 +588,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
     return allSlots.filter(s => {
       if (s.booked || s.disabled) return false;
       if (!s.allowedGroups || s.allowedGroups.length === 0) return false;
-      if (!s.allowedGroups.includes(session.group)) return false;
+      if (!s.allowedGroups.includes(session.group || '')) return false;
       if (isSlotPast(weekKey, s.day, s.slotLabel)) return false;
       if (myBookings.some(b => b.day === s.day && b.slotId === s.slotId)) return false;
       const sel = selectableBranchesFor(s);
@@ -511,20 +600,20 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
     });
   }, [allSlots, myBookings, session, selectableBranchesFor, filterBranch, filterTeacher, filterDay, weekKey]);
 
-  const handleBook = async ({ teacherId, branch, etutId }) => {
+  const handleBook = async ({ teacherId, branch, etutId }: BookEtutArgs) => {
     try {
       await api('/api/etut-sablon/rezervasyon', { method: 'POST', body: JSON.stringify({ teacherId, etutId, branch, weekKey }) });
       showToast('Etüde kaydoldunuz!');
       loadData(weekKey);
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
   };
 
-  const handleCancel = async ({ teacherId, etutId }) => {
+  const handleCancel = async ({ teacherId, etutId }: CancelEtutArgs) => {
     try {
       await api('/api/etut-sablon/rezervasyon', { method: 'DELETE', body: JSON.stringify({ teacherId, etutId }) });
       showToast('Rezervasyon iptal edildi');
       loadData(weekKey);
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) { showToast((err as Error).message, 'error'); }
   };
 
   if (loading) return <LoadingBox height="h-64" />;
@@ -532,7 +621,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">{classLabelFrom(classes, session.cls, classLabel)} · {GROUPS[session.group]}</p>
+        <p className="text-sm text-gray-500">{classLabelFrom(classes, session.cls || '', classLabel)} · {GROUPS[session.group || '']}</p>
         <WeekNav weekKey={weekKey} onPrev={() => { const w = getAdjacentWeek(weekKey,-1); setWeekKey(w); loadData(w); }} onNext={() => { const w = getAdjacentWeek(weekKey,1); setWeekKey(w); loadData(w); }} />
       </div>
 
@@ -540,7 +629,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
         <RehberlikAccordion
           subjects={guidanceSubjectsFor(session.cls)}
           editable={true}
-          studentId={null}
+          studentId={undefined}
           solvedContent={<StudentGuidancePanel session={session} showToast={showToast} />}
         />
       ) : tab === 'myBookings' ? (

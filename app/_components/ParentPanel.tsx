@@ -4,7 +4,7 @@
 // Tümü SALT-OKUNUR. Sekmeler: Program (etütler), Ödeme, Rehberlik (konu+deneme+çözülen).
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Calendar, Wallet, BarChart3, ChevronLeft, ChevronRight, Users, Megaphone, CreditCard, X } from 'lucide-react';
-import { StudentBookingsView } from './StudentPanel';
+import { StudentBookingsView, type BookingSlotEntry } from './StudentPanel';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { guidanceSubjectsFor } from './director/shared';
@@ -18,29 +18,55 @@ import { useClasses } from './ClassesContext';
 import { classLabelFrom } from '@/lib/classCatalog';
 import { getWeekKey, weekRangeLabel, classLabel } from '@/lib/constants';
 import { api, getAdjacentWeek } from './shared';
+import type { Session } from '@/lib/auth';
+import type { ShowToast, FinanceDTO, InstallmentDTO, SlotEntryDTO } from './types';
 
 
 // Haftalık gezinme (StudentPanel ile aynı hesap).
 
-const tl = (n) => `${(Number(n) || 0).toLocaleString('tr-TR')} ₺`;
+// Oturumdaki çocuk kaydı — yeni token'lar {id,name,cls} taşır (eski düz-string
+// biçimi API'de normalize edilir; panel obje varsayar).
+interface Child {
+  id: string;
+  name?: string;
+  cls?: string;
+}
+
+// GET /api/etut-sablon/all satırı (veli görünümü).
+interface EtutAllDTO {
+  id: string;
+  teacherId: string;
+  teacherName?: string;
+  dayIndex: number;
+  dayLabel?: string;
+  start: string;
+  end: string;
+  booked?: boolean;
+  studentId?: string | null;
+  studentName?: string | null;
+  branch?: string;
+  bookedBy?: string;
+}
+
+const tl = (n: number | undefined) => `${(Number(n) || 0).toLocaleString('tr-TR')} ₺`;
 
 // ─── PROGRAM (etütler) ──────────────────────────────────────────────────────────
-function ProgramView({ child }) {
+function ProgramView({ child }: { child: Child }) {
   const [weekKey, setWeekKey] = useState(getWeekKey());
-  const [allSlots, setAllSlots] = useState([]);
+  const [allSlots, setAllSlots] = useState<BookingSlotEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async (wk) => {
+  const load = useCallback(async (wk: string) => {
     setLoading(true);
     try {
       const sid = encodeURIComponent(child.id);
       // Eski slot-etüt + yeni serbest etüt şablonları (yalnız kendi çocuğu)
       const [data, etutData] = await Promise.all([
-        api(`/api/slots?week=${wk}&studentId=${sid}`),
-        api(`/api/etut-sablon/all?week=${wk}&studentId=${sid}`).catch(() => ({ etutler: [] })),
+        api<{ slots?: SlotEntryDTO[] }>(`/api/slots?week=${wk}&studentId=${sid}`),
+        api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${wk}&studentId=${sid}`).catch(() => ({ etutler: [] as EtutAllDTO[] })),
       ]);
-      const slotList = data.slots || [];
-      const etutList = (etutData.etutler || []).map(e => ({
+      const slotList: BookingSlotEntry[] = data.slots || [];
+      const etutList: BookingSlotEntry[] = (etutData.etutler || []).map(e => ({
         kind: 'etut',
         etutId: e.id,
         teacherId: e.teacherId,
@@ -67,7 +93,7 @@ function ProgramView({ child }) {
       <div className="flex items-center justify-end mb-4">
         <div className="flex items-center gap-1.5">
           <button onClick={() => setWeekKey(w => getAdjacentWeek(w, -1))} className="btn-ghost !px-2 !py-1.5" aria-label="Önceki hafta"><ChevronLeft size={16} /></button>
-          <span className="text-xs font-600 text-gray-600 min-w-[120px] text-center" style={{ fontWeight: 600 }}>{weekRangeLabel(weekKey)}</span>
+          <span className="text-xs font-600 text-gray-600 min-w-[120px] text-center" style={{ fontWeight: 600 }}>{`${weekRangeLabel(weekKey).startStr} – ${weekRangeLabel(weekKey).endStr}`}</span>
           <button onClick={() => setWeekKey(w => getAdjacentWeek(w, 1))} className="btn-ghost !px-2 !py-1.5" aria-label="Sonraki hafta"><ChevronRight size={16} /></button>
         </div>
       </div>
@@ -81,20 +107,20 @@ function ProgramView({ child }) {
 }
 
 // ─── ÖDEME (finansal — görüntüleme + online ödeme) ───────────────────────────────
-function PaymentView({ child, showToast }) {
-  const [rec, setRec] = useState(undefined);
+function PaymentView({ child, showToast }: { child: Child; showToast: ShowToast }) {
+  const [rec, setRec] = useState<FinanceDTO | null | undefined>(undefined);
   const [payEnabled, setPayEnabled] = useState(false);
-  const [payTarget, setPayTarget] = useState(null); // { idx, inst }
+  const [payTarget, setPayTarget] = useState<{ idx: number; inst: InstallmentDTO } | null>(null);
 
   const load = useCallback(async () => {
-    try { setRec(await api(`/api/finance?studentId=${encodeURIComponent(child.id)}`)); }
+    try { setRec(await api<FinanceDTO | null>(`/api/finance?studentId=${encodeURIComponent(child.id)}`)); }
     catch { setRec(null); }
   }, [child.id]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     (async () => {
-      try { const d = await api('/api/payment/config'); setPayEnabled(!!d.enabled); }
+      try { const d = await api<{ enabled?: boolean }>('/api/payment/config'); setPayEnabled(!!d.enabled); }
       catch { setPayEnabled(false); }
     })();
   }, []);
@@ -171,9 +197,18 @@ function PaymentView({ child, showToast }) {
   );
 }
 
+interface PayModalProps {
+  child: Child;
+  idx: number;
+  inst: InstallmentDTO;
+  showToast: ShowToast;
+  onClose: () => void;
+  onPaid: () => void;
+}
+
 // PayTR iframe modalı. /api/payment/start → iframeUrl; sonucu odeme/sonuc sayfası
 // postMessage ile bildirir. Kredilendirme sunucudaki callback'te yapılır.
-function PayModal({ child, idx, inst, showToast, onClose, onPaid }) {
+function PayModal({ child, idx, inst, showToast, onClose, onPaid }: PayModalProps) {
   const [url, setUrl] = useState('');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(true);
@@ -181,15 +216,15 @@ function PayModal({ child, idx, inst, showToast, onClose, onPaid }) {
   useEffect(() => {
     (async () => {
       try {
-        const d = await api('/api/payment/start', { method: 'POST', body: JSON.stringify({ studentId: child.id, installmentIdx: idx }) });
+        const d = await api<{ iframeUrl: string }>('/api/payment/start', { method: 'POST', body: JSON.stringify({ studentId: child.id, installmentIdx: idx }) });
         setUrl(d.iframeUrl);
-      } catch (e) { setErr(e.message); }
+      } catch (e) { setErr((e as Error).message); }
       finally { setLoading(false); }
     })();
   }, [child.id, idx]);
 
   useEffect(() => {
-    function onMsg(e) {
+    function onMsg(e: MessageEvent) {
       if (e?.data?.type !== 'paytr-result') return;
       if (e.data.status === 'fail') { showToast('Ödeme tamamlanamadı', 'error'); onClose(); }
       else { showToast('Ödeme alındı'); onPaid(); }
@@ -203,7 +238,8 @@ function PayModal({ child, idx, inst, showToast, onClose, onPaid }) {
     if (!url) return;
     const s = document.createElement('script');
     s.src = 'https://www.paytr.com/js/iframeResizer.min.js';
-    s.onload = () => { try { window.iFrameResize({}, '#paytr-iframe'); } catch {} };
+    // iFrameResize script'i window'a global ekler — tip beyanı yok, bilinçli iddia.
+    s.onload = () => { try { (window as unknown as { iFrameResize: (opts: object, sel: string) => void }).iFrameResize({}, '#paytr-iframe'); } catch {} };
     document.body.appendChild(s);
     return () => { try { document.body.removeChild(s); } catch {} };
   }, [url]);
@@ -230,7 +266,7 @@ function PayModal({ child, idx, inst, showToast, onClose, onPaid }) {
 }
 
 // ─── REHBERLİK (konu + deneme + çözülen, salt-okunur) ────────────────────────────
-function GuidanceView({ child }) {
+function GuidanceView({ child }: { child: Child }) {
   return (
     <RehberlikAccordion
       subjects={guidanceSubjectsFor(child.cls)}
@@ -241,11 +277,20 @@ function GuidanceView({ child }) {
   );
 }
 
+interface ParentPanelProps {
+  session: Session;
+  showToast: ShowToast;
+  externalTab?: string | null;
+  onExternalTabChange?: (key: string) => void;
+}
+
 // ─── KÖK ────────────────────────────────────────────────────────────────────────
-export default function ParentPanel({ session, showToast, externalTab, onExternalTabChange }) {
+export default function ParentPanel({ session, showToast, externalTab, onExternalTabChange }: ParentPanelProps) {
   const { classes } = useClasses();
-  const children = useMemo(() => Array.isArray(session.children) ? session.children : [], [session.children]);
-  const [childId, setChildId] = useState(children[0]?.id || null);
+  // Yeni token'larda children obje listesi — eski düz-string biçim panelde beklenmiyor
+  // (obje varsayımı çalışma zamanı sözleşmesi; bilinçli tip iddiası).
+  const children = useMemo(() => (Array.isArray(session.children) ? session.children : []) as Child[], [session.children]);
+  const [childId, setChildId] = useState<string | null>(children[0]?.id || null);
   const [tab, setTabInternal] = useUrlTab('program', ['program', 'odev', 'davranis', 'odeme', 'rehberlik', 'duyurular', 'takvim', 'formlar']);
 
   useEffect(() => {
@@ -253,7 +298,7 @@ export default function ParentPanel({ session, showToast, externalTab, onExterna
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalTab]);
 
-  const setTab = useCallback((key) => {
+  const setTab = useCallback((key: string) => {
     setTabInternal(key);
     onExternalTabChange?.(key);
   }, [setTabInternal, onExternalTabChange]);
@@ -296,7 +341,7 @@ export default function ParentPanel({ session, showToast, externalTab, onExterna
         </div>
       )}
 
-      <p className="text-body-sm mb-4">{child.name} · {classLabelFrom(classes, child.cls, classLabel)}</p>
+      <p className="text-body-sm mb-4">{child.name} · {classLabelFrom(classes, child.cls || '', classLabel)}</p>
 
       {/* child.id değişince alt bileşenler remount olsun diye key */}
       {tab === 'program' && <ProgramView key={child.id} child={child} />}

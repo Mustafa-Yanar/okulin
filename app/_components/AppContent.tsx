@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { LogOut, User, BookMarked, GraduationCap, Shield, Settings, Wallet, Users, Compass, Menu } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import StudentPanel from './StudentPanel';
 import TeacherPanel from './TeacherPanel';
 import AccountantPanel from './AccountantPanel';
@@ -15,30 +16,32 @@ import Landing from './Landing';
 import PullToRefreshIndicator from './PullToRefreshIndicator';
 import { usePullToRefresh } from './usePullToRefresh';
 import { isPushSupported, subscribeToPush } from '@/lib/push-client';
-import { useSlotTimes } from './SlotTimesContext';
+import { useSlotTimes, type SlotTimesInput } from './SlotTimesContext';
 import { ClassesProvider } from './ClassesContext';
-import { BRANDING_DEFAULTS } from '@/lib/branding';
+import { BRANDING_DEFAULTS, type Branding } from '@/lib/branding';
 import LoginScreen from './LoginScreen';
 import { Toast } from './ui-components';
 import { api } from './client-api';
+import type { Session } from '@/lib/auth';
+import type { WhoamiResponse } from './types';
 
 const SIDEBAR_ROLES = ['director', 'counselor', 'accountant', 'teacher', 'student', 'parent'];
 const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || 'okulin.com';
 
-function isApexHost(host) {
+function isApexHost(host: string): boolean {
   return host === APP_DOMAIN || host === `www.${APP_DOMAIN}`;
 }
 
 export default function AppContent() {
   const [loading, setLoading] = useState(true);
-  const [isApex, setIsApex] = useState(undefined); // undefined=karar verilmedi
-  const [session, setSession] = useState(null);
+  const [isApex, setIsApex] = useState<boolean | undefined>(undefined); // undefined=karar verilmedi
+  const [session, setSession] = useState<Session | null>(null);
   const [directorExists, setDirectorExists] = useState(false);
-  const [branding, setBranding] = useState(BRANDING_DEFAULTS);
-  const [modules, setModules] = useState(null); // kurum modül aç/kapa; null=henüz yüklenmedi (hepsi açık varsay)
-  const [etutCfg, setEtutCfg] = useState(null);  // etüt kuralları (self-rezervasyon vb.)
-  const [permissions, setPermissions] = useState(null); // rol yetki kısıtları (rehber salt-okunur vb.)
-  const [toast, setToast] = useState(null);
+  const [branding, setBranding] = useState<Branding>(BRANDING_DEFAULTS);
+  const [modules, setModules] = useState<Record<string, boolean> | null>(null); // kurum modül aç/kapa; null=henüz yüklenmedi (hepsi açık varsay)
+  const [etutCfg, setEtutCfg] = useState<WhoamiResponse['etut'] | null>(null);  // etüt kuralları (self-rezervasyon vb.)
+  const [permissions, setPermissions] = useState<WhoamiResponse['permissions'] | null>(null); // rol yetki kısıtları (rehber salt-okunur vb.)
+  const [toast, setToast] = useState<{ msg: React.ReactNode; type: string } | null>(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   // Sidebar state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -47,7 +50,7 @@ export default function AppContent() {
   });
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   // Aktif sekme (sidebar rolleri için)
-  const [activeTab, setActiveTab] = useState(null);
+  const [activeTab, setActiveTab] = useState<string | null>(null);
   const { updateSlotTimes } = useSlotTimes();
 
   const handleRefresh = useCallback(async () => {
@@ -62,7 +65,7 @@ export default function AppContent() {
     if (apex) { setLoading(false); return; }
     (async () => {
       try {
-        const status = await api('/api/auth');
+        const status = await api<WhoamiResponse>('/api/auth');
         setDirectorExists(status.directorExists);
         if (status.modules) setModules(status.modules);
         if (status.etut) setEtutCfg(status.etut);
@@ -76,7 +79,7 @@ export default function AppContent() {
         if (status.session) {
           setSession(status.session);
           try {
-            const times = await api('/api/slot-times');
+            const times = await api<SlotTimesInput>('/api/slot-times');
             updateSlotTimes(times);
           } catch {}
           // İlk girişte push izni iste — izin verilmişse sessiz, verilmemişse tarayıcı diyaloğu açılır
@@ -103,7 +106,7 @@ export default function AppContent() {
     return () => window.removeEventListener('popstate', readTab);
   }, [session]);
 
-  const handleTabChange = useCallback((key) => {
+  const handleTabChange = useCallback((key: string) => {
     setActiveTab(key);
     // URL'e yaz — DirectorPanel'in useUrlTab ile senkron kalır
     const params = new URLSearchParams(window.location.search);
@@ -127,7 +130,7 @@ export default function AppContent() {
     });
   }, []);
 
-  const showToast = (msg, type = 'success') => {
+  const showToast = (msg: React.ReactNode, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
@@ -151,7 +154,7 @@ export default function AppContent() {
     <><LoginScreen directorExists={directorExists} branding={branding} onLogin={async (s) => {
       setSession(s);
       try {
-        const times = await api('/api/slot-times');
+        const times = await api<SlotTimesInput>('/api/slot-times');
         updateSlotTimes(times);
       } catch {}
     }} showToast={showToast} /><Toast toast={toast} /></>
@@ -165,7 +168,7 @@ export default function AppContent() {
     <>
       <ForcedPasswordChange
         session={session}
-        onDone={() => setSession(s => ({ ...s, mustChangePassword: false }))}
+        onDone={() => setSession(s => (s ? { ...s, mustChangePassword: false } : s))}
         onLogout={logout}
         showToast={showToast}
       />
@@ -174,9 +177,9 @@ export default function AppContent() {
   );
 
   // ── Tüm roller: Sidebar layout ──────────────────────────────────────────────
-  const roleLabel = { director: 'Müdür', counselor: 'Rehber', accountant: 'Muhasebeci', teacher: 'Öğretmen', student: 'Öğrenci', parent: 'Veli' };
-  const roleColor = { director: '#6366f1', counselor: '#8b5cf6', accountant: '#0891b2', teacher: '#22c55e', student: '#f59e0b', parent: '#db2777' };
-  const RoleIcon = { director: Shield, counselor: Compass, accountant: Wallet, teacher: BookMarked, student: GraduationCap, parent: Users };
+  const roleLabel: Record<string, string> = { director: 'Müdür', counselor: 'Rehber', accountant: 'Muhasebeci', teacher: 'Öğretmen', student: 'Öğrenci', parent: 'Veli' };
+  const roleColor: Record<string, string> = { director: '#6366f1', counselor: '#8b5cf6', accountant: '#0891b2', teacher: '#22c55e', student: '#f59e0b', parent: '#db2777' };
+  const RoleIcon: Record<string, LucideIcon> = { director: Shield, counselor: Compass, accountant: Wallet, teacher: BookMarked, student: GraduationCap, parent: Users };
   const RIcon = RoleIcon[session.role] || User;
   // Müdür yardımcısı: oturumda role='director' + asst:true → yetki müdürle aynı, yalnız etiket farklı.
   const isAssistant = session.role === 'director' && session.asst === true;
@@ -260,8 +263,8 @@ export default function AppContent() {
                 <DirectorSettingsInline
                   current={session.name}
                   showToast={showToast}
-                  onSave={newName => setSession(s => ({ ...s, name: newName }))}
-                  onBranding={(b) => {
+                  onSave={(newName: string) => setSession(s => (s ? { ...s, name: newName } : s))}
+                  onBranding={(b: Branding) => {
                     setBranding(b);
                     if (b.themeColor) document.documentElement.style.setProperty('--brand', b.themeColor);
                   }}

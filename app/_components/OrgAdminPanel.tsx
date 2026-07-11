@@ -2,19 +2,36 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import { Plus, Building2, ToggleLeft, ToggleRight, KeyRound, LogOut, RefreshCw, Pencil, Users, GraduationCap, Copy, Check, Link2 } from 'lucide-react';
+import type { Session } from '@/lib/auth';
+
+// GET /api/hq şube satırı.
+interface BranchDTO {
+  slug: string;
+  name: string;
+  active?: boolean;
+  directorUsername?: string;
+  studentCount?: number;
+  teacherCount?: number;
+}
+interface HqData {
+  org?: string;
+  orgName?: string;
+  appDomain?: string | null;
+  branches?: BranchDTO[];
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 // Şube giriş adresi: main → kurum.domain, diğer → şube.kurum.domain (iki seviyeli).
 // appDomain boşsa (domain bağlı değil) null döner.
-function buildBranchUrl(org, slug, appDomain) {
+function buildBranchUrl(org: string | undefined, slug: string, appDomain: string | null | undefined): string | null {
   if (!appDomain) return null;
   const host = slug === 'main' ? `${org}.${appDomain}` : `${slug}.${org}.${appDomain}`;
   return `https://${host}`;
 }
 
 // Kopyalanabilir link rozeti.
-function CopyableUrl({ url }) {
+function CopyableUrl({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
@@ -29,7 +46,7 @@ function CopyableUrl({ url }) {
   );
 }
 
-function Field({ label, id, children }) {
+function Field({ label, id, children }: { label: string; id: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-xs font-medium text-slate-600">{label}</label>
@@ -38,7 +55,7 @@ function Field({ label, id, children }) {
   );
 }
 
-function Input({ id, ...props }) {
+function Input({ id, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       id={id}
@@ -50,7 +67,14 @@ function Input({ id, ...props }) {
 
 // ── Yeni Şube Modalı ─────────────────────────────────────────────────────────
 
-function NewBranchModal({ onClose, onCreated, org, appDomain }) {
+interface NewBranchModalProps {
+  onClose: () => void;
+  onCreated: () => void;
+  org?: string;
+  appDomain?: string | null;
+}
+
+function NewBranchModal({ onClose, onCreated, org, appDomain }: NewBranchModalProps) {
   const [form, setForm] = useState({
     branchSlug: '', name: '',
     directorUsername: '', directorPassword: '', directorName: '',
@@ -58,9 +82,9 @@ function NewBranchModal({ onClose, onCreated, org, appDomain }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  function set(k, v) { setForm(prev => ({ ...prev, [k]: v })); }
+  function set(k: string, v: string) { setForm(prev => ({ ...prev, [k]: v })); }
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -70,7 +94,7 @@ function NewBranchModal({ onClose, onCreated, org, appDomain }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create_branch', ...form }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) { setError(data.error || 'Hata'); return; }
       onCreated();
     } finally {
@@ -90,7 +114,7 @@ function NewBranchModal({ onClose, onCreated, org, appDomain }) {
             <p className="text-xs text-slate-400">Küçük harf, rakam, tire. Örn: ankara, izmir-merkez</p>
             {form.branchSlug && buildBranchUrl(org, form.branchSlug, appDomain) && (
               <p className="text-xs text-indigo-600 mt-0.5">
-                Giriş adresi: <code className="font-mono">{buildBranchUrl(org, form.branchSlug, appDomain).replace(/^https:\/\//, '')}</code>
+                Giriş adresi: <code className="font-mono">{buildBranchUrl(org, form.branchSlug, appDomain)!.replace(/^https:\/\//, '')}</code>
               </p>
             )}
           </Field>
@@ -125,12 +149,18 @@ function NewBranchModal({ onClose, onCreated, org, appDomain }) {
 
 // ── Müdür Şifre Sıfırlama Modalı ─────────────────────────────────────────────
 
-function ResetPasswordModal({ branch, onClose, onDone }) {
+interface BranchModalProps {
+  branch: BranchDTO;
+  onClose: () => void;
+  onDone: () => void;
+}
+
+function ResetPasswordModal({ branch, onClose, onDone }: BranchModalProps) {
   const [pw, setPw] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -140,7 +170,7 @@ function ResetPasswordModal({ branch, onClose, onDone }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'reset_director', branchSlug: branch.slug, newPassword: pw }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) { setError(data.error || 'Hata'); return; }
       onDone();
     } finally {
@@ -172,12 +202,12 @@ function ResetPasswordModal({ branch, onClose, onDone }) {
 
 // ── Ad Düzenle Modalı ────────────────────────────────────────────────────────
 
-function RenameModal({ branch, onClose, onDone }) {
+function RenameModal({ branch, onClose, onDone }: BranchModalProps) {
   const [name, setName] = useState(branch.name);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -187,7 +217,7 @@ function RenameModal({ branch, onClose, onDone }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'rename', branchSlug: branch.slug, name }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string };
       if (!res.ok) { setError(data.error || 'Hata'); return; }
       onDone();
     } finally {
@@ -218,11 +248,22 @@ function RenameModal({ branch, onClose, onDone }) {
 
 // ── Ana Panel ────────────────────────────────────────────────────────────────
 
-export default function OrgAdminPanel({ session, onLogout }) {
-  const { data, isLoading: loading, mutate } = useSWR('/api/hq');
-  const [modal, setModal] = useState(null);
+type ModalState =
+  | { type: 'new' }
+  | { type: 'reset'; branch: BranchDTO }
+  | { type: 'rename'; branch: BranchDTO }
+  | null;
 
-  async function toggleActive(branch) {
+interface OrgAdminPanelProps {
+  session?: Session | null;
+  onLogout: () => void;
+}
+
+export default function OrgAdminPanel({ session, onLogout }: OrgAdminPanelProps) {
+  const { data, isLoading: loading, mutate } = useSWR<HqData>('/api/hq');
+  const [modal, setModal] = useState<ModalState>(null);
+
+  async function toggleActive(branch: BranchDTO) {
     await fetch('/api/hq', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -288,7 +329,8 @@ export default function OrgAdminPanel({ session, onLogout }) {
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-base font-semibold text-slate-700">Şubeler</h1>
           <div className="flex gap-2">
-            <button onClick={load} aria-label="Yenile" className="btn-icon">
+            {/* NOT: eski kod tanımsız `load` referansıydı (render'da crash) — SWR mutate ile düzeltildi. */}
+            <button onClick={() => mutate()} aria-label="Yenile" className="btn-icon">
               <RefreshCw size={16} />
             </button>
             <button
@@ -329,9 +371,9 @@ export default function OrgAdminPanel({ session, onLogout }) {
                     <span className="flex items-center gap-1"><GraduationCap size={11} /> {branch.studentCount}</span>
                     <span className="flex items-center gap-1"><Users size={11} /> {branch.teacherCount}</span>
                   </div>
-                  {buildBranchUrl(data.org, branch.slug, data.appDomain) && (
+                  {data && buildBranchUrl(data.org, branch.slug, data.appDomain) && (
                     <div className="mt-1">
-                      <CopyableUrl url={buildBranchUrl(data.org, branch.slug, data.appDomain)} />
+                      <CopyableUrl url={buildBranchUrl(data.org, branch.slug, data.appDomain)!} />
                     </div>
                   )}
                 </div>

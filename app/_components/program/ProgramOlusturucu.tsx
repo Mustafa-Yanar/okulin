@@ -582,6 +582,8 @@ interface ProgramOlusturucuProps {
   api: ApiFn;
   showToast: ShowToast; // TeacherPresets zorunlu ister; panel her zaman geçer
   branding?: Branding | null;
+  // DirectorPanel geçiriyor ama bileşen kullanmıyor (registry tek kaynak) — ölü prop.
+  activeClasses?: string[];
 }
 
 // ── Ana bileşen ──

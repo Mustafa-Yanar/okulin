@@ -13,6 +13,7 @@ import {
   Building2, GraduationCap, HeartHandshake, User, Quote, Receipt, ChevronDown,
   Send, CheckCircle2, Moon, Sun,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import Logo from './Logo';
 import { useDarkMode } from './ThemeToggle';
 import { formatCode, normalizeCode } from '@/lib/orgcode';
@@ -33,7 +34,7 @@ function DarkToggle() {
   );
 }
 
-const FEATURES = [
+const FEATURES: { icon: LucideIcon; title: string; desc: string }[] = [
   { icon: CalendarClock, title: 'Etüt & Rezervasyon', desc: 'Öğrenciler ders bazlı etüt seçer, slotlar otomatik dolar; haftalık takip tek ekranda.' },
   { icon: Users, title: 'Öğrenci & Öğretmen', desc: 'Sınıf, grup, branş ve izin günleriyle eksiksiz kayıt yönetimi.' },
   { icon: Sparkles, title: 'Otomatik Ders Programı', desc: 'Kısıtları siz koyun, çözücü en uygun haftalık programı saniyeler içinde kursun.' },
@@ -45,7 +46,7 @@ const FEATURES = [
   { icon: Megaphone, title: 'Duyuru & Bildirim', desc: 'Rol ve kapsam hedefli duyurular, anlık push bildirimleri.' },
 ];
 
-const ROLES = [
+const ROLES: { icon: LucideIcon; title: string; points: string[] }[] = [
   {
     icon: Building2, title: 'Müdür & Yönetici',
     points: ['Tüm kurumu tek panelden yönetin', 'Otomatik ders programı oluşturun', 'Tahsilat, gider ve maaş takibi', 'Rol ve kapsam hedefli duyurular'],
@@ -70,7 +71,7 @@ const STEPS = [
   { n: '3', title: 'Yönetmeye başlayın', desc: 'Program, yoklama, ödeme ve iletişim tek ekranda akıcı şekilde işler.' },
 ];
 
-const HIGHLIGHTS = [
+const HIGHLIGHTS: { icon: LucideIcon; title: string; desc: string }[] = [
   { icon: Zap, title: 'Dakikalar içinde hazır', desc: 'Kurulum yok; kurumunuzun kodu ile giriş yapın, kendi logonuzla başlayın.' },
   { icon: ShieldCheck, title: 'Güvenli ve izole', desc: 'Her kurumun verisi ayrı; rol bazlı yetkiler ve şifreli ödeme altyapısı.' },
   { icon: Receipt, title: 'Şeffaf fiyat', desc: 'Sabit yıllık lisans. Öğrenci başına ücret yok, işlem komisyonu yok — ne ödeyeceğinizi baştan bilirsiniz.' },
@@ -260,7 +261,7 @@ export default function Landing() {
   );
 }
 
-function FeatureCard({ icon: Icon, title, desc }) {
+function FeatureCard({ icon: Icon, title, desc }: { icon: LucideIcon; title: string; desc: string }) {
   return (
     <div className="card p-5 transition-all hover:-translate-y-0.5" style={{ transitionDuration: '160ms' }}>
       <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-3"
@@ -273,7 +274,7 @@ function FeatureCard({ icon: Icon, title, desc }) {
   );
 }
 
-function RoleCard({ icon: Icon, title, points }) {
+function RoleCard({ icon: Icon, title, points }: { icon: LucideIcon; title: string; points: string[] }) {
   return (
     <div className="card p-5">
       <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-4"
@@ -293,7 +294,7 @@ function RoleCard({ icon: Icon, title, points }) {
   );
 }
 
-function StepCard({ n, title, desc }) {
+function StepCard({ n, title, desc }: { n: string; title: string; desc: string; last?: boolean }) {
   return (
     <div className="card p-6">
       <div className="w-10 h-10 rounded-full flex items-center justify-center mb-4 text-lg"
@@ -306,7 +307,7 @@ function StepCard({ n, title, desc }) {
   );
 }
 
-function FaqItem({ q, a }) {
+function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="card overflow-hidden">
@@ -388,9 +389,9 @@ function DemoSection() {
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
 
-  function set(k, v) { setForm(prev => ({ ...prev, [k]: v })); setError(''); }
+  function set(k: string, v: string) { setForm(prev => ({ ...prev, [k]: v })); setError(''); }
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (form.name.trim().length < 2) { setError('Lütfen adınızı girin.'); return; }
     if (form.org.trim().length < 2) { setError('Lütfen kurum adını girin.'); return; }
@@ -402,7 +403,7 @@ function DemoSection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) { setError(data.error || 'Bir hata oluştu. Tekrar deneyin.'); setLoading(false); return; }
       setDone(true);
     } catch {
@@ -493,20 +494,20 @@ function DemoSection() {
 }
 
 // Kurum kodu modalı — kod → /api/gate → subdomain'e yönlendir.
-function CodeModal({ onClose }) {
+function CodeModal({ onClose }: { onClose: () => void }) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const inputRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  async function submit(e) {
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     const clean = normalizeCode(code);
@@ -518,7 +519,7 @@ function CodeModal({ onClose }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: clean }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { error?: string; host?: string };
       if (!res.ok || !data.host) {
         setError(data.error || 'Kurum bulunamadı.');
         setLoading(false);
