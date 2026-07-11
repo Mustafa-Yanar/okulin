@@ -2,7 +2,7 @@
 
 // Müdür ayarlar modalı (isim + özelleştirme + ödeme) ve içindeki bölümler.
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon, SlidersHorizontal, DoorOpen, Tag, CalendarClock, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon, SlidersHorizontal, Tag, CalendarClock, ShieldCheck } from 'lucide-react';
 import { api, Modal } from './shared';
 import { brandGradient, type Branding } from '@/lib/branding';
 import { useConfirm } from '../ConfirmProvider';
@@ -11,16 +11,10 @@ import type { ShowToast } from '../types';
 // /api/config yanıtının bu ekranda düzenlenen görünümü — lib/config CONFIG_DEFAULTS
 // ile aynı şekil, ancak dinamik anahtar erişimi (toggleModule/togglePermission) için
 // Record biçiminde gevşetildi (JSON üzerinden geldiği için literal tipler zaten kaybolur).
-interface Classroom {
-  id: string;
-  name: string;
-  capacity: number | null;
-}
 interface OrgConfigView {
   modules: Record<string, boolean>;
   etut: { studentSelfBooking?: boolean; cancelLockHours?: number; maxWeeklyPerStudent?: number };
   permissions: Record<string, Record<string, boolean | undefined> | undefined>;
-  classrooms: Classroom[];
   expenseCategories: string[];
   [key: string]: unknown;
 }
@@ -417,7 +411,6 @@ function ConfigurationSection({ showToast }: { showToast: ShowToast }) {
   const [config, setConfig] = useState<OrgConfigView | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [room, setRoom] = useState({ name: '', capacity: '' });
   const [newCat, setNewCat] = useState('');
 
   useEffect(() => {
@@ -476,27 +469,6 @@ function ConfigurationSection({ showToast }: { showToast: ShowToast }) {
     saveKey('permissions', next, prev);
   }
 
-  function addRoom(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const name = room.name.trim();
-    if (!name) { showToast('Derslik adı gerekli', 'error'); return; }
-    const cap = parseInt(room.capacity);
-    const entry: Classroom = { id: crypto.randomUUID(), name, capacity: Number.isFinite(cap) && cap > 0 ? cap : null };
-    const prev = config!.classrooms;
-    const next = [...prev, entry];
-    setConfig(c => (c ? { ...c, classrooms: next } : c));
-    setRoom({ name: '', capacity: '' });
-    saveKey('classrooms', next, prev);
-  }
-
-  async function removeRoom(r: Classroom) {
-    if (!(await confirm(`"${r.name}" dersliği silinsin mi?`))) return;
-    const prev = config!.classrooms;
-    const next = prev.filter(x => x.id !== r.id);
-    setConfig(c => (c ? { ...c, classrooms: next } : c));
-    saveKey('classrooms', next, prev);
-  }
-
   // Gider kategorileri — "Diğer" daima sonda, silinemez (sistem kategorisi).
   function withOtherLast(list: string[]): string[] {
     const rest = list.filter(c => c !== 'Diğer');
@@ -527,7 +499,7 @@ function ConfigurationSection({ showToast }: { showToast: ShowToast }) {
       <h4 className="text-label mb-2 flex items-center gap-1.5">
         <SlidersHorizontal size={13} className="text-indigo-500" /> Konfigürasyon
       </h4>
-      <p className="text-caption mb-3">Kuruma özel ayarlar — modülleri aç/kapat, derslikleri tanımla. Değişiklikler anında kaydedilir.</p>
+      <p className="text-caption mb-3">Kuruma özel ayarlar — modülleri aç/kapat. Değişiklikler anında kaydedilir.</p>
 
       {!loaded || !config ? (
         <div className="text-center py-6 text-caption">Yükleniyor...</div>
@@ -558,42 +530,6 @@ function ConfigurationSection({ showToast }: { showToast: ShowToast }) {
                 );
               })}
             </div>
-          </div>
-
-          {/* ── Derslikler (K2) ── */}
-          <div>
-            <h5 className="text-label mb-1 flex items-center gap-1.5" style={{ fontSize: 11 }}>
-              <DoorOpen size={12} /> Derslikler
-            </h5>
-            <p className="text-caption mb-2">Fiziksel oda/derslik tanımları. Boş bırakılırsa oda kısıtı uygulanmaz.</p>
-            <form onSubmit={addRoom} className="flex gap-2 items-end mb-2 flex-wrap">
-              <div className="flex-1 min-w-[140px]">
-                <label className="text-label block mb-1">Derslik Adı</label>
-                <input className="input" value={room.name} onChange={e => setRoom(r => ({ ...r, name: e.target.value }))} placeholder="Örn: A-101, Fizik Lab" />
-              </div>
-              <div className="w-28">
-                <label className="text-label block mb-1">Kapasite</label>
-                <input className="input" type="number" min="1" inputMode="numeric" value={room.capacity}
-                  onChange={e => setRoom(r => ({ ...r, capacity: e.target.value }))} placeholder="ops." />
-              </div>
-              <button type="submit" className="btn-primary !px-4 !py-2 text-sm flex items-center gap-1.5" disabled={savingKey === 'classrooms'}>
-                <Plus size={13} /> Ekle
-              </button>
-            </form>
-            {(!config.classrooms || config.classrooms.length === 0) ? (
-              <p className="text-caption">Henüz derslik eklenmemiş.</p>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                {config.classrooms.map(r => (
-                  <div key={r.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                    <DoorOpen size={15} className="text-gray-400 shrink-0" />
-                    <span className="flex-1 text-sm font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{r.name}</span>
-                    {r.capacity ? <span className="text-caption shrink-0">{r.capacity} kişi</span> : null}
-                    <button onClick={() => removeRoom(r)} title="Sil" className="btn-icon btn-icon-danger"><Trash2 size={14} /></button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* ── Gider Kategorileri ── */}

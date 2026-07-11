@@ -1949,7 +1949,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
             {/* Gün başlıkları — her gün için sütun sayısı kadar birleşik hücre */}
             <tr>
               <th className="p-2 sticky left-0 z-10" rowSpan={2} style={{background:'#f5f6fb',border:'1px solid #eef0f5',verticalAlign:'middle'}}>
-                {viewMode==='class'?'Sınıf':viewMode==='teacher'?'Öğretmen':'Derslik'}
+                {viewMode==='class'?'Sınıf':'Öğretmen'}
               </th>
               {days.map(d => {
                 const slotsInDay = slotsOfDay(d);
@@ -1977,7 +1977,7 @@ function ResultView({ result, classes, teachers, labelOf, maxWeekly, applying, c
             {rowKeys.map(rk=>(
               <tr key={rk}>
                 <td className="p-2 sticky left-0 z-10 whitespace-nowrap" style={{background:'#fff',fontWeight:700,border:'1px solid #eef0f5'}}>
-                  {viewMode==='class'?labelOf(rk):viewMode==='room'?`D${rk} (${Number(rk)<=5?'1.k':Number(rk)<=8?'2.k':'3.k'})`:rk}
+                  {viewMode==='class'?labelOf(rk):rk}
                 </td>
                 {days.map(d => {
                   return slotsOfDay(d).map((s,si) => {

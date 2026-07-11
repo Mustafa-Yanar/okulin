@@ -16,7 +16,7 @@ import { logAudit, actorFrom } from '@/lib/audit';
 const COUNSELOR_WRITABLE_KEYS = ['programPlan'];
 
 // PATCH gövdesi: { patch: { <bilinen key>: <herhangi JSON>, ... } }
-// Değer şekli her key'e göre değişir (modules: obje, classrooms: dizi) → z.any().
+// Değer şekli her key'e göre değişir (modules: obje, expenseCategories: dizi) → z.any().
 // İçerik doğrulaması config servisinde (CONFIG_KEYS süzgeci + mergeDefault) yapılır.
 const PatchSchema = z.object({
   patch: z.record(z.string().max(60), z.any()).refine(

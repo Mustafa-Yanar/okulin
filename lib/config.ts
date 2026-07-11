@@ -42,11 +42,6 @@ export const CONFIG_DEFAULTS = {
     maxWeekly: 40,
   },
 
-  // Derslikler (K2) — fiziksel oda listesi. Boşsa CP-SAT'a oda kısıtı uygulanmaz
-  // (mevcut davranış: her sınıf 1:1 sanal oda). Doldurulursa ileride solver oda
-  // çakışmasını engeller. Şekil: [{ id, name, capacity }]
-  classrooms: [] as { id?: string; name?: string; capacity?: number }[],
-
   // Muhasebe gider kategorileri. lib/constants.js EXPENSE_CATEGORIES'in eşi.
   // "Diğer" daima sonda tutulur (UI + API normalize eder).
   expenseCategories: [
