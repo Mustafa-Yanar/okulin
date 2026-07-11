@@ -4,7 +4,8 @@
 // Tümü SALT-OKUNUR. Sekmeler: Program (etütler), Ödeme, Rehberlik (konu+deneme+çözülen).
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Calendar, Wallet, BarChart3, ChevronLeft, ChevronRight, Users, Megaphone, CreditCard, X } from 'lucide-react';
-import { StudentBookingsView, type BookingSlotEntry } from './StudentPanel';
+import { StudentBookingsView } from './StudentBookingsView';
+import type { BookingSlotEntry } from './student-types';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { guidanceSubjectsFor } from './director/shared';

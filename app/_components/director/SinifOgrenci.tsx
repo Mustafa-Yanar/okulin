@@ -13,7 +13,7 @@ import { classLabel } from '@/lib/constants';
 import { classLabelFrom } from '@/lib/classCatalog';
 import { api } from './shared';
 import { StudentExpandedView, ClassScheduleModal } from './StudentList';
-import type { BookingSlotEntry, BookingCancelArgs } from '../StudentPanel';
+import type { BookingSlotEntry, BookingCancelArgs } from '../student-types';
 import ClassScheduleEditor from './ClassScheduleEditor';
 import { ClassFormModal, CourseCatalog, KADEME_LABEL, KADEME_ORDER, DAL_LABEL } from './ClassManager';
 import LoadingBox from '../Loading';
