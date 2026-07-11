@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import useSWR from 'swr';
 import {
   Megaphone, Send, Trash2, X, Check, Users, Eye, ChevronDown, ChevronUp, Mail, MailOpen,
@@ -107,19 +107,28 @@ function Composer({ showToast, onSent }: ComposerProps) {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [role, setRole] = useState('parent');     // parent | student | teacher
-  const [scope, setScope] = useState('all');       // all | group | class | selected
+  const [scope, setScope] = useState('all');       // all | group | class | selected | branch
   const [group, setGroup] = useState('lise');
   const [cls, setCls] = useState('');
   const [teacherIds, setTeacherIds] = useState<string[]>([]); // teacher 'selected'
+  const [branches, setBranches] = useState<string[]>([]);     // teacher 'branch'
   const [busy, setBusy] = useState(false);
 
-  // Öğretmen 'selected' için liste — yalnız role==='teacher' iken çek (koşullu SWR anahtarı).
+  // Öğretmen 'selected'/'branch' için liste — yalnız role==='teacher' iken çek (koşullu SWR anahtarı).
   const { data: teachersData } = useSWR<TeacherDTO[]>(role === 'teacher' ? '/api/teachers' : null);
   const teachers = Array.isArray(teachersData) ? teachersData : [];
 
-  // Rol değişince kapsamı geçerli hale getir
+  // Branş seçici — kurumdaki öğretmenlerin fiilen sahip olduğu branşların birleşimi (sıra korunur).
+  const availableBranches = useMemo(() => {
+    const seen = new Set<string>(); const out: string[] = [];
+    teachers.forEach(t => (t.branches || []).forEach(b => { if (!seen.has(b)) { seen.add(b); out.push(b); } }));
+    return out;
+  }, [teachers]);
+
+  // Rol değişince kapsamı geçerli hale getir (öğretmen-özel/diğer-özel kapsamları temizle)
   useEffect(() => {
     if (role === 'teacher' && (scope === 'group' || scope === 'class')) setScope('all');
+    else if (role !== 'teacher' && (scope === 'branch' || scope === 'selected')) setScope('all');
   }, [role]); // eslint-disable-line
 
   // Hedefleme listeleri registry'den (özel şube isimleri/grupları görünür); kayıtsızsa
@@ -129,7 +138,7 @@ function Composer({ showToast, onSent }: ComposerProps) {
 
   async function send() {
     if (!title.trim() || !body.trim()) return showToast?.('Başlık ve içerik gerekli', 'error');
-    const audience: { role: string; scope: string; group?: string; cls?: string; ids?: string[] } = { role, scope };
+    const audience: { role: string; scope: string; group?: string; cls?: string; ids?: string[]; branches?: string[] } = { role, scope };
     if (scope === 'group') audience.group = group;
     if (scope === 'class') { if (!cls) return showToast?.('Sınıf seçin', 'error'); audience.cls = cls; }
     if (scope === 'selected') {
@@ -137,17 +146,22 @@ function Composer({ showToast, onSent }: ComposerProps) {
       if (teacherIds.length === 0) return showToast?.('En az bir öğretmen seçin', 'error');
       audience.ids = teacherIds;
     }
+    if (scope === 'branch') {
+      if (role !== 'teacher') return showToast?.('Branş hedefi yalnız öğretmen için', 'error');
+      if (branches.length === 0) return showToast?.('En az bir branş seçin', 'error');
+      audience.branches = branches;
+    }
     setBusy(true);
     try {
       const r = await api<{ recipientCount: number }>('/api/announcements', { method: 'POST', body: JSON.stringify({ action: 'send', title: title.trim(), body: body.trim(), audience }) });
       showToast?.(`${r.recipientCount} kişiye gönderildi`);
-      setTitle(''); setBody(''); setTeacherIds([]);
+      setTitle(''); setBody(''); setTeacherIds([]); setBranches([]);
       onSent?.();
     } catch (e) { showToast?.((e as Error).message, 'error'); } finally { setBusy(false); }
   }
 
   const scopeOptions = role === 'teacher'
-    ? [['all', 'Tümü'], ['selected', 'Seçili']]
+    ? [['all', 'Tümü'], ['branch', 'Branş'], ['selected', 'Seçili']]
     : [['all', 'Tümü'], ['group', 'Grup'], ['class', 'Sınıf']];
 
   return (
@@ -198,6 +212,22 @@ function Composer({ showToast, onSent }: ComposerProps) {
                 <input type="checkbox" checked={on} onChange={() => setTeacherIds(p => on ? p.filter(x => x !== t.id) : [...p, t.id])} className="hidden" />
                 {on ? <Check size={12} /> : <span className="w-3" />} {t.name}
               </label>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Öğretmen branş → çoklu seçim (seçilen branştan en az birine sahip öğretmenlere gider) */}
+      {role === 'teacher' && scope === 'branch' && (
+        <div className="rounded-lg p-2 mb-3 flex flex-wrap gap-1.5"
+          style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+          {availableBranches.length === 0 ? <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Branşı tanımlı öğretmen yok</span> : availableBranches.map(b => {
+            const on = branches.includes(b);
+            return (
+              <button type="button" key={b} onClick={() => setBranches(p => on ? p.filter(x => x !== b) : [...p, b])}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${on ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'}`}>
+                {b}
+              </button>
             );
           })}
         </div>

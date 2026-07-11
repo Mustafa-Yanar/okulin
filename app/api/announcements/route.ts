@@ -17,9 +17,10 @@ import { newId as genId } from '@/lib/id';
 
 const AudienceSchema = z.object({
   role: z.enum(['parent', 'student', 'teacher']),
-  scope: z.enum(['all', 'group', 'class', 'selected']),
+  scope: z.enum(['all', 'group', 'class', 'selected', 'branch']),
   group: z.string().max(20).optional(),
   cls: z.string().max(60).optional(), // şube id (özel şube 's_xxxxxxxx' = 10 krk)
+  branches: z.array(z.string().max(40)).max(50).optional(), // teacher scope='branch': hedef branşlar
   ids: z.array(z.string().max(100)).max(3000).optional(),
 });
 type Audience = z.infer<typeof AudienceSchema>;
@@ -52,7 +53,7 @@ interface AnnouncementData {
 
 // Hedef kitleyi çöz → [{role, id, name}]
 async function resolveRecipients(audience: Audience): Promise<Recipient[]> {
-  const { role, scope, cls, group, ids } = audience;
+  const { role, scope, cls, group, ids, branches } = audience;
 
   // group scope için şube→grup haritası (registry-aware). Lazımsa hesaplanır.
   const groupMap = async () => new Map((await getClasses()).map(c => [c.id, c.group]));
@@ -78,10 +79,14 @@ async function resolveRecipients(audience: Audience): Promise<Recipient[]> {
     return recs.map(s => ({ role: 'student', id: s.id, name: s.name }));
   }
 
-  // teacher — şimdilik yalnız 'all' veya 'selected' (branş/sınıf hedefi sonra)
+  // teacher — 'all' | 'selected' (id listesi) | 'branch' (branş kesişimi)
   const rows = await tdb().teacher.findMany();
-  let recs = rows.map(t => ({ id: t.legacyId, name: t.name }));
+  let recs = rows.map(t => ({ id: t.legacyId, name: t.name, branches: t.branches || [] }));
   if (scope === 'selected') recs = recs.filter(t => ids?.includes(t.id));
+  else if (scope === 'branch') {
+    const wanted = new Set(branches || []);
+    recs = recs.filter(t => t.branches.some(b => wanted.has(b))); // en az bir branş eşleşen öğretmen
+  }
   return recs.map(t => ({ role: 'teacher', id: t.id, name: t.name }));
 }
 
@@ -98,6 +103,10 @@ async function audienceLabel(audience: Audience): Promise<string> {
     // Şube etiketi registry'den (özel isim); kayıtsızsa classLabel fallback.
     const lbl = (await getClass(audience.cls || ''))?.ad || classLabel(audience.cls || '');
     return `${lbl} ${roleLbl === 'Veli' ? 'Velileri' : roleLbl + 'leri'}`;
+  }
+  if (audience.scope === 'branch') {
+    const bs = audience.branches || [];
+    return bs.length ? `${bs.join(', ')} Öğretmenleri` : 'Öğretmenler';
   }
   return `Seçili ${roleLbl}ler`;
 }
