@@ -1,30 +1,13 @@
 import { NextResponse } from 'next/server';
 import { withAuth, canReadStudent, type Session } from '@/lib/auth';
-import { getWeekKey } from '@/lib/slots';
 import { parseBody, z, zId } from '@/lib/validate';
-import { tdb, withScope } from '@/lib/sqldb';
+import { getGoal, setGoal } from '@/lib/hedef';
 
 export const runtime = 'nodejs';
 
 // Haftalık hedef (soru çözüm hedefi) — guidance verisini TÜKETİR, çoğaltmaz.
-// Hedef (SQL) → { studentId, weekly:number, setBy, setByName, updatedAt }
-// "Çözülen soru" = guidance entries'teki correct+wrong+empty toplamı (D+Y+B).
 // Öğrenci kendi hedefini koyar; müdür/rehber herhangi birininkini. Öğretmen/veli salt-okunur.
-
-// Guidance.data Json şekli: { entries: { [ders]: { correct, wrong, empty } } }
-interface GuidanceData {
-  entries?: Record<string, { correct?: number | string; wrong?: number | string; empty?: number | string } | null>;
-}
-
-function sumWeek(data: GuidanceData | null | undefined): number {
-  if (!data || !data.entries) return 0;
-  let total = 0;
-  for (const v of Object.values(data.entries)) {
-    if (!v || typeof v !== 'object') continue;
-    total += (parseInt(String(v.correct)) || 0) + (parseInt(String(v.wrong)) || 0) + (parseInt(String(v.empty)) || 0);
-  }
-  return total;
-}
+// DB + hesaplama lib/hedef.ts'te; burada yalnız yetki (session dallanması) + response.
 
 const SetSchema = z.object({
   studentId: zId.optional(),
@@ -41,7 +24,6 @@ function canWriteGoal(session: Session, studentId: string): boolean {
 
 // GET /api/hedef?studentId=...
 // Döner: { studentId, weekly, setBy, setByName, updatedAt, weekKey, thisWeekSolved, canEdit, history[] }
-// history: son haftalar [{ weekKey, solved }] (en yeni önce, max 8).
 // Bilinçli inline rol dallanması: erişim kapsamı isteğe (studentId) bağlı.
 export const GET = withAuth(async (req, _ctx, session) => {
   const { searchParams } = new URL(req.url);
@@ -56,30 +38,8 @@ export const GET = withAuth(async (req, _ctx, session) => {
   }
   if (!studentId) return NextResponse.json({ error: 'studentId gerekli' }, { status: 400 });
 
-  const weekKey = getWeekKey();
-
-  const rows = await tdb().guidance.findMany({ where: { studentId } });
-  let thisWeekSolved = 0;
-  const history = rows.map(r => {
-    const solved = sumWeek(r.data as GuidanceData | null);
-    if (r.week === weekKey) thisWeekSolved = solved;
-    return { weekKey: r.week, solved };
-  })
-    .filter(h => h.solved > 0)
-    .sort((a, b) => b.weekKey.localeCompare(a.weekKey))
-    .slice(0, 8);
-  const goal = await tdb().hedef.findFirst({ where: { studentId } });
-  return NextResponse.json({
-    studentId,
-    weekly: goal?.weekly || 0,
-    setBy: goal?.setBy || null,
-    setByName: goal?.setByName || null,
-    updatedAt: goal?.updatedAt ? (goal.updatedAt instanceof Date ? goal.updatedAt.toISOString() : goal.updatedAt) : null,
-    weekKey,
-    thisWeekSolved,
-    canEdit: canWriteGoal(session, studentId),
-    history,
-  });
+  const goal = await getGoal(studentId);
+  return NextResponse.json({ ...goal, canEdit: canWriteGoal(session, studentId) });
 });
 
 // POST /api/hedef  Body: { studentId?, weekly }
@@ -97,15 +57,6 @@ export const POST = withAuth(async (req, _ctx, session) => {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  const weekly = parsed.data.weekly;
-
-  if (weekly === 0) {
-    await tdb().hedef.deleteMany({ where: { studentId } });
-    return NextResponse.json({ ok: true, weekly: 0 });
-  }
-  const existing = await tdb().hedef.findFirst({ where: { studentId } });
-  const data = { weekly, setBy: session.role, setByName: session.name || null, updatedAt: new Date() };
-  if (existing) await tdb().hedef.update({ where: { id: existing.id }, data });
-  else await tdb().hedef.create({ data: withScope({ studentId, ...data }) });
+  const weekly = await setGoal({ studentId, weekly: parsed.data.weekly, setByRole: session.role, setByName: session.name || null });
   return NextResponse.json({ ok: true, weekly });
 });
