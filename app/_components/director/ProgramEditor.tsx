@@ -360,15 +360,15 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                 {isDers ? (
                   <div className="text-[11px] leading-tight truncate">
                     <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{dersAd || 'Ders'}</span>
-                    {dersBrans && <span style={{ color: '#6366f1' }}>{' · '}{dersBrans}</span>}
+                    {dersBrans && <span className="text-indigo-700" style={{ fontWeight: 600 }}>{' · '}{dersBrans}</span>}
                   </div>
                 ) : aktif ? (
                   <div className="text-[11px] leading-tight truncate">
-                    <span style={{ fontWeight: 600, color: '#60a5fa' }}>Boş</span>
-                    <span style={{ color: 'var(--text-muted)' }}>{' · '}{slot.start}</span>
+                    <span className="text-blue-700" style={{ fontWeight: 700 }}>Boş</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>{' · '}{slot.start}</span>
                   </div>
                 ) : (
-                  <div className="text-[10px] leading-tight truncate" style={{ color: 'var(--text-muted)' }}>
+                  <div className="text-[10px] leading-tight truncate" style={{ color: 'var(--text-secondary)' }}>
                     {etutEngel ? '' : height >= 28 ? `${slot.start} +` : '+'}
                   </div>
                 )}
