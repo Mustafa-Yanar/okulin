@@ -78,11 +78,11 @@ Her özellik veya düzeltme tamamlandığında **onay beklemeden:**
 | # | Aksiyon | Durum |
 |---|---------|-------|
 | 1 | SQL göçünü tamamla, Redis kod yolunu temizle | ✅ TAMAMLANDI (2026-07-08) — `isSqlEnabled`/çift-yol kod tabanında sıfır, `lib/usesql.js` silindi, Vercel `OKULIN_USE_SQL` env kaldırıldı. Redis yalnız bilinçli alt-sistemlerde (OTP cihaz tanıma, haftalık arşiv, rate-limit, backup snapshot) kalıyor. |
-| 2 | TypeScript'e geçiş | ✅ TAMAMLANDI (2026-07-10, dalga-1) — lib/ + app/api/ %100 strict TS (tsconfig strict+allowJs, typescript@5.9); app/_components bilinçli JS (Faz 3) |
+| 2 | TypeScript'e geçiş | ✅ TAMAMEN BİTTİ (2026-07-11, Faz 3) — lib/ + app/api/ + app/_components + app sayfaları %100 strict TS (app altında 0 .js); tsconfig `allowJs: false` (Next 14 anahtar YOKSA otomatik true geri yazıyor — silme, false bırak). e2e/, scripts/, kök config dosyaları bilinçli JS. |
 | 3 | `makeId` → `crypto.randomUUID()` | ✅ `lib/id.js` tek kaynak (newId + sortable), 19 dosya geçti. courses slug / audit-errlog key / payment oid bilinçli hariç. |
 | 4 | Merkezi yetkilendirme wrapper'ı | ✅ TAMAMLANDI (2026-07-10) — 71/71 route withAuth'ta; login/cron/callback gibi istisnalar yorumla gerekçeli |
 | 5 | Kritik route'lara entegrasyon testi | ✅ TAMAMLANDI (2026-07-10, test dalgası-2) — Playwright `int` projesi canlı testkurs'a karşı: PayTR callback (imza doğrulama + idempotency + uçtan uca taksit kredilendirme), `/api/slots` iş kuralları, `/api/program-solve` (canlı Cloud Run), kiracı izolasyonu (geçici kurum yaşam döngüsü). Bayat e2e fikstürleri dinamik keşfe geçti (helpers.whoami); toplam 56 test yeşil. İlk koşular 3 gerçek prod hatası yakaladı (upsert-orgSlug 500, UUID-id şema limitleri, çözücüye obje-olmayan gövde sızması) — ayrı commit'lerle düzeltildi. |
 | 6 | İstemci ortak yardımcıları: `shared.js` | ✅ TAMAMLANDI (2026-07-10) — app/_components/shared.js tek kaynak; 13 api() + hafta/slot yardımcı kopyası silindi |
 | 7 | Global hata handler | ✅ Hata formatı birleşti (2026-07-10): her uçta `{ error }` + doğru status (PayTR callback düz metin istisnası); global handler ihtiyacı kalktı |
 
-**NOT:** Dalga-1 (2026-07-10) ile #2/#4/#6/#7, test dalgası-2 (aynı gün) ile #5 kapandı — tablo tamam. Kalan borç: app/_components TS'e geçişi (Faz 3). Redis'in kalıcı anahtarları (ratelimit, backup, OTP cihaz tanıma, haftalık arşiv) bilinçli olarak kalmaya devam ediyor.
+**NOT:** Dalga-1 (2026-07-10) ile #2/#4/#6/#7, test dalgası-2 (aynı gün) ile #5, TS Faz 3 (2026-07-11) ile #2'nin kalan kısmı kapandı — denetim tablosundaki tüm borçlar tamam. Redis'in kalıcı anahtarları (ratelimit, backup, OTP cihaz tanıma, haftalık arşiv) bilinçli olarak kalmaya devam ediyor.
