@@ -47,8 +47,10 @@ export const zPassword = z.string().min(1, 'Şifre boş olamaz').max(200, 'Çok 
 // Yeni şifre: client en az 6 karakter zorunlu kılıyor — sunucu da aynı kuralı uygular.
 export const zNewPassword = z.string().min(6, 'En az 6 karakter').max(200, 'Çok uzun');
 
-// Kayıt id'si: kısa alfanümerik token (makeId çıktısı) — tip karışıklığını engeller.
-export const zId = z.string().min(1).max(100);
+// Kayıt id'si: sistem-üretimi token (cuid / legacyId '701'·'m1' / payment oid).
+// Boşluk ve açı parantezi (<>) reddedilir → id alanına metin/HTML sızması engellenir.
+// ':' '-' '.' vb. serbest kalır (payment oid ve olası composite id'ler kırılmasın).
+export const zId = z.string().min(1).max(100).regex(/^[^\s<>]+$/, 'Geçersiz kimlik');
 
 // Para: client string veya number gönderebilir → güvenli sayıya çevir, negatifi reddet.
 export const zMoney = z.coerce.number().finite().min(0).max(100_000_000);

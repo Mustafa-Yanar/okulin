@@ -52,8 +52,12 @@ describe('zPassword / zNewPassword', () => {
 describe('zId', () => {
   it('kısa string token kabul, boş/non-string red', () => {
     expect(zId.safeParse('zjyov8wy').success).toBe(true);
+    expect(zId.safeParse('m1').success).toBe(true);          // legacyId
+    expect(zId.safeParse('oid-2026:abc_12').success).toBe(true); // payment oid / composite
     expect(zId.safeParse('').success).toBe(false);
     expect(zId.safeParse(123).success).toBe(false);
+    expect(zId.safeParse('a b').success).toBe(false);        // boşluk red
+    expect(zId.safeParse('<script>').success).toBe(false);   // açı parantezi red
   });
 });
 
