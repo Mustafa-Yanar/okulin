@@ -3,7 +3,7 @@ import { cache } from 'react';
 import type { ReactNode } from 'react';
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
-import { resolveOrg, isApexHost, PLATFORM_BRANDING } from '@/lib/org';
+import { resolveOrg, isApexHost, PLATFORM_BRANDING, APP_DOMAIN } from '@/lib/org';
 import { normalizeBranding } from '@/lib/branding';
 import { tdb } from '@/lib/sqldb';
 import Providers from './_components/Providers';
@@ -31,14 +31,19 @@ const getIsApex = cache(() => {
   try { return isApexHost(headers().get('host')); } catch { return false; }
 });
 
+const APEX_DESC = 'okulin — dershane ve okullar için etüt takip, otomatik ders programı, yoklama, deneme analizi, ödeme ve veli iletişimi tek panelde.';
+const BASE_URL = APP_DOMAIN ? `https://${APP_DOMAIN}` : 'https://okulin.com';
+
 export async function generateMetadata(): Promise<Metadata> {
   const b = await getBranding();
   const apex = getIsApex();
   // Kuruma özel ikon: logo varsa onu kullan (iOS apple-touch + genel), yoksa varsayılan.
   const icon = b.logoUrl || '';
+  const description = apex ? APEX_DESC : 'Etüt takip ve rezervasyon sistemi';
   return {
-    title: b.name,
-    description: apex ? 'Eğitim kurumu yönetim platformu' : 'Etüt takip ve rezervasyon sistemi',
+    title: apex ? { default: 'okulin — Eğitim Kurumu Yönetim Platformu', template: '%s' } : b.name,
+    description,
+    metadataBase: new URL(BASE_URL),
     // Apex'te manifest YOK → "ana ekrana ekle" tam PWA yaratmaz (bkz getIsApex).
     // Subdomain'lerde kuruma özel manifest verilir (tam PWA deneyimi korunur).
     ...(apex ? {} : { manifest: '/api/manifest' }),
@@ -46,6 +51,26 @@ export async function generateMetadata(): Promise<Metadata> {
       icon: icon || '/icon-192.png',
       apple: icon || '/apple-touch-icon.png',
     },
+    // SEO: apex tanıtım sitesi indekslenir + zengin paylaşım kartları; kurum
+    // subdomain'leri (özel panel) noindex — mahremiyet + duplicate-content önleme.
+    ...(apex ? {
+      keywords: [
+        'dershane yönetim', 'etüt takip', 'ders programı oluşturucu', 'okul yönetim sistemi',
+        'öğrenci takip', 'yoklama sistemi', 'deneme analizi', 'veli bilgilendirme', 'okulin',
+      ],
+      alternates: { canonical: BASE_URL },
+      openGraph: {
+        type: 'website', locale: 'tr_TR', siteName: 'okulin', url: BASE_URL,
+        title: 'okulin — Eğitim Kurumu Yönetim Platformu', description,
+        images: [{ url: '/icon-512.png', width: 512, height: 512, alt: 'okulin' }],
+      },
+      twitter: {
+        card: 'summary', title: 'okulin — Eğitim Kurumu Yönetim Platformu', description,
+        images: ['/icon-512.png'],
+      },
+    } : {
+      robots: { index: false, follow: false },
+    }),
     // iOS "web app capable" bayrakları da yalnız subdomain'de — apex tanıtım sitesi kalır.
     ...(apex ? {} : {
       appleWebApp: {
@@ -84,6 +109,22 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {!apex && (
           <script dangerouslySetInnerHTML={{
             __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js')); }`
+          }} />
+        )}
+        {/* Zengin arama sonucu (structured data) — yalnız apex tanıtım sitesinde. */}
+        {apex && (
+          <script type="application/ld+json" dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'SoftwareApplication',
+              name: 'okulin',
+              applicationCategory: 'EducationalApplication',
+              operatingSystem: 'Web',
+              url: BASE_URL,
+              description: APEX_DESC,
+              inLanguage: 'tr-TR',
+              offers: { '@type': 'Offer', price: '0', priceCurrency: 'TRY' },
+            })
           }} />
         )}
       </head>
