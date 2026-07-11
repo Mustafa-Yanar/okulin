@@ -55,6 +55,28 @@ export async function notifyAbsentParents(date: string, attendance: Record<strin
   }
 }
 
+// Yeni cihazda başarılı OTP doğrulaması + cihaz kaydı sonrası hesabın MEVCUT (önceden
+// abone) cihazlarına "yeni cihaz girişi" güvenlik push'u. Yeni cihaz henüz abone
+// değildir → bildirim eski cihazlara ulaşır: "bu siz değilseniz şifrenizi değiştirin".
+// BEST-EFFORT: asla hata fırlatmaz, login akışını bozmaz. Dedupe YOK — her yeni cihaz
+// tanıma olayı bir güvenlik uyarısıdır, bastırılmaz. role/userId push aboneliğinin
+// anahtarıdır (session.role, session.id ile birebir; bkz. otp/verify getOtpIdentity).
+export async function notifyNewDeviceLogin(role: string, userId: string, when?: Date): Promise<void> {
+  try {
+    if (!role || !userId) return;
+    const time = (when || new Date()).toLocaleString('tr-TR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    await sendPushToUser(role, userId, {
+      title: 'Yeni cihaz girişi',
+      body: `Hesabınıza yeni bir cihazdan giriş yapıldı (${time}). Bu siz değilseniz hemen şifrenizi değiştirin.`,
+      url: '/',
+      tag: 'yeni-cihaz',
+      requireInteraction: true,
+    });
+  } catch {
+    /* güvenlik bildirimi login akışını asla bozmaz */
+  }
+}
+
 // Deneme hesaplanınca eşleşmiş öğrencilerin velilerine "yeni sonuç" push'u.
 // Kilit: deneme_notif:<examId>:<phone> (TTL 45 gün) → yeniden hesaplama spam yapmaz;
 // sonradan eşleşen yeni öğrencinin velisi de ilk kez bildirilir.
