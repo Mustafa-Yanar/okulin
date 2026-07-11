@@ -7,9 +7,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import LoadingBox from '../Loading';
 import { Save, Plus } from 'lucide-react';
 import {
-  ALL_DAYS, daySlots, getWeekKey,
+  ALL_DAYS, daySlots, getWeekKey, classLabel,
 } from '@/lib/constants';
+import { classLabelFrom } from '@/lib/classCatalog';
 import { useSlotTimes } from '../SlotTimesContext';
+import { useClasses } from '../ClassesContext';
 import { api, Modal, getAdjacentWeek, isSlotPast } from './shared';
 import EtutCalendar, { timeToMin, minToTop, durationToHeight } from './EtutCalendar';
 import { useConfirm } from '../ConfirmProvider';
@@ -55,6 +57,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   const [selectedEtut, setSelectedEtut] = useState<EtutSablonu | null>(null); // tıklanan etüt (eylem menüsü)
 
   const { slotTimes } = useSlotTimes();
+  const { classes } = useClasses();
 
   useEffect(() => {
     setLoading(true);
@@ -243,6 +246,11 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   function handleSlotClick(dayIndex: number, slotId: string, slotLabel: string) {
     if (isSlotPast(weekKey, dayIndex, slotLabel)) return;
     const entry = getEntry(dayIndex, slotId);
+    // Program-solve'dan yerleşen ders: salt-görüntü. Düzenleme "Ders Programı Oluştur"dan yapılır.
+    if (entry?.type === 'ders') {
+      showToast('Bu ders "Ders Programı Oluştur" ekranından yerleşti; düzenleme oradan yapılır.', 'info');
+      return;
+    }
     if (entry?.type === 'available') { clearEntry(dayIndex, slotId); return; }
     const slots = daySlots(dayIndex, slotTimes.days?.[dayIndex]);
     const slot = slots.find(x => x.id === slotId);
@@ -313,30 +321,42 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
           const slots = daySlots(day.index, slotTimes.days?.[day.index]);
           for (const slot of slots) {
             const entry = getEntry(day.index, slot.id);
-            const aktif = entry?.type === 'available';
+            const isDers = entry?.type === 'ders';          // program-solve yerleşimi (sınıf atanmış)
+            const aktif = entry?.type === 'available';       // öğretmen müsaitlik işareti
+            const dolu = isDers || aktif;
             const past = isSlotPast(weekKey, day.index, slot.label);
-            // Pasif slot + o saatte aktif etüt → ders eklenemez (bloklu). Aktif slot zaten etüdü engelliyor.
-            const etutEngel = !aktif && cakisanAktifEtut(day.index, slot.start, slot.end);
+            // Pasif (boş) slot + o saatte aktif etüt → ders eklenemez (bloklu). Dolu slot etüdü zaten engelliyor.
+            const etutEngel = !dolu && cakisanAktifEtut(day.index, slot.start, slot.end);
             const top = minToTop(timeToMin(slot.start));
             const height = Math.max(durationToHeight(timeToMin(slot.end) - timeToMin(slot.start)), 16);
+            const dersAd = isDers ? classLabelFrom(classes, entry?.cls || '', classLabel) : '';
+            const dersBrans = isDers ? (entry?.branch || entry?.subBranch || '') : '';
             blocks.push(
               <button key={`slot-${slot.id}`}
                 onClick={() => handleSlotClick(day.index, slot.id, slot.label)}
                 disabled={past || !!etutEngel}
-                className={`absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left transition-colors ${aktif || etutEngel ? '' : 'ders-slot-bos'}`}
+                className={`absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left transition-colors ${dolu || etutEngel ? '' : 'ders-slot-bos'}`}
                 style={{
                   top, height, zIndex: 1,
-                  background: aktif ? 'color-mix(in srgb, #3b82f6 22%, transparent)' : 'var(--bg-muted, #f1f5f9)',
-                  border: aktif ? '1px solid #3b82f6' : '1px dashed var(--border-subtle)',
-                  borderLeft: aktif ? '3px solid #3b82f6' : '1px dashed var(--border-subtle)',
+                  background: isDers ? 'color-mix(in srgb, #6366f1 22%, transparent)'
+                    : aktif ? 'color-mix(in srgb, #3b82f6 22%, transparent)'
+                    : 'var(--bg-muted, #f1f5f9)',
+                  border: isDers ? '1px solid #6366f1' : aktif ? '1px solid #3b82f6' : '1px dashed var(--border-subtle)',
+                  borderLeft: isDers ? '3px solid #6366f1' : aktif ? '3px solid #3b82f6' : '1px dashed var(--border-subtle)',
                   opacity: past ? 0.4 : etutEngel ? 0.5 : 1,
-                  cursor: past || etutEngel ? 'not-allowed' : 'pointer',
+                  cursor: isDers ? 'default' : past || etutEngel ? 'not-allowed' : 'pointer',
                 }}
                 title={past ? 'Geçmiş saat — düzenlenemez'
-                  : aktif ? `${slot.start}–${slot.end} · Ders — tıkla: kapat`
+                  : isDers ? `${slot.start}–${slot.end} · ${dersAd}${dersBrans ? ' — ' + dersBrans : ''} (Ders Programı Oluştur'dan yerleşti)`
+                  : aktif ? `${slot.start}–${slot.end} · Ders saati (müsait) — tıkla: kapat`
                   : etutEngel ? `${slot.start}–${slot.end} — bu saatte aktif etüt var, ders eklenemez`
                   : `${slot.start}–${slot.end} — tıkla: ders saati aç`}>
-                {aktif ? (
+                {isDers ? (
+                  <>
+                    <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{dersAd || 'Ders'}</div>
+                    {height >= 28 && dersBrans && <div className="text-[8px] leading-tight truncate" style={{ color: 'var(--text-muted)' }}>{dersBrans}</div>}
+                  </>
+                ) : aktif ? (
                   <>
                     <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Ders</div>
                     {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{slot.start}</div>}

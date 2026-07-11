@@ -65,6 +65,7 @@ export interface ProgramEntry {
   type?: string;
   cls?: string;
   subBranch?: string;
+  branch?: string; // program-solve yerleşiminde ders adı (course); şablonda saklanır
   fixed?: boolean;
   studentId?: string;
   studentName?: string;
