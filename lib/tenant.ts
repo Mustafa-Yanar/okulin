@@ -1,5 +1,7 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { headers } from 'next/headers';
 import redis from './redis';
+import { prisma } from './prisma';
 import { DEFAULT_ORG } from './org';
 import type { Redis } from '@upstash/redis';
 
@@ -18,8 +20,22 @@ const BRANCH = 'main';
 type SetOpts = Parameters<Redis['set']>[2];
 type ScanOpts = { match?: string; count?: number; type?: string };
 
-// İstekteki kurum (middleware'in koyduğu x-org header'ından; yoksa varsayılan).
+// İstek-DIŞI tenant bağlamı (cron/script). runWithTenant() bunu set eder; currentOrg/
+// currentBranch önce buna bakar, yoksa istek header'ına düşer → tüm tdb()/tenantRedis()
+// (dolayısıyla slots/push/db) çağıran koda dokunmadan doğru kuruma yönlenir.
+interface TenantStore { org: string; branch: string; }
+const tenantContext = new AsyncLocalStorage<TenantStore>();
+
+// Belirtilen kurum+şube bağlamında fn'i çalıştırır. İçindeki tüm currentOrg()/
+// currentBranch() bu değerleri döndürür. Cron'ların çok-kurum döngüsü için.
+export function runWithTenant<T>(org: string, branch: string, fn: () => Promise<T>): Promise<T> {
+  return tenantContext.run({ org, branch }, fn);
+}
+
+// İstekteki kurum: önce ALS bağlamı (cron), sonra middleware x-org header'ı, sonra varsayılan.
 export function currentOrg(): string {
+  const store = tenantContext.getStore();
+  if (store) return store.org;
   try {
     return headers().get('x-org') || DEFAULT_ORG;
   } catch {
@@ -27,13 +43,35 @@ export function currentOrg(): string {
   }
 }
 
-// İstekteki şube (middleware'in koyduğu x-branch; yoksa 'main' — tek şubeli/eski davranış).
+// İstekteki şube: önce ALS bağlamı (cron), sonra x-branch header'ı, sonra 'main'.
 export function currentBranch(): string {
+  const store = tenantContext.getStore();
+  if (store) return store.branch;
   try {
     return headers().get('x-branch') || 'main';
   } catch {
     return 'main';
   }
+}
+
+export interface TenantRef { org: string; branch: string; }
+
+// Aktif tüm kurum×şube çiftleri — çok-kurum cron'ları bu liste üzerinde döner.
+// Org'un hiç şubesi yoksa 'main' varsayılır (tek-şubeli eski davranış).
+// Liste boşsa (Org tablosu henüz tohumlanmadıysa) DEFAULT_ORG/main'e düşer → mevcut
+// tek-kurum cron davranışı korunur (güvenlik ağı).
+export async function listActiveTenants(): Promise<TenantRef[]> {
+  const orgs = await prisma.org.findMany({ where: { active: true }, select: { slug: true } });
+  const out: TenantRef[] = [];
+  for (const o of orgs) {
+    const branches = await prisma.branch.findMany({
+      where: { orgSlug: o.slug, active: true }, select: { slug: true },
+    });
+    if (branches.length === 0) out.push({ org: o.slug, branch: 'main' });
+    else for (const b of branches) out.push({ org: o.slug, branch: b.slug });
+  }
+  if (out.length === 0) out.push({ org: DEFAULT_ORG, branch: 'main' });
+  return out;
 }
 
 function prefixFor(org: string): string {

@@ -5,29 +5,28 @@ import {
   getAllTeachers, getCurrentWeek, setCurrentWeek, getTeacherWeekSlots, getDaySlotTimes,
 } from '@/lib/slots';
 import { ALL_DAYS, daySlots } from '@/lib/constants';
+import { listActiveTenants, runWithTenant, type TenantRef } from '@/lib/tenant';
 
 // Pazar 11:00 UTC+3 = 08:00 UTC → "0 8 * * 0"
 // Bilinçli withAuth istisnası: cron ucu — oturum yok, CRON_SECRET Bearer doğrulanır.
 // Öğretmen listesi / current_week / slot okuma / hafta init SQL'den.
 // NOT: haftalık arşiv (archive:teacher|student) hâlâ Redis — arşiv alt-sistemi SQL'e
 // taşınmadı (okuyan /api/archive de Redis). Tutarlı; ayrı bir göç işi.
-export async function GET(req: Request) {
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+// ÇOK-KURUM: aktif tüm kurum×şube üzerinde döner (runWithTenant); içindeki slots/redis
+// çağrıları o kurumun bağlamına otomatik yönlenir (lib/db tenant-scoped Redis, tdb() SQL).
 
-  const { searchParams } = new URL(req.url);
+// Bir kurumu mevcut haftaya sıfırlar (düzeltme modu).
+async function resetTenant(): Promise<{ weekKey: string }> {
+  const current = getWeekKey();
+  await setCurrentWeek(current);
+  return { weekKey: current };
+}
 
-  // Mevcut haftaya sıfırla (düzeltme modu)
-  if (searchParams.get('action') === 'reset') {
-    const current = getWeekKey();
-    await setCurrentWeek(current);
-    return NextResponse.json({ ok: true, weekKey: current });
-  }
-
+// Bir kurumu bir sonraki haftaya taşır: bu haftayı arşivle + tüm öğretmenlerin yeni
+// haftasını init et + current_week'i ilerlet.
+async function rollTenant(): Promise<{ previousWeek: string; newWeek: string; teachers: number } | { message: string }> {
   const teachers = await getAllTeachers(); // SQL-aware (legacyId + name)
-  if (!teachers || teachers.length === 0) return NextResponse.json({ ok: true, message: 'No teachers' });
+  if (!teachers || teachers.length === 0) return { message: 'No teachers' };
 
   const stored = await getCurrentWeek();
   const currentWeek = stored || getWeekKey();
@@ -69,7 +68,8 @@ export async function GET(req: Request) {
     }
   }
 
-  // 2. Arşivleri Redis'e yaz (arşiv alt-sistemi Redis — yukarıdaki NOT)
+  // 2. Arşivleri Redis'e yaz (arşiv alt-sistemi Redis — yukarıdaki NOT). lib/db
+  //    tenant-scoped → anahtarlar runWithTenant bağlamındaki kuruma prefix'lenir.
   const writePipeline = redis.pipeline();
   let hasWriteOps = false;
   for (const [tid, entries] of Object.entries(teacherArchiveMap)) {
@@ -87,5 +87,29 @@ export async function GET(req: Request) {
 
   await setCurrentWeek(nextWeek); // SQL-aware
 
-  return NextResponse.json({ ok: true, previousWeek: currentWeek, newWeek: nextWeek });
+  return { previousWeek: currentWeek, newWeek: nextWeek, teachers: teachers.length };
+}
+
+export async function GET(req: Request) {
+  const authHeader = req.headers.get('authorization');
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const isReset = searchParams.get('action') === 'reset';
+
+  const tenants = await listActiveTenants();
+  const results: Array<TenantRef & { result: unknown; error?: string }> = [];
+  for (const t of tenants) {
+    try {
+      const result = await runWithTenant<unknown>(t.org, t.branch, async () => (isReset ? resetTenant() : rollTenant()));
+      results.push({ ...t, result });
+    } catch (e) {
+      // bir kurumun hatası diğerlerini düşürmesin
+      results.push({ ...t, result: null, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  return NextResponse.json({ ok: true, mode: isReset ? 'reset' : 'roll', tenants: tenants.length, results });
 }
