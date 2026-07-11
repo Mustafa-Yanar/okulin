@@ -38,7 +38,7 @@ interface ResourceData {
 
 // GET /api/resources — role'e göre filtreli kaynak listesi
 // Bilinçli inline rol dallanması: öğrenci kendi sınıfının kaynaklarını görür.
-export const GET = withAuth(async (req, ctx, session) => {
+export const GET = withAuth('auth', 'lms', async (req, ctx, session) => {
   const rows = await tdb().resource.findMany();
   let resources = rows.map(r => r.data as unknown as ResourceData);
   if (session.role === 'student') {
@@ -51,7 +51,7 @@ export const GET = withAuth(async (req, ctx, session) => {
 });
 
 // POST /api/resources — kaynak ekle (director/teacher; rehber yalnız salt-okunur DEĞİLse)
-export const POST = withAuth(canWriteResource, async (req, ctx, session) => {
+export const POST = withAuth(canWriteResource, 'lms', async (req, ctx, session) => {
   const parsed = await parseBody(req, CreateSchema);
   if (!parsed.ok) return parsed.response;
   const { title, type, url, branch, topic, classes } = parsed.data;
@@ -75,7 +75,7 @@ export const POST = withAuth(canWriteResource, async (req, ctx, session) => {
 });
 
 // DELETE /api/resources?id=xxx — kaynak sil (director hepsini, teacher kendininkini)
-export const DELETE = withAuth(canWriteResource, async (req, ctx, session) => {
+export const DELETE = withAuth(canWriteResource, 'lms', async (req, ctx, session) => {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 

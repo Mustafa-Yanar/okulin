@@ -8,7 +8,7 @@ import { newSortableId as uuid } from '@/lib/id';
 import type { DenemeExam } from '@/lib/deneme/types';
 
 // Deneme listesi (meta) — giriş yapan herkes görür.
-export const GET = withAuth(async () => {
+export const GET = withAuth('auth', 'deneme', async () => {
   const index = await listExams();
   return NextResponse.json({ exams: index });
 });
@@ -21,7 +21,7 @@ const CreateSchema = z.object({
 });
 
 // Yeni boş sınav oluştur (müdür/rehber). Cevap anahtarı ve veri sonra eklenir.
-export const POST = withAuth(['director', 'counselor'], async (req) => {
+export const POST = withAuth(['director', 'counselor'], 'deneme', async (req) => {
 
   const parsed = await parseBody(req, CreateSchema);
   if (!parsed.ok) return parsed.response;

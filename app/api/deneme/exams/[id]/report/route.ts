@@ -5,7 +5,7 @@ import { buildReports } from '@/lib/deneme/report';
 import { hasAnswerKey } from '@/lib/deneme/grade';
 import type { StudentInfoById } from '@/lib/deneme/report';
 // Okulizyon biçimli sonuç listeleri (JSON). İstemci bundan ekran tablosu + PDF/Excel üretir.
-export const GET = withAuth(['director', 'counselor'], async (_req, ctx) => {
+export const GET = withAuth(['director', 'counselor'], 'deneme', async (_req, ctx) => {
 
   const exam = await getExam(String(ctx.params?.id));
   if (!exam) return NextResponse.json({ error: 'Sınav bulunamadı' }, { status: 404 });

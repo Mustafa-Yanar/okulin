@@ -6,7 +6,7 @@ import { withAuth } from '@/lib/auth';
 // PDF dosyaları doğrudan tarayıcıdan Blob'a yüklenir (4.5MB serverless gövde
 // sınırına takılmamak için). Bu route sadece imzalı token üretir + yetki denetler.
 
-export const POST = withAuth(['director', 'teacher'], async (req) => {
+export const POST = withAuth(['director', 'teacher'], 'lms', async (req) => {
   const body = (await req.json()) as HandleUploadBody;
   try {
     const jsonResponse = await handleUpload({

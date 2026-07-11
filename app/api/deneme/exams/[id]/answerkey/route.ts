@@ -11,7 +11,7 @@ const KeySchema = z.object({
 
 // Bir kitapçığın cevap anahtarını kaydet/güncelle (müdür/rehber).
 // body: { kitapcik:'A'|'B', answers:{ [boxKey]: 'ABCDE...' } }
-export const PUT = withAuth(['director', 'counselor'], async (req, ctx) => {
+export const PUT = withAuth(['director', 'counselor'], 'deneme', async (req, ctx) => {
 
   const parsed = await parseBody(req, KeySchema);
   if (!parsed.ok) return parsed.response;

@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'crypto';
 import { DEFAULT_ORG } from './org';
 import { errorResponse } from './errors';
+import type { ModuleKey } from './config';
 
 // Oturum payload'u — JWT claim'leri. JWTPayload'ı genişletir (ek alanlar unknown
 // olarak erişilebilir; role/id/name gibi bilinenler tipli).
@@ -109,6 +110,7 @@ export async function canIntake(session: Session | null | undefined): Promise<bo
 //   export const POST = withAuth(async (req, ctx, session) => { ... });        // yalnız giriş
 //   export const POST = withAuth('manage', async (req, ctx, session) => {...}); // yönetim yazma yetkisi
 //   export const POST = withAuth(['director','accountant'], handler);           // belirli roller
+//   export const POST = withAuth('manage', 'odev', handler);                    // + modül geçidi
 //
 // mode:
 //   'auth'   (varsayılan) → yalnız oturum şart (401 yoksa)
@@ -116,11 +118,33 @@ export async function canIntake(session: Session | null | undefined): Promise<bo
 //   'intake' → canIntake(session) (kayıt akışı: manage VEYA muhasebeci config'e göre) — 403
 //   dizi     → session.role listede mi — 403
 //   fn       → özel async predicate (session) => bool — 403
+//
+// module (ops.): kurum config.modules[module] KAPALI ise 403. Rol yetkisi geçse bile
+// müdür o modülü kapattıysa API reddeder — sidebar gizlemesi UI-only kalmaz, veri
+// yüzeyi de kapanır (güvenlik/tutarlılık). Yalnız o modüle özel route'lara verilir;
+// çok-modüllü/temel route'lar (auth, program, yoklama) modülsüz kalır.
 export function withAuth(handler: AuthedHandler): (req: NextRequest, ctx: RouteContext) => Promise<Response>;
 export function withAuth(mode: AuthMode, handler: AuthedHandler): (req: NextRequest, ctx: RouteContext) => Promise<Response>;
-export function withAuth(modeOrHandler: AuthMode | AuthedHandler, maybeHandler?: AuthedHandler) {
-  const handler = (maybeHandler || modeOrHandler) as AuthedHandler;
-  const mode: AuthMode = maybeHandler ? (modeOrHandler as AuthMode) : 'auth';
+export function withAuth(mode: AuthMode, module: ModuleKey, handler: AuthedHandler): (req: NextRequest, ctx: RouteContext) => Promise<Response>;
+export function withAuth(
+  modeOrHandler: AuthMode | AuthedHandler,
+  moduleOrHandler?: ModuleKey | AuthedHandler,
+  maybeHandler?: AuthedHandler,
+) {
+  // Argüman çözümü: (handler) | (mode, handler) | (mode, module, handler).
+  let mode: AuthMode = 'auth';
+  let module: ModuleKey | undefined;
+  let handler: AuthedHandler;
+  if (maybeHandler) {
+    mode = modeOrHandler as AuthMode;
+    module = moduleOrHandler as ModuleKey;
+    handler = maybeHandler;
+  } else if (typeof moduleOrHandler === 'function') {
+    mode = modeOrHandler as AuthMode;
+    handler = moduleOrHandler;
+  } else {
+    handler = modeOrHandler as AuthedHandler;
+  }
   return async (req: NextRequest, ctx: RouteContext) => {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Giriş gerekli' }, { status: 401 });
@@ -131,6 +155,15 @@ export function withAuth(modeOrHandler: AuthMode | AuthedHandler, maybeHandler?:
     else if (typeof mode === 'function') ok = await mode(session);
     // mode === 'auth' → giriş yeterli
     if (!ok) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+    // Modül geçidi: kurum bu modülü kapattıysa (config.modules[module]===false) reddet.
+    // Rol yetkisinden SONRA — "modül kapalı" mesajı yalnız yetkili kullanıcıya görünür.
+    if (module) {
+      const { getOrgConfig } = await import('./config');
+      const mods = await getOrgConfig('modules');
+      if (mods[module] === false) {
+        return NextResponse.json({ error: 'Bu modül kurumunuzda kapalı' }, { status: 403 });
+      }
+    }
     // Servis katmanı iş-kuralı ihlalinde HttpError fırlatır → tek noktada { error }+status'a
     // çevrilir (route re-translate etmez). Diğer hatalar yeniden fırlar (gerçek 500).
     try {

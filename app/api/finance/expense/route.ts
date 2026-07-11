@@ -98,7 +98,7 @@ function buildRecord(data: ExpenseInput, base: ExpenseBase, session: Session, va
   };
 }
 
-export const GET = withAuth(['director', 'accountant'], async (req) => {
+export const GET = withAuth(['director', 'accountant'], 'finance', async (req) => {
   const { searchParams } = new URL(req.url);
   const type = searchParams.get('type');
   const period = searchParams.get('period');
@@ -114,7 +114,7 @@ export const GET = withAuth(['director', 'accountant'], async (req) => {
   return NextResponse.json(list);
 });
 
-export const POST = withAuth(['director', 'accountant'], async (req, _ctx, session) => {
+export const POST = withAuth(['director', 'accountant'], 'finance', async (req, _ctx, session) => {
   const parsed = await parseBody(req, ExpenseSchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -141,7 +141,7 @@ export const POST = withAuth(['director', 'accountant'], async (req, _ctx, sessi
   return NextResponse.json({ ok: true, record });
 });
 
-export const PUT = withAuth(['director', 'accountant'], async (req, _ctx, session) => {
+export const PUT = withAuth(['director', 'accountant'], 'finance', async (req, _ctx, session) => {
   const parsed = await parseBody(req, ExpenseSchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -159,7 +159,7 @@ export const PUT = withAuth(['director', 'accountant'], async (req, _ctx, sessio
   return NextResponse.json({ ok: true, record });
 });
 
-export const DELETE = withAuth(['director', 'accountant'], async (req, _ctx, session) => {
+export const DELETE = withAuth(['director', 'accountant'], 'finance', async (req, _ctx, session) => {
   const parsed = await parseBody(req, ExpenseDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { id } = parsed.data;

@@ -61,7 +61,7 @@ async function updateSablonlar(teacherId: string, mutFn: (list: EtutSablonu[]) =
 }
 
 // GET /api/etut-sablon?teacherId=...
-export const GET = withAuth(async (req) => {
+export const GET = withAuth('auth', 'etut', async (req) => {
   const teacherId = new URL(req.url).searchParams.get('teacherId');
   if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
 
@@ -70,7 +70,7 @@ export const GET = withAuth(async (req) => {
 });
 
 // POST /api/etut-sablon → şablon ekle (id yoksa) veya güncelle (id varsa)
-export const POST = withAuth('manage', async (req) => {
+export const POST = withAuth('manage', 'etut', async (req) => {
   const parsed = await parseBody(req, SaveSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, sablon, weekKey: wk } = parsed.data;
@@ -100,7 +100,7 @@ export const POST = withAuth('manage', async (req) => {
 });
 
 // PUT /api/etut-sablon → aktif/pasif değiştir
-export const PUT = withAuth('manage', async (req) => {
+export const PUT = withAuth('manage', 'etut', async (req) => {
   const parsed = await parseBody(req, ToggleSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id, scope, weekKey, aktif } = parsed.data;
@@ -128,7 +128,7 @@ export const PUT = withAuth('manage', async (req) => {
 });
 
 // PATCH /api/etut-sablon → şablona öğrenci ata / kaldır
-export const PATCH = withAuth('manage', async (req, ctx, session) => {
+export const PATCH = withAuth('manage', 'etut', async (req, ctx, session) => {
   const parsed = await parseBody(req, AssignSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id, student } = parsed.data;
@@ -153,7 +153,7 @@ export const PATCH = withAuth('manage', async (req, ctx, session) => {
 });
 
 // DELETE /api/etut-sablon → şablon sil
-export const DELETE = withAuth('manage', async (req) => {
+export const DELETE = withAuth('manage', 'etut', async (req) => {
   const parsed = await parseBody(req, DeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id } = parsed.data;

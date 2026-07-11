@@ -28,7 +28,7 @@ function canGive(session: Session | null | undefined): boolean {
 // ───────────────────────────────────────── GET ─────────────────────────────────────────
 // Bilinçli inline rol dallanması: aynı uç rolüne göre farklı kapsam döner
 // (öğrenci kendi kaydı, veli çocuğu, yönetici/öğretmen roster).
-export const GET = withAuth(async (req, _ctx, session) => {
+export const GET = withAuth('auth', 'davranis', async (req, _ctx, session) => {
   const studentId = new URL(req.url).searchParams.get('studentId');
 
   // ── Tek öğrenci detayı (toplam + geçmiş) ──
@@ -61,7 +61,7 @@ export const GET = withAuth(async (req, _ctx, session) => {
 });
 
 // ───────────────────────────────────────── POST (ekle) ─────────────────────────────────────────
-export const POST = withAuth((s: Session) => canGive(s), async (req, _ctx, session) => {
+export const POST = withAuth((s: Session) => canGive(s), 'davranis', async (req, _ctx, session) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
   const { studentId, points, reason, note } = parsed.data;
@@ -86,7 +86,7 @@ export const POST = withAuth((s: Session) => canGive(s), async (req, _ctx, sessi
 });
 
 // ───────────────────────────────────────── DELETE (kayıt sil) ─────────────────────────────────────────
-export const DELETE = withAuth((s: Session) => canGive(s), async (req, _ctx, session) => {
+export const DELETE = withAuth((s: Session) => canGive(s), 'davranis', async (req, _ctx, session) => {
   const url = new URL(req.url);
   const studentId = url.searchParams.get('studentId');
   const entryId = url.searchParams.get('entryId');

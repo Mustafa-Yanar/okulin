@@ -5,7 +5,7 @@ import { buildStudentPoints } from '@/lib/deneme/store';
 // Müdür/öğretmen: belirli bir öğrencinin deneme analizini görür. Veli: kendi çocuğunu.
 // GET /api/deneme/student?studentId=...
 // Bilinçli inline rol dallanması: veli yalnız kendi çocuğu (isteğe bağlı kontrol).
-export const GET = withAuth(async (req, _ctx, session) => {
+export const GET = withAuth('auth', 'deneme', async (req, _ctx, session) => {
   const { searchParams } = new URL(req.url);
   const studentId = searchParams.get('studentId');
   if (!studentId) return NextResponse.json({ error: 'studentId gerekli' }, { status: 400 });

@@ -4,7 +4,7 @@ import { getExam, getAllStudents } from '@/lib/deneme/store';
 import { buildMergeReport, type StudentInfoById } from '@/lib/deneme/report';
 // TYT + AYT birleştirme raporu: ?tyt=<examId>&ayt=<examId>.
 // Ortak (her ikisinde de eşleşmiş) öğrenciler için 3 türde yerleştirme puanı.
-export const GET = withAuth(['director', 'counselor'], async (req) => {
+export const GET = withAuth(['director', 'counselor'], 'deneme', async (req) => {
 
   const { searchParams } = new URL(req.url);
   const tytId = searchParams.get('tyt');

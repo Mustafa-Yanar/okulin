@@ -89,6 +89,9 @@ export const CONFIG_DEFAULTS = {
 export type ConfigKey = keyof typeof CONFIG_DEFAULTS;
 export type ConfigValue<K extends ConfigKey> = (typeof CONFIG_DEFAULTS)[K];
 
+// Modül aç/kapa anahtarları (etut, finance, crm, ...). withAuth modül-geçidi bunu kullanır.
+export type ModuleKey = keyof (typeof CONFIG_DEFAULTS)['modules'];
+
 // Bilinen config key'leri — PATCH yalnız bunları kabul eder (rastgele key yazılamaz).
 export const CONFIG_KEYS = Object.keys(CONFIG_DEFAULTS) as ConfigKey[];
 

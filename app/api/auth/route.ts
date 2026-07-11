@@ -156,6 +156,18 @@ export async function POST(req: NextRequest) {
       const gate = gateMismatch(role);
       if (gate) return gate;
 
+      // Modül geçidi (veli): veli paneli tek route'a değil çok sayıda paylaşılan uca
+      // yayılır (program/davranış/ödev/rehberlik/ödeme) → withAuth('...','veli') temiz
+      // olmaz. Onun yerine kaldıracı LOGIN'e koyuyoruz: kurum veli modülünü kapattıysa
+      // veli hiç giriş yapamaz (panelin tüm yüzeyi böylece kapanır).
+      if (role === 'parent') {
+        const { getOrgConfig } = await import('@/lib/config');
+        const mods = await getOrgConfig('modules');
+        if (mods.veli === false) {
+          return NextResponse.json({ error: 'Veli girişi bu kurumda kapalı' }, { status: 403 });
+        }
+      }
+
       // Cihaz tanıma — roleCategory = selectedRole varsa o, yoksa gerçek rolden türetilir
       const cat = selectedRole || roleCategory(role);
       const phone = rec.phone || null;

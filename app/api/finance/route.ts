@@ -45,7 +45,7 @@ const FinanceSchema = z.object({
 const FinanceDeleteSchema = z.object({ studentId: zId });
 
 // Bilinçli inline rol dallanması: veli kendi çocuğunu okur, müdür/muhasebeci tümünü.
-export const GET = withAuth(async (req, _ctx, session) => {
+export const GET = withAuth('auth', 'finance', async (req, _ctx, session) => {
   const { searchParams } = new URL(req.url);
   const studentId = searchParams.get('studentId');
 
@@ -74,7 +74,7 @@ export const GET = withAuth(async (req, _ctx, session) => {
   return NextResponse.json(list);
 });
 
-export const POST = withAuth(['director', 'accountant'], async (req, _ctx, session) => {
+export const POST = withAuth(['director', 'accountant'], 'finance', async (req, _ctx, session) => {
   const parsed = await parseBody(req, FinanceSchema);
   if (!parsed.ok) return parsed.response;
   const { studentId, studentName, studentCls, totalFee, discount, paymentPlan, installments } = parsed.data;
@@ -102,7 +102,7 @@ export const POST = withAuth(['director', 'accountant'], async (req, _ctx, sessi
   return NextResponse.json({ ok: true, record: financeOut(full, { legacyId: studentId, name: studentName, class: { legacyId: studentCls } }) });
 });
 
-export const DELETE = withAuth(['director'], async (req, _ctx, session) => {
+export const DELETE = withAuth(['director'], 'finance', async (req, _ctx, session) => {
   const parsed = await parseBody(req, FinanceDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { studentId } = parsed.data;

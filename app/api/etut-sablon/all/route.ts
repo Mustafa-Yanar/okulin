@@ -17,7 +17,7 @@ function aktifThisWeek(sb: EtutSablonu, weekKey: string): boolean {
 }
 
 // Bilinçli inline rol dallanması: veli yalnız kendi çocuğunun etütlerini görür.
-export const GET = withAuth(async (req, _ctx, session) => {
+export const GET = withAuth('auth', 'etut', async (req, _ctx, session) => {
 
   const { searchParams } = new URL(req.url);
   const weekKey = searchParams.get('week') || getWeekKey();

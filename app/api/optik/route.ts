@@ -25,7 +25,7 @@ function cleanJson(raw: string): string {
   return raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/, '').trim();
 }
 
-export const POST = withAuth(['director', 'counselor', 'superadmin'], async (req) => {
+export const POST = withAuth(['director', 'counselor', 'superadmin'], 'deneme', async (req) => {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {

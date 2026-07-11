@@ -4,7 +4,7 @@ import { getExam, deleteExam } from '@/lib/deneme/store';
 import { rankedList } from '@/lib/deneme/analysis';
 
 // Deneme detayı — sıralı liste. Müdür ve öğretmen görür (tüm öğrenciler).
-export const GET = withAuth(['director', 'counselor', 'teacher'], async (_req, ctx, session) => {
+export const GET = withAuth(['director', 'counselor', 'teacher'], 'deneme', async (_req, ctx, session) => {
   const exam = await getExam(String(ctx.params?.id));
   if (!exam) return NextResponse.json({ error: 'Bulunamadı' }, { status: 404 });
 
@@ -42,7 +42,7 @@ export const GET = withAuth(['director', 'counselor', 'teacher'], async (_req, c
 });
 
 // Deneme sil (müdür)
-export const DELETE = withAuth(['director', 'counselor'], async (_req, ctx) => {
+export const DELETE = withAuth(['director', 'counselor'], 'deneme', async (_req, ctx) => {
   await deleteExam(String(ctx.params?.id));
   return NextResponse.json({ ok: true });
 });

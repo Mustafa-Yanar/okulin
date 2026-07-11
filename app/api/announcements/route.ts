@@ -114,7 +114,7 @@ async function audienceLabel(audience: Audience): Promise<string> {
 // GET — yönetici: gönderdiği duyurular + okunma sayıları; ?id=X → kim okudu detayı.
 //       alıcı: kendi gelen kutusu (inbox).
 // Bilinçli inline rol dallanması: aynı uç yönetici/alıcı için farklı veri döner.
-export const GET = withAuth(async (req, _ctx, session) => {
+export const GET = withAuth('auth', 'duyuru', async (req, _ctx, session) => {
   const detailId = new URL(req.url).searchParams.get('id');
 
   // Kim okudu detayı (yönetici)
@@ -148,7 +148,7 @@ export const GET = withAuth(async (req, _ctx, session) => {
 });
 
 // Bilinçli inline yetki dallanması: 'read' aksiyonu her alıcıya açık, 'send' yalnız yönetici.
-export const POST = withAuth(async (req, _ctx, session) => {
+export const POST = withAuth('auth', 'duyuru', async (req, _ctx, session) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -206,7 +206,7 @@ export const POST = withAuth(async (req, _ctx, session) => {
 });
 
 // DELETE ?id=X — yönetici duyuruyu siler
-export const DELETE = withAuth((session: Session) => isManager(session), async (req) => {
+export const DELETE = withAuth((session: Session) => isManager(session), 'duyuru', async (req) => {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 

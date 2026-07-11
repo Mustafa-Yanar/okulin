@@ -43,7 +43,7 @@ const canAssign = (s: Session) => isManager(s) || s.role === 'teacher';
 
 // ───────────────────────────────────────── GET ─────────────────────────────────────────
 // Bilinçli inline rol dallanması: aynı uç yönetici/öğretmen/öğrenci/veli için farklı kapsam döner.
-export const GET = withAuth(async (req, _ctx, session) => {
+export const GET = withAuth('auth', 'odev', async (req, _ctx, session) => {
   const detailId = new URL(req.url).searchParams.get('id');
 
   // Detay (yönetici/öğretmen): ödev + roster'daki her öğrencinin teslim durumu (kontrol ekranı).
@@ -72,7 +72,7 @@ export const GET = withAuth(async (req, _ctx, session) => {
 
 // ───────────────────────────────────────── POST ─────────────────────────────────────────
 // Bilinçli inline yetki dallanması: aksiyon bazlı (create: yönetici/öğretmen, submit: öğrenci, check: yönetici/öğretmen).
-export const POST = withAuth(async (req, _ctx, session) => {
+export const POST = withAuth('auth', 'odev', async (req, _ctx, session) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -118,7 +118,7 @@ export const POST = withAuth(async (req, _ctx, session) => {
 
 // ───────────────────────────────────────── DELETE ─────────────────────────────────────────
 // DELETE ?id=X — yönetici hepsini, öğretmen kendi verdiğini siler.
-export const DELETE = withAuth((s: Session) => canAssign(s), async (req, _ctx, session) => {
+export const DELETE = withAuth((s: Session) => canAssign(s), 'odev', async (req, _ctx, session) => {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 

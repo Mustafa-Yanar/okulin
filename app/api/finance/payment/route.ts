@@ -15,7 +15,7 @@ const PaymentSchema = z.object({
 });
 const PaymentDeleteSchema = z.object({ studentId: zId, paymentId: zId });
 
-export const POST = withAuth(['director', 'accountant'], async (req, _ctx, session) => {
+export const POST = withAuth(['director', 'accountant'], 'finance', async (req, _ctx, session) => {
   const parsed = await parseBody(req, PaymentSchema);
   if (!parsed.ok) return parsed.response;
   const { studentId, amount, date, method, note, installmentIdx } = parsed.data;
@@ -32,7 +32,7 @@ export const POST = withAuth(['director', 'accountant'], async (req, _ctx, sessi
   return NextResponse.json({ ok: true, payment, balance, receiptNo });
 });
 
-export const DELETE = withAuth(['director', 'accountant'], async (req, _ctx, session) => {
+export const DELETE = withAuth(['director', 'accountant'], 'finance', async (req, _ctx, session) => {
   const parsed = await parseBody(req, PaymentDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { studentId, paymentId } = parsed.data;

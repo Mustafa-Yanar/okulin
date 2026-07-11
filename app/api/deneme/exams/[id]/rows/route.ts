@@ -25,7 +25,7 @@ const AddSchema = z.object({
 
 // Sınava öğrenci satırı ekle (optik/manuel/.dat). Anahtar varsa anında puanlar,
 // isimden öğrenci eşleştirir (kalıcı namemap + öğrenci adı/kullanıcı adı).
-export const POST = withAuth(['director', 'counselor'], async (req, ctx) => {
+export const POST = withAuth(['director', 'counselor'], 'deneme', async (req, ctx) => {
 
   const parsed = await parseBody(req, AddSchema);
   if (!parsed.ok) return parsed.response;
@@ -83,7 +83,7 @@ export const POST = withAuth(['director', 'counselor'], async (req, ctx) => {
 });
 
 // Bir satırı sil. ?rowId=...
-export const DELETE = withAuth(['director', 'counselor'], async (req, ctx) => {
+export const DELETE = withAuth(['director', 'counselor'], 'deneme', async (req, ctx) => {
 
   const { searchParams } = new URL(req.url);
   const rid = searchParams.get('rowId');

@@ -69,7 +69,7 @@ function pushHistory(rec: LeadData, byName: string | undefined, text: string): v
 // Müdür/rehber/muhasebeci: tüm adaylar (history dahil, düşük hacim) + huni sayıları.
 // GET okuma: rol listesi, config'e bakmaz — okuma her zaman serbest. Muhasebeci
 // dahil: kayıt masası ön kaydı görür (yazması 'intake' iznine tabi).
-export const GET = withAuth(['director', 'counselor', 'accountant'], async () => {
+export const GET = withAuth(['director', 'counselor', 'accountant'], 'crm', async () => {
   const rows = await tdb().lead.findMany();
   const leads = rows.map(r => r.data as unknown as LeadData);
   const stats = emptyStats();
@@ -79,7 +79,7 @@ export const GET = withAuth(['director', 'counselor', 'accountant'], async () =>
 });
 
 // ───────────────────────────────────────── POST ─────────────────────────────────────────
-export const POST = withAuth('intake', async (req, ctx, session) => {
+export const POST = withAuth('intake', 'crm', async (req, ctx, session) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -144,7 +144,7 @@ export const POST = withAuth('intake', async (req, ctx, session) => {
 // ───────────────────────────────────────── DELETE ─────────────────────────────────────────
 // Aday silme de 'intake': lead silmek CRM akışının parçası (öğrenci silmenin
 // aksine finans/akademik geçmişi yok — muhasebeciye açılması güvenli).
-export const DELETE = withAuth('intake', async (req, ctx, session) => {
+export const DELETE = withAuth('intake', 'crm', async (req, ctx, session) => {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 

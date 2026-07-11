@@ -10,7 +10,7 @@ export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 // Hesapla: tüm satırları ham cevaplardan + güncel cevap anahtarıyla yeniden puanla.
 // (Anahtar satırlardan SONRA girilmiş olabilir → results boş kalmış olabilir.) Her satıra
 // results + toplamNet + puan yazılır; öğrenci paneli/grafiği güncel netleri görür.
-export const POST = withAuth(['director', 'counselor'], async (_req, ctx) => {
+export const POST = withAuth(['director', 'counselor'], 'deneme', async (_req, ctx) => {
 
   const exam = await getExam(String(ctx.params?.id));
   if (!exam) return NextResponse.json({ error: 'Sınav bulunamadı' }, { status: 404 });

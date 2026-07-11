@@ -14,7 +14,7 @@ const MatchSchema = z.object({
 // İsim/satırı öğrenci id'sine bağlar (kalıcı namemap'e de yazar).
 // body: { matches: [{ rowId?, excelName, studentId }] }  (boş studentId = eşleşmeyi kaldır)
 // rowId verilirse o satır; yoksa isimle eşleşen ilk satır güncellenir.
-export const POST = withAuth(['director', 'counselor'], async (req, ctx) => {
+export const POST = withAuth(['director', 'counselor'], 'deneme', async (req, ctx) => {
 
   const parsed = await parseBody(req, MatchSchema);
   if (!parsed.ok) return parsed.response;
