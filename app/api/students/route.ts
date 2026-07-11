@@ -35,7 +35,10 @@ const StudentDeleteSchema = z.object({
   ids: z.array(zId).max(2000).optional(),
 }).refine(d => d.id || (d.ids && d.ids.length), { message: 'id veya ids gerekli' });
 
-export const GET = withAuth(async () => {
+// Tam öğrenci listesi (telefon/veli telefonu/doğum tarihi/diploma notu dahil PII) —
+// yalnız personel rolleri. student/parent burada YOK: kendi verilerini ayrı, filtreli
+// uçlardan görürler (canReadStudent ile korunan rotalar).
+export const GET = withAuth(['director', 'teacher', 'counselor', 'accountant'], async () => {
   return NextResponse.json(await listStudents());
 });
 
