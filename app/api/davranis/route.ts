@@ -3,30 +3,14 @@ import { withAuth, isManager, type Session } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z } from '@/lib/validate';
-import { tdb, withScope } from '@/lib/sqldb';
-import type { BehaviorEntry } from '@prisma/client';
+import { getStudentBehavior, getBehaviorRoster, addBehavior, deleteBehaviorEntry } from '@/lib/davranis';
 
 // Davranış puanlama — olumlu/olumsuz davranış kaydı (artı/eksi puan).
 // Öğretmen + müdür/rehber öğrenciye puan verir (sebep + opsiyonel not). Öğrenci kendi
 // toplamını + geçmişini görür; veli çocuğunkini. Toplam, motivasyon/sorumluluk için şeffaf.
+// DB + iş kuralı lib/davranis.ts'te; burada yalnız yetki (session dallanması) + push + audit.
 
 export const runtime = 'nodejs'; // push (web-push Node crypto)
-
-// SQL BehaviorEntry satırı → mevcut sözleşme şekli (at = createdAt ISO).
-const behEntryOut = (e: BehaviorEntry) => ({
-  id: e.id, points: e.points, reason: e.reason || '', note: e.note || '',
-  byName: e.byName || '', byRole: e.byRole || '', by: e.by || '',
-  at: e.createdAt instanceof Date ? e.createdAt.toISOString() : e.createdAt,
-});
-
-// Bir öğrencinin (legacyId) davranış kaydını SQL'den getirir (entries dahil).
-async function behaviorByLegacySql(studentId: string) {
-  const beh = await tdb().behavior.findFirst({
-    where: { student: { legacyId: studentId } },
-    include: { entries: { orderBy: { createdAt: 'asc' } } },
-  });
-  return beh;
-}
 
 const AddSchema = z.object({
   action: z.literal('add'),
@@ -56,15 +40,14 @@ export const GET = withAuth(async (req, _ctx, session) => {
     if (session.role === 'parent' && !(session.children || []).some(c => (typeof c === 'string' ? c : c.id) === studentId)) {
       return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     }
-    const beh = await behaviorByLegacySql(studentId);
-    const entries = (beh?.entries || []).map(behEntryOut).reverse();
-    return NextResponse.json({ studentId, total: beh?.total || 0, entries });
+    const { total, entries } = await getStudentBehavior(studentId);
+    return NextResponse.json({ studentId, total, entries });
   }
 
   // ── Öğrenci: kendi kaydı ──
   if (session.role === 'student') {
-    const beh = await behaviorByLegacySql(session.id || '');
-    return NextResponse.json({ studentId: session.id, total: beh?.total || 0, entries: (beh?.entries || []).map(behEntryOut).reverse() });
+    const { total, entries } = await getStudentBehavior(session.id || '');
+    return NextResponse.json({ studentId: session.id, total, entries });
   }
 
   // ── Veli: studentId şart (panel childId geçer) ──
@@ -74,18 +57,7 @@ export const GET = withAuth(async (req, _ctx, session) => {
 
   // ── Yönetici/öğretmen: roster + toplamlar ──
   if (!canGive(session)) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-  const rows = await tdb().student.findMany({
-    include: {
-      class: { select: { legacyId: true } },
-      behavior: { select: { total: true, _count: { select: { entries: true } } } },
-    },
-  });
-  const roster = rows.map(s => ({
-    id: s.legacyId, name: s.name, cls: s.class?.legacyId || '',
-    total: s.behavior?.total || 0, count: s.behavior?._count?.entries || 0,
-  }));
-  roster.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'tr'));
-  return NextResponse.json({ roster });
+  return NextResponse.json({ roster: await getBehaviorRoster() });
 });
 
 // ───────────────────────────────────────── POST (ekle) ─────────────────────────────────────────
@@ -93,18 +65,11 @@ export const POST = withAuth((s: Session) => canGive(s), async (req, _ctx, sessi
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
   const { studentId, points, reason, note } = parsed.data;
-  if (points === 0) return NextResponse.json({ error: 'Puan 0 olamaz' }, { status: 400 });
 
-  const student = await tdb().student.findFirst({ where: { legacyId: studentId } });
-  if (!student) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
-
-  let beh = await tdb().behavior.findFirst({ where: { studentId: student.id } });
-  if (!beh) beh = await tdb().behavior.create({ data: withScope({ studentId: student.id, total: 0 }) });
-  await tdb().behaviorEntry.create({ data: {
-    behaviorId: beh.id, points, reason: reason.trim(), note: (note || '').trim(),
+  const { total, studentName } = await addBehavior({
+    studentId, points, reason, note,
     byName: session.name || '', byRole: session.role, by: session.id,
-  } });
-  const updated = await tdb().behavior.update({ where: { id: beh.id }, data: { total: { increment: points } } });
+  });
 
   const sign = points > 0 ? '+' : '';
   await Promise.allSettled([sendPushToUser('student', studentId, {
@@ -114,10 +79,10 @@ export const POST = withAuth((s: Session) => canGive(s), async (req, _ctx, sessi
   })]);
   await logAudit({
     ...actorFrom(session), action: 'behavior.add',
-    target: { type: 'student', id: studentId, name: student.name },
+    target: { type: 'student', id: studentId, name: studentName },
     detail: `Davranış puanı: ${sign}${points} — ${reason.trim()}`,
   });
-  return NextResponse.json({ ok: true, total: updated.total });
+  return NextResponse.json({ ok: true, total });
 });
 
 // ───────────────────────────────────────── DELETE (kayıt sil) ─────────────────────────────────────────
@@ -127,23 +92,11 @@ export const DELETE = withAuth((s: Session) => canGive(s), async (req, _ctx, ses
   const entryId = url.searchParams.get('entryId');
   if (!studentId || !entryId) return NextResponse.json({ error: 'studentId ve entryId gerekli' }, { status: 400 });
 
-  const beh = await tdb().behavior.findFirst({
-    where: { student: { legacyId: studentId } },
-    include: { entries: true },
-  });
-  if (!beh) return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });
-  const entry = beh.entries.find(e => e.id === entryId);
-  if (!entry) return NextResponse.json({ error: 'Kayıt bulunamadı' }, { status: 404 });
-  // Öğretmen yalnız kendi verdiğini siler; müdür/rehber hepsini.
-  if (!isManager(session) && entry.by !== session.id) {
-    return NextResponse.json({ error: 'Yalnız kendi verdiğiniz puanı silebilirsiniz' }, { status: 403 });
-  }
-  await tdb().behaviorEntry.delete({ where: { id: entry.id } });
-  const updated = await tdb().behavior.update({ where: { id: beh.id }, data: { total: { decrement: entry.points || 0 } } });
+  const { total, points, reason } = await deleteBehaviorEntry(studentId, entryId, { isManager: isManager(session), sessionId: session.id });
   await logAudit({
     ...actorFrom(session), action: 'behavior.delete',
     target: { type: 'student', id: studentId, name: '' },
-    detail: `Davranış puanı silindi: ${entry.points > 0 ? '+' : ''}${entry.points} — ${entry.reason}`,
+    detail: `Davranış puanı silindi: ${points > 0 ? '+' : ''}${points} — ${reason}`,
   });
-  return NextResponse.json({ ok: true, total: updated.total });
+  return NextResponse.json({ ok: true, total });
 });
