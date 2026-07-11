@@ -98,7 +98,12 @@ export const POST = withAuth('manage', async (req) => {
     return NextResponse.json({ error: 'Geçmiş hafta düzenlenemez. Sadece mevcut hafta ve sonraki 2 hafta düzenlenebilir.' }, { status: 400 });
   }
 
-  // Geçmiş slotları diff'ten sessizce kaldır
+  // Geçmiş slotları diff'ten sessizce kaldır.
+  // İSTİSNA: kalıcı şablon dersi (fixed:true) her hafta tekrar eden SABİT programdır —
+  // "geçmiş slot" kavramı ona uygulanmaz. Aksi halde haftanın son günlerinde (ör. Cmt/Paz)
+  // program uygulanınca bu haftanın geçmiş günlerine düşen dersler şablona hiç yazılmaz,
+  // öğretmen/sınıf kartları boş görünür. Geçmiş koruması yalnız o haftaya özel geçici
+  // girdiler (etüt/geçici ders rezervasyonu, fixed:false) ve slot silme (null) içindir.
   const templateForGuard = await getProgramTemplate(legacyTeacherId);
   const { etutSablonlari: _ets, ...gridTemplateForGuard } = templateForGuard as { etutSablonlari?: unknown } & ProgramGrid;
   const postSlotTimes = await getDaySlotTimes();
@@ -108,6 +113,7 @@ export const POST = withAuth('manage', async (req) => {
     for (const slotId of Object.keys(program[dayIdx] || {})) {
       const entry = program[dayIdx][slotId];
       if (entry?.type === 'available') continue;
+      if (entry?.fixed === true) continue; // kalıcı şablon dersi — geçmiş silme muaf
       const tmpl = gridTemplateForGuard?.[dayIdx]?.[slotId];
       if ((entry === null || entry === undefined) && tmpl?.type === 'available') continue;
       const slotDef = slots.find(s => s.id === slotId);
