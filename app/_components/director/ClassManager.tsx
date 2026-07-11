@@ -15,7 +15,7 @@ import type { CourseRecord } from '@/lib/courses';
 import type { ShowToast } from '../types';
 
 // Şube (sınıf) + ders kataloğu yönetimi. Kurum kendi şubelerini açar/düzenler/siler ve
-// ders kataloğunu (çekirdek + kendi eklediği) yönetir; her şubeye gördüğü dersleri atar.
+// ders kataloğunu yönetir (tüm dersler eşit — çekirdek/özel ayrımı yok); her şubeye gördüğü dersleri atar.
 // Veri: GET/POST/PATCH/DELETE /api/classes + /api/courses. Detay: hafıza kurum-turu-sinif-modeli.
 
 export const KADEME_LABEL: Record<string, string> = Object.fromEntries(KADEMELER.map((k) => [k.key, k.label]));
@@ -376,10 +376,8 @@ export function CourseCatalog({ courses, onChanged, showToast }: CourseCatalogPr
     } finally { setBusy(false); }
   }
 
-  const sorted = [...courses].sort((a, b) => {
-    if ((a.core ? 0 : 1) !== (b.core ? 0 : 1)) return (a.core ? 0 : 1) - (b.core ? 0 : 1);
-    return a.ad.localeCompare(b.ad, 'tr');
-  });
+  // Tüm dersler eşit seviyede — alfabetik sıra (çekirdek/özel ayrımı yok).
+  const sorted = [...courses].sort((a, b) => a.ad.localeCompare(b.ad, 'tr'));
 
   return (
     <div>
@@ -396,8 +394,8 @@ export function CourseCatalog({ courses, onChanged, showToast }: CourseCatalogPr
       </div>
 
       <p className="text-caption mb-2">
-        Çekirdek dersler silinemez, yalnız pasifleştirilebilir. Pasif ders yeni şubelere atanamaz
-        (geçmiş kayıtlar korunur).
+        Ders eklemek için üstteki alanı kullan; çıkarmak için pasifleştir. Pasif ders yeni şubelere
+        atanamaz (geçmiş kayıtlar korunur).
       </p>
 
       <div className="space-y-1.5">
@@ -409,7 +407,6 @@ export function CourseCatalog({ courses, onChanged, showToast }: CourseCatalogPr
               style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', opacity: inactive ? 0.55 : 1 }}>
               <div className="flex items-center gap-2 min-w-0">
                 <span className="truncate" style={{ fontWeight: 600 }}>{c.ad}</span>
-                {c.core && <span className="badge text-[10px]">çekirdek</span>}
                 {inactive && <span className="text-caption">pasif</span>}
               </div>
               <button className="btn-ghost !px-3 !py-1.5 text-sm flex items-center gap-1"
