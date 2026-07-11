@@ -3,16 +3,17 @@ import { withAuth, isManager, canManage, type Session } from '@/lib/auth';
 import { sendPushToUser } from '@/lib/push';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId } from '@/lib/validate';
-import { tdb, withScope } from '@/lib/sqldb';
-import type { ParentChild } from '@/lib/parents';
+import {
+  getFormResults, listFormsForManager, getFormForRespondent, listFormsForRespondent,
+  createForm, submitForm, closeForm, deleteForm, type RespondentFacts,
+} from '@/lib/form';
 
 // Form / Anket — müdür/rehber form oluşturur, hedef rollere (öğrenci/veli/öğretmen) dağıtır,
 // yanıtları toplar ve soru bazında özet görür. Soru tipleri: text/single/multi/rating.
-// Anonim seçeneği: açıksa yanıtta kişi kimliği saklanmaz (sadece dedup için yanıtlayan set'i).
+// Anonim seçeneği: açıksa yanıtta kişi kimliği saklanmaz.
+// DB + iş kuralı lib/form.ts'te; burada yalnız yetki (rol/canManage) + push + audit + response.
 
 export const runtime = 'nodejs'; // push web-push (Node crypto)
-
-import { newId as genId } from '@/lib/id';
 
 const QTYPES = ['text', 'single', 'multi', 'rating'] as const;
 
@@ -23,13 +24,11 @@ const QuestionSchema = z.object({
   options: z.array(z.string().min(1).max(200)).max(20).optional(),
   required: z.boolean().optional(),
 });
-type Question = z.infer<typeof QuestionSchema>;
 
 const AudienceSchema = z.object({
   roles: z.array(z.enum(['student', 'parent', 'teacher'])).min(1).max(3),
   classes: z.array(z.string().min(1).max(60)).max(60).optional(), // boş = ilgili rolün tamamı
 });
-type FormAudience = z.infer<typeof AudienceSchema>;
 
 const CreateSchema = z.object({
   action: z.literal('create'),
@@ -52,181 +51,38 @@ const CloseSchema = z.object({
 });
 const BodySchema = z.discriminatedUnion('action', [CreateSchema, SubmitSchema, CloseSchema]);
 
-// Form.data Json şekli.
-interface FormData {
-  id: string;
-  title: string;
-  desc?: string;
-  audience?: FormAudience;
-  questions?: Question[];
-  anonymous?: boolean;
-  closeDate?: string;
-  closed?: boolean;
-  createdBy?: string;
-  createdByName?: string;
-  createdByRole?: string;
-  createdAt?: string;
-}
-
-// FormResponse.data Json şekli.
-interface ResponseData {
-  answers?: Record<string, unknown>;
-  role?: string;
-  name?: string;
-  submittedAt?: string;
-}
-
-// Oturum sahibi bu formu yanıtlayabilir mi? (rol + sınıf hedefi)
-function eligible(form: FormData, session: Session): boolean {
-  const a = form.audience || ({} as FormAudience);
-  const roles: string[] = a.roles || [];
-  if (!roles.includes(session.role)) return false;
-  const cls = Array.isArray(a.classes) ? a.classes : [];
-  if (cls.length === 0) return true;
-  if (session.role === 'student') return cls.includes(session.cls as string);
-  if (session.role === 'parent') return (session.children || []).some(c => typeof c !== 'string' && cls.includes(c.cls || ''));
-  return true; // teacher sınıf hedefinden etkilenmez
-}
-
-// Hedef kitleyi çöz → [{role,id,name}] (eligibleCount + push için)
-async function resolveAudience(audience: FormAudience | Record<string, never>) {
-  const roles: string[] = ('roles' in audience && audience.roles) || [];
-  const cls = ('classes' in audience && Array.isArray(audience.classes)) ? audience.classes : [];
-  const out: { role: string; id: string; name: string }[] = [];
-
-  if (roles.includes('student')) {
-    const rows = await tdb().student.findMany({ include: { class: { select: { legacyId: true } } } });
-    let recs = rows.map(s => ({ id: s.legacyId, name: s.name, cls: s.class?.legacyId || '' }));
-    if (cls.length) recs = recs.filter(s => cls.includes(s.cls));
-    recs.forEach(s => out.push({ role: 'student', id: s.id, name: s.name }));
-  }
-  if (roles.includes('parent')) {
-    const rows = await tdb().parent.findMany();
-    let recs = rows.map(p => ({ id: p.phone, children: ((p.children as unknown as ParentChild[] | null) || []) })); // children: Json
-    if (cls.length) recs = recs.filter(p => (p.children || []).some(c => cls.includes(c.cls)));
-    recs.forEach(p => out.push({ role: 'parent', id: p.id, name: (p.children || []).map(c => c.name).join(', ') + ' (Veli)' }));
-  }
-  if (roles.includes('teacher')) {
-    const rows = await tdb().teacher.findMany();
-    rows.forEach(t => out.push({ role: 'teacher', id: t.legacyId, name: t.name }));
-  }
-  return out;
-}
-
-// Yanıtları soru tanımına göre temizle/doğrula.
-function cleanAnswers(questions: Question[], raw: Record<string, unknown> | undefined): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const q of questions) {
-    const v = raw?.[q.id];
-    if (q.type === 'text') {
-      const s = typeof v === 'string' ? v.trim().slice(0, 4000) : '';
-      if (s) out[q.id] = s;
-    } else if (q.type === 'single') {
-      if (typeof v === 'string' && (q.options || []).includes(v)) out[q.id] = v;
-    } else if (q.type === 'multi') {
-      if (Array.isArray(v)) {
-        const picked = v.filter((x): x is string => (q.options || []).includes(x)).slice(0, 20);
-        if (picked.length) out[q.id] = picked;
-      }
-    } else if (q.type === 'rating') {
-      const n = parseInt(String(v));
-      if (Number.isFinite(n) && n >= 1 && n <= 5) out[q.id] = n;
-    }
-  }
-  return out;
-}
-
-// Eksik zorunlu soru var mı?
-function missingRequired(questions: Question[], answers: Record<string, unknown>): boolean {
-  return questions.some(q => q.required && (answers[q.id] === undefined || answers[q.id] === '' ||
-    (Array.isArray(answers[q.id]) && (answers[q.id] as unknown[]).length === 0)));
+// Session → yanıtlayan olguları (eligible/submit için).
+function respondentFacts(session: Session): RespondentFacts {
+  return { role: session.role, id: session.id, cls: session.cls as string | undefined, children: session.children, name: session.name };
 }
 
 // ───────────────────────────────────────── GET ─────────────────────────────────────────
 // Bilinçli inline rol dallanması: yönetici sonuç/liste, yanıtlayan kendi formlarını görür.
-export const GET = withAuth(async (req, ctx, session) => {
+export const GET = withAuth(async (req, _ctx, session) => {
   const detailId = new URL(req.url).searchParams.get('id');
 
   // ── Yönetici: sonuç detayı ──
   if (detailId && isManager(session)) {
-    const f = await tdb().form.findFirst({ where: { legacyId: detailId }, include: { responses: true } });
-    if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
-    const form = f.data as unknown as FormData;
-    const responses = f.responses.map(r => r.data as unknown as ResponseData);
-    const results = (form.questions || []).map(q => {
-      if (q.type === 'single' || q.type === 'multi') {
-        const counts: Record<string, number> = {};
-        (q.options || []).forEach(o => { counts[o] = 0; });
-        responses.forEach(r => {
-          const a = r.answers?.[q.id];
-          if (q.type === 'single') { if (a != null && counts[a as string] !== undefined) counts[a as string]++; }
-          else if (Array.isArray(a)) a.forEach(x => { if (counts[x as string] !== undefined) counts[x as string]++; });
-        });
-        return { id: q.id, label: q.label, type: q.type, counts };
-      }
-      if (q.type === 'rating') {
-        const vals = responses.map(r => r.answers?.[q.id]).filter((n): n is number => Number.isFinite(n as number));
-        const dist: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-        vals.forEach(n => { dist[n] = (dist[n] || 0) + 1; });
-        const avg = vals.length ? (vals.reduce((s, n) => s + n, 0) / vals.length) : 0;
-        return { id: q.id, label: q.label, type: q.type, avg: Math.round(avg * 100) / 100, count: vals.length, dist };
-      }
-      const answers = responses
-        .map(r => ({ text: r.answers?.[q.id], name: form.anonymous ? null : (r.name || '') }))
-        .filter(x => x.text);
-      return { id: q.id, label: q.label, type: q.type, answers };
-    });
-    const eligibleCount = (await resolveAudience(form.audience || {})).length;
-    return NextResponse.json({ form, responseCount: responses.length, eligibleCount, results });
+    return NextResponse.json(await getFormResults(detailId));
   }
 
   // ── Yönetici: form listesi ──
   if (isManager(session)) {
-    const rows = await tdb().form.findMany({ include: { _count: { select: { responses: true } } } });
-    const list = rows.map(r => {
-      const d = r.data as unknown as FormData;
-      return {
-        id: d.id, title: d.title, desc: d.desc, audience: d.audience,
-        questionCount: (d.questions || []).length, anonymous: !!d.anonymous,
-        closed: !!d.closed, closeDate: d.closeDate || '', createdAt: d.createdAt,
-        responseCount: r._count.responses,
-      };
-    });
-    list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-    return NextResponse.json({ formlar: list });
+    return NextResponse.json({ formlar: await listFormsForManager() });
   }
 
   // ── Yanıtlayan: kendi cevabı (doldurma için) ──
   if (detailId) {
-    const f = await tdb().form.findFirst({ where: { legacyId: detailId } });
-    if (!f || !eligible(f.data as unknown as FormData, session)) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
-    const mine = await tdb().formResponse.findFirst({ where: { formId: f.id, respondent: session.id } });
-    return NextResponse.json({ form: f.data, mine: mine?.data || null });
+    return NextResponse.json(await getFormForRespondent(detailId, respondentFacts(session)));
   }
 
   // ── Yanıtlayan: uygun formlar + kendi durumu ──
-  const rows = await tdb().form.findMany();
-  const eligForms = rows.filter(r => eligible(r.data as unknown as FormData, session));
-  if (eligForms.length === 0) return NextResponse.json({ formlar: [] });
-  const formIds = eligForms.map(r => r.id);
-  const myResp = await tdb().formResponse.findMany({ where: { formId: { in: formIds }, respondent: session.id }, select: { formId: true } });
-  const answeredSet = new Set(myResp.map(r => r.formId));
-  const list = eligForms.map(r => {
-    const d = r.data as unknown as FormData;
-    return {
-      id: d.id, title: d.title, desc: d.desc,
-      questionCount: (d.questions || []).length, anonymous: !!d.anonymous,
-      closed: !!d.closed, closeDate: d.closeDate || '', createdAt: d.createdAt,
-      answered: answeredSet.has(r.id),
-    };
-  });
-  list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-  return NextResponse.json({ formlar: list });
+  return NextResponse.json({ formlar: await listFormsForRespondent(respondentFacts(session)) });
 });
 
 // ───────────────────────────────────────── POST ─────────────────────────────────────────
 // Bilinçli inline yetki dallanması: create/close yönetici (canManage), submit uygun roldeki yanıtlayan.
-export const POST = withAuth(async (req, ctx, session) => {
+export const POST = withAuth(async (req, _ctx, session) => {
   const parsed = await parseBody(req, BodySchema);
   if (!parsed.ok) return parsed.response;
   const data = parsed.data;
@@ -234,87 +90,52 @@ export const POST = withAuth(async (req, ctx, session) => {
   // ── Oluştur (müdür/rehber) ──
   if (data.action === 'create') {
     if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-    // Seçimli sorularda en az 2 seçenek şartı
-    for (const q of data.questions) {
-      if ((q.type === 'single' || q.type === 'multi') && (!q.options || q.options.length < 2)) {
-        return NextResponse.json({ error: `"${q.label}" için en az 2 seçenek gerekli` }, { status: 400 });
-      }
-    }
-    const id = genId();
-    const rec = {
-      id, title: data.title.trim(), desc: (data.desc || '').trim(),
-      audience: { roles: data.audience.roles, classes: data.audience.classes || [] },
-      questions: data.questions, anonymous: !!data.anonymous,
-      closeDate: data.closeDate || '', closed: false,
+    const { id, targets } = await createForm({
+      title: data.title, desc: data.desc, audience: data.audience, questions: data.questions,
+      anonymous: data.anonymous, closeDate: data.closeDate,
       createdBy: session.id, createdByName: session.name || '', createdByRole: session.role,
-      createdAt: new Date().toISOString(),
-    };
-    await tdb().form.create({ data: withScope({ legacyId: id, data: rec }) });
+    });
 
     // Hedef kitleye push (hata toleranslı)
-    const targets = await resolveAudience(rec.audience);
-    const payload = { title: '📋 Yeni form/anket', body: rec.title.slice(0, 120), url: '/?tab=formlar', tag: `form-${id}` };
+    const payload = { title: '📋 Yeni form/anket', body: data.title.trim().slice(0, 120), url: '/?tab=formlar', tag: `form-${id}` };
     await Promise.allSettled(targets.map(t => sendPushToUser(t.role, t.id, payload)));
 
     await logAudit({
       ...actorFrom(session),
       action: 'form.create',
-      target: { type: 'form', id, name: rec.title },
-      detail: `Form/anket oluşturuldu: "${rec.title}" → ${targets.length} kişi`,
+      target: { type: 'form', id, name: data.title.trim() },
+      detail: `Form/anket oluşturuldu: "${data.title.trim()}" → ${targets.length} kişi`,
     });
     return NextResponse.json({ ok: true, id, notified: targets.length });
   }
 
   // ── Yanıtla (uygun rol) ──
   if (data.action === 'submit') {
-    const f = await tdb().form.findFirst({ where: { legacyId: data.id } });
-    if (!f || !eligible(f.data as unknown as FormData, session)) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
-    const form = f.data as unknown as FormData;
-    if (form.closed) return NextResponse.json({ error: 'Bu form kapatıldı' }, { status: 400 });
-    if (form.closeDate && form.closeDate < new Date().toISOString().slice(0, 10)) {
-      return NextResponse.json({ error: 'Bu formun süresi doldu' }, { status: 400 });
-    }
-    const answers = cleanAnswers(form.questions || [], data.answers);
-    if (missingRequired(form.questions || [], answers)) {
-      return NextResponse.json({ error: 'Zorunlu soruları yanıtlayın' }, { status: 400 });
-    }
-    const rec = {
-      answers, role: session.role,
-      name: form.anonymous ? '' : (session.name || ''),
-      submittedAt: new Date().toISOString(),
-    };
-    const existing = await tdb().formResponse.findFirst({ where: { formId: f.id, respondent: session.id } });
-    if (existing) await tdb().formResponse.update({ where: { id: existing.id }, data: { data: rec } });
-    else await tdb().formResponse.create({ data: { formId: f.id, respondent: session.id || '', data: rec } });
+    await submitForm(data.id, respondentFacts(session), data.answers);
     return NextResponse.json({ ok: true });
   }
 
   // ── Aç/kapat (müdür/rehber) ──
   if (data.action === 'close') {
     if (!(await canManage(session))) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-    const f = await tdb().form.findFirst({ where: { legacyId: data.id } });
-    if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
-    await tdb().form.update({ where: { id: f.id }, data: { data: { ...(f.data as object), closed: data.closed } } });
-    return NextResponse.json({ ok: true, closed: data.closed });
+    const { closed } = await closeForm(data.id, data.closed);
+    return NextResponse.json({ ok: true, closed });
   }
 
   return NextResponse.json({ error: 'Geçersiz işlem' }, { status: 400 });
 });
 
 // ───────────────────────────────────────── DELETE ─────────────────────────────────────────
-export const DELETE = withAuth('manage', async (req, ctx, session) => {
+export const DELETE = withAuth('manage', async (req, _ctx, session) => {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id gerekli' }, { status: 400 });
 
-  const f = await tdb().form.findFirst({ where: { legacyId: id } });
-  if (!f) return NextResponse.json({ error: 'Form bulunamadı' }, { status: 404 });
-  const d = f.data as unknown as FormData | null;
-  await tdb().form.delete({ where: { id: f.id } }); // yanıtlar cascade ile gider
+  const { title } = await deleteForm(id);
   await logAudit({
     ...actorFrom(session),
     action: 'form.delete',
-    target: { type: 'form', id, name: d?.title || '' },
-    detail: `Form/anket silindi: "${d?.title || ''}"`,
+    target: { type: 'form', id, name: title },
+    detail: `Form/anket silindi: "${title}"`,
   });
   return NextResponse.json({ ok: true });
 });
