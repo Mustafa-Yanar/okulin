@@ -10,6 +10,7 @@ import {
   ALL_DAYS, daySlots, getWeekKey, classLabel,
 } from '@/lib/constants';
 import { classLabelFrom } from '@/lib/classCatalog';
+import type { ClassRecord } from '@/lib/classes';
 import { useSlotTimes } from '../SlotTimesContext';
 import { useClasses } from '../ClassesContext';
 import { api, Modal, getAdjacentWeek, isSlotPast } from './shared';
@@ -49,6 +50,8 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   const [offDays, setOffDays] = useState<number[]>(teacher.offDays || []);
   const [togglingDay, setTogglingDay] = useState<number | null>(null);
   const [dirty, setDirty] = useState<Record<string, ProgramEntry | null>>({});
+  // Slota tıklayınca açılan eylem modalı (elle ders ata / müsait işaretle / temizle).
+  const [slotModal, setSlotModal] = useState<{ dayIndex: number; slotId: string; slotStart: string } | null>(null);
 
   // Etüt şablonları (calendar — serbest saatli, haftadan bağımsız)
   const [etutSablonlar, setEtutSablonlar] = useState<EtutSablonu[]>([]);
@@ -245,23 +248,19 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   // Çift yönlü çakışma: o saate aktif etüt varsa ders aktif EDİLEMEZ (kapatma serbest).
   function handleSlotClick(dayIndex: number, slotId: string, slotLabel: string) {
     if (isSlotPast(weekKey, dayIndex, slotLabel)) return;
-    const entry = getEntry(dayIndex, slotId);
-    // Program-solve'dan yerleşen ders: salt-görüntü. Düzenleme "Ders Programı Oluştur"dan yapılır.
-    if (entry?.type === 'ders') {
-      showToast('Bu ders "Ders Programı Oluştur" ekranından yerleşti; düzenleme oradan yapılır.', 'info');
-      return;
-    }
-    if (entry?.type === 'available') { clearEntry(dayIndex, slotId); return; }
     const slots = daySlots(dayIndex, slotTimes.days?.[dayIndex]);
     const slot = slots.find(x => x.id === slotId);
-    if (slot) {
+    const entry = getEntry(dayIndex, slotId);
+    // Boş slota (ders/müsait eklenecek) o saatte aktif etüt varsa engelle.
+    if (!entry && slot) {
       const c = cakisanAktifEtut(dayIndex, slot.start, slot.end);
       if (c) {
         showToast(`Bu saatte aktif etüt var (${c.start}–${c.end}). Önce etüdü iptal/pasif yapın.`, 'error');
         return;
       }
     }
-    setEntry(dayIndex, slotId, { type: 'available', fixed: true });
+    // Eylem modalı: elle sınıf+ders ata / müsait işaretle / temizle.
+    setSlotModal({ dayIndex, slotId, slotStart: slot?.start || slotLabel });
   }
 
   const offSet = new Set(offDays);
@@ -297,7 +296,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
       {offDayBar}
 
       <p className="text-[11px] mb-3 px-1" style={{ color: 'var(--text-muted)' }}>
-        Ders saatlerine tıkla → aç/kapat (mavi = ders). Boş saatlere "Etüt Ekle" ile serbest etüt koy.
+        Ders saatine tıkla → sınıf + ders ata (elle program) ya da "müsait" işaretle (çözücü için). Boş saatlere "Etüt Ekle" ile serbest etüt koy.
       </p>
 
       <EtutCalendar
@@ -420,6 +419,21 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
           onToggle={toggleEtutSablon}
           onAssign={assignEtutSablon}
           onDelete={deleteEtutSablon}
+        />
+      )}
+
+      {slotModal && (
+        <SlotDersModal
+          dayIndex={slotModal.dayIndex}
+          slotStart={slotModal.slotStart}
+          entry={getEntry(slotModal.dayIndex, slotModal.slotId)}
+          classes={classes}
+          branches={teacher.branches || []}
+          allowedGroups={teacher.allowedGroups || []}
+          onAta={(cls, branch) => { setEntry(slotModal.dayIndex, slotModal.slotId, { type: 'ders', cls, branch, fixed: true }); setSlotModal(null); }}
+          onMusait={() => { setEntry(slotModal.dayIndex, slotModal.slotId, { type: 'available', fixed: true }); setSlotModal(null); }}
+          onTemizle={() => { clearEntry(slotModal.dayIndex, slotModal.slotId); setSlotModal(null); }}
+          onClose={() => setSlotModal(null)}
         />
       )}
 
@@ -679,6 +693,52 @@ function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle
             </div>
           </div>
         )}
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Slot eylem modalı: elle sınıf+ders ata / müsait işaretle / temizle ──────
+// Çözücüyü hiç çalıştırmadan programı elle kurmak için: slota tıkla → sınıf+ders seç.
+// Kurallar (çakışma/izin/mezun hafta içi) sunucuda POST /api/program sırasında uygulanır.
+function SlotDersModal({ dayIndex, slotStart, entry, classes, branches, allowedGroups, onAta, onMusait, onTemizle, onClose }: {
+  dayIndex: number; slotStart: string; entry: ProgramEntry | null;
+  classes: ClassRecord[]; branches: string[]; allowedGroups: string[];
+  onAta: (cls: string, branch: string) => void; onMusait: () => void; onTemizle: () => void; onClose: () => void;
+}) {
+  const dayLabel = ALL_DAYS.find(d => d.index === dayIndex)?.label || '';
+  const eligible = classes.filter(c => !allowedGroups.length || allowedGroups.includes(c.group));
+  const [cls, setCls] = useState(entry?.cls || eligible[0]?.id || '');
+  const [branch, setBranch] = useState(entry?.branch || branches[0] || '');
+  return (
+    <Modal title={`${dayLabel} ${slotStart} — Ders Saati`} onClose={onClose}>
+      <div className="space-y-3">
+        {entry?.type === 'ders' && (
+          <p className="text-xs px-2 py-1.5 rounded" style={{ background: 'var(--bg-muted)', color: 'var(--text-secondary)' }}>
+            Şu an atanmış: <b style={{ fontWeight: 700 }}>{classLabelFrom(classes, entry.cls || '', classLabel)}</b>{entry.branch ? ` · ${entry.branch}` : ''}
+          </p>
+        )}
+        <div>
+          <label className="text-label block mb-1">Sınıf</label>
+          <select className="input" value={cls} onChange={e => setCls(e.target.value)}>
+            {eligible.length === 0 && <option value="">— uygun sınıf yok —</option>}
+            {eligible.map(c => <option key={c.id} value={c.id}>{c.ad}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-label block mb-1">Ders</label>
+          <select className="input" value={branch} onChange={e => setBranch(e.target.value)}>
+            {branches.length === 0 && <option value="">— öğretmenin branşı tanımlı değil —</option>}
+            {branches.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </div>
+        <button className="btn-primary w-full" disabled={!cls || !branch} onClick={() => onAta(cls, branch)}>
+          Ders Olarak Ata
+        </button>
+        <div className="flex gap-2 pt-2" style={{ borderTop: '1px solid var(--border-light)' }}>
+          <button className="btn-ghost flex-1 !text-xs" onClick={onMusait}>Boş Ders Saati (müsait)</button>
+          {entry && <button className="btn-ghost !text-xs text-red-500 hover:bg-red-50" onClick={onTemizle}>Temizle</button>}
+        </div>
       </div>
     </Modal>
   );
