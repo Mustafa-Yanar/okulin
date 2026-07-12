@@ -79,11 +79,12 @@ function SenetKart({ no, toplam, inst, kurum, unvan, ogrenci, veli, duzenlemeTar
   const yazi = tutariYaziyaCevir(inst.amount);
   const kurusYazi = yazi.kurus;
   return (
-    <div className="rounded-xl border border-slate-300 overflow-hidden mb-3"
-      style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
-      {/* Üst şerit */}
-      <div className="flex items-stretch" style={{ borderBottom: '1px solid #cbd5e1' }}>
-        <div className="flex items-center gap-2.5 px-3 py-2 flex-1 min-w-0" style={{ background: '#f8fafc' }}>
+    <div className="rounded-xl border border-slate-300 overflow-hidden mb-3 flex flex-col"
+      style={{ breakInside: 'avoid', pageBreakInside: 'avoid', minHeight: '132mm' }}>
+      {/* Üst şerit — gövdeyle AYNI kolon oranı (1.35/1) → sağ kutu bloğunun sol sınırı
+          gövdedeki öğrenci kutusunun sol sınırıyla hizalanır. */}
+      <div className="grid items-stretch" style={{ gridTemplateColumns: '1.35fr 1fr', borderBottom: '1px solid #cbd5e1' }}>
+        <div className="flex items-center gap-2.5 px-3 py-2 min-w-0" style={{ background: '#f8fafc' }}>
           {kurum.logoUrl
             ? <img src={kurum.logoUrl} alt="" className="h-9 w-9 object-contain shrink-0" onError={e => { e.currentTarget.style.display = 'none'; }} />
             : <div className="h-9 w-9 rounded-lg shrink-0 flex items-center justify-center text-white text-xs font-800" style={{ fontWeight: 800, background: 'linear-gradient(135deg,#4f46e5,#6366f1)' }}>{(kurum.name || 'K')[0]}</div>}
@@ -92,10 +93,10 @@ function SenetKart({ no, toplam, inst, kurum, unvan, ogrenci, veli, duzenlemeTar
             <div className="text-[10px] text-indigo-600 font-700" style={{ fontWeight: 700 }}>TAKSİT SENEDİ</div>
           </div>
         </div>
-        <div className="grid grid-cols-3 text-center text-[10px]" style={{ minWidth: 280 }}>
+        <div className="grid grid-cols-3 text-center text-[10px]">
           <BoxHead label="Ödeme Günü" value={trDate(inst.dueDate)} />
           <BoxHead label="Tutar" value={money(inst.amount)} strong />
-          <BoxHead label="Senet No" value={`${no} / ${toplam}`} border={false} />
+          <BoxHead label="Senet No" value={`${no} / ${toplam}`} />
         </div>
       </div>
 
@@ -137,8 +138,8 @@ function SenetKart({ no, toplam, inst, kurum, unvan, ogrenci, veli, duzenlemeTar
         </div>
       </div>
 
-      {/* İmza */}
-      <div className="flex items-end justify-around gap-4 px-3 py-2" style={{ borderTop: '1px solid #e2e8f0' }}>
+      {/* İmza — A5 senedin en altına yaslı */}
+      <div className="mt-auto flex items-end justify-around gap-4 px-3 py-3" style={{ borderTop: '1px solid #e2e8f0' }}>
         <div className="text-center"><div style={{ width: 120, borderTop: '1px solid #94a3b8' }} className="pt-0.5 text-[9px] text-slate-400">Borçlu İmza</div></div>
         <div className="text-center"><div style={{ width: 120, borderTop: '1px solid #94a3b8' }} className="pt-0.5 text-[9px] text-slate-400">Kefil İmza</div></div>
       </div>
@@ -146,9 +147,9 @@ function SenetKart({ no, toplam, inst, kurum, unvan, ogrenci, veli, duzenlemeTar
   );
 }
 
-function BoxHead({ label, value, strong, border = true }: { label: string; value: string; strong?: boolean; border?: boolean }) {
+function BoxHead({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className="px-2 py-2 flex flex-col justify-center" style={{ borderLeft: border ? '1px solid #e2e8f0' : 'none' }}>
+    <div className="px-2 py-2 flex flex-col justify-center">
       <div className="text-slate-400 uppercase tracking-wide" style={{ fontSize: 8 }}>{label}</div>
       <div className={strong ? 'font-800 text-indigo-700 text-[12px]' : 'font-700 text-slate-800 text-[11px]'} style={{ fontWeight: strong ? 800 : 700 }}>{value}</div>
     </div>
