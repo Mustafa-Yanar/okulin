@@ -79,8 +79,8 @@ function SenetKart({ no, toplam, inst, kurum, unvan, ogrenci, veli, duzenlemeTar
   const yazi = tutariYaziyaCevir(inst.amount);
   const kurusYazi = yazi.kurus;
   return (
-    <div className="rounded-xl border border-slate-300 overflow-hidden mb-3 flex flex-col"
-      style={{ breakInside: 'avoid', pageBreakInside: 'avoid', minHeight: '132mm' }}>
+    <div className="rounded-xl border border-slate-300 overflow-hidden flex flex-col"
+      style={{ breakInside: 'avoid', pageBreakInside: 'avoid', minHeight: '86mm', marginBottom: '7mm' }}>
       {/* Üst şerit — gövdeyle AYNI kolon oranı (1.35/1) → sağ kutu bloğunun sol sınırı
           gövdedeki öğrenci kutusunun sol sınırıyla hizalanır. */}
       <div className="grid items-stretch" style={{ gridTemplateColumns: '1.35fr 1fr', borderBottom: '1px solid #cbd5e1' }}>
