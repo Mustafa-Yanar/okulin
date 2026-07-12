@@ -19,6 +19,7 @@ export interface StudentOut {
   diplomaNotu: number | ''; obp: number | null;
   parentRelation: string; parentNote: string;
   parent2Name: string; parent2Phone: string; parent2Relation: string;
+  tcNo: string; parentTcNo: string; parentAddress: string; // muhasebe belgeleri (senet/makbuz)
 }
 
 export const studentOut = (s: StudentWithClass): StudentOut => ({
@@ -27,6 +28,7 @@ export const studentOut = (s: StudentWithClass): StudentOut => ({
   diplomaNotu: s.diplomaNotu ?? '', obp: s.diplomaNotu ? Math.round(s.diplomaNotu * 5 * 100) / 100 : null,
   parentRelation: s.parentRelation || '', parentNote: s.parentNote || '',
   parent2Name: s.parent2Name || '', parent2Phone: s.parent2Phone || '', parent2Relation: s.parent2Relation || '',
+  tcNo: s.tcNo || '', parentTcNo: s.parentTcNo || '', parentAddress: s.parentAddress || '',
 });
 
 // Diploma notu string'ini doğrula → number (50-100) veya '' döndür; geçersizse null.
@@ -46,6 +48,7 @@ export interface StudentCreateInput {
   phone?: string; parentPhone?: string; parentName?: string; birthDate?: string; diplomaNotu?: string;
   parentRelation?: string; parentNote?: string;
   parent2Name?: string; parent2Phone?: string; parent2Relation?: string;
+  tcNo?: string; parentTcNo?: string; parentAddress?: string; // muhasebe belgeleri (opsiyonel)
 }
 export interface StudentUpdateInput extends StudentCreateInput { id: string; }
 
@@ -60,7 +63,8 @@ export async function listStudents(): Promise<StudentOut[]> {
 // (öğrenci opsiyonel/veli zorunlu) Türk cep, isim benzersiz. İhlalde HttpError.
 export async function createStudent(input: StudentCreateInput): Promise<StudentCreateResult> {
   const { name, password, cls, phone, parentPhone, parentName, birthDate, diplomaNotu,
-          parentRelation, parentNote, parent2Name, parent2Phone, parent2Relation } = input;
+          parentRelation, parentNote, parent2Name, parent2Phone, parent2Relation,
+          tcNo, parentTcNo, parentAddress } = input;
 
   // İsim soyisim kullanıcı adı olarak kullanılır
   const username = name;
@@ -107,6 +111,7 @@ export async function createStudent(input: StudentCreateInput): Promise<StudentC
     phone: normPhone, parentPhone: normParentPhone, parentName: (parentName || '').trim(),
     parentRelation: (parentRelation || '').trim(), parentNote: (parentNote || '').trim(),
     parent2Name: (parent2Name || '').trim(), parent2Phone: normParent2Phone, parent2Relation: (parent2Relation || '').trim(),
+    tcNo: (tcNo || '').trim() || null, parentTcNo: (parentTcNo || '').trim() || null, parentAddress: (parentAddress || '').trim() || null,
     birthDate: birthDate || '', diplomaNotu: (diploma === '' ? null : diploma), mustChangePassword: true,
   }) });
   return { id: legacyId, name, username, cls, group };
@@ -115,7 +120,8 @@ export async function createStudent(input: StudentCreateInput): Promise<StudentC
 // Öğrenci güncelle. Yoksa HttpError(404). Verilmeyen alanlar mevcut değeri korur.
 export async function updateStudent(input: StudentUpdateInput): Promise<void> {
   const { id, name, password, cls, phone, parentPhone, parentName, birthDate, diplomaNotu,
-          parentRelation, parentNote, parent2Name, parent2Phone, parent2Relation } = input;
+          parentRelation, parentNote, parent2Name, parent2Phone, parent2Relation,
+          tcNo, parentTcNo, parentAddress } = input;
 
   const s = await tdb().student.findFirst({ where: { legacyId: id }, include: { class: true } });
   if (!s) throw new HttpError(404, 'Öğrenci bulunamadı');
@@ -126,7 +132,7 @@ export async function updateStudent(input: StudentUpdateInput): Promise<void> {
     if (diploma === null) throw new HttpError(400, 'Diploma notu 50 ile 100 arasında olmalı');
   } else if (group !== 'mezun') diploma = '';
   const clsRow = await tdb().class.findFirst({ where: { legacyId: cls } });
-  const data: { name: string; username: string; classId: string | null; group: string; diplomaNotu: number | null; birthDate: string; parentName: string; parentRelation: string; parentNote: string; parent2Name: string; parent2Relation: string; phone?: string; parentPhone?: string; parent2Phone?: string; passwordHash?: string } = {
+  const data: { name: string; username: string; classId: string | null; group: string; diplomaNotu: number | null; birthDate: string; parentName: string; parentRelation: string; parentNote: string; parent2Name: string; parent2Relation: string; phone?: string; parentPhone?: string; parent2Phone?: string; passwordHash?: string; tcNo?: string | null; parentTcNo?: string | null; parentAddress?: string | null } = {
     name, username: name, classId: clsRow?.id ?? s.classId, group, diplomaNotu: (diploma === '' ? null : diploma),
     birthDate: birthDate !== undefined ? birthDate : (s.birthDate || ''),
     parentName: parentName !== undefined ? (parentName || '').trim() : (s.parentName || ''),
@@ -135,6 +141,9 @@ export async function updateStudent(input: StudentUpdateInput): Promise<void> {
     parent2Name: parent2Name !== undefined ? (parent2Name || '').trim() : (s.parent2Name || ''),
     parent2Relation: parent2Relation !== undefined ? (parent2Relation || '').trim() : (s.parent2Relation || ''),
   };
+  if (tcNo !== undefined) data.tcNo = (tcNo || '').trim() || null;
+  if (parentTcNo !== undefined) data.parentTcNo = (parentTcNo || '').trim() || null;
+  if (parentAddress !== undefined) data.parentAddress = (parentAddress || '').trim() || null;
   if (phone !== undefined) {
     if (phone) { const n = normalizeTurkishMobile(phone); if (!n) throw new HttpError(400, 'Öğrenci telefonu geçersiz. Örnek: 0532 123 45 67'); data.phone = n; }
     else data.phone = '';

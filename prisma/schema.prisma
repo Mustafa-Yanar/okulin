@@ -196,6 +196,7 @@ model Student {
   classId            String?
   group              String
   phone              String?
+  tcNo               String?   // öğrenci TC kimlik no (senet/makbuz — opsiyonel)
   birthDate          String?
   diplomaNotu        Float?    // yalnız mezun (50-100); OBP = ×5 türetilir
   mustChangePassword Boolean   @default(false)
@@ -203,6 +204,8 @@ model Student {
   parentPhone        String?
   parentRelation     String?
   parentNote         String?
+  parentTcNo         String?   // ödeyecek/veli TC kimlik no (senet — opsiyonel)
+  parentAddress      String?   // veli/ödeyecek adresi (senet — opsiyonel)
   parent2Name        String?
   parent2Phone       String?
   parent2Relation    String?
@@ -279,6 +282,10 @@ model TenantConfig {
   currentWeek     String?
   programTemplate Json?
   receiptCounter  Int     @default(0)  // makbuz no sayacı (MKB-YYYY-#####)
+  officialName    String? // kurum resmi ünvanı (senet/makbuz alacaklı — örn. "…Ltd. Şti.")
+  taxOffice       String? // vergi dairesi
+  taxNo           String? // vergi no
+  officialAddress String? // kurum resmi adresi (belge üst/alt bilgisi)
   denemeNameMap   Json?   // deneme excelName(lower)→studentId kalıcı eşleştirme
   paymentConfig   Json?   // PayTR ödeme yapılandırması (payment:config Redis karşılığı; şifreli anahtarlar)
   @@id([orgSlug, branch])

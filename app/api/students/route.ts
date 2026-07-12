@@ -10,10 +10,13 @@ const zDiplomaNotu = z.string().max(10).optional(); // mezun diploma notu 50-100
 const zParentName = z.string().max(120).optional(); // veli adı soyadı (opsiyonel)
 const zRelation = z.string().max(40).optional();    // yakınlık derecesi (Anne, Baba...)
 const zNote = z.string().max(2000).optional();      // veliye özel not (yönetim görür)
-// Veli ek alanları: yakınlık, not, 2. iletişim (ad/telefon/yakınlık)
+const zTc = z.string().max(11).optional();          // TC kimlik no (muhasebe belgeleri, opsiyonel)
+const zAddress = z.string().max(300).optional();    // veli adresi (senet, opsiyonel)
+// Veli ek alanları: yakınlık, not, 2. iletişim (ad/telefon/yakınlık) + muhasebe (TC/adres)
 const parentExtraFields = {
   parentRelation: zRelation, parentNote: zNote,
   parent2Name: zParentName, parent2Phone: zPhone, parent2Relation: zRelation,
+  tcNo: zTc, parentTcNo: zTc, parentAddress: zAddress,
 };
 const StudentCreateSchema = z.object({
   // Şifre opsiyonel: boş bırakılırsa öğrenci telefonu ilk şifre olur (serviste kontrol).

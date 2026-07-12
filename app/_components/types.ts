@@ -37,6 +37,9 @@ export interface StudentDTO {
   parent2Name: string;
   parent2Phone: string;
   parent2Relation: string;
+  tcNo: string;          // öğrenci TC (muhasebe belgeleri)
+  parentTcNo: string;    // veli TC (senet)
+  parentAddress: string; // veli adresi (senet)
 }
 
 // Öğretmen ders ön-tanımı (preset): sınıf + ders eşlemesi.

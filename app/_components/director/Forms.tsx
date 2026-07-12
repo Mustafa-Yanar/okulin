@@ -34,6 +34,9 @@ export interface StudentFormPayload {
   parentName: string;
   birthDate: string;
   diplomaNotu: string;
+  tcNo: string;          // öğrenci TC (muhasebe belgeleri — opsiyonel)
+  parentTcNo: string;    // veli TC (senet — opsiyonel)
+  parentAddress: string; // veli adresi (senet — opsiyonel)
 }
 
 // allowedGroups birleşimi → o gruplardaki şubelerin (registry) kullandığı gerçek dersler,
@@ -192,6 +195,10 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
   const [parentName, setParentName] = useState(initial?.parentName || '');
   const [birthDate, setBirthDate] = useState(initial?.birthDate || '');
   const [diplomaNotu, setDiplomaNotu] = useState(initial?.diplomaNotu != null ? String(initial.diplomaNotu) : '');
+  // Muhasebe belgeleri (senet/makbuz) için — opsiyonel, senet basmayan kurum boş bırakır.
+  const [tcNo, setTcNo] = useState(initial?.tcNo || '');
+  const [parentTcNo, setParentTcNo] = useState(initial?.parentTcNo || '');
+  const [parentAddress, setParentAddress] = useState(initial?.parentAddress || '');
   const [loading, setLoading] = useState(false);
   // Yeni öğrenci: grup (ya da şube listesi) değişince ilk şubeyi seç. Düzenlemede cls korunur.
   useEffect(() => { if (!isEdit) setCls(groupClasses[0]?.id || ''); }, [selectedGroup, groupClasses, isEdit]);
@@ -216,6 +223,7 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
     await onSave({
       name, username: name, password, cls, phone, parentPhone, parentName, birthDate,
       diplomaNotu: isMezun ? diplomaNotu.trim() : '',
+      tcNo: tcNo.trim(), parentTcNo: parentTcNo.trim(), parentAddress: parentAddress.trim(),
     });
     setLoading(false);
   };
@@ -265,6 +273,10 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
           <input className={`input ${phoneInvalid ? 'input-error' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX" value={phone} onChange={e=>setPhone(e.target.value)} aria-invalid={phoneInvalid || undefined} />
           {phoneInvalid && <p className="input-hint input-hint--error">Geçersiz numara. Örnek: 0532 123 45 67</p>}
         </FormField>
+        <FormField label="Öğrenci TC Kimlik No">
+          <input className="input" inputMode="numeric" maxLength={11} placeholder="Muhasebe belgeleri için (opsiyonel)"
+            value={tcNo} onChange={e=>setTcNo(e.target.value.replace(/\D/g,''))} />
+        </FormField>
         <FormField label="Veli Adı Soyadı *">
           <input className="input" type="text" placeholder="Örn. Ayşe Yılmaz" value={parentName} onChange={e=>setParentName(e.target.value)} required={!isEdit} />
           {!isEdit && parentName.trim()==='' && <p className="text-xs text-gray-400 mt-1">Veli adı zorunlu.</p>}
@@ -274,6 +286,14 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
           {parentPhoneInvalid
             ? <p className="input-hint input-hint--error">Geçersiz numara. Örnek: 0532 123 45 67</p>
             : (!isEdit && parentPhone.trim()==='' && <p className="input-hint">Veli telefonu zorunlu (veli paneli girişi bu numarayla).</p>)}
+        </FormField>
+        <FormField label="Veli TC Kimlik No">
+          <input className="input" inputMode="numeric" maxLength={11} placeholder="Senet için (opsiyonel)"
+            value={parentTcNo} onChange={e=>setParentTcNo(e.target.value.replace(/\D/g,''))} />
+        </FormField>
+        <FormField label="Veli Adresi">
+          <textarea className="input" rows={2} placeholder="Senet için (opsiyonel)"
+            value={parentAddress} onChange={e=>setParentAddress(e.target.value)} />
         </FormField>
         <FormField label="Doğum Tarihi">
           <input className="input" type="date" value={birthDate} onChange={e=>setBirthDate(e.target.value)}

@@ -647,17 +647,27 @@ function BrandingSection({ showToast, onBranding }: { showToast: ShowToast; onBr
   const [shortName, setShortName] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
   const [themeColor, setThemeColor] = useState('#6366f1');
+  // Kurum resmi bilgisi (muhasebe belgeleri: senet/makbuz)
+  const [officialName, setOfficialName] = useState('');
+  const [taxOffice, setTaxOffice] = useState('');
+  const [taxNo, setTaxNo] = useState('');
+  const [officialAddress, setOfficialAddress] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
-        const { branding } = await api<{ branding: Branding }>('/api/org');
+        interface LegalInfo { officialName: string; taxOffice: string; taxNo: string; officialAddress: string }
+        const { branding, legal } = await api<{ branding: Branding; legal?: LegalInfo }>('/api/org');
         setName(branding.name || '');
         setShortName(branding.shortName === branding.name ? '' : (branding.shortName || ''));
         setLogoUrl(branding.logoUrl || '');
         setThemeColor(branding.themeColor || '#6366f1');
+        setOfficialName(legal?.officialName || '');
+        setTaxOffice(legal?.taxOffice || '');
+        setTaxNo(legal?.taxNo || '');
+        setOfficialAddress(legal?.officialAddress || '');
       } catch (e) { showToast((e as Error).message, 'error'); }
       setLoaded(true);
     })();
@@ -670,9 +680,12 @@ function BrandingSection({ showToast, onBranding }: { showToast: ShowToast; onBr
     try {
       const res = await api<{ branding?: Branding }>('/api/org', {
         method: 'POST',
-        body: JSON.stringify({ name: name.trim(), shortName: shortName.trim(), logoUrl: logoUrl.trim(), themeColor }),
+        body: JSON.stringify({
+          name: name.trim(), shortName: shortName.trim(), logoUrl: logoUrl.trim(), themeColor,
+          officialName: officialName.trim(), taxOffice: taxOffice.trim(), taxNo: taxNo.trim(), officialAddress: officialAddress.trim(),
+        }),
       });
-      showToast('Kurum markası güncellendi');
+      showToast('Kurum bilgileri güncellendi');
       if (onBranding && res.branding) onBranding(res.branding);
     } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setSaving(false); }
@@ -718,9 +731,31 @@ function BrandingSection({ showToast, onBranding }: { showToast: ShowToast; onBr
               <span className="font-800 text-sm" style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{name || 'Kurum'}</span>
             </div>
           </div>
+          <div className="pt-3 mt-1 border-t border-gray-100">
+            <p className="text-label mb-1">Resmi Bilgiler <span className="text-caption" style={{ fontWeight: 400 }}>— senet / tahsilat makbuzu için (opsiyonel)</span></p>
+            <p className="text-caption mb-2">Bu bilgiler basılan senet ve makbuzlarda kurumun resmi kimliği olarak görünür.</p>
+            <div className="grid md:grid-cols-2 gap-3">
+              <div>
+                <label className="text-label block mb-1">Resmi Ünvan</label>
+                <input className="input" value={officialName} onChange={e => setOfficialName(e.target.value)} placeholder="… Özel Öğretim Kursu Ltd. Şti." />
+              </div>
+              <div>
+                <label className="text-label block mb-1">Vergi Dairesi</label>
+                <input className="input" value={taxOffice} onChange={e => setTaxOffice(e.target.value)} placeholder="Örn. Akyazı" />
+              </div>
+              <div>
+                <label className="text-label block mb-1">Vergi No</label>
+                <input className="input" inputMode="numeric" value={taxNo} onChange={e => setTaxNo(e.target.value.replace(/\D/g, ''))} placeholder="10 haneli" />
+              </div>
+              <div>
+                <label className="text-label block mb-1">Resmi Adres</label>
+                <input className="input" value={officialAddress} onChange={e => setOfficialAddress(e.target.value)} placeholder="Kurum resmi adresi" />
+              </div>
+            </div>
+          </div>
           <div className="flex justify-end">
             <button type="submit" className="btn-primary !px-4 !py-2 text-sm" disabled={saving}>
-              {saving ? 'Kaydediliyor…' : 'Markayı Kaydet'}
+              {saving ? 'Kaydediliyor…' : 'Kaydet'}
             </button>
           </div>
         </form>
