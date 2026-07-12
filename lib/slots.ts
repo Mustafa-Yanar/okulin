@@ -287,7 +287,13 @@ export async function initWeekForTeacher(legacyTeacherId: string, weekKey: strin
       const isMezunOnlySlot = day.index < 5 && slotNo <= MEZUN_ONLY_LESSON_SLOTS.length;
 
       if (!hasGroups) {
-        cell = { booked: false, disabled: true };
+        // Grup etiketi (allowedGroups) olmasa bile müdürün elle/çözücüyle yazdığı sabit
+        // DERS grid'e materyalize edilmeli. Aksi halde ders öğretmen şablonunda görünür
+        // ama sınıf kartı / yoklama grid'i (SlotBooking okuyan taraf) dersi göremez —
+        // asimetri buradan doğuyordu. Boş/etüt/available slotları kapalı kalmaya devam eder.
+        cell = (entry?.type === 'ders' && !offDays.has(day.index))
+          ? computeCellFromEntry(entry, existing)
+          : { booked: false, disabled: true };
       } else if (offDays.has(day.index)) {
         cell = { booked: false, disabled: true };
       } else if (isMezunOnlySlot) {
