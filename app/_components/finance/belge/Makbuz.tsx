@@ -19,8 +19,13 @@ function trDate(iso: string | null | undefined): string {
 function money(n: number | undefined): string {
   return '₺' + (n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+// Sınıf etiketinden şube kodunu (parantez içi) atar: "12.Sınıf Sayısal (401)" → "12.Sınıf Sayısal".
+// Şube zamanla değişebildiği için belgelerde yalnız düzey/alan yazılır.
+function cleanCls(cls: string): string {
+  return (cls || '').replace(/\s*\([^)]*\)\s*/g, '').trim();
+}
 
-export interface MakbuzOgrenci { no: string; name: string; cls: string; tc: string; }
+export interface MakbuzOgrenci { name: string; cls: string; tc: string; }
 export interface MakbuzVeli { name: string; phone: string; }
 
 interface MakbuzProps {
@@ -103,8 +108,8 @@ export default function Makbuz({ kurum, ogrenci, veli, payment, finance, donem, 
         <div className="grid grid-cols-2 gap-3 mt-4">
           <div className="rounded-xl border border-slate-200 p-3">
             <div className="text-[10px] uppercase tracking-wide text-slate-400 font-600 mb-1.5" style={{ fontWeight: 600 }}>Öğrenci</div>
-            <div className="font-700 text-slate-900 text-sm" style={{ fontWeight: 700 }}>{ogrenci.no ? `${ogrenci.no} · ` : ''}{ogrenci.name}</div>
-            <div className="text-[12px] text-slate-600 mt-0.5">Sınıf: {ogrenci.cls || '—'}</div>
+            <div className="font-700 text-slate-900 text-sm" style={{ fontWeight: 700 }}>{ogrenci.name}</div>
+            <div className="text-[12px] text-slate-600 mt-0.5">Sınıf: {cleanCls(ogrenci.cls) || '—'}</div>
             {ogrenci.tc && <div className="text-[12px] text-slate-600">T.C.: {ogrenci.tc}</div>}
           </div>
           <div className="rounded-xl border border-slate-200 p-3">

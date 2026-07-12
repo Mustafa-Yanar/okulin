@@ -574,7 +574,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
       {makbuzPayment && finance && (
         <Makbuz
           kurum={kurum}
-          ogrenci={{ no: item.studentId, name: studentName, cls: item.className || studentCls, tc: item.studentTc || '' }}
+          ogrenci={{ name: studentName, cls: item.className || studentCls, tc: item.studentTc || '' }}
           veli={{ name: item.parentName || '', phone: item.parentPhone || '' }}
           payment={makbuzPayment}
           finance={finance}
