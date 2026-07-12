@@ -21,6 +21,7 @@ import {
 } from '@/lib/constants';
 import { api, getAdjacentWeek, isSlotPast, WeekNav } from './shared';
 import AvailableTree from './AvailableTree';
+import ClassScheduleView from './ClassScheduleView';
 import { StudentBookingsView } from './StudentBookingsView';
 import StudentGuidancePanel from './StudentGuidancePanel';
 import { guidanceSubjectsFor, GROUPS } from './student-logic';
@@ -45,7 +46,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
   const [filterBranch, setFilterBranch] = useState('');
   const [filterTeacher, setFilterTeacher] = useState('');
   const [filterDay, setFilterDay] = useState('');
-  const [tab, setTabInternal] = useUrlTab('available', ['available', 'myBookings', 'odev', 'davranis', 'rehberlik', 'kutuphane', 'duyurular', 'takvim', 'formlar']);
+  const [tab, setTabInternal] = useUrlTab('available', ['available', 'myBookings', 'dersprogramim', 'odev', 'davranis', 'rehberlik', 'kutuphane', 'duyurular', 'takvim', 'formlar']);
 
   useEffect(() => {
     if (externalTab && externalTab !== tab) setTabInternal(externalTab);
@@ -174,6 +175,8 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
         <AnnouncementInbox showToast={showToast} />
       ) : tab === 'takvim' ? (
         <TakvimView />
+      ) : tab === 'dersprogramim' ? (
+        <ClassScheduleView cls={session.cls} />
       ) : tab === 'formlar' ? (
         <FormRespond showToast={showToast} />
       ) : tab === 'davranis' ? (

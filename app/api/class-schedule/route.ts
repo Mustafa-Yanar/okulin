@@ -12,11 +12,20 @@ import { getWeekKey, getAllTeachers, getTeacherWeekSlots, getDaySlotTimes } from
 //   cls, weekKey,
 //   schedule: { [dayIndex]: [ { slotId, slotLabel, teacherId, teacherName, branch, fixed } ] }
 // }
-export const GET = withAuth(async (req) => {
+export const GET = withAuth(async (req, _ctx, session) => {
 
   const { searchParams } = new URL(req.url);
-  const cls = searchParams.get('cls');
+  let cls = searchParams.get('cls');
   const weekKey = searchParams.get('week') || getWeekKey();
+  // Öğrenci/veli sınıfı OTURUMDAN türetilir — başka bir sınıfın programı çekilemez.
+  if (session.role === 'student') {
+    cls = session.cls || null; // istemci param'ı yok sayılır
+  } else if (session.role === 'parent') {
+    const childCls = (session.children || []).map(c => (typeof c === 'string' ? '' : c.cls || '')).filter(Boolean);
+    if (!cls || !childCls.includes(cls)) {
+      return NextResponse.json({ error: 'Bu sınıfa erişim yetkiniz yok' }, { status: 403 });
+    }
+  }
   if (!cls) return NextResponse.json({ error: 'cls gerekli' }, { status: 400 });
 
   const teachers = await getAllTeachers(); // SQL-aware

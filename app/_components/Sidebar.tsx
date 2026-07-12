@@ -71,6 +71,7 @@ const ITEMS_BY_ROLE: Record<string, SidebarItem[]> = {
   student: [
     { group: null,       key: 'available',   label: 'Müsait Etütler',    icon: Calendar },
     { group: null,       key: 'myBookings',  label: 'Etütlerim',         icon: BookMarked },
+    { group: null,       key: 'dersprogramim', label: 'Ders Programım',  icon: GraduationCap },
     { group: null,       key: 'odev',        label: 'Ödevlerim',         icon: NotebookPen },
     { group: null,       key: 'davranis',    label: 'Davranışım',        icon: Award },
     { group: null,       key: 'rehberlik',   label: 'Rehberlik',         icon: Compass },
