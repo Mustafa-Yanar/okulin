@@ -16,6 +16,8 @@ import type { ShowToast, FinanceDTO, FinanceListItemDTO, InstallmentDTO, KurumBi
 import type { Branding } from '@/lib/branding';
 import Makbuz from './belge/Makbuz';
 import Senet from './belge/Senet';
+import Ekstre from './belge/Ekstre';
+import GecikmisListe, { type GecikmisGrup, type GecikmisOgrenci } from './belge/GecikmisListe';
 
 const METHODS = ['Nakit', 'Havale/EFT', 'Kredi Kartı'];
 
@@ -355,6 +357,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
   const [showRegister, setShowRegister] = useState(false);
   const [makbuzPayment, setMakbuzPayment] = useState<PaymentEntry | null>(null);
   const [showSenet, setShowSenet] = useState(false);
+  const [showEkstre, setShowEkstre] = useState(false);
 
   const { studentId, studentName, studentCls, finance } = item;
 
@@ -499,6 +502,11 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
                   Ödeme Geçmişi ({(finance.payments || []).length})
                 </div>
                 <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowEkstre(true)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-600 hover:bg-slate-200 transition-colors"
+                    style={{ fontWeight: 600 }}
+                  ><FileText size={11} /> Ekstre</button>
                   {(finance.installments || []).length > 0 && (
                     <button
                       onClick={() => setShowSenet(true)}
@@ -601,8 +609,53 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
           onClose={() => setShowSenet(false)}
         />
       )}
+
+      {showEkstre && finance && (
+        <Ekstre
+          kurum={kurum}
+          ogrenci={{ name: studentName, cls: item.className || studentCls, tc: item.studentTc || '' }}
+          veli={{ name: item.parentName || '', phone: item.parentPhone || '' }}
+          finance={finance}
+          onClose={() => setShowEkstre(false)}
+        />
+      )}
     </>
   );
+}
+
+// Gecikmiş ödemeler raporu için veri: vadesi geçmiş taksiti olan öğrencileri sınıf/şube
+// (className) bazlı grupla, ara/genel toplam çıkar. Bellek içi (finans listesinden).
+function buildGecikmis(list: FinanceListItemDTO[]): { gruplar: GecikmisGrup[]; genelToplam: number; ogrenciSayisi: number } {
+  const bugun = new Date().toISOString().slice(0, 10);
+  const grupMap = new Map<string, GecikmisOgrenci[]>();
+  for (const item of list) {
+    if (!item.finance) continue;
+    const overdue = item.finance.installments.filter(i => !i.paid && i.dueDate && i.dueDate < bugun);
+    if (overdue.length === 0) continue;
+    const paidDates = item.finance.installments.filter(i => i.paid && i.paidDate).map(i => i.paidDate as string);
+    const payDates = (item.finance.payments || []).map(p => p.date);
+    const sonTahsil = [...paidDates, ...payDates].filter(Boolean).sort().pop() || '';
+    const ogr: GecikmisOgrenci = {
+      name: item.studentName, tc: item.studentTc || '',
+      parentName: item.parentName || '', parentPhone: item.parentPhone || '', sonTahsil,
+      taksitler: overdue.map(i => ({ no: i.idx + 1, dueDate: i.dueDate, amount: i.amount })),
+      toplam: overdue.reduce((s, i) => s + (i.amount || 0), 0),
+    };
+    const key = item.className || item.studentCls || 'Diğer';
+    (grupMap.get(key) || grupMap.set(key, []).get(key)!).push(ogr);
+  }
+  const gruplar: GecikmisGrup[] = [...grupMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], 'tr'))
+    .map(([baslik, ogrenciler]) => ({
+      baslik,
+      ogrenciler: ogrenciler.sort((a, b) => a.name.localeCompare(b.name, 'tr')),
+      araToplam: ogrenciler.reduce((s, o) => s + o.toplam, 0),
+    }));
+  return {
+    gruplar,
+    genelToplam: gruplar.reduce((s, g) => s + g.araToplam, 0),
+    ogrenciSayisi: gruplar.reduce((s, g) => s + g.ogrenciler.length, 0),
+  };
 }
 
 // ── Filtre dropdown ──────────────────────────────────────────────────────────
@@ -711,6 +764,7 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
   };
   const [search, setSearch] = useState(initialSearch || '');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [showGecikmis, setShowGecikmis] = useState(false);
 
   // Özet istatistikler
   const stats = list.reduce((acc, item) => {
@@ -769,6 +823,11 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
           />
         </div>
         <FilterDropdown value={filterStatus} onChange={setFilterStatus} />
+        <button
+          onClick={() => setShowGecikmis(true)}
+          className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-600 hover:bg-red-100 transition-colors whitespace-nowrap"
+          style={{ fontWeight: 600 }}
+        ><AlertCircle size={14} /> Gecikmiş Rapor</button>
       </div>
 
       {/* Liste */}
@@ -790,6 +849,11 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
           ))
         )}
       </div>
+
+      {showGecikmis && (() => {
+        const g = buildGecikmis(list);
+        return <GecikmisListe kurum={kurum} gruplar={g.gruplar} genelToplam={g.genelToplam} ogrenciSayisi={g.ogrenciSayisi} onClose={() => setShowGecikmis(false)} />;
+      })()}
     </div>
   );
 }

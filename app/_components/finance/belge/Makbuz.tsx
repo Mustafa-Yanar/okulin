@@ -11,12 +11,13 @@ import type { PaymentEntry } from '@/lib/finance';
 // (globals.css #print-preview). Excel-tablo değil; kart/tipografi tabanlı ama tüm resmi
 // alanlar eksiksiz (makbuz no, öğrenci/veli TC, ödeme şekli, yazıyla tutar, taksit dökümü).
 
-function trDate(iso: string | null | undefined): string {
+// Ortak belge yardımcıları (Ekstre de kullanır).
+export function trDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const [y, m, d] = iso.split('-');
   return d && m && y ? `${d}.${m}.${y}` : iso;
 }
-function money(n: number | undefined): string {
+export function money(n: number | undefined): string {
   return '₺' + (n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 // Sınıf etiketinden şube kodunu (parantez içi) atar: "12.Sınıf Sayısal (401)" → "12.Sınıf Sayısal".
@@ -168,8 +169,8 @@ export default function Makbuz({ kurum, ogrenci, veli, payment, finance, donem, 
   );
 }
 
-// Taksit döküm listesi — modern satırlar (çizgili tablo değil).
-function TaksitListe({ title, rows, tone, money }: {
+// Taksit döküm listesi — modern satırlar (çizgili tablo değil). Ekstre de kullanır.
+export function TaksitListe({ title, rows, tone, money }: {
   title: string;
   rows: { no: number; date: string; amount: number }[];
   tone: 'paid' | 'unpaid';
@@ -205,7 +206,7 @@ function TaksitListe({ title, rows, tone, money }: {
   );
 }
 
-function Ozet({ label, value, color }: { label: string; value: string; color: string }) {
+export function Ozet({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div className="rounded-xl border border-slate-200 p-3 text-center">
       <div className="text-[10px] uppercase tracking-wide text-slate-400 font-600 mb-1" style={{ fontWeight: 600 }}>{label}</div>
