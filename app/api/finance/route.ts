@@ -69,7 +69,13 @@ export const GET = withAuth('auth', 'finance', async (req, _ctx, session) => {
   }
 
   const studs = await tdb().student.findMany({ include: { class: true, finance: { include: { installments: { orderBy: { idx: 'asc' } } } } } });
-  const list = studs.map((s) => ({ studentId: s.legacyId, studentName: s.name, studentCls: s.class?.legacyId || '', finance: financeOut(s.finance, s) }));
+  const list = studs.map((s) => ({
+    studentId: s.legacyId, studentName: s.name, studentCls: s.class?.legacyId || '',
+    // Muhasebe belgeleri (senet/makbuz/gecikmiş liste) için öğrenci+veli kimlik bilgisi.
+    studentTc: s.tcNo || '', parentName: s.parentName || '', parentPhone: s.parentPhone || '',
+    parentTcNo: s.parentTcNo || '', parentAddress: s.parentAddress || '', className: s.class?.ad || '',
+    finance: financeOut(s.finance, s),
+  }));
   list.sort((a, b) => a.studentName.localeCompare(b.studentName, 'tr'));
   return NextResponse.json(list);
 });

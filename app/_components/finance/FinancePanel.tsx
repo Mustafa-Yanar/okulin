@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import useSWR from 'swr';
 import LoadingBox from '../Loading';
 import {
@@ -13,12 +12,9 @@ import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
 import type { Session } from '@/lib/auth';
 import type { PaymentEntry } from '@/lib/finance';
-import type { ShowToast, FinanceDTO, FinanceListItemDTO, InstallmentDTO } from '../types';
-
-const DERSHANE = {
-  name: 'Akyazı Çözüm Özel Öğretim Kursu',
-  address: 'Akyazı / Sakarya',
-};
+import type { ShowToast, FinanceDTO, FinanceListItemDTO, InstallmentDTO, KurumBilgi } from '../types';
+import type { Branding } from '@/lib/branding';
+import Makbuz from './belge/Makbuz';
 
 const METHODS = ['Nakit', 'Havale/EFT', 'Kredi Kartı'];
 
@@ -35,97 +31,6 @@ function isOverdue(dueDate: string | null | undefined): boolean {
   return new Date(dueDate) < new Date(todayISO());
 }
 
-// Makbuz yazdırma verisi.
-interface ReceiptData {
-  studentName: string;
-  studentCls: string;
-  payment: PaymentEntry;
-  dershane: { name: string; address: string };
-}
-
-interface ReceiptPrintAreaProps {
-  data: ReceiptData;
-  onClose: () => void;
-}
-
-// ── Makbuz yazdırma bileşeni ─────────────────────────────────────────────────
-function ReceiptPrintArea({ data, onClose }: ReceiptPrintAreaProps) {
-  const { studentName, studentCls, payment, dershane } = data;
-
-  // Portal + mount guard: #print-preview body'nin doğrudan çocuğu olsun (print CSS
-  // "body > *:not(#print-preview) gizle" kuralı derin modal DOM'unda çalışmaz).
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    const timer = setTimeout(() => window.print(), 200);
-    return () => clearTimeout(timer);
-  }, [mounted]);
-
-  if (!mounted) return null;
-
-  return createPortal(
-    // id="print-preview" PORTAL KÖKÜNDE olmalı: print CSS'in "body > *:not(#print-preview)
-    // gizle" kuralı doğrudan-çocukluk şartı arar; id içeride kalırsa kural hiç eşleşmez
-    // ve makbuzun arkasındaki tüm uygulama da yazdırılır.
-    <div id="print-preview" className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 print:bg-transparent print:static print:p-0">
-      <div role="dialog" aria-modal="true" aria-label="Makbuz önizlemesi" className="modal w-full max-w-md print:shadow-none print:max-w-none print:w-full print:border-none">
-        <div className="flex items-center justify-between p-4 border-b border-gray-100 no-print">
-          <span className="font-700 text-gray-800" style={{ fontWeight: 700 }}>Makbuz Önizlemesi</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-600 hover:bg-indigo-700 transition-colors"
-              style={{ fontWeight: 600 }}
-            >
-              <Printer size={14} /> Yazdır
-            </button>
-            <button onClick={onClose} aria-label="Kapat" className="btn-icon">
-              <X size={16} />
-            </button>
-          </div>
-        </div>
-
-        <div className="p-6">
-          {/* Makbuz içeriği */}
-          <div className="text-center border-b border-gray-200 pb-4 mb-4">
-            <div className="font-800 text-lg text-gray-900" style={{ fontWeight: 800 }}>{dershane.name}</div>
-            <div className="text-sm text-gray-500">{dershane.address}</div>
-          </div>
-          <div className="text-center mb-4">
-            <div className="text-label">Ödeme Makbuzu</div>
-            <div className="text-2xl font-800 text-indigo-600 mt-1" style={{ fontWeight: 800 }}>{payment.receiptNo}</div>
-          </div>
-          <table className="w-full text-sm mb-4">
-            <tbody>
-              {[
-                ['Öğrenci Adı', studentName],
-                ['Sınıf', studentCls?.toUpperCase()],
-                ['Tarih', payment.date],
-                ['Ödeme Yöntemi', payment.method],
-                ...(payment.note ? [['Açıklama', payment.note]] : []),
-              ].map(([k, v]) => (
-                <tr key={k} className="border-b border-gray-50">
-                  <td className="py-2 text-gray-500 w-36">{k}</td>
-                  <td className="py-2 text-gray-800 font-600" style={{ fontWeight: 600 }}>{v}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="bg-indigo-50 rounded-xl p-4 text-center print:bg-gray-50 print:border print:border-gray-200">
-            <div className="text-xs text-indigo-500 uppercase tracking-wide mb-1 font-600 print:text-gray-500" style={{ fontWeight: 600 }}>Tahsil Edilen Tutar</div>
-            <div className="text-3xl font-800 text-indigo-700 print:text-gray-900" style={{ fontWeight: 800 }}>₺{fmt(payment.amount)}</div>
-          </div>
-          <div className="text-center text-xs text-gray-400 mt-4">
-            Kaydeden: {payment.recordedBy}
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
 
 interface AddPaymentModalProps {
   studentId: string;
@@ -438,15 +343,16 @@ interface StudentFinanceRowProps {
   onRefresh: () => void;
   showToast: ShowToast;
   session?: Session | null;
+  kurum: KurumBilgi;
 }
 
 // ── Öğrenci finansal detay satırı ───────────────────────────────────────────
-function StudentFinanceRow({ item, onRefresh, showToast, session }: StudentFinanceRowProps) {
+function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: StudentFinanceRowProps) {
   const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
-  const [printData, setPrintData] = useState<ReceiptData | null>(null);
+  const [makbuzPayment, setMakbuzPayment] = useState<PaymentEntry | null>(null);
 
   const { studentId, studentName, studentCls, finance } = item;
 
@@ -621,7 +527,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }: StudentFinan
                       </div>
                       <span className="font-800 text-green-600 text-sm shrink-0" style={{ fontWeight: 800 }}>+₺{fmt(p.amount)}</span>
                       <button
-                        onClick={() => setPrintData({ studentName, studentCls, payment: p, dershane: DERSHANE })}
+                        onClick={() => setMakbuzPayment(p)}
                         className="btn-icon btn-icon-primary"
                         title="Makbuz yazdır"
                       ><Printer size={13} /></button>
@@ -665,7 +571,16 @@ function StudentFinanceRow({ item, onRefresh, showToast, session }: StudentFinan
         />
       )}
 
-      {printData && <ReceiptPrintArea data={printData} onClose={() => setPrintData(null)} />}
+      {makbuzPayment && finance && (
+        <Makbuz
+          kurum={kurum}
+          ogrenci={{ no: item.studentId, name: studentName, cls: item.className || studentCls, tc: item.studentTc || '' }}
+          veli={{ name: item.parentName || '', phone: item.parentPhone || '' }}
+          payment={makbuzPayment}
+          finance={finance}
+          onClose={() => setMakbuzPayment(null)}
+        />
+      )}
     </>
   );
 }
@@ -764,6 +679,16 @@ interface FinancePanelProps {
 export default function FinancePanel({ session, showToast, initialSearch }: FinancePanelProps) {
   const { data: financeData, isLoading: loading, mutate: load } = useSWR<FinanceListItemDTO[]>('/api/finance');
   const list = Array.isArray(financeData) ? financeData : [];
+  // Kurum bilgisi (marka + resmi bilgi) — makbuz/senet belgelerinde kullanılır.
+  const { data: orgData } = useSWR<{ branding: Branding; legal?: KurumBilgi }>('/api/org');
+  const kurum: KurumBilgi = {
+    name: orgData?.branding?.name || '',
+    logoUrl: orgData?.branding?.logoUrl || '',
+    officialName: orgData?.legal?.officialName || '',
+    taxOffice: orgData?.legal?.taxOffice || '',
+    taxNo: orgData?.legal?.taxNo || '',
+    officialAddress: orgData?.legal?.officialAddress || '',
+  };
   const [search, setSearch] = useState(initialSearch || '');
   const [filterStatus, setFilterStatus] = useState('all');
 
@@ -840,6 +765,7 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
               onRefresh={load}
               showToast={showToast}
               session={session}
+              kurum={kurum}
             />
           ))
         )}

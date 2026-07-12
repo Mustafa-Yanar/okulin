@@ -106,7 +106,24 @@ export interface FinanceListItemDTO {
   studentId: string;
   studentName: string;
   studentCls: string;
+  studentTc?: string;      // muhasebe belgeleri (senet/makbuz)
+  parentName?: string;
+  parentPhone?: string;
+  parentTcNo?: string;
+  parentAddress?: string;
+  className?: string;      // sınıf adı (ör. "7/701")
   finance: FinanceDTO | null;
+}
+
+// Muhasebe belgelerinde (senet/makbuz/ekstre) kurumun kimlik bilgisi.
+// branding'ten (ad/logo) + TenantConfig legal'den (resmi ünvan/vergi/adres) birleşir.
+export interface KurumBilgi {
+  name: string;            // marka adı (Org.name)
+  logoUrl: string;         // Org.logoUrl (boşsa bileşen varsayılan gösterir)
+  officialName: string;    // resmi ünvan (…Ltd. Şti.)
+  taxOffice: string;
+  taxNo: string;
+  officialAddress: string;
 }
 
 // GET /api/slots düz satırı — öğretmen+gün+slot bilgisi + hücre durumu
