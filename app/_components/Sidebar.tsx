@@ -82,6 +82,7 @@ const ITEMS_BY_ROLE: Record<string, SidebarItem[]> = {
   ],
   parent: [
     { group: null,       key: 'program',     label: 'Program',           icon: Calendar },
+    { group: null,       key: 'dersprogramim', label: 'Ders Programı',   icon: GraduationCap },
     { group: null,       key: 'odev',        label: 'Ödevler',           icon: NotebookPen },
     { group: null,       key: 'davranis',    label: 'Davranış',          icon: Award },
     { group: null,       key: 'odeme',       label: 'Ödeme',             icon: Wallet },

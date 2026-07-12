@@ -10,6 +10,7 @@ import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { guidanceSubjectsFor } from './director/shared';
 import { useUrlTab } from './useUrlTab';
+import ClassScheduleView from './ClassScheduleView';
 import { AnnouncementInbox } from './announcements/Announcements';
 import { OdevParent } from './odev/Odev';
 import { TakvimView } from './etkinlik/Takvim';
@@ -292,7 +293,7 @@ export default function ParentPanel({ session, showToast, externalTab, onExterna
   // (obje varsayımı çalışma zamanı sözleşmesi; bilinçli tip iddiası).
   const children = useMemo(() => (Array.isArray(session.children) ? session.children : []) as Child[], [session.children]);
   const [childId, setChildId] = useState<string | null>(children[0]?.id || null);
-  const [tab, setTabInternal] = useUrlTab('program', ['program', 'odev', 'davranis', 'odeme', 'rehberlik', 'duyurular', 'takvim', 'formlar']);
+  const [tab, setTabInternal] = useUrlTab('program', ['program', 'dersprogramim', 'odev', 'davranis', 'odeme', 'rehberlik', 'duyurular', 'takvim', 'formlar']);
 
   useEffect(() => {
     if (externalTab && externalTab !== tab) setTabInternal(externalTab);
@@ -346,6 +347,7 @@ export default function ParentPanel({ session, showToast, externalTab, onExterna
 
       {/* child.id değişince alt bileşenler remount olsun diye key */}
       {tab === 'program' && <ProgramView key={child.id} child={child} />}
+      {tab === 'dersprogramim' && <ClassScheduleView key={child.id} cls={child.cls} />}
       {tab === 'odev' && <OdevParent key={child.id} childId={child.id} showToast={showToast} />}
       {tab === 'davranis' && <DavranisView key={child.id} studentId={child.id} />}
       {tab === 'odeme' && <PaymentView key={child.id} child={child} showToast={showToast} />}
