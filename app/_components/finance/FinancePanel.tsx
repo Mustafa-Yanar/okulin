@@ -197,6 +197,13 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
   const [discount, setDiscount] = useState(existing?.discount ? String(existing.discount) : '0');
   const [plan, setPlan] = useState(existing?.paymentPlan || 'pesin');
   const [installmentCount, setInstallmentCount] = useState(existing?.installments?.length || 3);
+  // İlk taksit tarihi — varsayılan: mevcut ilk taksit ya da bir sonraki ayın bugünü.
+  // Veli farklı bir güne (ör. her ayın 1'i / 15'i) sabitlenmek isteyebilir.
+  const [firstDate, setFirstDate] = useState<string>(() => {
+    if (existing?.installments?.[0]?.dueDate) return existing.installments[0].dueDate;
+    const d = new Date(); d.setMonth(d.getMonth() + 1);
+    return d.toISOString().slice(0, 10);
+  });
   const [installments, setInstallments] = useState<InstallmentDTO[]>(() => {
     if (existing?.installments?.length) return existing.installments;
     return [];
@@ -207,10 +214,11 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
 
   function buildInstallments(count: number, net: number): InstallmentDTO[] {
     const perInst = net > 0 ? Math.round((net / count) * 100) / 100 : 0;
-    const today = new Date();
+    // İlk taksit = seçilen başlangıç tarihi; sonrakiler birer ay artar.
+    const start = firstDate ? new Date(firstDate + 'T00:00:00') : new Date();
     return Array.from({ length: count }, (_, i) => {
-      const d = new Date(today);
-      d.setMonth(d.getMonth() + i + 1);
+      const d = new Date(start);
+      d.setMonth(d.getMonth() + i);
       return {
         idx: i,
         dueDate: d.toISOString().slice(0, 10),
@@ -228,7 +236,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
     if (plan === 'taksitli' && totalFee) {
       setInstallments(buildInstallments(installmentCount, netFee));
     }
-  }, [plan, installmentCount, totalFee, discount]);
+  }, [plan, installmentCount, totalFee, discount, firstDate]);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -301,6 +309,11 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
 
           {plan === 'taksitli' && (
             <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-label">İlk Taksit Tarihi</label>
+                <input type="date" value={firstDate} onChange={e => setFirstDate(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white focus:border-indigo-400 focus:outline-none" />
+              </div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-label">Taksit Sayısı</label>
                 <select value={installmentCount} onChange={e => setInstallmentCount(parseInt(e.target.value))}
