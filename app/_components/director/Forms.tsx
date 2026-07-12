@@ -2,7 +2,8 @@
 
 // Müdür paneli modal formları: öğretmen, öğrenci, Excel import, şifre sıfırlama.
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, Check, BookOpen } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { User, Check, BookOpen, Download } from 'lucide-react';
 import { classesForGroup, type ClassEntry } from '@/lib/classCatalog';
 import { isValidTurkishMobile, formatTurkishMobile } from '@/lib/phone';
 import { GROUPS, Modal, Label, FormField } from './shared';
@@ -325,6 +326,17 @@ export function ImportModal({ onClose, showToast, onDone }: ImportModalProps) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
+  // Başlık + örnek satırlı boş şablon indir — sütun sırası hatasını önler.
+  const downloadTemplate = () => {
+    const headers = ['Ad Soyad', 'Sınıf Kodu', 'Öğrenci Telefonu', 'Veli Telefonu', 'Veli Adı', 'Diploma Notu (yalnız mezun)', 'Öğrenci TC', 'Veli TC', 'Veli Adresi'];
+    const ornek = ['Ahmet Yılmaz', '701', '05321234567', '05339876543', 'Ayşe Yılmaz', '', '12345678901', '10987654321', 'Örnek Mah. No:1 Akyazı/Sakarya'];
+    const ws = XLSX.utils.aoa_to_sheet([headers, ornek]);
+    ws['!cols'] = headers.map(() => ({ wch: 20 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Öğrenciler');
+    XLSX.writeFile(wb, 'ogrenci-yukleme-sablonu.xlsx');
+  };
+
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -347,12 +359,18 @@ export function ImportModal({ onClose, showToast, onDone }: ImportModalProps) {
 
   return (
     <Modal title="Excel'den Öğrenci Yükle" onClose={onClose}>
-      <p className="text-sm text-gray-500 mb-4">
-        Excel sütunları sırayla: <strong>A</strong> isim soyisim, <strong>B</strong> sınıf kodu (701, 802, 101 vb.),
-        <strong> C</strong> öğrenci telefonu, <strong>D</strong> veli telefonu, <strong>E</strong> veli adı soyadı,
-        <strong> F</strong> diploma notu (yalnız mezun, 50-100).
-        <br /><span className="text-gray-400">A ve B zorunlu; C–F opsiyonel (boş bırakılabilir). F yalnız mezun sınıflarda dikkate alınır → OBP = not × 5.</span>
+      <p className="text-sm text-gray-500 mb-3">
+        Excel sütunları sırayla: <strong>A</strong> ad soyad, <strong>B</strong> sınıf kodu (701, 802, 101…),
+        <strong> C</strong> öğrenci telefonu, <strong>D</strong> veli telefonu, <strong>E</strong> veli adı,
+        <strong> F</strong> diploma notu (yalnız mezun), <strong>G</strong> öğrenci TC, <strong>H</strong> veli TC,
+        <strong> I</strong> veli adresi.
+        <br /><span className="text-gray-400">A ve B zorunlu; diğerleri opsiyonel. İlk satır başlık olabilir — otomatik atlanır. TC ve adres senet/makbuz belgeleri içindir.</span>
       </p>
+      <button type="button" onClick={downloadTemplate}
+        className="text-xs font-600 text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 mb-4"
+        style={{ fontWeight: 600 }}>
+        <Download size={13} /> Boş şablonu indir (.xlsx)
+      </button>
       {!result ? (
         <label className={`btn-primary flex items-center justify-center gap-2 cursor-pointer ${loading ? 'opacity-60 pointer-events-none' : ''}`}>
           <BookOpen size={14} /> {loading ? 'Yükleniyor...' : 'Excel Dosyası Seç'}

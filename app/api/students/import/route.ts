@@ -29,7 +29,12 @@ export const POST = withAuth('manage', async (req) => {
   const buffer = Buffer.from(await file.arrayBuffer());
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  const allRows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+  // Başlık satırı (indirilebilir şablonun 1. satırı) varsa atla — B sütununda "sınıf/kod"
+  // geçen satır başlıktır (gerçek sınıf kodu "701" bu kelimeleri içermez). Başlıksız eski
+  // dosyalar da çalışmaya devam eder.
+  const rows = allRows.length && /s[ıi]n[ıi]f|kod/i.test(String(allRows[0]?.[1] || ''))
+    ? allRows.slice(1) : allRows;
 
   // Şube → köprü grubu haritası (registry; boşsa constants'tan türetilmiş sanal liste).
   const allClasses = await getClasses();
@@ -48,8 +53,11 @@ export const POST = withAuth('manage', async (req) => {
     const rawCls = String(row[1] || '').trim();
     const phone = String(row[2] || '').trim();
     const parentPhone = String(row[3] || '').trim();
-    const parentName = String(row[4] || '').trim(); // 5. sütun — opsiyonel, sona eklendi (eski dosyalar bozulmaz)
-    const rawDiploma = String(row[5] || '').trim(); // 6. sütun — diploma notu (yalnız mezun, opsiyonel)
+    const parentName = String(row[4] || '').trim(); // E — veli adı (opsiyonel)
+    const rawDiploma = String(row[5] || '').trim(); // F — diploma notu (yalnız mezun, opsiyonel)
+    const tcNo = String(row[6] || '').trim().replace(/\D/g, ''); // G — öğrenci TC (opsiyonel)
+    const parentTcNo = String(row[7] || '').trim().replace(/\D/g, ''); // H — veli TC (opsiyonel)
+    const parentAddress = String(row[8] || '').trim(); // I — veli adresi (opsiyonel)
 
     if (!rawName || !rawCls) continue;
 
@@ -96,6 +104,7 @@ export const POST = withAuth('manage', async (req) => {
       classId: clsIdMap.get(cls) || null, group,
       phone: normPhone || null, parentPhone: normParentPhone || null,
       parentName: parentName || null,
+      tcNo: tcNo || null, parentTcNo: parentTcNo || null, parentAddress: parentAddress || null,
       diplomaNotu: diplomaNotu === '' ? null : diplomaNotu, // Float? ; '' → null
       mustChangePassword: true,
     }) });
