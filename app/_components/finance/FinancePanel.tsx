@@ -6,7 +6,7 @@ import LoadingBox from '../Loading';
 import {
   TrendingUp, TrendingDown, DollarSign, Users, Plus, X, Check,
   ChevronDown, ChevronUp, Printer, Trash2, AlertCircle, Edit3,
-  Search, CreditCard, Banknote, Building2
+  Search, CreditCard, Banknote, Building2, FileText
 } from 'lucide-react';
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
@@ -15,6 +15,7 @@ import type { PaymentEntry } from '@/lib/finance';
 import type { ShowToast, FinanceDTO, FinanceListItemDTO, InstallmentDTO, KurumBilgi } from '../types';
 import type { Branding } from '@/lib/branding';
 import Makbuz from './belge/Makbuz';
+import Senet from './belge/Senet';
 
 const METHODS = ['Nakit', 'Havale/EFT', 'Kredi Kartı'];
 
@@ -353,6 +354,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [makbuzPayment, setMakbuzPayment] = useState<PaymentEntry | null>(null);
+  const [showSenet, setShowSenet] = useState(false);
 
   const { studentId, studentName, studentCls, finance } = item;
 
@@ -497,6 +499,13 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
                   Ödeme Geçmişi ({(finance.payments || []).length})
                 </div>
                 <div className="flex gap-2">
+                  {(finance.installments || []).length > 0 && (
+                    <button
+                      onClick={() => setShowSenet(true)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-600 hover:bg-slate-200 transition-colors"
+                      style={{ fontWeight: 600 }}
+                    ><FileText size={11} /> Senet</button>
+                  )}
                   <button
                     onClick={() => setShowRegister(true)}
                     className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-600 hover:bg-gray-200 transition-colors"
@@ -579,6 +588,17 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
           payment={makbuzPayment}
           finance={finance}
           onClose={() => setMakbuzPayment(null)}
+        />
+      )}
+
+      {showSenet && finance && (
+        <Senet
+          kurum={kurum}
+          ogrenci={{ name: studentName, tc: item.studentTc || '' }}
+          veli={{ name: item.parentName || '', phone: item.parentPhone || '', address: item.parentAddress || '', tc: item.parentTcNo || '' }}
+          installments={finance.installments}
+          duzenlemeTarihi={finance.registrationDate || new Date().toISOString().slice(0, 10)}
+          onClose={() => setShowSenet(false)}
         />
       )}
     </>
