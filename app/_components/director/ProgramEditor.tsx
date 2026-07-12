@@ -9,7 +9,7 @@ import { Save, Plus } from 'lucide-react';
 import {
   ALL_DAYS, daySlots, getWeekKey, classLabel,
 } from '@/lib/constants';
-import { classLabelFrom } from '@/lib/classCatalog';
+import { classLabelFrom, coursesForClass } from '@/lib/classCatalog';
 import type { ClassRecord } from '@/lib/classes';
 import { useSlotTimes } from '../SlotTimesContext';
 import { useClasses } from '../ClassesContext';
@@ -707,9 +707,24 @@ function SlotDersModal({ dayIndex, slotStart, entry, classes, branches, allowedG
   onAta: (cls: string, branch: string) => void; onMusait: () => void; onTemizle: () => void; onClose: () => void;
 }) {
   const dayLabel = ALL_DAYS.find(d => d.index === dayIndex)?.label || '';
-  const eligible = classes.filter(c => !allowedGroups.length || allowedGroups.includes(c.group));
-  const [cls, setCls] = useState(entry?.cls || eligible[0]?.id || '');
   const [branch, setBranch] = useState(entry?.branch || branches[0] || '');
+  // Ön eşleştirme eligibility: seçili dersi ALABİLEN sınıflar = o sınıfın ders listesinde
+  // (coursesForClass) bu ders var + öğretmenin izin verilen grupları. Sınıfın dersleri
+  // tanımsızsa (null) kısıt uygulanmaz (o sınıf her derse açık sayılır).
+  const eligibleClasses = useMemo(() =>
+    classes.filter(c => {
+      if (allowedGroups.length && !allowedGroups.includes(c.group)) return false;
+      const cs = coursesForClass(classes, c.id);
+      return !cs || cs.includes(branch);
+    }),
+    [classes, allowedGroups, branch]
+  );
+  const [cls, setCls] = useState(entry?.cls || eligibleClasses[0]?.id || '');
+  // Ders değişince seçili sınıf artık o dersi alamıyorsa ilk uygun sınıfa geç.
+  useEffect(() => {
+    if (cls && !eligibleClasses.some(c => c.id === cls)) setCls(eligibleClasses[0]?.id || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eligibleClasses]);
   return (
     <Modal title={`${dayLabel} ${slotStart} — Ders Saati`} onClose={onClose}>
       <div className="space-y-3">
@@ -719,17 +734,17 @@ function SlotDersModal({ dayIndex, slotStart, entry, classes, branches, allowedG
           </p>
         )}
         <div>
-          <label className="text-label block mb-1">Sınıf</label>
-          <select className="input" value={cls} onChange={e => setCls(e.target.value)}>
-            {eligible.length === 0 && <option value="">— uygun sınıf yok —</option>}
-            {eligible.map(c => <option key={c.id} value={c.id}>{c.ad}</option>)}
-          </select>
-        </div>
-        <div>
           <label className="text-label block mb-1">Ders</label>
           <select className="input" value={branch} onChange={e => setBranch(e.target.value)}>
             {branches.length === 0 && <option value="">— öğretmenin branşı tanımlı değil —</option>}
             {branches.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-label block mb-1">Sınıf <span className="text-caption" style={{ fontWeight: 400 }}>· bu dersi alan</span></label>
+          <select className="input" value={cls} onChange={e => setCls(e.target.value)}>
+            {eligibleClasses.length === 0 && <option value="">— bu dersi alan sınıf yok —</option>}
+            {eligibleClasses.map(c => <option key={c.id} value={c.id}>{c.ad}</option>)}
           </select>
         </div>
         <button className="btn-primary w-full" disabled={!cls || !branch} onClick={() => onAta(cls, branch)}>
