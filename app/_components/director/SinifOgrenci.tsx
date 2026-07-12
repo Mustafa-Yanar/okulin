@@ -7,11 +7,11 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Plus, Trash2, Edit3, Calendar, CalendarClock, GraduationCap, BookOpen, ChevronRight, ChevronLeft,
+  Plus, Trash2, Edit3, Calendar, CalendarClock, GraduationCap, BookOpen, ChevronRight, ChevronLeft, ArrowRightLeft, Check,
 } from 'lucide-react';
 import { classLabel } from '@/lib/constants';
 import { classLabelFrom } from '@/lib/classCatalog';
-import { api } from './shared';
+import { api, Modal } from './shared';
 import { StudentExpandedView, ClassScheduleModal } from './StudentList';
 import type { BookingSlotEntry, BookingCancelArgs } from '../student-types';
 import ClassScheduleEditor from './ClassScheduleEditor';
@@ -71,6 +71,7 @@ export default function SinifOgrenci({
   const [searchQ, setSearchQ] = useState('');
   const [openClsId, setOpenClsId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useUrlParam('ogrenci');
+  const [moveTarget, setMoveTarget] = useState<PanelStudent | null>(null); // hızlı sınıf değiştirme modalı
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -154,6 +155,9 @@ export default function SinifOgrenci({
           </button>
           {!readOnly && (
           <div className="flex gap-2 shrink-0">
+            <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5" onClick={() => setMoveTarget(selected)}>
+              <ArrowRightLeft size={14} /> Sınıf Değiştir
+            </button>
             <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5" onClick={() => onEditStudent?.(selected)}>
               <Edit3 size={14} /> Düzenle
             </button>
@@ -164,6 +168,15 @@ export default function SinifOgrenci({
           </div>
           )}
         </div>
+        {moveTarget && (
+          <MoveClassModal
+            student={moveTarget}
+            classes={classes}
+            onClose={() => setMoveTarget(null)}
+            onMoved={() => { setMoveTarget(null); onClassesChanged?.(); }}
+            showToast={showToast}
+          />
+        )}
         <div className="card overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
             <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-700"
@@ -406,5 +419,88 @@ function StudentRow({ s, subtitle, pending, onClick }: StudentRowProps) {
       </div>
       <ChevronRight size={14} className="text-gray-400 shrink-0" />
     </button>
+  );
+}
+
+interface MoveClassModalProps {
+  student: PanelStudent;
+  classes: ClassRecord[];
+  onClose: () => void;
+  onMoved: () => void;
+  showToast?: ShowToast;
+}
+
+// ─── Hızlı sınıf değiştirme: bilgileri yeniden girmeden öğrenciyi başka şubeye taşı ───
+// Yalnız { id, name, cls } gönderir; sunucu diğer alanları (telefon, veli, not…) korur,
+// hedef şubenin kademesine göre group'u otomatik günceller (lib/students.ts updateStudent).
+function MoveClassModal({ student, classes, onClose, onMoved, showToast }: MoveClassModalProps) {
+  const [target, setTarget] = useState(student.cls);
+  const [busy, setBusy] = useState(false);
+
+  // Şubeleri kademeye göre sıralı grupla (SinifOgrenci ana listesiyle aynı düzen).
+  const byKademe = useMemo(() => {
+    const m: Record<string, ClassRecord[]> = {};
+    for (const c of classes) (m[c.kademe || 'ortaokul'] ||= []).push(c);
+    for (const k of Object.keys(m)) m[k].sort((a, b) => (a.ad || '').localeCompare(b.ad || '', 'tr'));
+    return m;
+  }, [classes]);
+  const kademeKeys = KADEME_ORDER.filter((k) => byKademe[k]?.length);
+
+  async function save() {
+    if (target === student.cls) { onClose(); return; }
+    setBusy(true);
+    try {
+      await api('/api/students', {
+        method: 'PUT',
+        body: JSON.stringify({ id: student.id, name: student.name, cls: target }),
+      });
+      const label = classLabelFrom(classes, target, classLabel);
+      showToast?.(`${student.name} → ${label} sınıfına taşındı`);
+      onMoved();
+    } catch (err) { showToast?.((err as Error).message, 'error'); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <Modal title="Sınıf Değiştir" onClose={onClose}>
+      <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
+        <span style={{ fontWeight: 600 }}>{student.name}</span> için yeni şube seçin.
+        Öğrencinin diğer bilgileri (telefon, veli, notlar) korunur.
+      </p>
+      <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
+        {kademeKeys.map((kademe) => (
+          <div key={kademe}>
+            <p className="text-[11px] uppercase tracking-widest mb-1.5" style={{ fontWeight: 700, color: 'var(--text-muted)' }}>
+              {KADEME_LABEL[kademe] || kademe}
+            </p>
+            <div className="grid gap-1.5">
+              {byKademe[kademe].map((c) => {
+                const isCurrent = c.id === student.cls;
+                const isSelected = c.id === target;
+                return (
+                  <button key={c.id} type="button" onClick={() => setTarget(c.id)}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-left text-sm transition-colors"
+                    style={{
+                      border: `1px solid ${isSelected ? '#6366f1' : 'var(--border-subtle)'}`,
+                      background: isSelected ? 'rgba(99,102,241,0.08)' : 'var(--bg-card)',
+                      fontWeight: isSelected ? 600 : 400,
+                    }}>
+                    <span className="flex-1 min-w-0 truncate">{c.ad}</span>
+                    {isCurrent && <span className="badge badge-info shrink-0">Mevcut</span>}
+                    {isSelected && !isCurrent && <Check size={16} className="shrink-0" style={{ color: '#6366f1' }} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-end gap-2 mt-5">
+        <button className="btn-ghost !px-4 !py-2 text-sm" onClick={onClose} disabled={busy}>Vazgeç</button>
+        <button className="btn-primary !px-4 !py-2 text-sm" onClick={save} disabled={busy || target === student.cls}>
+          {busy ? 'Taşınıyor…' : 'Taşı'}
+        </button>
+      </div>
+    </Modal>
   );
 }
