@@ -54,6 +54,33 @@ export function classShortUpper(classes: ClassEntry[] | null | undefined, id: st
   return id.toUpperCase();
 }
 
+// Öğrencileri şube kimliğine (cls) göre grupla — kademe sırası, sonra şube adı (numeric).
+// Map-tabanlı: aynı şubenin öğrencileri HER ZAMAN tek grupta toplanır (giriş sırası
+// önemsiz). Eski "önce sırala, ardışık grupla" deseni s_ UUID'lerde bozuktu: clsSort
+// parseInt('s_…')=NaN → sıralama kararsız → aynı şube birden çok parçaya bölünüyordu.
+// Filtreleme (arama/grup) çağıran tarafta yapılır; bu yalnız gruplar + sıralar.
+export function groupStudentsByClass<T extends { cls: string; group?: string | null }>(
+  list: T[],
+  classes: ClassEntry[] | null | undefined,
+  labelFallback?: string | ((id: string) => string),
+): { cls: string; label: string; group?: string | null; students: T[] }[] {
+  const order: Record<string, number> = { ilkokul: 0, ortaokul: 1, lise: 2, mezun: 3 };
+  const byCls = new Map<string, { cls: string; label: string; group?: string | null; students: T[] }>();
+  for (const s of list) {
+    let g = byCls.get(s.cls);
+    if (!g) {
+      g = { cls: s.cls, label: classLabelFrom(classes, s.cls, labelFallback), group: s.group, students: [] };
+      byCls.set(s.cls, g);
+    }
+    g.students.push(s);
+  }
+  return [...byCls.values()].sort((a, b) => {
+    const gd = (order[a.group || ''] ?? 9) - (order[b.group || ''] ?? 9);
+    if (gd !== 0) return gd;
+    return a.label.localeCompare(b.label, 'tr', { numeric: true });
+  });
+}
+
 const GROUP_ORDER = ['ilkokul', 'ortaokul', 'lise', 'mezun'];
 const GROUP_LABELS: Record<string, string> = { ilkokul: 'İlkokul', ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
 
