@@ -5,7 +5,8 @@
 // etütler serbest saatli "+ Etüt Ekle" ile eklenir (etutSablonlari).
 import React, { useState, useEffect, useMemo } from 'react';
 import LoadingBox from '../Loading';
-import { Save, Plus } from 'lucide-react';
+import { Save, Plus, Download } from 'lucide-react';
+import SchedulePrint, { type ScheduleDay, type ScheduleLesson } from '../program/SchedulePrint';
 import {
   ALL_DAYS, daySlots, getWeekKey, classLabel,
 } from '@/lib/constants';
@@ -52,6 +53,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   const [dirty, setDirty] = useState<Record<string, ProgramEntry | null>>({});
   // Slota tıklayınca açılan eylem modalı (elle ders ata / müsait işaretle / temizle).
   const [slotModal, setSlotModal] = useState<{ dayIndex: number; slotId: string; slotStart: string } | null>(null);
+  const [showPrint, setShowPrint] = useState(false);
 
   // Etüt şablonları (calendar — serbest saatli, haftadan bağımsız)
   const [etutSablonlar, setEtutSablonlar] = useState<EtutSablonu[]>([]);
@@ -291,6 +293,17 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     return <Modal title={`${teacher.name} – Program`} onClose={onClose} xwide>{inner}</Modal>;
   }
 
+  // Öğretmenin haftalık dersleri → PDF çıktısı verisi (dolu 'ders' slotları).
+  const teacherDays: ScheduleDay[] = ALL_DAYS.map(day => {
+    const slots = daySlots(day.index, slotTimes.days?.[day.index]);
+    const lessons: ScheduleLesson[] = [];
+    for (const slot of slots) {
+      const e = getEntry(day.index, slot.id);
+      if (e?.type === 'ders' && e.cls) lessons.push({ main: classLabelFrom(classes, e.cls, classLabel), sub: e.branch || e.subBranch || '', time: slot.label, slotId: slot.id });
+    }
+    return { dayIndex: day.index, dayLabel: day.short, weekend: day.weekend, lessons };
+  });
+
   const content = (
     <>
       {offDayBar}
@@ -308,9 +321,14 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
         onNext={() => canNext && setWeekKey(getAdjacentWeek(weekKey, 1))}
         hiddenDayIndexes={hiddenDayIndexes}
         headerRight={
-          <button className="btn-primary !px-3 !py-1.5 text-sm flex items-center gap-1.5" onClick={() => setShowEtutForm(true)}>
-            <Plus size={14} /> Etüt Ekle
-          </button>
+          <div className="flex gap-2">
+            <button className="btn-ghost !px-3 !py-1.5 text-sm flex items-center gap-1.5" onClick={() => setShowPrint(true)}>
+              <Download size={14} /> PDF
+            </button>
+            <button className="btn-primary !px-3 !py-1.5 text-sm flex items-center gap-1.5" onClick={() => setShowEtutForm(true)}>
+              <Plus size={14} /> Etüt Ekle
+            </button>
+          </div>
         }
         renderDayContent={(day) => {
           const blocks = [];
@@ -459,6 +477,15 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
           }}
           onClose={() => setShowEtutForm(false)}
           onSave={saveEtutSablon}
+        />
+      )}
+
+      {showPrint && (
+        <SchedulePrint
+          title="Ders Programı"
+          subtitle={teacher.name}
+          days={teacherDays}
+          onClose={() => setShowPrint(false)}
         />
       )}
     </>

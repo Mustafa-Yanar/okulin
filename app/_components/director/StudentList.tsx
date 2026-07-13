@@ -3,7 +3,8 @@
 // Öğrenci listesi (gruplu) + öğrenci detay görünümü (StudentExpandedView) +
 // sınıf ders programı modalı (ClassScheduleModal).
 import React, { useState, useEffect, useMemo } from 'react';
-import { BookOpen, ClipboardList, Clock, Calendar, ChevronRight, ChevronLeft, Edit3, GraduationCap, Trash2 } from 'lucide-react';
+import { BookOpen, ClipboardList, Clock, Calendar, ChevronRight, ChevronLeft, Edit3, GraduationCap, Trash2, Download } from 'lucide-react';
+import SchedulePrint, { type ScheduleDay, type ScheduleLesson } from '../program/SchedulePrint';
 import type { LucideIcon } from 'lucide-react';
 import { classLabel, ALL_DAYS } from '@/lib/constants';
 import { classLabelFrom, type ClassEntry } from '@/lib/classCatalog';
@@ -245,6 +246,7 @@ interface ClassScheduleModalProps {
 export function ClassScheduleModal({ cls, label, onClose }: ClassScheduleModalProps) {
   const [schedule, setSchedule] = useState<Record<number, ClassLessonDTO[]> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showPrint, setShowPrint] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -290,8 +292,21 @@ export function ClassScheduleModal({ cls, label, onClose }: ClassScheduleModalPr
     return result;
   }, [schedule, visibleDays]);
 
+  // PDF çıktısı verisi (sınıf perspektifi: hücrede öğretmen adı).
+  const classDays: ScheduleDay[] = ALL_DAYS.map(day => ({
+    dayIndex: day.index, dayLabel: day.short, weekend: day.weekend,
+    lessons: (schedule?.[day.index] || []).map((l): ScheduleLesson => ({ main: l.teacherName || '', sub: l.subBranch || l.branch || '', time: l.slotLabel || '', slotId: l.slotId })),
+  }));
+
   return (
     <Modal title={`${label || cls.toUpperCase()} – Ders Programı`} onClose={onClose} wide>
+      {!loading && visibleDays.length > 0 && (
+        <div className="flex justify-end mb-3">
+          <button onClick={() => setShowPrint(true)} className="btn-ghost !px-3 !py-1.5 text-sm flex items-center gap-1.5">
+            <Download size={14} /> PDF İndir
+          </button>
+        </div>
+      )}
       {loading ? (
         <div className="flex items-center justify-center h-32 text-caption">Yükleniyor...</div>
       ) : visibleDays.length === 0 ? (
@@ -334,6 +349,9 @@ export function ClassScheduleModal({ cls, label, onClose }: ClassScheduleModalPr
             </tbody>
           </table>
         </div>
+      )}
+      {showPrint && (
+        <SchedulePrint title="Ders Programı" subtitle={label || cls.toUpperCase()} days={classDays} onClose={() => setShowPrint(false)} />
       )}
     </Modal>
   );
