@@ -509,8 +509,8 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
           {finance ? (
             <div className="text-right shrink-0">
               <div className="text-caption">Toplam / Kalan</div>
-              <div className="text-sm font-700 text-gray-800" style={{ fontWeight: 700 }}>
-                ₺{fmt(finance.netFee)} / <span className={finance.balance > 0 ? 'text-red-500' : 'text-green-600'}>₺{fmt(finance.balance)}</span>
+              <div className="text-sm tabular-nums" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                ₺{fmt(finance.netFee)} / <span style={{ color: finance.balance > 0 ? 'var(--color-danger)' : 'var(--color-success)' }}>₺{fmt(finance.balance)}</span>
               </div>
             </div>
           ) : (
@@ -772,15 +772,19 @@ function FilterDropdown({ value, onChange }: FilterDropdownProps) {
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', onKey); };
   }, [open]);
 
   return (
     <div ref={ref} className="relative shrink-0">
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm transition-all"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm transition-colors"
         style={{
           background: 'var(--bg-muted)',
           border: '1px solid var(--border-subtle)',
@@ -798,6 +802,8 @@ function FilterDropdown({ value, onChange }: FilterDropdownProps) {
 
       {open && (
         <div
+          role="listbox"
+          aria-label="Duruma göre filtrele"
           className="absolute left-0 top-full mt-1.5 z-30 rounded-xl overflow-hidden animate-slide-in"
           style={{
             background: 'var(--bg-surface)',
@@ -809,8 +815,10 @@ function FilterDropdown({ value, onChange }: FilterDropdownProps) {
           {FILTER_OPTIONS.map(opt => (
             <button
               key={opt.value}
+              role="option"
+              aria-selected={value === opt.value}
               onClick={() => { onChange(opt.value); setOpen(false); }}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-all hover:bg-[var(--bg-muted)]"
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-[var(--bg-muted)]"
               style={{
                 color: value === opt.value ? 'var(--brand, #6366f1)' : 'var(--text-primary)',
                 fontWeight: value === opt.value ? 600 : 400,
@@ -911,7 +919,7 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={search} onChange={e => setSearch(e.target.value)}
-            className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
+            className="input pl-9"
             placeholder="İsim veya sınıf ara..."
           />
         </div>
