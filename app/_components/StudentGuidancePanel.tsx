@@ -91,7 +91,7 @@ export default function StudentGuidancePanel({ session, showToast }: StudentGuid
               <th className="text-center text-xs text-emerald-600 font-600 py-2.5 px-2" style={{ fontWeight: 600 }}>Doğru</th>
               <th className="text-center text-xs text-red-600 font-600 py-2.5 px-2" style={{ fontWeight: 600 }}>Yanlış</th>
               <th className="text-center text-xs text-gray-500 font-600 py-2.5 px-2" style={{ fontWeight: 600 }}>Boş</th>
-              <th className="text-center text-xs text-indigo-600 font-600 py-2.5 px-2" style={{ fontWeight: 600 }}>Toplam</th>
+              <th className="text-center text-xs text-brand font-600 py-2.5 px-2" style={{ fontWeight: 600 }}>Toplam</th>
             </tr>
           </thead>
           <tbody>
@@ -107,7 +107,7 @@ export default function StudentGuidancePanel({ session, showToast }: StudentGuid
                     className="w-16 text-center text-sm border border-gray-200 rounded-lg py-1.5 focus:border-red-400 focus:outline-none" /></td>
                   <td className="px-2 py-2"><input type="number" min="0" inputMode="numeric" value={val.empty} onChange={e => setVal(subject, 'empty', e.target.value)}
                     className="w-16 text-center text-sm border border-gray-200 rounded-lg py-1.5 focus:border-gray-400 focus:outline-none" /></td>
-                  <td className="px-2 py-2 text-center text-sm font-700 text-indigo-700" style={{ fontWeight: 700 }}>{total > 0 ? total : '—'}</td>
+                  <td className="px-2 py-2 text-center text-sm font-700 text-brand" style={{ fontWeight: 700 }}>{total > 0 ? total : '—'}</td>
                 </tr>
               );
             })}

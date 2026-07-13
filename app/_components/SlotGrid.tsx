@@ -269,10 +269,10 @@ function MobileDayCard({ day, slots, grid, program, teacher, weekKey, session, o
 
   return (
     <div className="card overflow-hidden">
-      <div className={`px-4 py-2.5 border-b border-gray-100 flex items-center justify-between ${day.weekend ? 'bg-indigo-50/50' : 'bg-gray-50/50'}`}>
+      <div className={`px-4 py-2.5 border-b border-gray-100 flex items-center justify-between ${day.weekend ? 'bg-brand-soft' : 'bg-gray-50/50'}`}>
         <div>
-          <div className={`font-700 text-sm ${day.weekend ? 'text-indigo-700' : 'text-gray-900'}`} style={{ fontWeight: 700 }}>{day.label}</div>
-          {day.weekend && <div className="text-[10px] text-indigo-400">Hafta sonu</div>}
+          <div className={`font-700 text-sm ${day.weekend ? 'text-brand' : 'text-gray-900'}`} style={{ fontWeight: 700 }}>{day.label}</div>
+          {day.weekend && <div className="text-[10px] text-brand">Hafta sonu</div>}
         </div>
         <span className="text-xs text-gray-400">{visibleEntries.length} slot</span>
       </div>
@@ -404,9 +404,9 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
             <tr>
               <th className="text-left py-2 px-3 text-xs text-gray-400 font-600 w-24" style={{ fontWeight: 600 }}>Saat</th>
               {visibleDays.map(day => (
-                <th key={day.index} className={`text-center py-2 px-1 text-xs font-600 ${day.weekend ? 'text-indigo-400' : 'text-gray-500'}`} style={{ fontWeight: 600, width: `calc((100% - 6rem) / ${colCount})` }}>
+                <th key={day.index} className={`text-center py-2 px-1 text-xs font-600 ${day.weekend ? 'text-brand' : 'text-gray-500'}`} style={{ fontWeight: 600, width: `calc((100% - 6rem) / ${colCount})` }}>
                   {day.short}
-                  {day.weekend && <span className="block text-[9px] text-indigo-300">H.sonu</span>}
+                  {day.weekend && <span className="block text-[9px] text-brand">H.sonu</span>}
                 </th>
               ))}
             </tr>
@@ -473,7 +473,7 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
                   <div className="flex gap-2 flex-wrap mt-1">
                     {bookableBranches.map(b => (
                       <button key={b} type="button" onClick={() => setBookingBranch(b)}
-                        className={`px-3 py-1.5 rounded-lg text-sm border transition ${bookingBranch===b?'border-indigo-300 bg-indigo-50 text-indigo-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                        className={`px-3 py-1.5 rounded-lg text-sm border transition ${bookingBranch===b?'border-brand-soft bg-brand-soft text-brand':'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
                         {b}
                       </button>
                     ))}
@@ -498,7 +498,7 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
               <div className="max-h-52 overflow-y-auto space-y-1 mb-4">
                 {filteredStudents.map(s => (
                   <button key={s.id} onClick={() => setSelectedStudent(s)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${selectedStudent?.id === s.id ? 'bg-indigo-50 border border-indigo-200 text-indigo-700' : 'hover:bg-gray-50'}`}>
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${selectedStudent?.id === s.id ? 'bg-brand-soft border border-brand-soft text-brand' : 'hover:bg-gray-50'}`}>
                     <span className="font-600" style={{ fontWeight: 600 }}>{s.name}</span>
                     <span className="text-gray-400 ml-2 text-xs">{classLabelFrom(classes, s.cls, classLabel)}</span>
                   </button>
@@ -511,7 +511,7 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
                   <div className="flex gap-2 flex-wrap mt-1">
                     {bookableBranches.map(b => (
                       <button key={b} type="button" onClick={() => setBookingBranch(b)}
-                        className={`px-3 py-1.5 rounded-lg text-sm border transition ${bookingBranch===b?'border-indigo-300 bg-indigo-50 text-indigo-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                        className={`px-3 py-1.5 rounded-lg text-sm border transition ${bookingBranch===b?'border-brand-soft bg-brand-soft text-brand':'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
                         {b}
                       </button>
                     ))}
@@ -524,7 +524,7 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
               {session.role === 'director' && (
                 <label className="flex items-center gap-2 mb-4 cursor-pointer select-none">
                   <input type="checkbox" checked={fixedBooking} onChange={e => setFixedBooking(e.target.checked)}
-                    className="w-4 h-4 rounded accent-indigo-600" />
+                    className="w-4 h-4 rounded accent-brand" />
                   <span className="text-sm text-gray-700 font-500" style={{ fontWeight: 500 }}>Sabit rezervasyon</span>
                   <span className="text-xs text-gray-400">(her hafta otomatik tekrarlanır)</span>
                 </label>

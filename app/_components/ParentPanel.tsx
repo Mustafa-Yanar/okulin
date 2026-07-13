@@ -335,7 +335,7 @@ export default function ParentPanel({ session, showToast, externalTab, onExterna
             return (
               <button key={c.id} onClick={() => setChildId(c.id)}
                 className={`px-3.5 py-2 rounded-xl text-sm font-600 transition border ${active ? 'text-white border-transparent' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'}`}
-                style={{ fontWeight: 600, background: active ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : undefined }}>
+                style={{ fontWeight: 600, background: active ? 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))' : undefined }}>
                 {c.name}
               </button>
             );

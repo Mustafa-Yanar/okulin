@@ -25,7 +25,7 @@ export default function PullToRefreshIndicator({ pullDistance, refreshState }: P
       <div className="relative flex items-center justify-center w-full h-full">
         {refreshState === 'popping' ? (
           <div className="relative flex items-center justify-center w-8 h-8">
-            <span className="absolute w-8 h-8 rounded-full border-2 border-indigo-400 animate-bubble-pop opacity-0" />
+            <span className="absolute w-8 h-8 rounded-full border-2 border-[color:var(--brand)] animate-bubble-pop opacity-0" />
             <span className="absolute w-8 h-8 rounded-full border-2 border-purple-400 animate-bubble-pop-delayed opacity-0" />
             <div className="absolute w-2 h-2 rounded-full bg-yellow-400 animate-pop-dot-1" />
             <div className="absolute w-2 h-2 rounded-full bg-green-400 animate-pop-dot-2" />
@@ -47,7 +47,7 @@ export default function PullToRefreshIndicator({ pullDistance, refreshState }: P
             }}
           >
             {refreshState === 'refreshing' ? (
-              <Loader2 size={16} className="animate-spin" style={{ color: '#6366f1' }} />
+              <Loader2 size={16} className="animate-spin" style={{ color: 'var(--brand,#6366f1)' }} />
             ) : (
               <span
                 className="rounded-full"
@@ -55,7 +55,7 @@ export default function PullToRefreshIndicator({ pullDistance, refreshState }: P
                   width: '12px',
                   height: '12px',
                   background: refreshState === 'ready'
-                    ? 'linear-gradient(135deg, #6366f1, #a855f7)'
+                    ? 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #a855f7))'
                     : 'var(--bg-muted)',
                   boxShadow: refreshState === 'ready' ? '0 0 10px rgba(99,102,241,0.6)' : 'none',
                   transform: refreshState === 'ready' ? 'scale(1.1)' : 'scale(0.9)',

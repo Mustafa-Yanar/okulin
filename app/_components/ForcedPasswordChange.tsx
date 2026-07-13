@@ -47,7 +47,7 @@ export default function ForcedPasswordChange({ session, onDone, onLogout, showTo
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="card-elevated w-full max-w-md p-8">
         <div className="text-center mb-6">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)' }}>
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))' }}>
             <ShieldCheck size={28} color="white" />
           </div>
           <h1 className="text-xl" style={{ fontWeight: 800, color: 'var(--text-primary)' }}>Hoş geldin, {session.name}</h1>

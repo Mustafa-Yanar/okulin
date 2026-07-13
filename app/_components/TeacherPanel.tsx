@@ -171,7 +171,7 @@ export function TeacherBookingsList({ bookedList, listColorMap, onCancel, canCan
               className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
-                  style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)' }}>
+                  style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))' }}>
                   <Calendar size={16} />
                 </div>
                 <div className="text-left">
@@ -189,7 +189,7 @@ export function TeacherBookingsList({ bookedList, listColorMap, onCancel, canCan
                   return (
                     <div key={i} className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-100">
                       <div className="flex items-center gap-3 min-w-0">
-                        <Clock size={13} className="text-indigo-400 shrink-0" />
+                        <Clock size={13} className="text-brand shrink-0" />
                         <div className="min-w-0">
                           <div className="text-xs font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.slotLabel}</div>
                           <div className="text-caption truncate">{item.studentName} · {item.studentCls}</div>
@@ -379,7 +379,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
               className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
-                  style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)' }}>
+                  style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))' }}>
                   <Calendar size={16} />
                 </div>
                 <div className="text-left">
@@ -407,7 +407,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                         className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-600 text-gray-800" style={{ fontWeight: 600 }}>{lessonNo}. Ders</span>
-                          <span className="text-xs text-indigo-600 font-600" style={{ fontWeight: 600 }}>({classShortUpper(classes, cls)})</span>
+                          <span className="text-xs text-brand font-600" style={{ fontWeight: 600 }}>({classShortUpper(classes, cls)})</span>
                           <span className="text-xs text-gray-400">{stuList.length} öğrenci</span>
                         </div>
                         <ChevronRight size={14} className="text-gray-400 shrink-0 transition-transform" style={{ transform: lOpen ? 'rotate(90deg)' : 'rotate(0)' }} />
@@ -446,7 +446,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                               <button
                                 onClick={() => saveAttendance(day.dayIndex, cls, lessonNo)}
                                 disabled={saving[attKey]}
-                                className="w-full py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-600 hover:bg-indigo-700 transition-colors disabled:opacity-60"
+                                className="w-full py-1.5 rounded-lg bg-brand text-white text-xs font-600 transition-colors disabled:opacity-60"
                                 style={{ fontWeight: 600 }}>
                                 {saving[attKey] ? 'Kaydediliyor...' : `${lessonNo}. Ders Yoklamasını Kaydet`}
                               </button>
@@ -580,7 +580,7 @@ function TeacherStudentsView({ students, branches = [] }: TeacherStudentsViewPro
           const isOpen = openCls === grp.cls;
           const dotColor =
             grp.group === 'lise'
-              ? 'linear-gradient(135deg,#6366f1,#4f46e5)'
+              ? 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))'
               : grp.group === 'ortaokul'
               ? 'linear-gradient(135deg,#22c55e,#16a34a)'
               : 'linear-gradient(135deg,#f59e0b,#d97706)';
@@ -608,7 +608,7 @@ function TeacherStudentsView({ students, branches = [] }: TeacherStudentsViewPro
                   {grp.students.map((s) => (
                     <div key={s.id} className="card overflow-hidden text-sm">
                       <button
-                        className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-indigo-50/30"
+                        className="w-full flex items-center gap-3 px-3 py-3 text-left bg-brand-soft-hover"
                         onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
                       >
                         <div

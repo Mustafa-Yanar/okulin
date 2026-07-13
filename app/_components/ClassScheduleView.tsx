@@ -95,7 +95,7 @@ export default function ClassScheduleView({ cls }: { cls?: string }) {
           <tr>
             <th className="text-left py-2 px-2 text-gray-400 font-600 w-10" style={{ fontWeight: 600 }}>#</th>
             {visibleDays.map(day => (
-              <th key={day.index} className={`text-center py-2 px-2 font-600 ${day.weekend ? 'text-indigo-500' : 'text-gray-600'}`} style={{ fontWeight: 600 }}>
+              <th key={day.index} className={`text-center py-2 px-2 font-600 ${day.weekend ? 'text-brand' : 'text-gray-600'}`} style={{ fontWeight: 600 }}>
                 {day.short}
               </th>
             ))}

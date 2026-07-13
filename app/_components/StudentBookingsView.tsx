@@ -51,7 +51,7 @@ export function StudentBookingsView({ student, allSlots, onCancel }: StudentBook
               className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-700 shrink-0"
-                  style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)', fontWeight: 700 }}>
+                  style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))', fontWeight: 700 }}>
                   <Calendar size={16} />
                 </div>
                 <div className="text-left">
@@ -67,7 +67,7 @@ export function StudentBookingsView({ student, allSlots, onCancel }: StudentBook
                 {day.slots.map((s, i) => (
                   <div key={i} className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-100">
                     <div className="flex items-center gap-3 min-w-0">
-                      <Clock size={13} className="text-indigo-400 shrink-0" />
+                      <Clock size={13} className="text-brand shrink-0" />
                       <div className="min-w-0">
                         <div className="text-xs font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{s.slotLabel}</div>
                         <div className="text-caption truncate">{s.teacherName} · {s.branch}</div>

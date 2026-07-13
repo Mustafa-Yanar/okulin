@@ -56,7 +56,7 @@ export default function NotificationButton({ showToast }: NotificationButtonProp
       title={subscribed ? 'Bildirimler açık — kapatmak için tıkla' : 'Bildirimleri aç'}
       className={`btn-ghost !px-3 !py-2 ${busy ? 'animate-pulse' : ''}`}
     >
-      <Icon size={14} className={subscribed ? 'text-indigo-500' : 'text-gray-400'} />
+      <Icon size={14} className={subscribed ? 'text-brand' : 'text-gray-400'} />
     </button>
   );
 }

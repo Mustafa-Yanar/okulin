@@ -54,7 +54,7 @@ export default function AvailableTree({ available, onBook, selectableBranchesFor
               className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-700 shrink-0"
-                  style={{ background: 'linear-gradient(135deg,#6366f1,#4f46e5)', fontWeight: 700 }}>
+                  style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))', fontWeight: 700 }}>
                   {(teacher.branches[0] || '?').slice(0, 2)}
                 </div>
                 <div className="text-left">
@@ -75,7 +75,7 @@ export default function AvailableTree({ available, onBook, selectableBranchesFor
                       <button onClick={() => toggleDay(dayKey)}
                         className="w-full flex items-center justify-between px-5 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors">
                         <div className="flex items-center gap-2">
-                          <Calendar size={13} className="text-indigo-400" />
+                          <Calendar size={13} className="text-brand" />
                           <span className="text-sm font-600 text-gray-700" style={{ fontWeight: 600 }}>{day.dayLabel}</span>
                           <span className="text-xs text-gray-400">{day.slots.length} saat</span>
                         </div>
@@ -87,9 +87,9 @@ export default function AvailableTree({ available, onBook, selectableBranchesFor
                           {day.slots.map((s, i) => {
                             const sel = selectableBranchesFor ? selectableBranchesFor(s) : (s.branches || []);
                             return (
-                              <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-gray-100 hover:border-indigo-200 transition-colors">
+                              <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-gray-100 hover:border-[color:var(--brand)] transition-colors">
                                 <div className="flex items-center gap-2">
-                                  <Clock size={12} className="text-indigo-400 shrink-0" />
+                                  <Clock size={12} className="text-brand shrink-0" />
                                   <span className="text-xs font-600 text-gray-700" style={{ fontWeight: 600 }}>{s.slotLabel}</span>
                                 </div>
                                 {sel.length === 1 ? (
