@@ -80,7 +80,7 @@ function SenetKart({ no, toplam, inst, kurum, unvan, ogrenci, veli, duzenlemeTar
   const kurusYazi = yazi.kurus;
   return (
     <div className="rounded-xl border border-slate-300 overflow-hidden flex flex-col"
-      style={{ breakInside: 'avoid', pageBreakInside: 'avoid', height: '85mm', marginBottom: '4mm' }}>
+      style={{ breakInside: 'avoid', pageBreakInside: 'avoid', height: '80mm', marginBottom: '4mm' }}>
       {/* Üst şerit — gövdeyle AYNI kolon oranı (1.35/1) → sağ kutu bloğunun sol sınırı
           gövdedeki öğrenci kutusunun sol sınırıyla hizalanır. */}
       <div className="grid items-stretch" style={{ gridTemplateColumns: '1.35fr 1fr', borderBottom: '1px solid #cbd5e1' }}>
@@ -100,10 +100,11 @@ function SenetKart({ no, toplam, inst, kurum, unvan, ogrenci, veli, duzenlemeTar
         </div>
       </div>
 
-      {/* Gövde: metin + taraf bilgileri */}
-      <div className="grid" style={{ gridTemplateColumns: '1.35fr 1fr' }}>
-        {/* Sol: bono metni */}
-        <div className="px-3 py-2.5" style={{ borderRight: '1px solid #e2e8f0' }}>
+      {/* Gövde: metin + taraf bilgileri — kalan yüksekliği doldurur (ayrı alt imza satırı YOK;
+          imzalar sol metnin altına ve kefil bilgisinin sağına gömülü → yükseklik kazanılır). */}
+      <div className="grid flex-1" style={{ gridTemplateColumns: '1.35fr 1fr' }}>
+        {/* Sol: bono metni + altta iki imza alanı */}
+        <div className="px-3 py-2.5 flex flex-col" style={{ borderRight: '1px solid #e2e8f0' }}>
           <div className="text-[11px] text-slate-500 mb-1">
             Borçlu: <b className="text-slate-800" style={{ fontWeight: 600 }}>{veli.name || ogrenci.name}</b>
             {' · '}Taksit: <b className="text-slate-800" style={{ fontWeight: 600 }}>{inst.idx + 1}. Ay</b>
@@ -117,10 +118,15 @@ function SenetKart({ no, toplam, inst, kurum, unvan, ogrenci, veli, duzenlemeTar
             {kurum.officialAddress ? '' : ' yetkili'} mahkemelerinin salahiyetini şimdiden kabul eylerim. Okudum.
           </p>
           <div className="text-[10px] text-slate-400 mt-1.5">Düzenleme Tarihi: {trDate(duzenlemeTarihi)}</div>
+          {/* İmza alanları — bloğun alt çizgisine yakın, iki adet */}
+          <div className="mt-auto flex items-end justify-around gap-4 pt-3">
+            <div style={{ width: 110, borderTop: '1px solid #94a3b8' }} className="pt-0.5 text-[9px] text-slate-400 text-center">İMZA</div>
+            <div style={{ width: 110, borderTop: '1px solid #94a3b8' }} className="pt-0.5 text-[9px] text-slate-400 text-center">İMZA</div>
+          </div>
         </div>
 
-        {/* Sağ: öğrenci / ödeyecek / kefil */}
-        <div className="text-[10px]">
+        {/* Sağ: öğrenci / ödeyecek / kefil (kefil bilgisinin sağında imza) */}
+        <div className="text-[10px] flex flex-col">
           <Taraf title="Öğrenci">
             <div className="text-slate-800 font-600" style={{ fontWeight: 600 }}>{ogrenci.name}</div>
             {ogrenci.tc && <div className="text-slate-500">T.C.: {ogrenci.tc}</div>}
@@ -134,16 +140,15 @@ function SenetKart({ no, toplam, inst, kurum, unvan, ogrenci, veli, duzenlemeTar
             {veli.tc && <div className="text-slate-500">T.C.: {veli.tc}</div>}
           </Taraf>
           <Taraf title="Kefil" last>
-            <div className="text-slate-300">İsim: ....................</div>
-            <div className="text-slate-300">T.C.: ....................</div>
+            <div className="flex items-end justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-slate-300">İsim: ................</div>
+                <div className="text-slate-300">T.C.: ................</div>
+              </div>
+              <div style={{ width: 66, borderTop: '1px solid #94a3b8' }} className="pt-0.5 text-[9px] text-slate-400 text-center shrink-0">İMZA</div>
+            </div>
           </Taraf>
         </div>
-      </div>
-
-      {/* İmza — A5 senedin en altına yaslı */}
-      <div className="mt-auto flex items-end justify-around gap-4 px-3 py-3" style={{ borderTop: '1px solid #e2e8f0' }}>
-        <div className="text-center"><div style={{ width: 120, borderTop: '1px solid #94a3b8' }} className="pt-0.5 text-[9px] text-slate-400">Borçlu İmza</div></div>
-        <div className="text-center"><div style={{ width: 120, borderTop: '1px solid #94a3b8' }} className="pt-0.5 text-[9px] text-slate-400">Kefil İmza</div></div>
       </div>
     </div>
   );
