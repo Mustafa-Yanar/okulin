@@ -191,7 +191,7 @@ export default function ExpensePanel({ session, showToast }: ExpensePanelProps) 
             )}
           </div>
           <button onClick={openNew}
-            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700">
+            className="flex items-center gap-1.5 px-3 py-2 bg-brand text-white text-sm rounded-lg">
             <Plus size={15} /> {view === 'personnel' ? 'Ödeme Ekle' : 'Gider Ekle'}
           </button>
         </div>
@@ -253,7 +253,7 @@ function PersonnelList({ items, onEdit, onDelete }: ExpenseListProps) {
         return (
           <div key={e.id} className="card card-interactive px-4 py-3 flex items-center gap-3">
             <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-white font-700 text-sm"
-              style={{ background: 'linear-gradient(135deg,#6366f1,#4338ca)', fontWeight: 700 }}>
+              style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))', fontWeight: 700 }}>
               {(e.personnelName || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
@@ -266,7 +266,7 @@ function PersonnelList({ items, onEdit, onDelete }: ExpenseListProps) {
               {(e.extras || []).length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {(e.extras || []).map((x, i) => (
-                    <span key={i} className="text-[10px] bg-indigo-50 text-indigo-600 rounded px-1.5 py-0.5">
+                    <span key={i} className="text-[10px] bg-brand-soft text-brand rounded px-1.5 py-0.5">
                       {x.label || 'Ek'}: ₺{fmt(x.amount)}
                     </span>
                   ))}
@@ -437,7 +437,7 @@ function ExpenseForm({ mode, type, initial, staff, categories, onClose, onSaved,
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className={labelCls + ' !mb-0'}>Ek Ödemeler</label>
-                  <button type="button" onClick={addExtra} className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
+                  <button type="button" onClick={addExtra} className="text-xs text-brand hover:underline flex items-center gap-1">
                     <Plus size={12} /> Satır ekle
                   </button>
                 </div>
@@ -455,9 +455,9 @@ function ExpenseForm({ mode, type, initial, staff, categories, onClose, onSaved,
                 </div>
               </div>
 
-              <div className="bg-indigo-50 rounded-xl px-4 py-2.5 flex items-center justify-between">
-                <span className="text-xs text-indigo-500 font-600" style={{ fontWeight: 600 }}>Genel Toplam</span>
-                <span className="text-lg font-800 text-indigo-700" style={{ fontWeight: 800 }}>₺{fmt(personnelTotal)}</span>
+              <div className="bg-brand-soft rounded-xl px-4 py-2.5 flex items-center justify-between">
+                <span className="text-xs text-brand font-600" style={{ fontWeight: 600 }}>Genel Toplam</span>
+                <span className="text-lg font-800 text-brand" style={{ fontWeight: 800 }}>₺{fmt(personnelTotal)}</span>
               </div>
             </>
           ) : (

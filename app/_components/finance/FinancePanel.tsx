@@ -161,7 +161,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
                 <button
                   key={m} type="button"
                   onClick={() => setMethod(m)}
-                  className={`flex-1 py-2 rounded-lg text-xs font-600 border transition ${method === m ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                  className={`flex-1 py-2 rounded-lg text-xs font-600 border transition ${method === m ? 'bg-brand-soft border-brand-soft text-brand' : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'}`}
                   style={{ fontWeight: 600 }}
                 >{m}</button>
               ))}
@@ -332,9 +332,9 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
           </div>
 
           {totalFee && (
-            <div className="bg-indigo-50 rounded-xl px-4 py-2.5 flex items-center justify-between">
-              <span className="text-sm text-indigo-600">Net Ücret</span>
-              <span className="text-lg font-800 text-indigo-700" style={{ fontWeight: 800 }}>₺{fmt(netFee)}</span>
+            <div className="bg-brand-soft rounded-xl px-4 py-2.5 flex items-center justify-between">
+              <span className="text-sm text-brand">Net Ücret</span>
+              <span className="text-lg font-800 text-brand" style={{ fontWeight: 800 }}>₺{fmt(netFee)}</span>
             </div>
           )}
 
@@ -343,7 +343,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
             <div className="flex gap-2">
               {[['pesin', 'Peşin'], ['taksitli', 'Taksitli']].map(([v, l]) => (
                 <button key={v} type="button" onClick={() => setPlan(v)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-600 border transition ${plan === v ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-600 border transition ${plan === v ? 'bg-brand-soft border-brand-soft text-brand' : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'}`}
                   style={{ fontWeight: 600 }}>{l}</button>
               ))}
             </div>
@@ -370,7 +370,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
                 <div className="flex gap-2">
                   {METHODS.map(m => (
                     <button key={m} type="button" onClick={() => setPesinMethod(m)}
-                      className={`flex-1 py-2 rounded-lg text-xs font-600 border transition ${pesinMethod === m ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                      className={`flex-1 py-2 rounded-lg text-xs font-600 border transition ${pesinMethod === m ? 'bg-brand-soft border-brand-soft text-brand' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
                       style={{ fontWeight: 600 }}>{m}</button>
                   ))}
                 </div>
@@ -516,7 +516,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
           ) : (
             <button
               onClick={e => { e.stopPropagation(); setShowRegister(true); }}
-              className="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-600 hover:bg-indigo-100 transition-colors"
+              className="px-3 py-1.5 rounded-lg bg-brand-soft text-brand text-xs font-600 bg-brand-soft-hover transition-colors"
               style={{ fontWeight: 600 }}
             >+ Kayıt Oluştur</button>
           )}
@@ -613,7 +613,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
                   {finance.balance > 0 && (
                     <button
                       onClick={() => setShowAddPayment(true)}
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-600 hover:bg-indigo-700 transition-colors"
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-brand text-white text-xs font-600 transition-colors"
                       style={{ fontWeight: 600 }}
                     ><Plus size={11} /> Ödeme Al</button>
                   )}

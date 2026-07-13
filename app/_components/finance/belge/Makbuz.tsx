@@ -65,7 +65,7 @@ export default function Makbuz({ kurum, ogrenci, veli, payment, finance, donem, 
         <span className="font-700 text-slate-700 text-sm" style={{ fontWeight: 700 }}>Tahsilat Makbuzu — Önizleme</span>
         <div className="flex gap-2">
           <button onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-600 hover:bg-indigo-700 transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-brand text-white text-sm font-600 transition-colors"
             style={{ fontWeight: 600 }}><Printer size={14} /> Yazdır / PDF</button>
           <button onClick={onClose} aria-label="Kapat" className="btn-icon"><X size={16} /></button>
         </div>
