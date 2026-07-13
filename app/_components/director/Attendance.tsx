@@ -7,6 +7,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Phone, ClipboardList, GraduationCap } from 'lucide-react';
 import { getWeekKey, ALL_DAYS } from '@/lib/constants';
 import { api, Modal } from './shared';
+import { useClasses } from '../ClassesContext';
+import { classShort } from '@/lib/classCatalog';
 import LoadingBox from '../Loading';
 import type { ShowToast } from '../types';
 
@@ -67,7 +69,7 @@ function AttendanceStudentRow({ student, variant }: { student: AttSummaryStudent
   );
 }
 
-function AttendanceSummaryModal({ cls, date, onClose }: { cls: string; date: string; onClose: () => void }) {
+function AttendanceSummaryModal({ cls, label, date, onClose }: { cls: string; label: string; date: string; onClose: () => void }) {
   const [summary, setSummary] = useState<ClsSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -92,7 +94,7 @@ function AttendanceSummaryModal({ cls, date, onClose }: { cls: string; date: str
   })();
 
   return (
-    <Modal title={`${cls.toUpperCase()} – ${dayName} Yoklama Özeti`} onClose={onClose}>
+    <Modal title={`${label} – ${dayName} Yoklama Özeti`} onClose={onClose}>
       {loading ? (
         <LoadingBox height="h-32" />
       ) : !summary || summary.lessons.length === 0 ? (
@@ -150,6 +152,7 @@ function AttendanceSummaryModal({ cls, date, onClose }: { cls: string; date: str
 }
 
 export function DirectorAttendanceView({ showToast }: { showToast?: ShowToast }) {
+  const { classes } = useClasses();
   const today = new Date();
   const jsDay = today.getDay();
   const todayIndex = jsDay === 0 ? 6 : jsDay - 1;
@@ -251,7 +254,7 @@ export function DirectorAttendanceView({ showToast }: { showToast?: ShowToast })
               <button key={cls} onClick={() => setSelectedCls(cls)}
                 className="card card-interactive aspect-square flex flex-col items-center justify-center gap-1.5 cursor-pointer p-3">
                 <GraduationCap size={20} className="text-indigo-400" />
-                <span className="text-sm font-700 text-gray-900" style={{ fontWeight: 700 }}>{cls.toUpperCase()}</span>
+                <span className="text-sm font-700 text-gray-900" style={{ fontWeight: 700 }}>{classShort(classes, cls)}</span>
                 <div className="flex flex-wrap gap-1 justify-center">
                   {totalAbsent > 0 && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 font-600" style={{ fontWeight: 600 }}>{totalAbsent} yok</span>
@@ -273,7 +276,7 @@ export function DirectorAttendanceView({ showToast }: { showToast?: ShowToast })
       )}
 
       {selectedCls && (
-        <AttendanceSummaryModal cls={selectedCls} date={dateForSelectedDay} onClose={() => setSelectedCls(null)} />
+        <AttendanceSummaryModal cls={selectedCls} label={classShort(classes, selectedCls)} date={dateForSelectedDay} onClose={() => setSelectedCls(null)} />
       )}
     </div>
   );
