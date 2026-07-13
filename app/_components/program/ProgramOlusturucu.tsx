@@ -560,7 +560,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
             {clearing ? 'Siliniyor...' : 'Programları Temizle'}
           </button>
           <button onClick={feasibilityCheck} disabled={feasChecking || generating}
-            className="btn-ghost !px-3 !py-2 text-xs flex items-center gap-1.5 border border-indigo-200 text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+            className="btn-ghost !px-3 !py-2 text-xs flex items-center gap-1.5 border border-brand-soft text-brand bg-brand-soft-hover disabled:opacity-50"
             title="Tüm derslerin yerleşip yerleşemeyeceğini solver ile KESİN test et">
             <ShieldCheck size={14} /> {feasChecking ? 'Kontrol ediliyor…' : 'Kesin Kontrol'}
           </button>
@@ -627,9 +627,9 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
                 </p>
 
                 {(() => { const sg = feasSuggestion(feasResult); return sg ? (
-                  <div className="text-xs mt-1.5 p-2 rounded-lg bg-indigo-50 border border-indigo-200">
-                    <span className="text-indigo-700" style={{fontWeight:700}}>Sistem önerisi:</span>{' '}
-                    <b className="text-indigo-800">{sg.text}</b>
+                  <div className="text-xs mt-1.5 p-2 rounded-lg bg-brand-soft border border-brand-soft">
+                    <span className="text-brand" style={{fontWeight:700}}>Sistem önerisi:</span>{' '}
+                    <b className="text-brand">{sg.text}</b>
                     <span className="text-gray-500"> — {sg.why}. Bu yalnızca bir öneridir; aşağıdaki diğer seçenekler de programı çözer.</span>
                   </div>
                 ) : null; })()}
@@ -700,7 +700,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
       {/* Özet kartlar */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {[
-          {l:'Toplam talep', v:totalDemand+' saat', c:'#6366f1'},
+          {l:'Toplam talep', v:totalDemand+' saat', c:'var(--brand,#6366f1)'},
           {l:'Kadro kapasitesi', v:(teachers.length*maxWeekly)+' saat', c:totalDemand>teachers.length*maxWeekly?'#dc2626':'#16a34a'},
           {l:'Sınıf sayısı', v:classes.length, c:'#0ea5e9'},
         ].map((k,i)=>(

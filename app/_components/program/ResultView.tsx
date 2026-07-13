@@ -276,7 +276,7 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
                 setSelUnplaced(null);
                 return n;
               })}
-              className={`!px-3 !py-1.5 flex items-center gap-1.5 text-xs rounded-lg border ${editMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200'}`}
+              className={`!px-3 !py-1.5 flex items-center gap-1.5 text-xs rounded-lg border ${editMode ? 'bg-brand text-white border-brand' : 'bg-white text-brand border-brand-soft'}`}
               style={{fontWeight:600}}>
               <Pencil size={13}/> {editMode ? 'Düzenleme Açık' : 'Düzenle'}
             </button>
@@ -300,7 +300,7 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
 
       {/* Düzenleme modu bilgi bandı */}
       {editMode && (
-        <div className="text-[11px] p-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700">
+        <div className="text-[11px] p-2 rounded-lg bg-brand-soft border border-brand-soft text-brand">
           {selBlock ? (
             <>
               Seçili: <b>{selBlock.course}</b> — {labelOf(selBlock.cls)}, {DAYS[selBlock.day]} ({selBlock.len} saat).{' '}
@@ -331,7 +331,7 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
                     return (
                       <button key={tid}
                         onClick={() => setSelUnplaced(su => ({ ...su!, teacherId: tid }))}
-                        className={`ml-1 px-1.5 py-0.5 rounded border text-[10px] ${cur ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-700 border-indigo-200'}`}
+                        className={`ml-1 px-1.5 py-0.5 rounded border text-[10px] ${cur ? 'bg-brand text-white border-brand' : 'bg-white text-brand border-brand-soft'}`}
                         style={cur ? {fontWeight:600} : undefined}>
                         {teacherById[tid]?.name} ({result.tLoad[tid] || 0} saat{upMeta.presetTeacherId === tid ? ' · ön eşleştirme' : ''})
                       </button>
@@ -368,7 +368,7 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
                 return (
                   <button key={i}
                     onClick={() => { setSel(null); setSelUnplaced(active ? null : { idx: i, teacherId: null }); }}
-                    className={`px-2 py-1 rounded-lg border text-[11px] ${active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-red-700 border-red-200'}`}
+                    className={`px-2 py-1 rounded-lg border text-[11px] ${active ? 'bg-brand text-white border-brand' : 'bg-white text-red-700 border-red-200'}`}
                     title={u.reason}
                     style={active ? {fontWeight:600} : undefined}>
                     {labelOf(u.cls)} — {u.course} ({unplacedMeta[i]?.hours || 2} saat)
@@ -388,7 +388,7 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
 
       {/* Öğretmen yük + PDF butonları */}
       <details className="rounded-xl border border-gray-100 p-3" open>
-        <summary className="cursor-pointer text-indigo-600 text-xs" style={{fontWeight:700}}>Öğretmen yük dağılımı (saat) & PDF</summary>
+        <summary className="cursor-pointer text-brand text-xs" style={{fontWeight:700}}>Öğretmen yük dağılımı (saat) & PDF</summary>
         <div className="mt-2 grid md:grid-cols-2 gap-x-6 gap-y-1.5">
           {loadRows.map(r=>(
             <div key={r.id} className="flex items-center gap-2 text-[11px]">
@@ -408,7 +408,7 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
           <div className="flex flex-wrap gap-1.5">
             {classes.map(cls=>(
               <button key={cls} onClick={()=>onPrintClass(cls)}
-                className="px-2 py-1 rounded-lg border border-gray-200 text-[10px] text-gray-500 hover:border-indigo-300 hover:text-indigo-600 flex items-center gap-1">
+                className="px-2 py-1 rounded-lg border border-gray-200 text-[10px] text-gray-500 hover:border-[color:var(--brand)] text-brand-hover flex items-center gap-1">
                 <Download size={9}/> {labelOf(cls)}
               </button>
             ))}
@@ -489,7 +489,7 @@ export default function ResultView({ result, classes, teachers, labelOf, maxWeek
                         style={{minWidth:64,border:`1px solid ${col}30`,borderLeft:si===0?`3px solid ${col}60`:undefined,
                           background:`${col}14`,color:col,
                           cursor: clickable ? 'pointer' : undefined,
-                          outline: isSel ? '2px solid #4f46e5' : isSwap ? '2px dashed #f59e0b' : undefined,
+                          outline: isSel ? '2px solid var(--brand,#6366f1)' : isSwap ? '2px dashed #f59e0b' : undefined,
                           outlineOffset: -2}}>
                         <b>{viewMode==='class'?shortCourse(a.course):labelOf(a.cls)}</b><br/>
                         <span style={{opacity:.6,fontSize:10}}>{viewMode==='class'?a.teacherName.split(' ')[0]:shortCourse(a.course)}</span>
