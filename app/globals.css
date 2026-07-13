@@ -59,6 +59,7 @@
   --color-danger-border:  rgba(220,38,38,0.2);
 
   --color-info:           #2563eb;
+  --time-etut:            #7c3aed;
   --color-info-bg:        #eff6ff;
   --color-info-border:    rgba(37,99,235,0.2);
 
@@ -109,6 +110,7 @@ html.dark {
   --color-danger-border:  rgba(248,113,113,0.18);
 
   --color-info:           #60a5fa;
+  --time-etut:            #a78bfa;
   --color-info-bg:        rgba(96,165,250,0.08);
   --color-info-border:    rgba(96,165,250,0.18);
 }
@@ -394,6 +396,28 @@ body {
 .border-brand-soft    { border-color: color-mix(in srgb, var(--brand, #6366f1) 30%, transparent); }
 .accent-brand         { accent-color: var(--brand, #6366f1); }
 .badge-brand          { background: color-mix(in srgb, var(--brand,#6366f1) 12%, transparent); color: var(--brand,#6366f1); border: 1px solid color-mix(in srgb, var(--brand,#6366f1) 25%, transparent); }
+
+/* ─── Akademik zaman bloğu (Faz 5): ders/etüt için roller arası TEK görsel dil ──
+   Ders = kurum rengi (--brand), Etüt = mor aksan (--time-etut). İskelet aynı:
+   sol çizgi (--lead) + başlık(ne) + alt(kim) + saat(ne zaman, tabular). Renk+iskelet
+   verir; boyut/padding taşıyıcıdan gelir → 15 ekran kendi kopyasını taşımaz. */
+.time-block { position: relative; border: 1px solid var(--border-light); overflow: hidden; }
+.time-block--lead::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.time-block__title { font-weight: 700; letter-spacing: -0.01em; }
+.time-block__sub   { color: var(--text-secondary); }
+.time-block__time  { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.time-ders { background: color-mix(in srgb, var(--brand,#6366f1) 12%, var(--bg-surface)); border-color: color-mix(in srgb, var(--brand,#6366f1) 26%, transparent); }
+.time-ders.time-block--lead::before { background: var(--brand,#6366f1); }
+.time-ders .time-block__title { color: var(--brand,#6366f1); }
+
+.time-etut { background: color-mix(in srgb, var(--time-etut) 12%, var(--bg-surface)); border-color: color-mix(in srgb, var(--time-etut) 26%, transparent); }
+.time-etut.time-block--lead::before { background: var(--time-etut); }
+.time-etut .time-block__title { color: var(--time-etut); }
+
+/* "şu an" çizgisi — zaman-orantılı takvimde (dalga 4) kullanılacak */
+.time-now { position: relative; height: 2px; background: var(--brand,#6366f1); border-radius: 2px; }
+.time-now::before { content: ''; position: absolute; left: -3px; top: -3px; width: 8px; height: 8px; border-radius: 99px; background: var(--brand,#6366f1); }
 
 /* ─── Kart varyantları ───────────────────────────────────────────────────────── */
 .card-hover {

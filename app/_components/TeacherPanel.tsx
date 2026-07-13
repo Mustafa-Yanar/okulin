@@ -402,11 +402,11 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                   const att = attendance[attKey] || {};
 
                   return (
-                    <div key={lessonNo} className="rounded-xl overflow-hidden border border-gray-100">
+                    <div key={lessonNo} className="time-block time-ders time-block--lead rounded-xl overflow-hidden">
                       <button onClick={() => toggleLesson(day.dayIndex, lessonNo, cls)}
-                        className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors">
+                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-black/[0.03] transition-colors">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-600 text-gray-800" style={{ fontWeight: 600 }}>{lessonNo}. Ders</span>
+                          <span className="time-block__title text-sm">{lessonNo}. Ders</span>
                           <span className="text-xs text-brand font-600" style={{ fontWeight: 600 }}>({classShortUpper(classes, cls)})</span>
                           <span className="text-xs text-gray-400">{stuList.length} öğrenci</span>
                         </div>
@@ -467,13 +467,13 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                   const att = attendance[attKey] || {};
                   const current = att[e.studentId!];
                   return (
-                    <div key={lessonNo} className="rounded-xl overflow-hidden border border-violet-100">
+                    <div key={lessonNo} className="time-block time-etut time-block--lead rounded-xl overflow-hidden">
                       <button onClick={() => toggleLesson(day.dayIndex, lessonNo, cls)}
-                        className="w-full flex items-center justify-between px-3 py-2.5 bg-violet-50 hover:bg-violet-100 transition-colors">
+                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-black/[0.03] transition-colors">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-200 text-violet-700 font-600 shrink-0" style={{ fontWeight: 600 }}>ETÜT</span>
-                          <span className="text-xs text-gray-500 shrink-0">{e.start}–{e.end}</span>
-                          {e.branch && <span className="text-xs text-violet-600 font-600 shrink-0" style={{ fontWeight: 600 }}>{e.branch}</span>}
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-600 shrink-0" style={{ fontWeight: 600, background: 'color-mix(in srgb, var(--time-etut) 22%, transparent)', color: 'var(--time-etut)' }}>ETÜT</span>
+                          <span className="time-block__time text-xs shrink-0">{e.start}–{e.end}</span>
+                          {e.branch && <span className="text-xs font-600 shrink-0" style={{ fontWeight: 600, color: 'var(--time-etut)' }}>{e.branch}</span>}
                           <span className="text-sm text-gray-800 truncate">{e.studentName}</span>
                         </div>
                         <ChevronRight size={14} className="text-gray-400 shrink-0 transition-transform" style={{ transform: lOpen ? 'rotate(90deg)' : 'rotate(0)' }} />
@@ -502,8 +502,8 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                           <button
                             onClick={() => saveAttendance(day.dayIndex, cls, lessonNo)}
                             disabled={saving[attKey]}
-                            className="w-full py-1.5 rounded-lg bg-violet-600 text-white text-xs font-600 hover:bg-violet-700 transition-colors disabled:opacity-60"
-                            style={{ fontWeight: 600 }}>
+                            className="w-full py-1.5 rounded-lg text-white text-xs font-600 transition-colors disabled:opacity-60"
+                            style={{ fontWeight: 600, background: 'var(--time-etut)' }}>
                             {saving[attKey] ? 'Kaydediliyor...' : 'Etüt Yoklamasını Kaydet'}
                           </button>
                         </div>

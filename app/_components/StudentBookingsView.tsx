@@ -65,9 +65,9 @@ export function StudentBookingsView({ student, allSlots, onCancel }: StudentBook
             {dOpen && (
               <div className="border-t border-gray-100 px-4 py-2 space-y-1.5">
                 {day.slots.map((s, i) => (
-                  <div key={i} className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-100">
+                  <div key={i} className="time-block time-etut time-block--lead flex items-center justify-between px-3 py-2.5 rounded-xl">
                     <div className="flex items-center gap-3 min-w-0">
-                      <Clock size={13} className="text-brand shrink-0" />
+                      <Clock size={13} className="shrink-0" style={{ color: 'var(--time-etut)' }} />
                       <div className="min-w-0">
                         <div className="text-xs font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{s.slotLabel}</div>
                         <div className="text-caption truncate">{s.teacherName} · {s.branch}</div>
@@ -75,7 +75,7 @@ export function StudentBookingsView({ student, allSlots, onCancel }: StudentBook
                     </div>
                     <div className="flex items-center gap-2 shrink-0 ml-2">
                       {s.fixed && (
-                        <span className="badge" style={{ background: 'color-mix(in srgb, #7c3aed 12%, transparent)', color: '#7c3aed' }}>Sabit</span>
+                        <span className="badge" style={{ background: 'color-mix(in srgb, var(--time-etut) 14%, transparent)', color: 'var(--time-etut)' }}>Sabit</span>
                       )}
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-500 ${bookedByColor[s.bookedBy || ''] || bookedByColor.student}`} style={{ fontWeight: 500 }}>
                         {bookedByLabel[s.bookedBy || ''] || 'Öğrenci'}

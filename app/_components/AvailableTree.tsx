@@ -89,7 +89,7 @@ export default function AvailableTree({ available, onBook, selectableBranchesFor
                             return (
                               <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white border border-gray-100 hover:border-[color:var(--brand)] transition-colors">
                                 <div className="flex items-center gap-2">
-                                  <Clock size={12} className="text-brand shrink-0" />
+                                  <Clock size={12} className="shrink-0" style={{ color: 'var(--time-etut)' }} />
                                   <span className="text-xs font-600 text-gray-700" style={{ fontWeight: 600 }}>{s.slotLabel}</span>
                                 </div>
                                 {sel.length === 1 ? (
