@@ -5,7 +5,7 @@
 // etütler serbest saatli "+ Etüt Ekle" ile eklenir (etutSablonlari).
 import React, { useState, useEffect, useMemo } from 'react';
 import LoadingBox from '../Loading';
-import { Save, Plus, Download } from 'lucide-react';
+import { Save, Plus, Download, AlertCircle, AlertTriangle } from 'lucide-react';
 import SchedulePrint, { type ScheduleDay, type ScheduleLesson } from '../program/SchedulePrint';
 import {
   ALL_DAYS, daySlots, getWeekKey, classLabel,
@@ -423,7 +423,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
 
       <div className="flex gap-3 mt-4">
         <button className="btn-primary flex-1 flex items-center justify-center gap-1.5" onClick={handleSave} disabled={saving}>
-          <Save size={14} /> {saving ? 'Kaydediliyor...' : 'Kaydet ve Uygula'}
+          <Save size={14} /> {saving ? 'Kaydediliyor...' : `Kaydet ve Uygula${Object.keys(dirty).length ? ` (${Object.keys(dirty).length})` : ''}`}
         </button>
         {!inline && <button className="btn-ghost" onClick={onClose}>İptal</button>}
       </div>
@@ -604,14 +604,14 @@ function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, weekKey, s
 
         {invalid && <p className="text-xs" style={{ color: '#ef4444' }}>Bitiş saati başlangıçtan sonra olmalı.</p>}
         {!invalid && isPast && (
-          <p className="text-xs" style={{ color: '#ef4444' }}>⛔ Geçmiş bir gün/saate etüt eklenemez — ileri bir zaman seçin.</p>
+          <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}><AlertCircle size={13} className="shrink-0" /> Geçmiş bir gün/saate etüt eklenemez — ileri bir zaman seçin.</p>
         )}
         {!invalid && !isPast && overlap && (
-          <p className="text-xs" style={{ color: '#ef4444' }}>⛔ Bu saat aralığı mevcut bir ders/etütle çakışıyor — değiştirin.</p>
+          <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-danger)' }}><AlertCircle size={13} className="shrink-0" /> Bu saat aralığı mevcut bir ders/etütle çakışıyor — değiştirin.</p>
         )}
         {!invalid && !isPast && !overlap && hasMola && (
           <div className="rounded-lg p-2.5" style={{ background: 'color-mix(in srgb, #f59e0b 12%, transparent)', border: '1px solid color-mix(in srgb, #f59e0b 35%, transparent)' }}>
-            <p className="text-xs mb-1" style={{ color: '#b45309', fontWeight: 600 }}>⚠ Yeterli mola yok:</p>
+            <p className="text-xs mb-1 flex items-center gap-1.5" style={{ color: 'var(--color-warning)', fontWeight: 600 }}><AlertTriangle size={13} className="shrink-0" /> Yeterli mola yok:</p>
             {molaWarnings.map((w, i) => <p key={i} className="text-[11px]" style={{ color: '#b45309' }}>• {w}</p>)}
             <label className="flex items-center gap-1.5 text-xs mt-2 cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
               <input type="checkbox" checked={ignoreMola} onChange={e => setIgnoreMola(e.target.checked)} />
