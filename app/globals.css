@@ -849,9 +849,11 @@ html.dark .hover\:bg-amber-100:hover  { background: var(--color-warning-bg) !imp
     min-height: 0 !important;
   }
 
-  /* Senet sayfası: 3 senet A4'e DİKEY yayılır (üst senet sayfa üstüne, alt senet sayfa
-     altına, aralar eşit). height = A4 - @page 10mm margin (275mm güvenli pay); üst/alt
-     padding 0; child marginlar sıfırlanır (justify-content boşlukları yönetir). */
+  /* Senet sayfası: senetler ÜSTTEN dizilir, aralarında SABİT boşluk (17.5mm).
+     Bu boşluk 3-senetli tam sayfanın aralığıdır: 275mm - 3×80mm = 35mm → 2 aralık = 17.5mm.
+     Böylece tam sayfa yayılmış görünür (80+17.5+80+17.5+80 = 275mm), eksik (2 veya 1
+     senetli) son sayfa da AYNI konumdan başlar (üstten) — space-between gibi alta yaslanmaz.
+     height = A4 - @page 10mm margin; üst/alt padding 0; child marginlar sıfırlanır. */
   #print-preview .senet-sheet {
     box-sizing: border-box;
     height: 275mm;
@@ -859,7 +861,8 @@ html.dark .hover\:bg-amber-100:hover  { background: var(--color-warning-bg) !imp
     padding-bottom: 0 !important;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 17.5mm;
   }
   #print-preview .senet-sheet > * {
     margin-bottom: 0 !important;
