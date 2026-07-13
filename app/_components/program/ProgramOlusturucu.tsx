@@ -13,12 +13,12 @@ import type { Branding } from '@/lib/branding';
 import type { ShowToast, TeacherDTO, TeacherPresetDTO } from '../types';
 import type {
   ApiFn, Load, Grouping, Windows, TeacherSlots, SolveResult, SolveResponse,
-  ProgramGrid, FeasFix, SwapFix, DayGap, FeasResult, SolvePayload,
+  ProgramGrid, FeasFix, SwapFix, DayGap, FeasResult, SolvePayload, LockedLesson,
 } from './program-types';
 import {
   DAYS, LOAD_COLUMNS, colKeyFor, coursesForColFromRegistry, colKeyFromRegistry,
   SOLVER_GROUPS, windowsFromTemplate, parsePattern, slotIdFor, feasSuggestion,
-  currentWeekKey, teacherGroups, fetchTeacherSlots, analyzeLoad,
+  currentWeekKey, teacherGroups, fetchTeacherSlots, fetchManualLessons, analyzeLoad,
 } from './program-logic';
 
 // Ders adı = branş adı; otomatik eşleme yok (çoklu branş modeli).
@@ -164,7 +164,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
   // Kısıtların tümü server'da modellenir; frontend payload'ı hazırlar ve sonucu gösterir.
   // Solver payload'ını kur — hem generate() hem feasibilityCheck() kullanır.
   // teacherSlots dışarıdan verilir (feasibility farklı senaryolar için değiştirir).
-  const buildPayload = useCallback((teacherSlots: TeacherSlots): SolvePayload => {
+  const buildPayload = useCallback((teacherSlots: TeacherSlots, locked?: LockedLesson[]): SolvePayload => {
     const tList = teachers || []; // çağıranlar teachers yüklü olmadan çağırmaz
     const windows: Record<string, Windows> = {}, colKey: Record<string, string | null> = {}, group: Record<string, string | null> = {};
     classes.forEach(c => {
@@ -193,7 +193,7 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
     const presets = tList.flatMap(t =>
       (t.presets || []).map(p => ({ teacherId: t.id, cls: p.cls, course: p.course }))
     );
-    return { classes, teachers: tList, load: cleanLoad, pieces, maxWeekly, windows, colKey, group, teacherSlots, presets };
+    return { classes, teachers: tList, load: cleanLoad, pieces, maxWeekly, windows, colKey, group, teacherSlots, presets, locked };
   }, [classes, teachers, windowsOf, colKeyOf, groupOf, load, coursesOfCol, grouping, maxWeekly]);
 
   async function generate() {
@@ -203,10 +203,15 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
     setGenerating(true);
     try {
       // KATI mod: her öğretmenin işaretlediği (gün, slotIndex) çiftleri — ön analizle aynı kaynak.
-      const teacherSlots = await fetchTeacherSlots(teachers, api);
+      // Elle atanan dersler (locked) çözücüye SABİT yerleşim olarak gider; çözücü kalanı dağıtır.
+      const [teacherSlots, locked] = await Promise.all([
+        fetchTeacherSlots(teachers, api),
+        fetchManualLessons(teachers, api),
+      ]);
       setLastTeacherSlots(teacherSlots);
-      const payload = buildPayload(teacherSlots);
+      const payload = buildPayload(teacherSlots, locked);
       const data = await api<SolveResponse>('/api/program-solve', { method: 'POST', body: JSON.stringify(payload) });
+      if (locked.length) showToast?.(`${locked.length} elle atanmış ders sabit tutuldu (ön eşleştirme)`, 'info');
 
       const assigned = data.assigned || [];
       const unplaced = data.unplaced || [];
@@ -234,8 +239,11 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
     setFeasChecking(true);
     setFeasResult(null);
     try {
-      const teacherSlots = await fetchTeacherSlots(teachers, api);
-      const base = buildPayload(teacherSlots);
+      const [teacherSlots, locked] = await Promise.all([
+        fetchTeacherSlots(teachers, api),
+        fetchManualLessons(teachers, api),
+      ]);
+      const base = buildPayload(teacherSlots, locked);
 
       // 1) Mevcut durumu kesin test et
       const r0 = await api<SolveResponse>('/api/program-solve', {
@@ -490,7 +498,9 @@ export default function ProgramOlusturucu({ api, showToast, branding }: ProgramO
     }
     setApplying(true);
     try {
-      // Önce tüm öğretmenlerin programını temizle
+      // Önce tüm öğretmenlerin programını temizle. NOT: Elle atanmış (locked) dersler de
+      // silinir AMA çözücü onları pinli birim olarak assigned'a geri koyduğu için aşağıdaki
+      // yazma adımında aynı slota geri gelir — hibrit akışta manuel yerleşim korunur.
       for (const t of (teachers || [])) {
         await api('/api/program', { method: 'DELETE', body: JSON.stringify({ teacherId: t.id }) });
       }

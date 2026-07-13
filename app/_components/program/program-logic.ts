@@ -2,7 +2,7 @@ import { slotId as makeSlotId, slotNoOf } from '@/lib/constants';
 import type { ClassRecord } from '@/lib/classes';
 import type { TeacherDTO } from '../types';
 import type {
-  ApiFn, Load, Grouping, Windows, TeacherSlots, ProgramGrid, Assigned, FeasInfeasible, AnalyzeCtx,
+  ApiFn, Load, Grouping, Windows, TeacherSlots, ProgramGrid, Assigned, FeasInfeasible, AnalyzeCtx, LockedLesson,
 } from './program-types';
 
 // ── Program oluşturucu saf mantığı (sabitler + saf fonksiyonlar) ──
@@ -227,6 +227,46 @@ export async function fetchTeacherSlots(teachers: TeacherDTO[], api: ApiFn): Pro
     } catch { teacherSlots[t.id] = []; }
   }));
   return teacherSlots;
+}
+
+// Elle (manuel) atanmış dersleri topla → çözücüye "locked" (sabit yerleşim) olarak gider.
+// Her öğretmenin programındaki type==='ders' girdileri (gün, cls, branch) bazında gruplanır;
+// aynı grupta ARDIŞIK slotlar tek bloğa (seg) bölünür. Çözücü her bloğu o gün+slota pinler,
+// dersin kalan saatlerini etrafına dağıtır. fetchTeacherSlots ile aynı /api/program kaynağı.
+export async function fetchManualLessons(teachers: TeacherDTO[], api: ApiFn): Promise<LockedLesson[]> {
+  const out: LockedLesson[] = [];
+  await Promise.all(teachers.map(async t => {
+    try {
+      const resp = await api<{ program?: ProgramGrid }>(`/api/program?teacherId=${t.id}`);
+      const prog = resp.program || {};
+      // (gün|cls|branch) → slotIdx listesi
+      const groups: Record<string, { day: number; cls: string; course: string; idxs: number[] }> = {};
+      for (const dayStr of Object.keys(prog)) {
+        const day = parseInt(dayStr);
+        const slots = prog[dayStr] || {};
+        for (const slotId of Object.keys(slots)) {
+          const e = slots[slotId];
+          if (e?.type !== 'ders' || !e.cls || !e.branch) continue;
+          const no = slotNoOf(slotId); // 1-tabanlı
+          if (no == null || no < 1) continue;
+          const key = `${day}|${e.cls}|${e.branch}`;
+          (groups[key] = groups[key] || { day, cls: e.cls, course: e.branch, idxs: [] }).idxs.push(no - 1);
+        }
+      }
+      // her grubu ardışık slotIdx koşularına böl — her koşu bir locked blok
+      for (const g of Object.values(groups)) {
+        const sorted = [...new Set(g.idxs)].sort((a, b) => a - b);
+        let run: number[] = [];
+        const flush = () => { if (run.length) { out.push({ teacherId: t.id, cls: g.cls, course: g.course, day: g.day, slots: run }); run = []; } };
+        for (const idx of sorted) {
+          if (run.length && idx !== run[run.length - 1] + 1) flush();
+          run.push(idx);
+        }
+        flush();
+      }
+    } catch { /* öğretmen okunamadıysa atla */ }
+  }));
+  return out;
 }
 
 // Bir grubun (gün,slot) pencere birleşimi: o gruptaki tüm sınıfların işaretli slotları.

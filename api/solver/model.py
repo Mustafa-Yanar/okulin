@@ -14,6 +14,9 @@ Girdi payload:
   group:  {cls: 'ortaokul'|'lise'|'mezun'},    # classToGroup(cls) (frontend)
   teacherSlots: {tid: [[day, slotIdx], ...]},  # KATI mod (Özellik 1)
   presets: [{teacherId, cls, course}, ...],    # HARD kilit (Özellik 2)
+  locked: [{teacherId, cls, course, day, slots:[slotIdx,...]}, ...],  # Özellik 3: elle
+                                               #   yerleştirilmiş dersler — belirli (gün,slot)'a
+                                               #   SABİT (pinned) birim; çözücü kalanı etrafına dağıtır.
 }
 
 Çıktı:
@@ -52,6 +55,20 @@ NUM_WORKERS = 8
 def default_pieces(hours):
     """Desen verilmemişse: 2'li gruplar + tek kalan saat 1'lik grup."""
     return [2] * (hours // 2) + ([1] if hours % 2 else [])
+
+
+def subtract_locked(base_pat, locked_lengths):
+    """Tüm-ders deseninden elle atanmış (locked) parça uzunluklarını çıkar → çözücünün
+    dağıtacağı KALAN desen. Tam eşleşen parçayı siler; yoksa en büyük parçadan düşer
+    (toplam korunur, yaklaşık). Örn [2,2,2] - [2] = [2,2]; [3,2,2] - [2] = [3,2]."""
+    rem = sorted(base_pat, reverse=True)
+    for L in sorted(locked_lengths, reverse=True):
+        if L in rem:
+            rem.remove(L)
+        elif rem:
+            rem[0] = rem[0] - L
+            rem = sorted([v for v in rem if v > 0], reverse=True)
+    return rem
 
 
 def parse_pieces(raw, hours):
@@ -133,6 +150,32 @@ def solve(payload):
 
     teacher_by_id = {t['id']: t for t in teachers}
 
+    # ── Özellik 3: elle yerleştirilmiş dersler (locked / pinned) ──
+    # Her locked, o (cls,course)'un bir parçasını belirli (gün, ardışık slotlar) ve belirli
+    # öğretmene SABİTLER. Çözücüde tek-adaylı pinned unit olur: K4/K5 çakışması + öğretmen
+    # yükü otomatik korunur, load'dan düşülür (çözücü kalanı dağıtır), assigned'da geri döner.
+    # Aynı (cls,course) tek öğretmene bağlıdır (bir sınıf-ders = tek öğretmen kuralı) → aynı
+    # cc'ye farklı öğretmen locked'ları gelirse İLK öğretmen kazanır, sonrakiler atlanır.
+    locked_raw = payload.get('locked') or []
+    locked_list = []            # [{cls, course, tid, day, seg(tuple)}]
+    locked_hours = {}           # (cls, course) -> toplam locked saat (load'dan düşülür)
+    locked_teacher_of_cc = {}   # (cls, course) -> ilk locked öğretmen (tek öğretmen kuralı)
+    for lk in locked_raw:
+        cls = lk.get('cls'); course = lk.get('course'); tid = lk.get('teacherId')
+        day = lk.get('day'); slots = lk.get('slots') or []
+        if cls is None or course is None or tid is None or day is None or not slots:
+            continue
+        if tid not in teacher_by_id:
+            continue
+        cc = (cls, course)
+        # tek öğretmen kuralı: bu cc daha önce başka öğretmene kilitlendiyse atla
+        if cc in locked_teacher_of_cc and locked_teacher_of_cc[cc] != tid:
+            continue
+        locked_teacher_of_cc[cc] = tid
+        seg = tuple(sorted(int(s) for s in slots))
+        locked_list.append({'cls': cls, 'course': course, 'tid': tid, 'day': int(day), 'seg': seg})
+        locked_hours[cc] = locked_hours.get(cc, 0) + len(seg)
+
     assigned = []
     unplaced = []
     preset_warnings = []
@@ -143,36 +186,61 @@ def solve(payload):
     # unit = (cls, course, L): dersin L saatlik TEK parçası. Parça bir güne, ardışık
     # L slota ve (cls,course üzerinden) bir öğretmene atanır.
     units = []                 # [(cls, course, L)]
-    units_of_cc = {}           # (cls, course) -> [unit_index, ...]
+    units_of_cc = {}           # (cls, course) -> [unit_index, ...] (normal + locked)
     eligible_of_cc = {}        # (cls, course) -> [teacherId, ...]
     hours_of_cc = {}           # (cls, course) -> toplam saat (desen toplamı)
+    locked_units = set()       # locked (pinned) unit index'leri — K3/simetri'den hariç
+    pin_of_unit = {}           # locked unit index -> (day, seg) sabit yerleşim
 
     for cls in classes:
         key = colkey_by_cls.get(cls)
         grp = group_by_cls.get(cls)
-        cc_load = load.get(key, {}) if key else {}
+        cc_load = dict(load.get(key, {}) if key else {})
         pats = pieces_by_key.get(key, {}) if key else {}
+        # bu sınıfa elle atanmış ama load sütununda olmayan dersleri dahil et (load 0)
+        for l in locked_list:
+            if l['cls'] == cls and l['course'] not in cc_load:
+                cc_load[l['course']] = 0
         for course, hours in cc_load.items():
             hours = int(hours or 0)
-            if hours <= 0:
+            cc = (cls, course)
+            lk_h = locked_hours.get(cc, 0)         # elle atanmış saat
+            if hours <= 0 and lk_h <= 0:
                 continue
-            pat = parse_pieces(pats.get(course), hours)
-            if not pat:
-                continue
+            rem = max(0, hours - lk_h)             # çözücünün DAĞITACAĞI kalan saat
+            if lk_h > 0:
+                # locked var → tüm-ders deseninden elle parçaları çıkar (çift-sayımı önler)
+                locked_lens = [len(l['seg']) for l in locked_list
+                               if l['cls'] == cls and l['course'] == course]
+                base_pat = parse_pieces(pats.get(course), max(hours, lk_h))
+                pat = subtract_locked(base_pat, locked_lens)
+            else:
+                pat = parse_pieces(pats.get(course), hours) if hours > 0 else []
             elig = eligible_teachers(teachers, course, grp)
+            # locked öğretmen eligible listesinde yoksa ekle (elle atama kesin — grup/branş bypass)
+            lk_tid = locked_teacher_of_cc.get(cc)
+            if lk_tid and lk_tid not in elig:
+                elig = list(elig) + [lk_tid]
             if not elig:
-                # her parça için bir unplaced satırı (hours: manuel yerleştirme parça boyunu bilsin)
                 for length in pat:
                     unplaced.append({'cls': cls, 'course': course, 'hours': length,
                                      'reason': 'uygun öğretmen yok (ders: %s)' % course})
                 continue
-            cc = (cls, course)
             eligible_of_cc[cc] = elig
-            hours_of_cc[cc] = sum(pat)
+            # yük: tek öğretmen locked + kalan saati birlikte verir
+            hours_of_cc[cc] = max(hours, lk_h)
             idxs = []
             for length in pat:
                 idxs.append(len(units))
                 units.append((cls, course, length))
+            # locked (elle) parçalar: tek-adaylı pinned unit
+            for l in locked_list:
+                if l['cls'] == cls and l['course'] == course:
+                    u = len(units)
+                    units.append((cls, course, len(l['seg'])))
+                    locked_units.add(u)
+                    pin_of_unit[u] = (l['day'], l['seg'])
+                    idxs.append(u)
             units_of_cc[cc] = idxs
 
     # Çözülecek bir şey yoksa erken dön
@@ -197,15 +265,21 @@ def solve(payload):
     placed = {}
     pool_of_unit = {}  # u -> [(day, (slot,...)), ...]
     for u, (cls, course, length) in enumerate(units):
-        win = win_by_cls.get(cls, {})
-        aligned = not free_cls.get(cls, False)
-        pool = [(d, seg) for d in sorted(win)
-                for seg in run_candidates(win[d], length, aligned)]
+        if u in locked_units:
+            # locked: tek aday = elle seçilen (gün, seg); sınıf penceresine bakmaz (kesin)
+            pool = [pin_of_unit[u]]
+        else:
+            win = win_by_cls.get(cls, {})
+            aligned = not free_cls.get(cls, False)
+            pool = [(d, seg) for d in sorted(win)
+                    for seg in run_candidates(win[d], length, aligned)]
         pool_of_unit[u] = pool
         x[u] = [model.NewBoolVar('x_%d_%d' % (u, p)) for p in range(len(pool))]
         placed[u] = model.NewBoolVar('placed_%d' % u)
         # u ya tam 1 yerleşime ya hiçbirine; havuz boşsa (parça sığmıyor) placed 0'a düşer
         model.Add(sum(x[u]) == placed[u])
+        if u in locked_units:
+            model.Add(x[u][0] == 1)  # SABİT yerleşim (pin) — elle atama korunur
 
     # y[(cls,course)][t] : bu sınıf-dersi öğretmen t veriyor mu (sadece eligible)
     y = {}
@@ -219,6 +293,10 @@ def solve(payload):
         for u in units_of_cc[cc]:
             # öğretmen seçilmediyse (sum_y=0) bu cc'nin hiçbir parçası yerleşemez
             model.Add(placed[u] <= sum_y)
+        # Özellik 3: elle atanmış ders varsa öğretmeni SABİT (HARD) — kalan parçalar da ona gider
+        lk_tid = locked_teacher_of_cc.get(cc)
+        if lk_tid and lk_tid in y[cc]:
+            model.Add(y[cc][lk_tid] == 1)
 
     # ── Özellik 2: ön eşleştirme kilitleri (SOFT — yüksek öncelikli) ──
     # Eskiden model.Add(y[cc][tid]==1) HARD idi: imkansız TEK bir preset (öğretmenin
@@ -244,15 +322,23 @@ def solve(payload):
         preset_miss_info.append((miss, cc, tid))
 
     # ── HARD: K3 — aynı sınıf+ders aynı günde en fazla 1 parça ──
+    # Locked (pinned) parçalar K3'e girmez (kullanıcı kesin yerleştirdi) ama o gün "dolu"
+    # sayılır: normal parça locked'ın gününe gelemez (aynı ders aynı gün 2 kez olmasın).
     for cc, idxs in units_of_cc.items():
-        days = sorted(win_by_cls.get(cc[0], {}).keys())
+        locked_days_cc = set(pin_of_unit[u][0] for u in idxs if u in locked_units)
+        days = sorted(set(win_by_cls.get(cc[0], {}).keys()) | locked_days_cc)
         for d in days:
             terms = []
             for u in idxs:
+                if u in locked_units:
+                    continue  # pinned parça K3 toplamına girmez
                 for p, (day, _seg) in enumerate(pool_of_unit[u]):
                     if day == d:
                         terms.append(x[u][p])
-            if len(terms) > 1:
+            if d in locked_days_cc:
+                for tm in terms:
+                    model.Add(tm == 0)  # elle ders var → normal parça bu güne yasak
+            elif len(terms) > 1:
                 model.Add(sum(terms) <= 1)
 
     # ── Simetri kırma: aynı (cls,course) içindeki EŞ uzunluklu parçalar birbirinin ──
@@ -270,6 +356,8 @@ def solve(payload):
     for cc, idxs in units_of_cc.items():
         by_len = {}
         for u in idxs:
+            if u in locked_units:
+                continue  # pinned parçalar sabit — simetri kırmaya girmez
             by_len.setdefault(units[u][2], []).append(u)
         for us in by_len.values():
             for ua, ub in zip(us, us[1:]):
@@ -319,8 +407,12 @@ def solve(payload):
         for t in elig:
             off = set(teacher_by_id[t].get('offDays') or [])
             for u in idxs:
+                is_locked = u in locked_units
                 for p, (day, seg) in enumerate(pool_of_unit[u]):
-                    if day in off or not piece_ok(t, day, seg):
+                    # locked parça: öğretmen izin/available BYPASS (elle atama kesin). y[cc]
+                    # AtMostOne + locked kilidi zaten yalnız locked öğretmeni seçtirir; diğer
+                    # t için y=0 → z=0, yalnız gerçek öğretmen slot çakışmasına (K4) katılır.
+                    if not is_locked and (day in off or not piece_ok(t, day, seg)):
                         model.AddBoolOr([x[u][p].Not(), y[cc][t].Not()])
                         continue
                     zv = get_z(u, p, t, cc)

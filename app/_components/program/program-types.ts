@@ -81,6 +81,10 @@ export interface AnalyzeCtx {
   coursesForCol?: (key: string | null) => string[];
 }
 
+// Elle (manuel) atanmış ders → çözücüye "locked" (sabit yerleşim). day+slots o bloğun
+// gün ve ardışık slot indeksleri; çözücü bu birimi pinler, kalanı etrafına dağıtır.
+export interface LockedLesson { teacherId: string; cls: string; course: string; day: number; slots: number[] }
+
 export interface SolvePayload {
   classes: string[];
   teachers: TeacherDTO[];
@@ -92,5 +96,6 @@ export interface SolvePayload {
   group: Record<string, string | null>;
   teacherSlots: TeacherSlots;
   presets: { teacherId: string; cls: string; course: string }[];
+  locked?: LockedLesson[];
   feasibilityTest?: boolean;
 }
