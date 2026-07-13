@@ -150,7 +150,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
             <label className="text-label block mb-1.5">Tarih</label>
             <input
               type="date" value={date} onChange={e => setDate(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
+              className="input"
             />
           </div>
 
@@ -172,7 +172,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
             <label className="text-label block mb-1.5">Not (opsiyonel)</label>
             <input
               type="text" value={note} onChange={e => setNote(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
+              className="input"
               placeholder="Örn: 1. dönem ödemesi"
             />
           </div>
@@ -320,13 +320,13 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
             <div>
               <label className="text-label block mb-1.5">Toplam Ücret (₺)</label>
               <input type="number" min="0" step="0.01" value={totalFee} onChange={e => setTotalFee(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
+                className="input"
                 placeholder="0,00" required />
             </div>
             <div>
               <label className="text-label block mb-1.5">İndirim (₺)</label>
               <input type="number" min="0" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none"
+                className="input"
                 placeholder="0,00" />
             </div>
           </div>
@@ -356,13 +356,13 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
                 <div>
                   <label className="text-label block mb-1.5">Ödeme Tarihi</label>
                   <input type="date" value={pesinDate} onChange={e => setPesinDate(e.target.value)}
-                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
+                    className="input" />
                 </div>
                 <div>
                   <label className="text-label block mb-1.5">Tutar (₺)</label>
                   <input type="number" min="0" step="0.01" value={pesinAmount} onChange={e => setPesinAmount(e.target.value)}
                     placeholder={totalFee ? fmt(netFee) : '0,00'}
-                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
+                    className="input" />
                 </div>
               </div>
               <div>
@@ -384,12 +384,12 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
               <div className="flex items-center justify-between mb-2">
                 <label className="text-label">İlk Taksit Tarihi</label>
                 <input type="date" value={firstDate} onChange={e => setFirstDate(e.target.value)}
-                  className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white focus:border-indigo-400 focus:outline-none" />
+                  className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white focus:border-[var(--brand,#6366f1)] focus:outline-none" />
               </div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-label">Taksit Sayısı</label>
                 <select value={installmentCount} onChange={e => setInstallmentCount(parseInt(e.target.value))}
-                  className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white focus:border-indigo-400 focus:outline-none">
+                  className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white focus:border-[var(--brand,#6366f1)] focus:outline-none">
                   {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => <option key={n} value={n}>{n} Taksit</option>)}
                 </select>
               </div>
@@ -399,12 +399,12 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
                     <span className="text-xs text-gray-500 w-6 text-center font-600" style={{ fontWeight: 600 }}>{i + 1}.</span>
                     <input type="date" value={inst.dueDate}
                       onChange={e => setInstallments(prev => prev.map((x, j) => j === i ? { ...x, dueDate: e.target.value } : x))}
-                      className="bg-white border border-gray-200 rounded px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none flex-1"
+                      className="bg-white border border-gray-200 rounded px-2 py-1 text-xs focus:border-[var(--brand,#6366f1)] focus:outline-none flex-1"
                       disabled={inst.paid}
                     />
                     <input type="number" value={inst.amount}
                       onChange={e => setInstallments(prev => prev.map((x, j) => j === i ? { ...x, amount: parseFloat(e.target.value) || 0 } : x))}
-                      className="bg-white border border-gray-200 rounded px-2 py-1 text-xs focus:border-indigo-400 focus:outline-none w-24 text-right"
+                      className="bg-white border border-gray-200 rounded px-2 py-1 text-xs focus:border-[var(--brand,#6366f1)] focus:outline-none w-24 text-right"
                       disabled={inst.paid}
                     />
                     {inst.paid && <Check size={12} className="text-green-600 shrink-0" />}
