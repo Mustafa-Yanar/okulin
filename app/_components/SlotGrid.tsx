@@ -134,6 +134,7 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
             <button
               onClick={() => onCellClick(dayIndex, slotIdx, slotData, true)}
               title={`"${slotData.eventTitle || 'Etkinlik'}" aktif — yine de aç ve rezervasyon yap`}
+              aria-label={`${slotData.eventTitle || 'Etkinlik'} aktif — yine de aç ve rezervasyon yap`}
               className="w-full rounded-lg py-2 px-1 text-center border border-dashed border-rose-300 bg-rose-100 hover:border-rose-400 hover:bg-rose-200 transition-colors text-[10px] text-rose-700 truncate"
             >
               {slotData.eventTitle || 'Etkinlik'}
@@ -162,6 +163,7 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
           <button
             onClick={() => onCellClick(dayIndex, slotIdx, slotData, true)}
             title="Ek slot aç ve rezervasyon yap"
+            aria-label="Ek slot aç ve rezervasyon yap"
             className="w-full rounded-lg py-2 px-1 text-center border border-dashed border-amber-400 bg-amber-50 hover:border-amber-500 hover:bg-amber-100 transition-colors text-xs text-amber-600 hover:text-amber-700"
           >
             +
@@ -202,8 +204,9 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
           )}
           {canCancel && (
             <button onClick={() => onCancel({ teacherId: teacher.id, day: dayIndex, slotId: slot.id, weekKey })}
-              className={`absolute top-0.5 right-0.5 p-0.5 rounded hover:bg-red-100 transition-opacity ${isDirector ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-              <X size={10} className="text-red-400" />
+              aria-label="Rezervasyonu iptal et"
+              className={`absolute top-0.5 right-0.5 p-1 rounded hover:bg-red-100 transition-opacity focus-visible:opacity-100 ${isDirector ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+              <X size={12} className="text-red-400" />
             </button>
           )}
         </div>
