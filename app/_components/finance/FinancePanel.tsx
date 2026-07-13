@@ -27,8 +27,14 @@ function fmt(n: number | undefined): string {
   return (n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// YEREL tarih → YYYY-MM-DD. toISOString() UTC'ye çevirir; TR (UTC+3) gece yarısını bir
+// gün geriye kaydırırdı (05 seçilen taksit 04 kaydolurdu). Yerel getFullYear/Month/Date
+// kayma üretmez — tarih girişleri (taksit vadesi, ödeme tarihi) doğru gün olarak yazılır.
+function localYMD(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localYMD(new Date());
 }
 
 function isOverdue(dueDate: string | null | undefined): boolean {
@@ -204,7 +210,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
   const [firstDate, setFirstDate] = useState<string>(() => {
     if (existing?.installments?.[0]?.dueDate) return existing.installments[0].dueDate;
     const d = new Date(); d.setMonth(d.getMonth() + 1);
-    return d.toISOString().slice(0, 10);
+    return localYMD(d);
   });
   const [installments, setInstallments] = useState<InstallmentDTO[]>(() => {
     if (existing?.installments?.length) return existing.installments;
@@ -228,7 +234,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
       d.setMonth(d.getMonth() + i);
       return {
         idx: i,
-        dueDate: d.toISOString().slice(0, 10),
+        dueDate: localYMD(d),
         amount: i === count - 1 ? Math.round((net - perInst * (count - 1)) * 100) / 100 : perInst,
         paid: existing?.installments?.[i]?.paid || false,
         paidDate: existing?.installments?.[i]?.paidDate || null,
