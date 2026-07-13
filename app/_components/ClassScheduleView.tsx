@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Calendar } from 'lucide-react';
+import { Calendar, Download } from 'lucide-react';
 import { ALL_DAYS } from '@/lib/constants';
 import { api } from './shared';
+import SchedulePrint, { type ScheduleDay, type ScheduleLesson } from './program/SchedulePrint';
 
 // Salt-okunur sınıf ders programı tablosu. Öğrenci kendi (session.cls), veli çocuğunun
 // (child.cls) programını görür. Sınıf kilidi API'de (class-schedule) uygulanır; burada
@@ -20,6 +21,7 @@ interface ClassLessonDTO {
 export default function ClassScheduleView({ cls }: { cls?: string }) {
   const [schedule, setSchedule] = useState<Record<number, ClassLessonDTO[]> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showPrint, setShowPrint] = useState(false);
 
   useEffect(() => {
     if (!cls) { setSchedule({}); setLoading(false); return; }
@@ -71,8 +73,20 @@ export default function ClassScheduleView({ cls }: { cls?: string }) {
     );
   }
 
+  // PDF çıktısı verisi (sınıf perspektifi: hücrede öğretmen adı).
+  const classDays: ScheduleDay[] = ALL_DAYS.map(day => ({
+    dayIndex: day.index, dayLabel: day.short, weekend: day.weekend,
+    lessons: (schedule?.[day.index] || []).map((l): ScheduleLesson => ({ main: l.teacherName || '', sub: l.subBranch || l.branch || '', time: l.slotLabel || '', slotId: l.slotId })),
+  }));
+
   return (
-    <div className="overflow-x-auto">
+    <div>
+      <div className="flex justify-end mb-3">
+        <button onClick={() => setShowPrint(true)} className="btn-ghost !px-3 !py-1.5 text-sm flex items-center gap-1.5">
+          <Download size={14} /> PDF İndir
+        </button>
+      </div>
+      <div className="overflow-x-auto">
       <table className="w-full text-xs" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
         <thead>
           <tr>
@@ -105,6 +119,8 @@ export default function ClassScheduleView({ cls }: { cls?: string }) {
           ))}
         </tbody>
       </table>
+      </div>
+      {showPrint && <SchedulePrint title="Ders Programı" subtitle={cls?.toUpperCase() || 'Sınıf'} days={classDays} onClose={() => setShowPrint(false)} />}
     </div>
   );
 }
