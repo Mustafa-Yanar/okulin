@@ -255,7 +255,7 @@ export function DirectorAttendanceView({ showToast }: { showToast?: ShowToast })
             return (
               <button key={cls} onClick={() => setSelectedCls(cls)}
                 className="card card-interactive aspect-square flex flex-col items-center justify-center gap-1.5 cursor-pointer p-3">
-                <GraduationCap size={20} className="text-indigo-400" />
+                <GraduationCap size={20} className="text-brand" />
                 <span className="text-sm font-700 text-gray-900" style={{ fontWeight: 700 }}>{classShort(classes, cls)}</span>
                 <div className="flex flex-wrap gap-1 justify-center">
                   {totalAbsent > 0 && (

@@ -77,7 +77,7 @@ function WeekNav({ weekKey, currentWeek, canPrev, canNext, onPrev, onNext }: Cal
       <div className="text-xs text-center min-w-[150px]" style={{ color: 'var(--text-secondary)' }}>
         <div className="font-600" style={{ fontWeight: 600 }}>{`${r.startStr} – ${r.endStr} ${r.yearStr}`}</div>
         {weekKey === currentWeek
-          ? <div className="text-[10px] text-indigo-500 mt-0.5">Bu hafta</div>
+          ? <div className="text-[10px] text-brand mt-0.5">Bu hafta</div>
           : <div className="text-[10px] text-amber-600 mt-0.5">İleri hafta — bu haftaya uygulanır</div>}
       </div>
       <button onClick={onNext} disabled={!canNext}

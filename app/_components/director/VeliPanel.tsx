@@ -187,7 +187,7 @@ export default function VeliPanel({ students, classes = [], onChanged, showToast
         {grouped.map(grp => {
           const isOpen = openCls === grp.cls;
           const dotColor = grp.group === 'lise'
-            ? 'linear-gradient(135deg,#6366f1,#4f46e5)'
+            ? 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))'
             : grp.group === 'ortaokul'
             ? 'linear-gradient(135deg,#22c55e,#16a34a)'
             : 'linear-gradient(135deg,#f59e0b,#d97706)';

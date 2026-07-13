@@ -117,7 +117,7 @@ export default function OptikFormTab({ showToast }: OptikFormTabProps) {
                 <select
                   value={ans ?? ''}
                   onChange={e => setAnswer(formIdx, idx, e.target.value)}
-                  className="flex-1 text-xs border border-slate-200 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  className="flex-1 text-xs border border-slate-200 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-[color:var(--brand)]"
                 >
                   <option value="">—</option>
                   {CHOICES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -134,19 +134,19 @@ export default function OptikFormTab({ showToast }: OptikFormTabProps) {
   return (
     <div className="max-w-2xl">
       <div className="flex items-center gap-2 mb-5">
-        <ScanLine size={20} className="text-indigo-600" />
+        <ScanLine size={20} className="text-brand" />
         <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>Optik Form Oku</h3>
       </div>
 
       {/* Upload alanı */}
       <div
         onClick={() => inputRef.current?.click()}
-        className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition mb-4"
+        className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-[color:var(--brand)] bg-brand-soft-hover transition mb-4"
       >
         {preview ? (
           <img src={preview} alt="Form önizleme" className="max-h-48 mx-auto rounded object-contain" />
         ) : isPdf ? (
-          <div className="flex flex-col items-center gap-2 text-indigo-500">
+          <div className="flex flex-col items-center gap-2 text-brand">
             <FileText size={36} />
             <p className="text-sm font-medium text-slate-700">{fileName}</p>
             <p className="text-xs text-slate-400">PDF — tarayıcı çıktısı desteklenir, çok sayfalı toplu okuma</p>
@@ -169,7 +169,7 @@ export default function OptikFormTab({ showToast }: OptikFormTabProps) {
         <button
           onClick={readForm}
           disabled={!file || loading}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700 disabled:opacity-40"
+          className="flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm rounded disabled:opacity-40"
         >
           <ScanLine size={15} />
           {loading ? 'Okunuyor…' : 'Formu Oku'}

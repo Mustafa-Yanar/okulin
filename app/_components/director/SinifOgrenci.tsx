@@ -193,7 +193,7 @@ export default function SinifOgrenci({
         <div className="card overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
             <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-700"
-              style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', fontWeight: 700 }}>
+              style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))', fontWeight: 700 }}>
               {selected.name.slice(0, 2).toUpperCase()}
             </div>
             <div>
@@ -442,7 +442,7 @@ function StudentRow({ s, subtitle, pending, onClick, nested = false }: StudentRo
         : 'card card-interactive overflow-hidden text-sm w-full flex items-center gap-3 px-3 py-2.5 text-left'}>
       <div className="relative shrink-0">
         <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-700"
-          style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', fontWeight: 700 }}>
+          style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))', fontWeight: 700 }}>
           {s.name.slice(0, 2).toUpperCase()}
         </div>
         {(pending ?? 0) > 0 && (

@@ -168,7 +168,7 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
     ) : (
       <>
         <div className="flex justify-end mb-4">
-          <button onClick={handlePrint} className="btn-ghost !px-4 !py-2 flex items-center gap-2 text-sm text-indigo-600">
+          <button onClick={handlePrint} className="btn-ghost !px-4 !py-2 flex items-center gap-2 text-sm text-brand">
             <BookOpen size={14} /> PDF / Yazdır
           </button>
         </div>
@@ -184,17 +184,17 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
                 <div key={week.weekKey} className="card overflow-hidden">
                   <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
                     <span className="font-700 text-sm text-gray-800" style={{ fontWeight: 700 }}>{weekLabel(week.weekKey)}</span>
-                    {week.isCurrent && <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600 font-600" style={{ fontWeight: 600 }}>Bu Hafta</span>}
+                    {week.isCurrent && <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-soft text-brand font-600" style={{ fontWeight: 600 }}>Bu Hafta</span>}
                   </div>
                   <div className="p-3 space-y-3">
                     {sortedDays.map(day => (
                       <div key={day.dayLabel}>
-                        <div className="text-xs font-700 text-indigo-600 mb-1.5 px-1" style={{ fontWeight: 700 }}>{day.dayLabel}</div>
+                        <div className="text-xs font-700 text-brand mb-1.5 px-1" style={{ fontWeight: 700 }}>{day.dayLabel}</div>
                         <div className="space-y-1">
                           {day.entries.sort((a,b) => a.slotId.localeCompare(b.slotId)).map((e,i) => (
                             <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-gray-100 text-sm">
                               <div className="flex items-center gap-2">
-                                <Clock size={12} className="text-indigo-400 shrink-0" />
+                                <Clock size={12} className="text-brand shrink-0" />
                                 <span className="font-600 text-gray-800 text-xs" style={{ fontWeight: 600 }}>{e.slotLabel}</span>
                               </div>
                               <span className="text-xs text-gray-500">

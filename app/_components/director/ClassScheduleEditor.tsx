@@ -122,7 +122,7 @@ export default function ClassScheduleEditor({ cls, label, initialTemplate, onClo
                     <button onClick={() => toggleDay(day.index)}
                       className="w-full rounded-md py-1 px-1 transition-colors"
                       style={{
-                        color: day.weekend ? '#6366f1' : 'var(--text-secondary)',
+                        color: day.weekend ? 'var(--brand,#6366f1)' : 'var(--text-secondary)',
                         background: allOn ? 'color-mix(in srgb,#3b82f6 14%,transparent)' : 'transparent',
                       }}
                       title="O günün tümünü aç/kapat">

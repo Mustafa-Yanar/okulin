@@ -182,7 +182,7 @@ export function CounselorSection({ showToast }: { showToast: ShowToast }) {
           {list.map(c => (
             <div key={c.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
               <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-700 shrink-0"
-                style={{ background: 'linear-gradient(135deg,#8b5cf6,#6d28d9)', fontWeight: 700 }}>
+                style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 65%, #000))', fontWeight: 700 }}>
                 {c.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
               </span>
               <span className="flex-1 text-sm font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{c.name}</span>
@@ -497,7 +497,7 @@ function ConfigurationSection({ showToast }: { showToast: ShowToast }) {
   return (
     <div>
       <h4 className="text-label mb-2 flex items-center gap-1.5">
-        <SlidersHorizontal size={13} className="text-indigo-500" /> Konfigürasyon
+        <SlidersHorizontal size={13} className="text-brand" /> Konfigürasyon
       </h4>
       <p className="text-caption mb-3">Kuruma özel ayarlar — modülleri aç/kapat. Değişiklikler anında kaydedilir.</p>
 
@@ -521,7 +521,7 @@ function ConfigurationSection({ showToast }: { showToast: ShowToast }) {
                       opacity: savingKey === 'modules' ? 0.6 : 1,
                     }}>
                     <input type="checkbox" checked={on} disabled={savingKey === 'modules'}
-                      onChange={() => toggleModule(mod)} className="accent-indigo-600 shrink-0" />
+                      onChange={() => toggleModule(mod)} className="accent-brand shrink-0" />
                     <span className="min-w-0">
                       <span className="block text-sm font-600 truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{m.label}</span>
                       <span className="block text-caption truncate">{m.desc}</span>
@@ -575,7 +575,7 @@ function ConfigurationSection({ showToast }: { showToast: ShowToast }) {
                 opacity: savingKey === 'etut' ? 0.6 : 1,
               }}>
               <input type="checkbox" checked={config.etut?.studentSelfBooking !== false} disabled={savingKey === 'etut'}
-                onChange={() => toggleEtut('studentSelfBooking')} className="accent-indigo-600 shrink-0" />
+                onChange={() => toggleEtut('studentSelfBooking')} className="accent-brand shrink-0" />
               <span className="min-w-0">
                 <span className="block text-sm font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Öğrenci kendi etüdünü seçebilir</span>
                 <span className="block text-caption">Kapalıyken etütleri yalnız müdür/rehber/öğretmen dağıtır</span>
@@ -615,7 +615,7 @@ function ConfigurationSection({ showToast }: { showToast: ShowToast }) {
                 opacity: savingKey === 'permissions' ? 0.6 : 1,
               }}>
               <input type="checkbox" checked={!!config.permissions?.counselor?.readOnly} disabled={savingKey === 'permissions'}
-                onChange={() => togglePermission('counselor', 'readOnly')} className="accent-indigo-600 shrink-0" />
+                onChange={() => togglePermission('counselor', 'readOnly')} className="accent-brand shrink-0" />
               <span className="min-w-0">
                 <span className="block text-sm font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Rehber salt-okunur</span>
                 <span className="block text-caption">Açıkken rehber öğrenci/öğretmen/program/sınıf yönetimi yapamaz — yalnız görüntüler. Rehberlik notu, deneme, davranış, ödev, duyuru, takvim açık kalır.</span>
@@ -628,7 +628,7 @@ function ConfigurationSection({ showToast }: { showToast: ShowToast }) {
                 opacity: savingKey === 'permissions' ? 0.6 : 1,
               }}>
               <input type="checkbox" checked={config.permissions?.accountant?.intake !== false} disabled={savingKey === 'permissions'}
-                onChange={() => togglePermission('accountant', 'intake', config.permissions?.accountant?.intake !== false)} className="accent-indigo-600 shrink-0" />
+                onChange={() => togglePermission('accountant', 'intake', config.permissions?.accountant?.intake !== false)} className="accent-brand shrink-0" />
               <span className="min-w-0">
                 <span className="block text-sm font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Muhasebeci kayıt yapabilir</span>
                 <span className="block text-caption">Açıkken muhasebeci ön kayıt (aday takibi) ve öğrenci ekleme/düzenleme yapabilir — veliyi kayıt masasında tek başına karşılar. Öğrenci silme her durumda kapalıdır. Kapatınca muhasebecide yalnız finans ekranları kalır.</span>
@@ -694,7 +694,7 @@ function BrandingSection({ showToast, onBranding }: { showToast: ShowToast; onBr
   return (
     <div>
       <h4 className="text-label mb-2 flex items-center gap-1.5">
-        <Palette size={13} className="text-indigo-500" /> Özelleştirme
+        <Palette size={13} className="text-brand" /> Özelleştirme
       </h4>
       {!loaded ? (
         <div className="text-center py-6 text-caption">Yükleniyor...</div>

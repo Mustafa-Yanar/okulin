@@ -130,14 +130,14 @@ function DayCard({ day, config, selected, onToggleSelect, onCountChange, onTimeC
 
   return (
     <div className="rounded-xl p-3.5" style={{
-      border: `1px solid ${selected ? 'var(--accent, #6366f1)' : 'var(--border-subtle)'}`,
+      border: `1px solid ${selected ? 'var(--brand, #6366f1)' : 'var(--border-subtle)'}`,
       background: day.weekend ? 'var(--bg-subtle, rgba(99,102,241,0.03))' : 'var(--bg-surface)',
     }}>
       {/* Başlık: gün adı + toplu-seç checkbox */}
       <div className="flex items-center justify-between mb-3">
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input type="checkbox" checked={selected} onChange={() => onToggleSelect(day.index)}
-            className="w-4 h-4 rounded accent-indigo-500" />
+            className="w-4 h-4 rounded accent-brand" />
           <span className="text-sm" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{day.label}</span>
         </label>
         {/* Ders sayısı seçici */}
@@ -236,7 +236,7 @@ export default function SlotTimeEditor({ days, etutSuresi = 60, molaSuresi = 10,
           : <span>Aynı anda birden çok günü düzenlemek için günlerin kutucuğunu işaretle.</span>}
         {selectedCount > 0 && (
           <button type="button" onClick={() => setSelected(new Set())}
-            className="ml-auto underline" style={{ color: 'var(--accent, #6366f1)' }}>seçimi temizle</button>
+            className="ml-auto underline" style={{ color: 'var(--brand, #6366f1)' }}>seçimi temizle</button>
         )}
       </div>
 

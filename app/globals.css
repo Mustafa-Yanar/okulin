@@ -381,6 +381,20 @@ body {
 .tag-teacher  { background: var(--color-success-bg); color: var(--color-success); }
 .tag-director { background: var(--color-warning-bg); color: var(--color-warning); }
 
+/* ─── Marka aksanı: white-label --brand'e bağlı yardımcılar ─────────────────────
+   Sabit indigo/violet (text-indigo-600, accent-indigo-600, bg-indigo-50…) yerine.
+   Kurum rengi değişince otomatik uyar; default #6366f1. Sadece renk verir,
+   boyut/şekil taşıyıcı utility'lerden gelir (tag-* deseniyle aynı). */
+.text-brand           { color: var(--brand, #6366f1); }
+.text-brand-hover:hover { color: var(--brand, #6366f1); }
+.bg-brand             { background: var(--brand, #6366f1); }
+.bg-brand-soft        { background: color-mix(in srgb, var(--brand, #6366f1) 10%, transparent); }
+.bg-brand-soft-hover:hover { background: color-mix(in srgb, var(--brand, #6366f1) 14%, transparent); }
+.border-brand         { border-color: var(--brand, #6366f1); }
+.border-brand-soft    { border-color: color-mix(in srgb, var(--brand, #6366f1) 30%, transparent); }
+.accent-brand         { accent-color: var(--brand, #6366f1); }
+.badge-brand          { background: color-mix(in srgb, var(--brand,#6366f1) 12%, transparent); color: var(--brand,#6366f1); border: 1px solid color-mix(in srgb, var(--brand,#6366f1) 25%, transparent); }
+
 /* ─── Kart varyantları ───────────────────────────────────────────────────────── */
 .card-hover {
   cursor: pointer;

@@ -231,10 +231,10 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
   return (
     <Modal title={isEdit?'Öğrenci Düzenle':'Yeni Öğrenci'} onClose={onClose}>
       {!isEdit && onSwitchToImport && (
-        <div className="mb-4 -mt-1 flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-100">
-          <span className="text-xs text-indigo-600">Toplu öğrenci yüklemek ister misin?</span>
+        <div className="mb-4 -mt-1 flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-brand-soft border border-brand-soft">
+          <span className="text-xs text-brand">Toplu öğrenci yüklemek ister misin?</span>
           <button type="button" onClick={onSwitchToImport}
-            className="text-xs font-600 text-indigo-700 hover:text-indigo-900 flex items-center gap-1 shrink-0" style={{ fontWeight: 600 }}>
+            className="text-xs font-600 text-brand flex items-center gap-1 shrink-0" style={{ fontWeight: 600 }}>
             <BookOpen size={12} /> Excel ile Yükle →
           </button>
         </div>
@@ -368,7 +368,7 @@ export function ImportModal({ onClose, showToast, onDone }: ImportModalProps) {
         <br /><span className="text-gray-400">A ve B zorunlu; diğerleri opsiyonel. İlk satır başlık olabilir — otomatik atlanır. TC ve adres senet/makbuz belgeleri içindir.</span>
       </p>
       <button type="button" onClick={downloadTemplate}
-        className="text-xs font-600 text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 mb-4"
+        className="text-xs font-600 text-brand flex items-center gap-1.5 mb-4"
         style={{ fontWeight: 600 }}>
         <Download size={13} /> Boş şablonu indir (.xlsx)
       </button>

@@ -130,7 +130,7 @@ export function StudentList({ students, classes = [], allSlots, weekKey, onCance
         <div className="card overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
             <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-700"
-              style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', fontWeight: 700 }}>
+              style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))', fontWeight: 700 }}>
               {selected.name.slice(0, 2).toUpperCase()}
             </div>
             <div>
@@ -158,7 +158,7 @@ export function StudentList({ students, classes = [], allSlots, weekKey, onCance
         {grouped.map(grp => {
           const isOpen = openCls === grp.cls;
           const dotColor = grp.group==='lise'
-            ? 'linear-gradient(135deg,#6366f1,#4f46e5)'
+            ? 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))'
             : grp.group==='ortaokul'
             ? 'linear-gradient(135deg,#22c55e,#16a34a)'
             : 'linear-gradient(135deg,#f59e0b,#d97706)';
@@ -172,7 +172,7 @@ export function StudentList({ students, classes = [], allSlots, weekKey, onCance
                 </button>
                 <div className="flex items-center gap-1 ml-2">
                   <button onClick={() => setScheduleCls({ cls: grp.cls, label: grp.label })}
-                    className="flex items-center gap-1 px-2 py-1 rounded hover:bg-indigo-100 text-slate-600 hover:text-indigo-600 transition-colors text-[11px] font-600"
+                    className="flex items-center gap-1 px-2 py-1 rounded bg-brand-soft-hover text-slate-600 text-brand-hover transition-colors text-[11px] font-600"
                     style={{ fontWeight:600 }}
                     title="Sınıfın ders programı">
                     <Calendar size={12} /> Ders Programı
@@ -308,7 +308,7 @@ export function ClassScheduleModal({ cls, label, onClose }: ClassScheduleModalPr
               <tr>
                 <th className="text-left py-2 px-2 text-gray-400 font-600 w-12" style={{ fontWeight: 600 }}>#</th>
                 {visibleDays.map(day => (
-                  <th key={day.index} className={`text-center py-2 px-2 font-600 ${day.weekend ? 'text-indigo-500' : 'text-gray-600'}`} style={{ fontWeight: 600 }}>
+                  <th key={day.index} className={`text-center py-2 px-2 font-600 ${day.weekend ? 'text-brand' : 'text-gray-600'}`} style={{ fontWeight: 600 }}>
                     {day.short}
                   </th>
                 ))}

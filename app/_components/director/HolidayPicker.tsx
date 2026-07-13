@@ -76,7 +76,7 @@ export default function HolidayPicker({ showToast }: HolidayPickerProps) {
   return (
     <div className="rounded-xl p-4 mt-4" style={{ background: 'var(--bg-surface-2)', border: '1px solid var(--border-subtle)' }}>
       <div className="flex items-center gap-2 mb-3">
-        <CalendarOff size={18} className="text-indigo-600" />
+        <CalendarOff size={18} className="text-brand" />
         <h3 className="font-700" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Tatil Günleri</h3>
       </div>
       <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>
