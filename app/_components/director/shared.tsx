@@ -66,10 +66,26 @@ export function Modal({ title, onClose, children, wide, xwide, lockClose }: Moda
     const prevFocus = document.activeElement as HTMLElement | null;
     // İçeride zaten odaklı bir öğe yoksa (autoFocus input'unu çalma) modalı odakla.
     if (!dialogRef.current?.contains(document.activeElement)) dialogRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !lockRef.current) onCloseRef.current(); };
+    // Body scroll lock — modal açıkken arka plan kaymasın (mobil + uzun sayfalar).
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !lockRef.current) { onCloseRef.current(); return; }
+      // Focus trap — Tab odağı modal dışına kaçmasın, ilk/son odaklanabilir arasında döngü.
+      if (e.key === 'Tab' && dialogRef.current) {
+        const f = dialogRef.current.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])'
+        );
+        if (!f.length) return;
+        const first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
       // Kapanışta odağı tetikleyen öğeye geri ver — hâlâ DOM'daysa.
       if (prevFocus && typeof prevFocus.focus === 'function' && document.contains(prevFocus)) {
         prevFocus.focus();

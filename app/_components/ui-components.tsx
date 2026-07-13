@@ -17,8 +17,14 @@ export function Toast({ toast }: ToastProps) {
   if (!toast) return null;
   // Record<string, string>: bilinmeyen type değeri || ile toast-success'e düşer (mevcut davranış).
   const cls: Record<string, string> = { success: 'toast-success', error: 'toast-error', info: 'toast-info' };
+  // Ekran okuyucu bildirimi: hata acil (assertive/alert), başarı-bilgi kibar (polite/status).
+  const isError = toast.type === 'error';
   return (
-    <div className={`fixed bottom-6 left-1/2 z-50 animate-fade-up -translate-x-1/2 toast-base ${cls[toast.type] || 'toast-success'}`}>
+    <div
+      role={isError ? 'alert' : 'status'}
+      aria-live={isError ? 'assertive' : 'polite'}
+      aria-atomic="true"
+      className={`fixed bottom-6 left-1/2 z-50 animate-fade-up -translate-x-1/2 toast-base ${cls[toast.type] || 'toast-success'}`}>
       {toast.msg}
     </div>
   );
