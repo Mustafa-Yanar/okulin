@@ -106,7 +106,7 @@ function FilterChip({ active, onClick, label, count }: FilterChipProps) {
   return (
     <button onClick={onClick} className="text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1.5"
       style={active
-        ? { background: '#6366f1', color: '#fff', fontWeight: 600 }
+        ? { background: 'var(--brand,#6366f1)', color: '#fff', fontWeight: 600 }
         : { border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
       {label}
       <span className="text-[11px] px-1.5 rounded-full" style={active ? { background: 'rgba(255,255,255,.25)' } : { background: 'var(--bg-muted)', color: 'var(--text-muted)' }}>{count}</span>
@@ -146,7 +146,7 @@ function LeadForm({ showToast, onDone, onCancel }: LeadFormProps) {
   return (
     <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface-2)', border: '1px solid var(--border-subtle)' }}>
       <div className="flex items-center gap-2 mb-3">
-        <UserPlus size={18} className="text-indigo-600" />
+        <UserPlus size={18} className="text-brand" />
         <h3 className="font-700" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Yeni Aday</h3>
         <button onClick={onCancel} className="ml-auto text-xs flex items-center gap-1" style={{ color: 'var(--text-muted)' }}><X size={13} /> Vazgeç</button>
       </div>
@@ -217,7 +217,7 @@ function LeadCard({ lead, showToast, onChange, onRemove, onCreateStudent }: Lead
           <div className="flex items-center gap-3 mt-1 text-body-sm flex-wrap">
             {lead.parentName && <span style={{ color: 'var(--text-secondary)' }}>{lead.parentName}</span>}
             {lead.phone && (
-              <a href={`tel:${lead.phone}`} className="flex items-center gap-1 text-indigo-600 hover:underline">
+              <a href={`tel:${lead.phone}`} className="flex items-center gap-1 text-brand hover:underline">
                 <Phone size={12} /> {lead.phone}
               </a>
             )}
@@ -232,7 +232,7 @@ function LeadCard({ lead, showToast, onChange, onRemove, onCreateStudent }: Lead
               <UserPlus size={13} /> Öğrenci kaydı
             </button>
           )}
-          <button onClick={() => setOpen(o => !o)} className="hover:text-indigo-600 flex items-center gap-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+          <button onClick={() => setOpen(o => !o)} className="text-brand-hover flex items-center gap-0.5 text-xs" style={{ color: 'var(--text-muted)' }}>
             Takip {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
           <button onClick={onRemove} className="hover:text-rose-500" style={{ color: 'var(--text-muted)' }}><Trash2 size={15} /></button>
@@ -249,7 +249,7 @@ function LeadCard({ lead, showToast, onChange, onRemove, onCreateStudent }: Lead
                 <button key={s} disabled={busy || on} onClick={() => patch({ status: s }, `Durum: ${STATUS[s].label}`)}
                   className="text-xs px-2.5 py-1 rounded-md"
                   style={on
-                    ? { background: '#6366f1', color: '#fff', fontWeight: 600 }
+                    ? { background: 'var(--brand,#6366f1)', color: '#fff', fontWeight: 600 }
                     : { border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
                   {STATUS[s].label}
                 </button>

@@ -82,7 +82,7 @@ export function AnnouncementSender({ showToast }: AnnouncementSenderProps) {
               <div className="flex items-center gap-3 mt-2 text-caption flex-wrap">
                 <span className="badge badge-info">{a.audienceLabel}</span>
                 <span className="flex items-center gap-1"><Users size={11} /> {a.recipientCount}</span>
-                <button onClick={() => setDetail(a)} className="flex items-center gap-1 text-indigo-600 hover:underline">
+                <button onClick={() => setDetail(a)} className="flex items-center gap-1 text-brand hover:underline">
                   <Eye size={11} /> {a.readCount}/{a.recipientCount} okudu
                 </button>
                 <span className="ml-auto">{fmtDate(a.createdAt)}</span>
@@ -167,7 +167,7 @@ function Composer({ showToast, onSent }: ComposerProps) {
   return (
     <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface-2)', border: '1px solid var(--border-subtle)' }}>
       <div className="flex items-center gap-2 mb-3">
-        <Megaphone size={18} className="text-indigo-600" />
+        <Megaphone size={18} className="text-brand" />
         <h3 className="font-700" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Yeni Duyuru</h3>
       </div>
 
@@ -207,7 +207,7 @@ function Composer({ showToast, onSent }: ComposerProps) {
           {teachers.length === 0 ? <span className="text-xs col-span-2" style={{ color: 'var(--text-muted)' }}>Öğretmen yok</span> : teachers.map(t => {
             const on = teacherIds.includes(t.id);
             return (
-              <label key={t.id} className={`text-xs flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer ${on ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-[var(--bg-muted)]'}`}
+              <label key={t.id} className={`text-xs flex items-center gap-1.5 px-2 py-1 rounded cursor-pointer ${on ? 'bg-brand-soft text-brand' : 'hover:bg-[var(--bg-muted)]'}`}
                 style={on ? undefined : { color: 'var(--text-secondary)' }}>
                 <input type="checkbox" checked={on} onChange={() => setTeacherIds(p => on ? p.filter(x => x !== t.id) : [...p, t.id])} className="hidden" />
                 {on ? <Check size={12} /> : <span className="w-3" />} {t.name}
@@ -225,7 +225,7 @@ function Composer({ showToast, onSent }: ComposerProps) {
             const on = branches.includes(b);
             return (
               <button type="button" key={b} onClick={() => setBranches(p => on ? p.filter(x => x !== b) : [...p, b])}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${on ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'}`}>
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${on ? 'bg-brand text-white border-brand' : 'bg-white text-gray-600 border-gray-200 hover:border-[color:var(--brand)]'}`}>
                 {b}
               </button>
             );
@@ -310,11 +310,11 @@ export function AnnouncementInbox({ showToast }: AnnouncementInboxProps) {
         return (
           <div key={a.id} className="rounded-xl overflow-hidden"
             style={{
-              border: a.read ? '1px solid var(--border-subtle)' : '1px solid color-mix(in srgb, #6366f1 50%, transparent)',
-              background: a.read ? 'transparent' : 'color-mix(in srgb, #6366f1 8%, transparent)',
+              border: a.read ? '1px solid var(--border-subtle)' : '1px solid color-mix(in srgb, var(--brand,#6366f1) 50%, transparent)',
+              background: a.read ? 'transparent' : 'color-mix(in srgb, var(--brand,#6366f1) 8%, transparent)',
             }}>
             <button onClick={() => toggle(a)} className="w-full flex items-center gap-2.5 px-4 py-3 text-left">
-              {!a.read && <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />}
+              {!a.read && <span className="w-2 h-2 rounded-full bg-brand shrink-0" />}
               <div className="min-w-0 flex-1">
                 <p className={`text-sm truncate ${a.read ? 'font-500' : 'font-700'}`} style={{ fontWeight: a.read ? 500 : 700, color: 'var(--text-primary)' }}>{a.title}</p>
                 <p className="text-caption">{a.senderName} · {fmtDate(a.createdAt)}</p>

@@ -111,7 +111,7 @@ export default function StudentGuidanceView({ studentId, onReviewed, readOnly, b
                     <th className="text-center text-[10px] uppercase text-emerald-600 font-600 py-1.5 px-2" style={{ fontWeight: 600 }}>D</th>
                     <th className="text-center text-[10px] uppercase text-red-600 font-600 py-1.5 px-2" style={{ fontWeight: 600 }}>Y</th>
                     <th className="text-center text-[10px] uppercase text-gray-500 font-600 py-1.5 px-2" style={{ fontWeight: 600 }}>B</th>
-                    <th className="text-center text-[10px] uppercase text-indigo-600 font-600 py-1.5 px-2" style={{ fontWeight: 600 }}>Toplam</th>
+                    <th className="text-center text-[10px] uppercase text-brand font-600 py-1.5 px-2" style={{ fontWeight: 600 }}>Toplam</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -123,13 +123,13 @@ export default function StudentGuidanceView({ studentId, onReviewed, readOnly, b
                         <td className="py-1.5 px-2 text-xs text-center text-emerald-700 font-600" style={{ fontWeight: 600 }}>{v.correct || 0}</td>
                         <td className="py-1.5 px-2 text-xs text-center text-red-700 font-600" style={{ fontWeight: 600 }}>{v.wrong || 0}</td>
                         <td className="py-1.5 px-2 text-xs text-center text-gray-600">{v.empty || 0}</td>
-                        <td className="py-1.5 px-2 text-xs text-center text-indigo-700 font-700" style={{ fontWeight: 700 }}>{total}</td>
+                        <td className="py-1.5 px-2 text-xs text-center text-brand font-700" style={{ fontWeight: 700 }}>{total}</td>
                       </tr>
                     );
                   })}
                   <tr className="bg-gray-50">
                     <td className="py-1.5 px-3 text-xs font-700 text-gray-700" style={{ fontWeight: 700 }}>Toplam</td>
-                    <td colSpan={4} className="py-1.5 px-2 text-[11px] text-center text-indigo-700 font-700" style={{ fontWeight: 700 }}>{totalSolved} soru</td>
+                    <td colSpan={4} className="py-1.5 px-2 text-[11px] text-center text-brand font-700" style={{ fontWeight: 700 }}>{totalSolved} soru</td>
                   </tr>
                 </tbody>
               </table>

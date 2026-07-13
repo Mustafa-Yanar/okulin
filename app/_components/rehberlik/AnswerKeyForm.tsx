@@ -69,7 +69,7 @@ export default function AnswerKeyForm({ exam, showToast }: AnswerKeyFormProps) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <KeyRound size={18} className="text-indigo-600" />
+        <KeyRound size={18} className="text-brand" />
         <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>Cevap Anahtarı</h3>
       </div>
 

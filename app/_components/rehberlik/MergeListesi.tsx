@@ -72,7 +72,7 @@ export default function MergeListesi({ exams, showToast, onBack }: MergeListesiP
       </button>
 
       <div className="flex items-center gap-2">
-        <GitMerge size={18} className="text-indigo-500" />
+        <GitMerge size={18} className="text-brand" />
         <h2 className="font-700 text-xl" style={{ fontWeight: 700 }}>TYT + AYT Birleştirme</h2>
       </div>
 
@@ -173,14 +173,14 @@ function MergeTablo({ list }: { list: MergeListDTO }) {
               </td>
               <td className="px-3 py-1.5 text-right text-gray-500">{r.tytPuan != null ? r.tytPuan.toFixed(2) : '—'}</td>
               <td className="px-3 py-1.5 text-right text-gray-500">{r.aytPuan != null ? r.aytPuan.toFixed(2) : '—'}</td>
-              <td className="px-3 py-1.5 text-right text-indigo-600" style={{ fontWeight: 700 }}>{r.yerlestirme != null ? r.yerlestirme.toFixed(2) : '—'}</td>
+              <td className="px-3 py-1.5 text-right text-brand" style={{ fontWeight: 700 }}>{r.yerlestirme != null ? r.yerlestirme.toFixed(2) : '—'}</td>
             </tr>
           ))}
           <tr className="border-t-2 border-gray-200 bg-gray-50/60">
             <td className="px-3 py-2 text-gray-400" colSpan={2} style={{ fontWeight: 600 }}>Okul Ortalaması</td>
             <td className="px-3 py-2 text-right text-gray-600">{o.tytPuan != null ? o.tytPuan.toFixed(2) : '—'}</td>
             <td className="px-3 py-2 text-right text-gray-600">{o.aytPuan != null ? o.aytPuan.toFixed(2) : '—'}</td>
-            <td className="px-3 py-2 text-right text-indigo-500" style={{ fontWeight: 600 }}>{o.yerlestirme != null ? o.yerlestirme.toFixed(2) : '—'}</td>
+            <td className="px-3 py-2 text-right text-brand" style={{ fontWeight: 600 }}>{o.yerlestirme != null ? o.yerlestirme.toFixed(2) : '—'}</td>
           </tr>
         </tbody>
       </table>

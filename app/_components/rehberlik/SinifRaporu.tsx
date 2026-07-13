@@ -126,12 +126,12 @@ export default function SinifRaporu({ showToast, onBack }: SinifRaporuProps) {
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <h3 className="flex items-center gap-2 text-sm text-gray-600" style={{ fontWeight: 700 }}>
-                <Users size={15} className="text-indigo-500" /> Sınıf Karşılaştırması
+                <Users size={15} className="text-brand" /> Sınıf Karşılaştırması
               </h3>
               <select
                 value={examId || ''}
                 onChange={(e) => pickExam(e.target.value)}
-                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm bg-white focus:border-indigo-400 focus:outline-none"
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm bg-white focus:border-[color:var(--brand)] focus:outline-none"
               >
                 {data.exams.map((e) => (
                   <option key={e.id} value={e.id}>
@@ -202,7 +202,7 @@ function SinifTablosu({ list }: { list: ClassReportListDTO }) {
                 <td key={s.key} className="px-2 py-1.5 text-right text-gray-500">{(c.subjects[s.key] ?? 0).toFixed(2)}</td>
               ))}
               <td className="px-3 py-1.5 text-right text-gray-700" style={{ fontWeight: 600 }}>{c.toplamNet.toFixed(2)}</td>
-              <td className="px-3 py-1.5 text-right text-indigo-600" style={{ fontWeight: 700 }}>{c.puan != null ? c.puan.toFixed(2) : '—'}</td>
+              <td className="px-3 py-1.5 text-right text-brand" style={{ fontWeight: 700 }}>{c.puan != null ? c.puan.toFixed(2) : '—'}</td>
             </tr>
           ))}
           <tr className="border-t-2 border-gray-200 bg-gray-50/60">
@@ -211,7 +211,7 @@ function SinifTablosu({ list }: { list: ClassReportListDTO }) {
               <td key={s.key} className="px-2 py-2 text-right text-gray-500">{(list.ortalama.subjects[s.key] ?? 0).toFixed(2)}</td>
             ))}
             <td className="px-3 py-2 text-right text-gray-600" style={{ fontWeight: 600 }}>{(list.ortalama.toplamNet ?? 0).toFixed(2)}</td>
-            <td className="px-3 py-2 text-right text-indigo-500" style={{ fontWeight: 600 }}>{list.ortalama.puan != null ? list.ortalama.puan.toFixed(2) : '—'}</td>
+            <td className="px-3 py-2 text-right text-brand" style={{ fontWeight: 600 }}>{list.ortalama.puan != null ? list.ortalama.puan.toFixed(2) : '—'}</td>
           </tr>
         </tbody>
       </table>

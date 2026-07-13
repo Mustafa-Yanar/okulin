@@ -71,7 +71,7 @@ export default function KonuTakibi({ subjects, editable, studentId }: KonuTakibi
                 {subject}
               </span>
               <span className="flex items-center gap-2">
-                <span className="text-xs font-700 text-indigo-600" style={{ fontWeight: 700 }}>
+                <span className="text-xs font-700 text-brand" style={{ fontWeight: 700 }}>
                   %{avg}
                 </span>
                 <ChevronDown
@@ -103,7 +103,7 @@ export default function KonuTakibi({ subjects, editable, studentId }: KonuTakibi
                         value={val}
                         disabled={!editable}
                         onChange={(e) => setPercent(subject, i, parseInt(e.target.value))}
-                        className="w-full accent-indigo-600 disabled:opacity-60"
+                        className="w-full accent-brand disabled:opacity-60"
                       />
                     </div>
                   );

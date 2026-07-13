@@ -119,7 +119,7 @@ function EventCard({ ev, classMap, teacherMap, onEdit, onDelete }: EventCardProp
           <p className="font-600 flex-1 min-w-0" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{ev.title}</p>
           {(onEdit || onDelete) && (
             <div className="flex items-center gap-1.5 shrink-0">
-              {onEdit && <button onClick={() => onEdit(ev)} className="hover:text-indigo-600" style={{ color: 'var(--text-muted)' }} title="Düzenle"><PencilLine size={14} /></button>}
+              {onEdit && <button onClick={() => onEdit(ev)} className="text-brand-hover" style={{ color: 'var(--text-muted)' }} title="Düzenle"><PencilLine size={14} /></button>}
               {onDelete && <button onClick={() => onDelete(ev)} className="hover:text-rose-500" style={{ color: 'var(--text-muted)' }} title="Sil"><Trash2 size={14} /></button>}
             </div>
           )}
@@ -315,7 +315,7 @@ function TakvimComposer({ showToast, editing, onDone, onCancel }: TakvimComposer
   return (
     <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface-2)', border: '1px solid var(--border-subtle)' }}>
       <div className="flex items-center gap-2 mb-3">
-        <CalendarDays size={18} className="text-indigo-600" />
+        <CalendarDays size={18} className="text-brand" />
         <h3 className="font-700" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{edId ? 'Etkinliği Düzenle' : 'Yeni Etkinlik'}</h3>
         {edId && <button onClick={() => { reset(); onCancel?.(); }} className="ml-auto text-xs flex items-center gap-1" style={{ color: 'var(--text-muted)' }}><X size={13} /> Vazgeç</button>}
       </div>
@@ -370,7 +370,7 @@ function TakvimComposer({ showToast, editing, onDone, onCancel }: TakvimComposer
                 const on = proctorIds.includes(t.id);
                 return (
                   <button key={t.id} onClick={() => toggleProctor(t.id)}
-                    className={`text-xs px-2 py-1 rounded-md flex items-center gap-1 ${on ? 'bg-indigo-600 text-white' : 'hover:bg-[var(--bg-muted)]'}`}
+                    className={`text-xs px-2 py-1 rounded-md flex items-center gap-1 ${on ? 'bg-brand text-white' : 'hover:bg-[var(--bg-muted)]'}`}
                     style={on ? undefined : { border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
                     {on && <Check size={11} />} {t.name}
                   </button>
@@ -395,14 +395,14 @@ function TakvimComposer({ showToast, editing, onDone, onCancel }: TakvimComposer
           const allOn = ids.every(id => sel.includes(id));
           return (
             <div key={g.key} className="mb-2 last:mb-0">
-              <button onClick={() => toggleGroup(g)} className={`text-[11px] uppercase tracking-wide mb-1 ${allOn ? 'text-indigo-600' : ''}`}
+              <button onClick={() => toggleGroup(g)} className={`text-[11px] uppercase tracking-wide mb-1 ${allOn ? 'text-brand' : ''}`}
                 style={{ fontWeight: 700, color: allOn ? undefined : 'var(--text-muted)' }}>{g.label}</button>
               <div className="flex flex-wrap gap-1">
                 {g.items.map(c => {
                   const on = sel.includes(c.id);
                   return (
                     <button key={c.id} onClick={() => toggle(c.id)}
-                      className={`text-xs px-2 py-1 rounded-md flex items-center gap-1 ${on ? 'bg-indigo-600 text-white' : 'hover:bg-[var(--bg-muted)]'}`}
+                      className={`text-xs px-2 py-1 rounded-md flex items-center gap-1 ${on ? 'bg-brand text-white' : 'hover:bg-[var(--bg-muted)]'}`}
                       style={on ? undefined : { border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
                       {on && <Check size={11} />} {c.ad}
                     </button>

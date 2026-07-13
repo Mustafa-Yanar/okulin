@@ -137,7 +137,7 @@ export function FormManager({ showToast }: FormManagerProps) {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button onClick={() => toggleClose(f)} title={f.closed ? 'Aç' : 'Kapat'}
-                    className="hover:text-indigo-600" style={{ color: 'var(--text-muted)' }}>
+                    className="text-brand-hover" style={{ color: 'var(--text-muted)' }}>
                     {f.closed ? <Lock size={15} /> : <Unlock size={15} />}
                   </button>
                   <button onClick={() => remove(f)} className="hover:text-rose-500" style={{ color: 'var(--text-muted)' }}><Trash2 size={15} /></button>
@@ -148,7 +148,7 @@ export function FormManager({ showToast }: FormManagerProps) {
                 {f.anonymous && <span className="badge">anonim</span>}
                 {f.closed && <span className="badge badge-warning">kapalı</span>}
                 <span style={{ color: 'var(--text-muted)' }}>{f.questionCount} soru</span>
-                <button onClick={() => setResultsId(f.id)} className="flex items-center gap-1 text-indigo-600 hover:underline ml-auto">
+                <button onClick={() => setResultsId(f.id)} className="flex items-center gap-1 text-brand hover:underline ml-auto">
                   <BarChart3 size={12} /> {f.responseCount} yanıt
                 </button>
               </div>
@@ -225,7 +225,7 @@ function FormBuilder({ showToast, onDone, onCancel }: FormBuilderProps) {
   return (
     <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface-2)', border: '1px solid var(--border-subtle)' }}>
       <div className="flex items-center gap-2 mb-3">
-        <ClipboardList size={18} className="text-indigo-600" />
+        <ClipboardList size={18} className="text-brand" />
         <h3 className="font-700" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Yeni Form / Anket</h3>
         <button onClick={onCancel} className="ml-auto text-xs flex items-center gap-1" style={{ color: 'var(--text-muted)' }}><X size={13} /> Vazgeç</button>
       </div>
@@ -240,7 +240,7 @@ function FormBuilder({ showToast, onDone, onCancel }: FormBuilderProps) {
           const on = roles.includes(r);
           return (
             <button key={r} onClick={() => toggleRole(r)} className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1"
-              style={on ? { background: '#6366f1', color: '#fff', fontWeight: 600 } : { border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
+              style={on ? { background: 'var(--brand,#6366f1)', color: '#fff', fontWeight: 600 } : { border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
               {on && <Check size={11} />} {lbl}
             </button>
           );
@@ -258,14 +258,14 @@ function FormBuilder({ showToast, onDone, onCancel }: FormBuilderProps) {
             const allOn = ids.every(id => sel.includes(id));
             return (
               <div key={g.key} className="mb-2 last:mb-0">
-                <button onClick={() => toggleGroup(g)} className={`text-[11px] uppercase tracking-wide mb-1 ${allOn ? 'text-indigo-600' : ''}`}
+                <button onClick={() => toggleGroup(g)} className={`text-[11px] uppercase tracking-wide mb-1 ${allOn ? 'text-brand' : ''}`}
                   style={{ fontWeight: 700, color: allOn ? undefined : 'var(--text-muted)' }}>{g.label}</button>
                 <div className="flex flex-wrap gap-1">
                   {g.items.map(c => {
                     const on = sel.includes(c.id);
                     return (
                       <button key={c.id} onClick={() => toggleCls(c.id)}
-                        className={`text-xs px-2 py-1 rounded-md flex items-center gap-1 ${on ? 'bg-indigo-600 text-white' : 'hover:bg-[var(--bg-muted)]'}`}
+                        className={`text-xs px-2 py-1 rounded-md flex items-center gap-1 ${on ? 'bg-brand text-white' : 'hover:bg-[var(--bg-muted)]'}`}
                         style={on ? undefined : { border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
                         {on && <Check size={11} />} {c.ad}
                       </button>
@@ -297,7 +297,7 @@ function FormBuilder({ showToast, onDone, onCancel }: FormBuilderProps) {
       {/* Ayarlar */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <label className="text-xs flex items-center gap-1.5 cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
-          <input type="checkbox" checked={anonymous} onChange={e => setAnonymous(e.target.checked)} className="accent-indigo-600" /> Anonim (kişi görünmez)
+          <input type="checkbox" checked={anonymous} onChange={e => setAnonymous(e.target.checked)} className="accent-brand" /> Anonim (kişi görünmez)
         </label>
         <label className="text-xs flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
           Kapanış (ops.)
@@ -347,11 +347,11 @@ function QuestionEditor({ q, index, onChange, onRemove }: QuestionEditorProps) {
               {q.options.length > 2 && <button onClick={() => removeOpt(i)} style={{ color: 'var(--text-muted)' }}><X size={13} /></button>}
             </div>
           ))}
-          <button onClick={addOpt} className="text-xs text-indigo-600 hover:underline flex items-center gap-1 mt-0.5"><Plus size={12} /> Seçenek ekle</button>
+          <button onClick={addOpt} className="text-xs text-brand hover:underline flex items-center gap-1 mt-0.5"><Plus size={12} /> Seçenek ekle</button>
         </div>
       )}
       <label className="text-[11px] flex items-center gap-1.5 cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
-        <input type="checkbox" checked={!!q.required} onChange={e => onChange({ required: e.target.checked })} className="accent-indigo-600" /> Zorunlu
+        <input type="checkbox" checked={!!q.required} onChange={e => onChange({ required: e.target.checked })} className="accent-brand" /> Zorunlu
       </label>
     </div>
   );
@@ -561,7 +561,7 @@ function FillModal({ formId, onClose, onSaved, showToast }: FillModalProps) {
                     <div className="flex flex-col gap-1.5">
                       {(q.options || []).map(o => (
                         <label key={o} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
-                          <input type="radio" name={q.id} checked={answers[q.id] === o} disabled={closed} onChange={() => setAns(q.id, o)} className="accent-indigo-600" /> {o}
+                          <input type="radio" name={q.id} checked={answers[q.id] === o} disabled={closed} onChange={() => setAns(q.id, o)} className="accent-brand" /> {o}
                         </label>
                       ))}
                     </div>
@@ -570,7 +570,7 @@ function FillModal({ formId, onClose, onSaved, showToast }: FillModalProps) {
                     <div className="flex flex-col gap-1.5">
                       {(q.options || []).map(o => (
                         <label key={o} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
-                          <input type="checkbox" checked={Array.isArray(answers[q.id]) && (answers[q.id] as string[]).includes(o)} disabled={closed} onChange={() => toggleMulti(q.id, o)} className="accent-indigo-600" /> {o}
+                          <input type="checkbox" checked={Array.isArray(answers[q.id]) && (answers[q.id] as string[]).includes(o)} disabled={closed} onChange={() => toggleMulti(q.id, o)} className="accent-brand" /> {o}
                         </label>
                       ))}
                     </div>
@@ -582,7 +582,7 @@ function FillModal({ formId, onClose, onSaved, showToast }: FillModalProps) {
                         return (
                           <button key={n} disabled={closed} onClick={() => setAns(q.id, n)}
                             className="w-9 h-9 rounded-lg text-sm font-600"
-                            style={on ? { background: '#6366f1', color: '#fff', fontWeight: 600 } : { border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
+                            style={on ? { background: 'var(--brand,#6366f1)', color: '#fff', fontWeight: 600 } : { border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
                             {n}
                           </button>
                         );

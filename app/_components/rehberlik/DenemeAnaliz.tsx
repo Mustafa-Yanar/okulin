@@ -121,7 +121,7 @@ function ExamList({ points }: { points: DenemePointDTO[] }) {
                 </div>
                 <div className="text-right">
                   <div className="text-caption">Net</div>
-                  <div className="text-base font-800 text-indigo-600" style={{ fontWeight: 800 }}>
+                  <div className="text-base font-800 text-brand" style={{ fontWeight: 800 }}>
                     {p.toplamNet.toFixed(2)}
                   </div>
                 </div>
@@ -160,7 +160,7 @@ function ExamDetail({ point }: { point: DenemePointDTO }) {
             <th className="text-center font-600 py-1 text-emerald-600" style={{ fontWeight: 600 }}>D</th>
             <th className="text-center font-600 py-1 text-red-600" style={{ fontWeight: 600 }}>Y</th>
             <th className="text-center font-600 py-1" style={{ fontWeight: 600 }}>Boş</th>
-            <th className="text-right font-600 py-1 text-indigo-600" style={{ fontWeight: 600 }}>Net</th>
+            <th className="text-right font-600 py-1 text-brand" style={{ fontWeight: 600 }}>Net</th>
           </tr>
         </thead>
         <tbody>
@@ -174,7 +174,7 @@ function ExamDetail({ point }: { point: DenemePointDTO }) {
                 <td className="py-1.5 text-center text-gray-600">{r.dogru}</td>
                 <td className="py-1.5 text-center text-gray-600">{r.yanlis}</td>
                 <td className="py-1.5 text-center text-gray-400">{r.bos ?? '—'}</td>
-                <td className="py-1.5 text-right font-700 text-indigo-700" style={{ fontWeight: 700 }}>
+                <td className="py-1.5 text-right font-700 text-brand" style={{ fontWeight: 700 }}>
                   {net.toFixed(2)}
                 </td>
               </tr>
@@ -186,7 +186,7 @@ function ExamDetail({ point }: { point: DenemePointDTO }) {
             <td className="py-1.5 font-700 text-gray-700" style={{ fontWeight: 700 }} colSpan={4}>
               Toplam Net
             </td>
-            <td className="py-1.5 text-right font-800 text-indigo-600" style={{ fontWeight: 800 }}>
+            <td className="py-1.5 text-right font-800 text-brand" style={{ fontWeight: 800 }}>
               {point.toplamNet.toFixed(2)}
             </td>
           </tr>
@@ -271,7 +271,7 @@ function GrowthChart({ points, examType }: { points: DenemePointDTO[]; examType:
           <select
             value={activeSubject}
             onChange={(e) => setSelectedSubject(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm bg-white focus:border-indigo-400 focus:outline-none"
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm bg-white focus:border-[color:var(--brand)] focus:outline-none"
           >
             {subjectKeys.map((k) => (
               <option key={k} value={k}>

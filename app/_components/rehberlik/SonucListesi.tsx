@@ -147,7 +147,7 @@ function ListeTablosu({ list }: { list: ReportListDTO }) {
                 <td key={s.key} className="px-2 py-1.5 text-right text-gray-500">{(r.subjects[s.key]?.net ?? 0).toFixed(2)}</td>
               ))}
               <td className="px-3 py-1.5 text-right text-gray-700" style={{ fontWeight: 600 }}>{(r.toplamNet ?? 0).toFixed(2)}</td>
-              <td className="px-3 py-1.5 text-right text-indigo-600" style={{ fontWeight: 700 }}>{r.puan != null ? r.puan.toFixed(2) : '—'}</td>
+              <td className="px-3 py-1.5 text-right text-brand" style={{ fontWeight: 700 }}>{r.puan != null ? r.puan.toFixed(2) : '—'}</td>
             </tr>
           ))}
           <tr className="border-t-2 border-gray-200 bg-gray-50/60">
@@ -156,7 +156,7 @@ function ListeTablosu({ list }: { list: ReportListDTO }) {
               <td key={s.key} className="px-2 py-2 text-right text-gray-500">{(list.ortalama.subjects[s.key] ?? 0).toFixed(2)}</td>
             ))}
             <td className="px-3 py-2 text-right text-gray-600" style={{ fontWeight: 600 }}>{(list.ortalama.toplamNet ?? 0).toFixed(2)}</td>
-            <td className="px-3 py-2 text-right text-indigo-500" style={{ fontWeight: 600 }}>{list.ortalama.puan != null ? list.ortalama.puan.toFixed(2) : '—'}</td>
+            <td className="px-3 py-2 text-right text-brand" style={{ fontWeight: 600 }}>{list.ortalama.puan != null ? list.ortalama.puan.toFixed(2) : '—'}</td>
           </tr>
         </tbody>
       </table>

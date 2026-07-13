@@ -133,7 +133,7 @@ export function OdevManager({ showToast, userRole, userId }: OdevManagerProps) {
                       <Calendar size={11} /> {fmtDue(o.dueDate)}
                     </span>
                   )}
-                  <button onClick={() => setDetail(o)} className="flex items-center gap-1 text-indigo-600 hover:underline">
+                  <button onClick={() => setDetail(o)} className="flex items-center gap-1 text-brand hover:underline">
                     <Users size={11} /> {o.submittedCount}/{o.rosterCount} teslim
                   </button>
                   <span className="ml-auto">{fmtDate(o.createdAt)}</span>
@@ -192,7 +192,7 @@ function OdevComposer({ showToast, onSent }: OdevComposerProps) {
   return (
     <div className="rounded-xl p-4" style={{ background: 'var(--bg-surface-2)', border: '1px solid var(--border-subtle)' }}>
       <div className="flex items-center gap-2 mb-3">
-        <ClipboardList size={18} className="text-indigo-600" />
+        <ClipboardList size={18} className="text-brand" />
         <h3 className="font-700" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Yeni Ödev</h3>
       </div>
 
@@ -221,7 +221,7 @@ function OdevComposer({ showToast, onSent }: OdevComposerProps) {
           return (
             <div key={g.key} className="mb-2 last:mb-0">
               <button onClick={() => toggleGroup(g)}
-                className={`text-[11px] uppercase tracking-wide mb-1 ${allOn ? 'text-indigo-600' : ''}`}
+                className={`text-[11px] uppercase tracking-wide mb-1 ${allOn ? 'text-brand' : ''}`}
                 style={{ fontWeight: 700, color: allOn ? undefined : 'var(--text-muted)' }}>
                 {g.label}
               </button>
@@ -230,7 +230,7 @@ function OdevComposer({ showToast, onSent }: OdevComposerProps) {
                   const on = sel.includes(c.id);
                   return (
                     <button key={c.id} onClick={() => toggle(c.id)}
-                      className={`text-xs px-2 py-1 rounded-md flex items-center gap-1 ${on ? 'bg-indigo-600 text-white' : 'hover:bg-[var(--bg-muted)]'}`}
+                      className={`text-xs px-2 py-1 rounded-md flex items-center gap-1 ${on ? 'bg-brand text-white' : 'hover:bg-[var(--bg-muted)]'}`}
                       style={on ? undefined : { border: '1px solid var(--border-subtle)', color: 'var(--text-secondary)' }}>
                       {on && <Check size={11} />} {c.ad}
                     </button>
@@ -308,7 +308,7 @@ function KontrolModal({ odev, onClose, onChanged, showToast }: KontrolModalProps
                     </button>
                   ) : (
                     <button onClick={() => setEditing(isEd ? null : s.studentId)}
-                      className="text-xs flex items-center gap-1 text-indigo-600 hover:underline">
+                      className="text-xs flex items-center gap-1 text-brand hover:underline">
                       <PencilLine size={13} /> Kontrol et
                     </button>
                   )}

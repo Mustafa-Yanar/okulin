@@ -149,7 +149,7 @@ function DatEkle({ exam, onChanged, showToast }: DatEkleProps) {
     <div className="card p-4 space-y-4">
       <div
         onClick={() => inputRef.current?.click()}
-        className="border-2 border-dashed border-gray-300 rounded-xl p-5 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition"
+        className="border-2 border-dashed border-gray-300 rounded-xl p-5 text-center cursor-pointer hover:border-[color:var(--brand)] bg-brand-soft-hover transition"
       >
         <div className="flex flex-col items-center gap-1.5 text-gray-400">
           <HardDriveDownload size={28} />
@@ -174,7 +174,7 @@ function DatEkle({ exam, onChanged, showToast }: DatEkleProps) {
 
           <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-80 overflow-y-auto">
             {parsed.students.map((s, i) => (
-              <div key={i} className={`flex items-center gap-2 p-2 ${i === 0 ? 'bg-indigo-50/40' : ''}`}>
+              <div key={i} className={`flex items-center gap-2 p-2 ${i === 0 ? 'bg-brand-soft' : ''}`}>
                 <span className="text-[10px] text-gray-400 w-7 shrink-0 text-right">{i + 1}.</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${s.kitapcik === 'B' ? 'bg-purple-100 text-purple-600' : 'bg-sky-100 text-sky-600'}`}>{s.kitapcik}</span>
                 <input
@@ -294,12 +294,12 @@ function OptikEkle({ exam, kitapcik, onChanged, showToast }: OptikEkleProps) {
     <div className="card p-4 space-y-4">
       <div
         onClick={() => inputRef.current?.click()}
-        className="border-2 border-dashed border-gray-300 rounded-xl p-5 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition"
+        className="border-2 border-dashed border-gray-300 rounded-xl p-5 text-center cursor-pointer hover:border-[color:var(--brand)] bg-brand-soft-hover transition"
       >
         {preview ? (
           <img src={preview} alt="" className="max-h-40 mx-auto rounded object-contain" />
         ) : isPdf ? (
-          <div className="flex flex-col items-center gap-1.5 text-indigo-500">
+          <div className="flex flex-col items-center gap-1.5 text-brand">
             <FileText size={30} /><p className="text-sm text-gray-700">{fileName}</p>
             <p className="text-xs text-gray-400">PDF — çok sayfalı toplu okuma</p>
           </div>

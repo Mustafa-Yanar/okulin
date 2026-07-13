@@ -177,7 +177,7 @@ function CreateExam({ showToast, onCancel, onCreated }: CreateExamProps) {
                   type="button"
                   key={n}
                   onClick={() => setKitapcik(n)}
-                  className={`px-4 py-2 rounded-lg text-sm border ${kitapcikSayisi === n ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-gray-200 text-gray-600'}`}
+                  className={`px-4 py-2 rounded-lg text-sm border ${kitapcikSayisi === n ? 'border-brand-soft bg-brand-soft text-brand' : 'border-gray-200 text-gray-600'}`}
                 >
                   {n === 1 ? 'Tek (A)' : 'İki (A / B)'}
                 </button>

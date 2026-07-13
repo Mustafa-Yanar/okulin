@@ -54,7 +54,7 @@ export default function RehberlikAccordion({ solvedContent, subjects, editable, 
               className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors"
             >
               <span className="flex items-center gap-2.5">
-                <Icon size={18} className="text-indigo-600" />
+                <Icon size={18} className="text-brand" />
                 <span className="font-700 text-gray-800" style={{ fontWeight: 700 }}>
                   {label}
                 </span>

@@ -94,14 +94,14 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div className="flex items-center gap-2">
-          <BookOpen size={20} className="text-indigo-600" />
+          <BookOpen size={20} className="text-brand" />
           <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>Kütüphane</h3>
           <span className="text-caption">({resources.length})</span>
         </div>
         {canManage && (
           <button
             onClick={() => setShowForm(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700"
+            className="flex items-center gap-1.5 px-3 py-2 bg-brand text-white text-sm rounded-lg"
           >
             <Plus size={15} /> Kaynak Ekle
           </button>
@@ -166,12 +166,12 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
                   <span className="text-caption truncate">{r.uploadedByName}</span>
                   {r.type === 'video' && embedUrl(r.url) ? (
                     <button onClick={() => setVideo({ url: embedUrl(r.url)!, title: r.title })}
-                      className="flex items-center gap-1 text-xs text-indigo-600 hover:underline shrink-0">
+                      className="flex items-center gap-1 text-xs text-brand hover:underline shrink-0">
                       <Play size={13} /> İzle
                     </button>
                   ) : (
                     <a href={r.url} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-xs text-indigo-600 hover:underline shrink-0">
+                      className="flex items-center gap-1 text-xs text-brand hover:underline shrink-0">
                       {r.type === 'pdf' ? <><FileText size={13} /> Aç</> : <><ExternalLink size={13} /> Aç</>}
                     </a>
                   )}
@@ -318,7 +318,7 @@ function ResourceForm({ branches, onClose, onSaved, showToast }: ResourceFormPro
                 return (
                   <button key={key} type="button" onClick={() => setType(key)}
                     className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs transition
-                      ${type === key ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                      ${type === key ? 'border-brand-soft bg-brand-soft text-brand' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
                     <Icon size={14} /> {m.label}
                   </button>
                 );
@@ -329,7 +329,7 @@ function ResourceForm({ branches, onClose, onSaved, showToast }: ResourceFormPro
           <div>
             <label className="text-label block mb-1.5">Başlık</label>
             <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Örn: Türev Föyü - 1"
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[color:var(--brand)]" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -344,7 +344,7 @@ function ResourceForm({ branches, onClose, onSaved, showToast }: ResourceFormPro
             <div>
               <label className="text-label block mb-1.5">Konu <span className="font-400" style={{ color: 'var(--text-muted)' }}>(ops.)</span></label>
               <input value={topic} onChange={e => setTopic(e.target.value)} placeholder="Örn: Türev"
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[color:var(--brand)]" />
             </div>
           </div>
 
@@ -353,7 +353,7 @@ function ResourceForm({ branches, onClose, onSaved, showToast }: ResourceFormPro
             <div>
               <label className="text-label block mb-1.5">PDF Dosyası</label>
               <div onClick={() => fileRef.current?.click()}
-                className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30">
+                className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center cursor-pointer hover:border-[color:var(--brand)] bg-brand-soft-hover">
                 {file ? (
                   <p className="text-sm text-slate-700 flex items-center justify-center gap-1.5"><FileText size={15} className="text-rose-500" /> {file.name}</p>
                 ) : (
@@ -369,7 +369,7 @@ function ResourceForm({ branches, onClose, onSaved, showToast }: ResourceFormPro
                 {type === 'video' ? 'Video Linki (YouTube/Vimeo)' : 'Web Adresi'}
               </label>
               <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://…"
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[color:var(--brand)]" />
             </div>
           )}
 
@@ -385,14 +385,14 @@ function ResourceForm({ branches, onClose, onSaved, showToast }: ResourceFormPro
                 return (
                   <div key={g.key}>
                     <button type="button" onClick={() => toggleGroup(ids)}
-                      className={`text-[11px] font-600 mb-1 px-2 py-0.5 rounded ${allIn ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'}`}
+                      className={`text-[11px] font-600 mb-1 px-2 py-0.5 rounded ${allIn ? 'bg-brand-soft text-brand' : 'bg-slate-100 text-slate-500'}`}
                       style={{ fontWeight: 600 }}>
                       {g.label} {allIn ? '✓' : 'tümü'}
                     </button>
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-1">
                       {g.items.map(c => (
                         <label key={c.id} className={`text-[11px] flex items-center gap-1 px-1.5 py-1 rounded cursor-pointer border
-                          ${classes.has(c.id) ? 'border-indigo-400 bg-indigo-50 text-indigo-700' : 'border-slate-150 text-slate-500 hover:bg-slate-50'}`}>
+                          ${classes.has(c.id) ? 'border-brand-soft bg-brand-soft text-brand' : 'border-slate-150 text-slate-500 hover:bg-slate-50'}`}>
                           <input type="checkbox" checked={classes.has(c.id)} onChange={() => toggleClass(c.id)} className="hidden" />
                           {classShort(regClasses, c.id)}
                         </label>
@@ -408,7 +408,7 @@ function ResourceForm({ branches, onClose, onSaved, showToast }: ResourceFormPro
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-slate-100 sticky bottom-0 bg-white">
           <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 rounded-lg hover:bg-slate-100">İptal</button>
           <button onClick={submit} disabled={busy}
-            className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+            className="px-4 py-2 text-sm bg-brand text-white rounded-lg disabled:opacity-50">
             {busy ? 'Kaydediliyor…' : 'Kaydet'}
           </button>
         </div>
