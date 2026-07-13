@@ -138,7 +138,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
               type="number" min="0.01" step="0.01"
               value={amount} onChange={e => setAmount(e.target.value)}
               readOnly={installmentIdx !== ''}
-              className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none ${installmentIdx !== '' ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed' : 'bg-gray-50 border-gray-200 focus:border-indigo-400'}`}
+              className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none ${installmentIdx !== '' ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed' : 'bg-gray-50 border-gray-200 focus:border-[var(--brand,#6366f1)]'}`}
               placeholder="0,00" required autoFocus={installmentIdx === ''}
             />
             {installmentIdx !== '' && (
