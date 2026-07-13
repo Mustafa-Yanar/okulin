@@ -478,11 +478,16 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
     } catch (err) { showToast((err as Error).message, 'error'); }
   }
 
+  // İç içe <button> yasak (Codex): kart aç/kapa yalnız finans kaydı VARKEN anlamlı →
+  // finance varsa satır <button> (aria-expanded), yoksa <div> (içindeki "Kayıt Oluştur"
+  // tek geçerli buton kalır). Nested interactive giderilir.
+  const RowTag = (finance ? 'button' : 'div') as 'button';
   return (
     <>
       <div className={`card overflow-hidden ${open ? '' : 'card-interactive'}`}>
-        <button
-          onClick={() => finance && setOpen(!open)}
+        <RowTag
+          onClick={finance ? () => setOpen(!open) : undefined}
+          aria-expanded={finance ? open : undefined}
           className="w-full flex items-center px-4 py-3.5 gap-3 text-left"
         >
           {/* Durum dot */}
@@ -530,21 +535,21 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
               {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </div>
           )}
-        </button>
+        </RowTag>
 
         {/* Açılır detay paneli */}
         {open && finance && (
           <div className="border-t" style={{ borderColor:'var(--border-light)', background:'var(--bg-surface-2)' }}>
-            <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3 border-b border-gray-100">
+            <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4 border-b" style={{ borderColor: 'var(--border-light)' }}>
               {[
-                { label: 'Kayıt Ücreti', value: `₺${fmt(finance.totalFee)}`, color: 'text-gray-700' },
-                { label: 'İndirim', value: `₺${fmt(finance.discount)}`, color: 'text-emerald-600' },
-                { label: 'Net Ücret', value: `₺${fmt(finance.netFee)}`, color: 'text-indigo-700' },
-                { label: 'Kalan Borç', value: `₺${fmt(finance.balance)}`, color: finance.balance > 0 ? 'text-red-600' : 'text-green-600' },
+                { label: 'Kayıt Ücreti', value: `₺${fmt(finance.totalFee)}`, color: 'var(--text-secondary)' },
+                { label: 'İndirim', value: `₺${fmt(finance.discount)}`, color: 'var(--color-success)' },
+                { label: 'Net Ücret', value: `₺${fmt(finance.netFee)}`, color: 'var(--brand,#6366f1)' },
+                { label: 'Kalan Borç', value: `₺${fmt(finance.balance)}`, color: finance.balance > 0 ? 'var(--color-danger)' : 'var(--color-success)' },
               ].map(item => (
-                <div key={item.label} className="card p-3 text-center">
+                <div key={item.label}>
                   <div className="text-label mb-1">{item.label}</div>
-                  <div className={`text-base font-800 ${item.color}`} style={{ fontWeight: 800 }}>{item.value}</div>
+                  <div className="text-base tabular-nums" style={{ fontWeight: 800, color: item.color }}>{item.value}</div>
                 </div>
               ))}
             </div>
@@ -880,20 +885,22 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
 
   return (
     <div>
-      {/* Özet kartları */}
+      {/* Özet — nötr, sakin premium: gradient/text-white yerine .card yüzeyi + semantik ince
+          aksan (tahsil yeşil, borç kırmızı); değer büyük+kalın (hiyerarşi renkle değil
+          ağırlıkla), tabular-nums ile hizalı. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {[
-          { label: 'Kayıtlı Öğrenci', value: stats.totalStudents, icon: Users, color: 'from-violet-500 to-purple-600', suffix: '' },
-          { label: 'Toplam Alacak', value: fmt(stats.totalFee), icon: DollarSign, color: 'from-blue-500 to-indigo-600', suffix: '₺' },
-          { label: 'Tahsil Edilen', value: fmt(stats.totalPaid), icon: TrendingUp, color: 'from-emerald-500 to-green-600', suffix: '₺' },
-          { label: 'Kalan Borç', value: fmt(stats.totalBalance), icon: TrendingDown, color: 'from-rose-500 to-red-600', suffix: '₺' },
+          { label: 'Kayıtlı Öğrenci', value: stats.totalStudents, icon: Users, accent: 'var(--text-muted)', valueColor: 'var(--text-primary)', suffix: '' },
+          { label: 'Toplam Alacak', value: fmt(stats.totalFee), icon: DollarSign, accent: 'var(--text-muted)', valueColor: 'var(--text-primary)', suffix: '₺' },
+          { label: 'Tahsil Edilen', value: fmt(stats.totalPaid), icon: TrendingUp, accent: 'var(--color-success)', valueColor: 'var(--color-success)', suffix: '₺' },
+          { label: 'Kalan Borç', value: fmt(stats.totalBalance), icon: TrendingDown, accent: 'var(--color-danger)', valueColor: 'var(--color-danger)', suffix: '₺' },
         ].map(card => (
-          <div key={card.label} className={`rounded-2xl bg-gradient-to-br ${card.color} p-4 text-white shadow-lg`}>
-            <div className="flex items-center gap-1.5 mb-2.5" style={{ opacity: 0.9 }}>
-              <card.icon size={15} />
-              <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.03em' }}>{card.label}</span>
+          <div key={card.label} className="card px-4 py-3">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <card.icon size={14} style={{ color: card.accent }} />
+              <span className="text-caption">{card.label}</span>
             </div>
-            <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1 }}>{card.suffix}{card.value}</div>
+            <div className="tabular-nums" style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1, color: card.valueColor }}>{card.suffix}{card.value}</div>
           </div>
         ))}
       </div>

@@ -494,13 +494,13 @@ function MoveClassModal({ student, classes, onClose, onMoved, showToast }: MoveC
                   <button key={c.id} type="button" onClick={() => setTarget(c.id)}
                     className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-left text-sm transition-colors"
                     style={{
-                      border: `1px solid ${isSelected ? '#6366f1' : 'var(--border-subtle)'}`,
-                      background: isSelected ? 'rgba(99,102,241,0.08)' : 'var(--bg-card)',
+                      border: `1px solid ${isSelected ? 'var(--brand,#6366f1)' : 'var(--border-subtle)'}`,
+                      background: isSelected ? 'color-mix(in srgb, var(--brand,#6366f1) 8%, transparent)' : 'var(--bg-surface)',
                       fontWeight: isSelected ? 600 : 400,
                     }}>
                     <span className="flex-1 min-w-0 truncate">{c.ad}</span>
                     {isCurrent && <span className="badge badge-info shrink-0">Mevcut</span>}
-                    {isSelected && !isCurrent && <Check size={16} className="shrink-0" style={{ color: '#6366f1' }} />}
+                    {isSelected && !isCurrent && <Check size={16} className="shrink-0" style={{ color: 'var(--brand,#6366f1)' }} />}
                   </button>
                 );
               })}
