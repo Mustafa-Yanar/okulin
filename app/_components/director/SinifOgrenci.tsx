@@ -5,9 +5,9 @@
 // Öğrenciye tıklayınca bireysel takip (rehberlik/devamsızlık/etüt) açılır — özellik kaybı yok.
 // Şube CRUD + ders kataloğu ClassManager'dan; öğrenci detay + ders programı modalı StudentList'ten.
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Plus, Trash2, Edit3, Calendar, CalendarClock, GraduationCap, BookOpen, ChevronRight, ChevronLeft, ArrowRightLeft, Check, Users,
+  Plus, Trash2, Edit3, Calendar, CalendarClock, GraduationCap, BookOpen, ChevronRight, ChevronLeft, ArrowRightLeft, Check, Users, MoreHorizontal,
 } from 'lucide-react';
 import { classLabel } from '@/lib/constants';
 import { classLabelFrom } from '@/lib/classCatalog';
@@ -75,6 +75,17 @@ export default function SinifOgrenci({
   const [expandedId, setExpandedId] = useUrlParam('ogrenci');
   const [moveTarget, setMoveTarget] = useState<PanelStudent | null>(null); // hızlı sınıf değiştirme modalı
   const [busy, setBusy] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false); // başlık "Diğer" overflow menüsü
+  const moreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDoc = (e: MouseEvent) => { if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMoreOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [moreOpen]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -206,7 +217,7 @@ export default function SinifOgrenci({
             ({classes.length} şube · {students.length} öğrenci)
           </span>
         </h3>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           <button className={`btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5 ${view === 'catalog' ? 'is-active' : ''}`}
             onClick={() => setView(view === 'catalog' ? 'list' : 'catalog')}>
             <BookOpen size={14} /> Ders Kataloğu
@@ -217,22 +228,33 @@ export default function SinifOgrenci({
           </button>
           )}
           {!readOnly && (
-          <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5 border" style={{ borderColor: 'var(--border-subtle)' }}
-            onClick={() => setEditClass({})}>
-            <Plus size={14} /> Yeni Şube
-          </button>
-          )}
-          {!isCounselor && !readOnly && (
-            <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5 border" style={{ borderColor: 'var(--border-subtle)' }}
-              onClick={() => onAddCounselor?.()}>
-              <Plus size={14} /> Rehberlik Öğretmeni
-            </button>
-          )}
-          {!isCounselor && !readOnly && (
-            <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5 border" style={{ borderColor: 'var(--border-subtle)' }}
-              onClick={() => onAddAssistant?.()}>
-              <Plus size={14} /> Müdür Yardımcısı
-            </button>
+            <div className="relative" ref={moreRef}>
+              <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5 border" style={{ borderColor: 'var(--border-subtle)' }}
+                onClick={() => setMoreOpen(o => !o)} aria-haspopup="menu" aria-expanded={moreOpen} aria-label="Diğer ekleme işlemleri">
+                <MoreHorizontal size={16} /> Diğer
+              </button>
+              {moreOpen && (
+                <div role="menu" className="absolute right-0 top-full mt-1 z-20 min-w-[13rem] rounded-xl border p-1 shadow-lg"
+                  style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-subtle)' }}>
+                  <button role="menuitem" className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--bg-surface-2)] transition-colors"
+                    onClick={() => { setMoreOpen(false); setEditClass({}); }}>
+                    <Plus size={14} /> Yeni Şube
+                  </button>
+                  {!isCounselor && (
+                    <button role="menuitem" className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--bg-surface-2)] transition-colors"
+                      onClick={() => { setMoreOpen(false); onAddCounselor?.(); }}>
+                      <Plus size={14} /> Rehberlik Öğretmeni
+                    </button>
+                  )}
+                  {!isCounselor && (
+                    <button role="menuitem" className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-[var(--bg-surface-2)] transition-colors"
+                      onClick={() => { setMoreOpen(false); onAddAssistant?.(); }}>
+                      <Plus size={14} /> Müdür Yardımcısı
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -394,7 +416,7 @@ function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, 
           {students.length === 0 ? (
             <p className="text-caption px-1 py-1">Bu şubede öğrenci yok.</p>
           ) : students.map((s) => (
-            <StudentRow key={s.id} s={s} pending={pendingGuidance?.[s.id]} onClick={() => onSelectStudent(s.id)} />
+            <StudentRow key={s.id} s={s} pending={pendingGuidance?.[s.id]} onClick={() => onSelectStudent(s.id)} nested />
           ))}
         </div>
       )}
@@ -407,13 +429,17 @@ interface StudentRowProps {
   subtitle?: string;
   pending?: number;
   onClick: () => void;
+  nested?: boolean; // şube kartı içindeyse düz satır (çift-kart gürültüsünü önler)
 }
 
-// ─── Öğrenci satırı (kart) ─────────────────────────────────────────────────────────
-function StudentRow({ s, subtitle, pending, onClick }: StudentRowProps) {
+// ─── Öğrenci satırı ─────────────────────────────────────────────────────────
+// nested=false → bağımsız kart (arama sonuç listesi); nested=true → şube kartı içi düz satır.
+function StudentRow({ s, subtitle, pending, onClick, nested = false }: StudentRowProps) {
   return (
     <button onClick={onClick}
-      className="card card-interactive overflow-hidden text-sm w-full flex items-center gap-3 px-3 py-2.5 text-left">
+      className={nested
+        ? 'text-sm w-full flex items-center gap-3 px-2.5 py-2 text-left rounded-lg hover:bg-[var(--bg-surface-2)] transition-colors'
+        : 'card card-interactive overflow-hidden text-sm w-full flex items-center gap-3 px-3 py-2.5 text-left'}>
       <div className="relative shrink-0">
         <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-700"
           style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', fontWeight: 700 }}>
