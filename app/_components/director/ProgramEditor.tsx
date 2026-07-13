@@ -707,24 +707,36 @@ function SlotDersModal({ dayIndex, slotStart, entry, classes, branches, allowedG
   onAta: (cls: string, branch: string) => void; onMusait: () => void; onTemizle: () => void; onClose: () => void;
 }) {
   const dayLabel = ALL_DAYS.find(d => d.index === dayIndex)?.label || '';
+  const inGroup = (c: ClassRecord) => !allowedGroups.length || allowedGroups.includes(c.group);
+  // Bir dersi ALABİLEN sınıflar: o sınıfın ders listesinde (coursesForClass) ders var
+  // + öğretmenin grupları. Sınıfın dersleri tanımsızsa (null) kısıt uygulanmaz.
+  const classesForBranch = (b: string) => classes.filter(c => {
+    if (!inGroup(c)) return false;
+    const cs = coursesForClass(classes, c.id);
+    return !cs || cs.includes(b);
+  });
+  // Bir sınıfın öğretmence VERİLEBİLİR dersleri: sınıf dersleri ∩ öğretmen branşları.
+  const branchesForCls = (id: string) => {
+    const cs = coursesForClass(classes, id);
+    return cs ? branches.filter(b => cs.includes(b)) : branches;
+  };
   const [branch, setBranch] = useState(entry?.branch || branches[0] || '');
-  // Ön eşleştirme eligibility: seçili dersi ALABİLEN sınıflar = o sınıfın ders listesinde
-  // (coursesForClass) bu ders var + öğretmenin izin verilen grupları. Sınıfın dersleri
-  // tanımsızsa (null) kısıt uygulanmaz (o sınıf her derse açık sayılır).
-  const eligibleClasses = useMemo(() =>
-    classes.filter(c => {
-      if (allowedGroups.length && !allowedGroups.includes(c.group)) return false;
-      const cs = coursesForClass(classes, c.id);
-      return !cs || cs.includes(branch);
-    }),
-    [classes, allowedGroups, branch]
-  );
-  const [cls, setCls] = useState(entry?.cls || eligibleClasses[0]?.id || '');
-  // Ders değişince seçili sınıf artık o dersi alamıyorsa ilk uygun sınıfa geç.
-  useEffect(() => {
-    if (cls && !eligibleClasses.some(c => c.id === cls)) setCls(eligibleClasses[0]?.id || '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eligibleClasses]);
+  const [cls, setCls] = useState(entry?.cls || classesForBranch(entry?.branch || branches[0] || '')[0]?.id || '');
+
+  // Çift yönlü eligibility: ders seçilince sınıflar, sınıf seçilince dersler filtrelenir.
+  const eligibleClasses = classesForBranch(branch);
+  const eligibleBranches = cls ? branchesForCls(cls) : branches;
+
+  const onBranchChange = (nb: string) => {
+    setBranch(nb);
+    const ok = classesForBranch(nb);
+    if (!cls || !ok.some(c => c.id === cls)) setCls(ok[0]?.id || ''); // sınıf artık uymuyorsa düzelt
+  };
+  const onClsChange = (nc: string) => {
+    setCls(nc);
+    const okB = branchesForCls(nc);
+    if (!branch || !okB.includes(branch)) setBranch(okB[0] || ''); // ders artık uymuyorsa düzelt
+  };
   return (
     <Modal title={`${dayLabel} ${slotStart} — Ders Saati`} onClose={onClose}>
       <div className="space-y-3">
@@ -734,17 +746,17 @@ function SlotDersModal({ dayIndex, slotStart, entry, classes, branches, allowedG
           </p>
         )}
         <div>
-          <label className="text-label block mb-1">Ders</label>
-          <select className="input" value={branch} onChange={e => setBranch(e.target.value)}>
-            {branches.length === 0 && <option value="">— öğretmenin branşı tanımlı değil —</option>}
-            {branches.map(b => <option key={b} value={b}>{b}</option>)}
+          <label className="text-label block mb-1">Sınıf</label>
+          <select className="input" value={cls} onChange={e => onClsChange(e.target.value)}>
+            {eligibleClasses.length === 0 && <option value="">— bu dersi alan sınıf yok —</option>}
+            {eligibleClasses.map(c => <option key={c.id} value={c.id}>{c.ad}</option>)}
           </select>
         </div>
         <div>
-          <label className="text-label block mb-1">Sınıf <span className="text-caption" style={{ fontWeight: 400 }}>· bu dersi alan</span></label>
-          <select className="input" value={cls} onChange={e => setCls(e.target.value)}>
-            {eligibleClasses.length === 0 && <option value="">— bu dersi alan sınıf yok —</option>}
-            {eligibleClasses.map(c => <option key={c.id} value={c.id}>{c.ad}</option>)}
+          <label className="text-label block mb-1">Ders</label>
+          <select className="input" value={branch} onChange={e => onBranchChange(e.target.value)}>
+            {eligibleBranches.length === 0 && <option value="">— bu sınıfın alabildiği ders yok —</option>}
+            {eligibleBranches.map(b => <option key={b} value={b}>{b}</option>)}
           </select>
         </div>
         <button className="btn-primary w-full" disabled={!cls || !branch} onClick={() => onAta(cls, branch)}>

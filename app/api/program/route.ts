@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
-import { daySlots as buildDaySlots, MEZUN_ONLY_LESSON_SLOTS, STUDENT_GROUPS } from '@/lib/constants';
+import { daySlots as buildDaySlots } from '@/lib/constants';
 import { getWeekKey, isEditableWeek, initWeekForTeacher, slotStartTime, getDaySlotTimes, getProgramTemplate, setProgramTemplate, deleteProgramTemplate } from '@/lib/slots';
 import { parseBody, z, zId } from '@/lib/validate';
 import { tdb, withScope } from '@/lib/sqldb';
@@ -20,11 +20,6 @@ interface GridEntry {
 }
 // gün ("0".."6") → slotId → giriş
 type ProgramGrid = Record<string, Record<string, GridEntry | null | undefined>>;
-
-function slotNoFromId(slotId: string): number | null {
-  const m = /(?:^[we]|s)(\d+)$/.exec(slotId);
-  return m ? parseInt(m[1], 10) : null;
-}
 
 // Derin iç içe grid — üst seviye şekil doğrulanır, hücre mantığı aşağıda işlenir.
 const ProgramPostSchema = z.object({ teacherId: zId, weekKey: z.string().min(1).max(40), program: z.record(z.unknown()) });
@@ -137,30 +132,12 @@ export const POST = withAuth('manage', async (req) => {
     }
   }
 
-  // Hafta içi ilk 6 slot 'ders' kuralı (eski dershane modeli: gündüz = mezun).
-  // ÖNCELİK sınıfın kendi ders penceresi (Class.slotTemplate, Faz 4 KATI pencere):
-  // müdür o (gün, slot)'u pencereye işaretlediyse kural UYGULANMAZ — pencere bilinçli
-  // tercihtir. Penceresi olmayan sınıflar için eski kural sürer; mezun tespiti registry
-  // group'undan (s_… id'ler) + eski sabit kodlardan (m1-m10) yapılır.
-  const classRows = await tdb().class.findMany();
-  const classByLegacy = new Map(classRows.map((c) => [c.legacyId, c]));
-  const mezunLegacy = new Set(STUDENT_GROUPS.mezun?.classes || []);
-  const mezunOnlyCount = MEZUN_ONLY_LESSON_SLOTS.length; // 6
-  for (const [dayIdx, daySlotEntries] of Object.entries(program)) {
-    const day = parseInt(dayIdx);
-    if (day >= 5) continue;
-    for (const [slotId, entry] of Object.entries(daySlotEntries || {})) {
-      const slotNo = slotNoFromId(slotId);
-      if (entry?.type !== 'ders' || slotNo == null || slotNo > mezunOnlyCount || !entry.cls) continue;
-      const row = classByLegacy.get(entry.cls);
-      const windowNos = (row?.slotTemplate as Record<string, number[]> | null)?.[String(day)];
-      if (Array.isArray(windowNos) && windowNos.includes(slotNo)) continue; // pencere izni
-      const isMezun = row ? row.group === 'mezun' : mezunLegacy.has(entry.cls);
-      if (!isMezun) {
-        return NextResponse.json({ error: `${slotNo}. slot (hafta içi ilk 6) sadece mezun sınıflarına ders eklenebilir — ya da sınıfın "Program Penceresi"nde bu saat işaretli olmalı` }, { status: 400 });
-      }
-    }
-  }
+  // NOT: Eski "hafta içi ilk 6 slot yalnız mezun" DERS kısıtı KALDIRILDI (2026-07-13).
+  // Slot-NUMARASI tabanlıydı (7-gün göçünden sonra saat-kör, yanlış slotları kapatıyordu)
+  // ve müdürün elle/çözücü ile bilinçli ders atamasını hafta içi erken saatlerde
+  // engelliyordu → o öğretmenin TÜM kaydı 400 dönüp ders sınıf kartına hiç yansımıyordu.
+  // Ders yerleşimi artık müdürün/çözücünün kararı; etütteki mezun-only kuralı POST
+  // /api/slots'ta ayrıca korunur (bu değişiklik yalnız DERS programını serbestleştirir).
 
   // Sınıf çakışma kontrolü (diğer öğretmenlerin programTemplates'inden)
   const otherTeachers = await tdb().teacher.findMany({ where: { id: { not: teacherSql.id } } });
