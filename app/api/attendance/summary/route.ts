@@ -14,7 +14,8 @@ interface StudentInfo {
 }
 
 interface LessonSummary {
-  lessonNo: number;
+  lessonNo: number;   // öğretmenin o günkü ders sırası — attendance kaydı anahtarı (yoklama eşleşmesi)
+  slotNo: number;     // sınıfın o günkü GERÇEK ders saati (grid pozisyonu) — görünüm + sıralama
   teacherId: string;
   teacherName: string;
   attendanceTaken: boolean;
@@ -47,9 +48,15 @@ export const GET = withAuth(['director', 'counselor'], async (req) => {
 
   const clsMap: Record<string, { cls: string; lessons: LessonSummary[] }> = {};
   for (const t of teachers) {
-    const grid = await getTeacherWeekSlots(t.id, weekKey); // {[day]:[cell]}
+    const grid = await getTeacherWeekSlots(t.id, weekKey); // {[day]:[cell]} — index = gerçek slot pozisyonu
+    const dayGrid = grid[dayIndex] || [];
+    // lessonNo = öğretmenin o günkü ders SIRASI (boş/etüt atlanır) — attendance kaydı bununla
+    // tutulur (TeacherPanel de aynı sayar), o yüzden attMap anahtarı bununla eşleşmeli.
+    // slotNo = grid indeksi+1 = sınıfın o günkü GERÇEK ders saati — sınıf özetinde farklı
+    // öğretmenlerin dersleri tek doğru zaman çizgisinde sıralanır (öğretmen-bazlı 1-2-3 karışmaz).
     let lessonNo = 0;
-    for (const sd of (grid[dayIndex] || [])) {
+    for (let slotIdx = 0; slotIdx < dayGrid.length; slotIdx++) {
+      const sd = dayGrid[slotIdx];
       if (!sd || sd.lessonType !== 'ders' || !sd.cls) continue;
       lessonNo++;
       const cls = sd.cls;
@@ -64,6 +71,7 @@ export const GET = withAuth(['director', 'counselor'], async (req) => {
       if (!clsMap[cls]) clsMap[cls] = { cls, lessons: [] };
       clsMap[cls].lessons.push({
         lessonNo,
+        slotNo: slotIdx + 1,
         teacherId: t.id,
         teacherName: t.name,
         attendanceTaken: Object.keys(recObj).length > 0,
@@ -73,8 +81,10 @@ export const GET = withAuth(['director', 'counselor'], async (req) => {
     }
   }
 
+  // Gerçek ders saatine (slotNo) göre sırala; aynı saatte birden çok öğretmen varsa (çakışma)
+  // ada göre stabilize et — sınıf özeti kronolojik ve tekrarsız görünür.
   for (const cls of Object.keys(clsMap)) {
-    clsMap[cls].lessons.sort((a, b) => a.lessonNo - b.lessonNo);
+    clsMap[cls].lessons.sort((a, b) => a.slotNo - b.slotNo || a.teacherName.localeCompare(b.teacherName, 'tr'));
   }
   return NextResponse.json(clsMap);
 });

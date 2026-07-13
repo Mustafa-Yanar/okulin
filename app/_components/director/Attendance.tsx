@@ -20,7 +20,8 @@ interface AttSummaryStudent {
   phone?: string;
 }
 interface AttLesson {
-  lessonNo: number;
+  lessonNo: number;   // öğretmen ders sırası (attendance anahtarı)
+  slotNo?: number;    // sınıfın gerçek ders saati (görünüm) — özette bu gösterilir
   teacherName?: string;
   attendanceTaken?: boolean;
   absent: AttSummaryStudent[];
@@ -104,24 +105,25 @@ function AttendanceSummaryModal({ cls, label, date, onClose }: { cls: string; la
         </div>
       ) : (
         <div className="space-y-3">
-          {summary.lessons.map(lesson => {
+          {summary.lessons.map((lesson, i) => {
             const hasAbsent = lesson.absent.length > 0;
             const hasLate = lesson.late.length > 0;
+            const dersNo = lesson.slotNo ?? lesson.lessonNo;
             if (!lesson.attendanceTaken) return (
-              <div key={lesson.lessonNo} className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3">
-                <div className="text-xs font-600 text-amber-700 mb-1" style={{ fontWeight: 600 }}>{lesson.lessonNo}. Ders <span className="font-400 text-amber-500">· {lesson.teacherName}</span></div>
+              <div key={i} className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3">
+                <div className="text-xs font-600 text-amber-700 mb-1" style={{ fontWeight: 600 }}>{dersNo}. Ders <span className="font-400 text-amber-500">· {lesson.teacherName}</span></div>
                 <p className="text-xs text-amber-600">Yoklama henüz alınmamış.</p>
               </div>
             );
             if (!hasAbsent && !hasLate) return (
-              <div key={lesson.lessonNo} className="rounded-xl bg-gray-50 px-4 py-3">
-                <div className="text-xs font-600 mb-1" style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{lesson.lessonNo}. Ders <span className="font-400" style={{ color: 'var(--text-muted)' }}>· {lesson.teacherName}</span></div>
+              <div key={i} className="rounded-xl bg-gray-50 px-4 py-3">
+                <div className="text-xs font-600 mb-1" style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>{dersNo}. Ders <span className="font-400" style={{ color: 'var(--text-muted)' }}>· {lesson.teacherName}</span></div>
                 <p className="text-xs text-emerald-600">Tüm öğrenciler mevcut.</p>
               </div>
             );
             return (
-              <div key={lesson.lessonNo} className="rounded-xl bg-gray-50 px-4 py-3">
-                <div className="text-xs font-600 text-gray-600 mb-2" style={{ fontWeight: 600 }}>{lesson.lessonNo}. Ders <span className="text-gray-400 font-400">· {lesson.teacherName}</span></div>
+              <div key={i} className="rounded-xl bg-gray-50 px-4 py-3">
+                <div className="text-xs font-600 text-gray-600 mb-2" style={{ fontWeight: 600 }}>{dersNo}. Ders <span className="text-gray-400 font-400">· {lesson.teacherName}</span></div>
                 {hasAbsent && (
                   <div className="mb-2">
                     <span className="text-[10px] font-600 text-red-500 uppercase tracking-wide" style={{ fontWeight: 600 }}>Yok ({lesson.absent.length})</span>
