@@ -10,7 +10,7 @@ import SchedulePrint, { type ScheduleDay, type ScheduleLesson } from '../program
 import {
   ALL_DAYS, daySlots, getWeekKey, classLabel,
 } from '@/lib/constants';
-import { classLabelFrom, coursesForClass } from '@/lib/classCatalog';
+import { classLabelFrom, classShort, coursesForClass } from '@/lib/classCatalog';
 import type { ClassRecord } from '@/lib/classes';
 import { useSlotTimes } from '../SlotTimesContext';
 import { useClasses } from '../ClassesContext';
@@ -644,6 +644,7 @@ interface EtutEylemModalProps {
 
 // ─── Etüt eylem modalı (tıklanan etüt: aktif/pasif/sil) ──────────────────────
 function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle, onAssign, onDelete }: EtutEylemModalProps) {
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (öğrenci seçici)
   const confirm = useConfirm();
   const gun = ALL_DAYS.find(d => d.index === sablon.dayIndex)?.label || '';
   // Pasifleştirme onayı: "sadece bu hafta" varsayılan İŞARETLİ
@@ -676,7 +677,7 @@ function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle
             className="input !text-sm !py-1.5 w-full">
             <option value="">— Boş (atama yok) —</option>
             {allowedStudents.map(s => (
-              <option key={s.id} value={s.id}>{s.name}{s.cls ? ` · ${s.cls}` : ''}</option>
+              <option key={s.id} value={s.id}>{s.name}{s.cls ? ` · ${classShort(classes, s.cls)}` : ''}</option>
             ))}
           </select>
           {sablon.studentName && (

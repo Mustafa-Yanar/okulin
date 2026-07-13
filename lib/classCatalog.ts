@@ -44,6 +44,16 @@ export function classShort(classes: ClassEntry[] | null | undefined, id: string)
   return id;
 }
 
+// classShort'un büyük-harf varyantı: eski kod BÜYÜK gösterilir (m1→M1, eski davranış),
+// özel şube (s_…) kayıtlı adını OLDUĞU GİBİ gösterir (UUID'yi büyütmek anlamsız; ad
+// zaten kullanıcının yazdığı biçimdedir). `cls.toUpperCase()` kalıbının yerine geçer —
+// o kalıp s_ UUID'leri ham basıyordu (öğretmen grid / yoklama / etüt hücreleri bug'ı).
+export function classShortUpper(classes: ClassEntry[] | null | undefined, id: string): string {
+  if (!id) return '';
+  if (/^s_/.test(id)) return findClass(classes, id)?.ad || id;
+  return id.toUpperCase();
+}
+
 const GROUP_ORDER = ['ilkokul', 'ortaokul', 'lise', 'mezun'];
 const GROUP_LABELS: Record<string, string> = { ilkokul: 'İlkokul', ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
 

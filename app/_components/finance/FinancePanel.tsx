@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
+import { useClasses } from '../ClassesContext';
+import { classShortUpper } from '@/lib/classCatalog';
 import type { Session } from '@/lib/auth';
 import type { PaymentEntry } from '@/lib/finance';
 import type { ShowToast, FinanceDTO, FinanceListItemDTO, InstallmentDTO, KurumBilgi } from '../types';
@@ -364,6 +366,7 @@ interface StudentFinanceRowProps {
 
 // ── Öğrenci finansal detay satırı ───────────────────────────────────────────
 function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: StudentFinanceRowProps) {
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad
   const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [showAddPayment, setShowAddPayment] = useState(false);
@@ -418,7 +421,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
           {/* İsim ve sınıf */}
           <div className="flex-1 min-w-0">
             <div className="font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{studentName}</div>
-            <div className="text-body-sm">{studentCls?.toUpperCase()}</div>
+            <div className="text-body-sm">{classShortUpper(classes, studentCls || '')}</div>
             {overdueInstallments.length > 0 && (
               <div className="flex items-center gap-1 text-caption mt-0.5" style={{ color: 'var(--color-danger)' }}>
                 <AlertCircle size={10} />
@@ -604,7 +607,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
       {makbuzPayment && finance && (
         <Makbuz
           kurum={kurum}
-          ogrenci={{ name: studentName, cls: item.className || studentCls, tc: item.studentTc || '' }}
+          ogrenci={{ name: studentName, cls: item.className || classShortUpper(classes, studentCls || ''), tc: item.studentTc || '' }}
           veli={{ name: item.parentName || '', phone: item.parentPhone || '' }}
           payment={makbuzPayment}
           finance={finance}
@@ -626,7 +629,7 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
       {showEkstre && finance && (
         <Ekstre
           kurum={kurum}
-          ogrenci={{ name: studentName, cls: item.className || studentCls, tc: item.studentTc || '' }}
+          ogrenci={{ name: studentName, cls: item.className || classShortUpper(classes, studentCls || ''), tc: item.studentTc || '' }}
           veli={{ name: item.parentName || '', phone: item.parentPhone || '' }}
           finance={finance}
           onClose={() => setShowEkstre(false)}

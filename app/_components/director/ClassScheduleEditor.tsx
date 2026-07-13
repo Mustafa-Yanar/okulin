@@ -10,6 +10,8 @@ import React, { useState, useMemo } from 'react';
 import { Save } from 'lucide-react';
 import { ALL_DAYS, daySlots, type Slot } from '@/lib/constants';
 import { useSlotTimes } from '../SlotTimesContext';
+import { useClasses } from '../ClassesContext';
+import { classShortUpper } from '@/lib/classCatalog';
 import { api, Modal } from './shared';
 import type { ShowToast } from '../types';
 
@@ -27,6 +29,7 @@ interface ClassScheduleEditorProps {
 
 export default function ClassScheduleEditor({ cls, label, initialTemplate, onClose, onSaved, showToast }: ClassScheduleEditorProps) {
   const { slotTimes } = useSlotTimes();
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (başlık fallback)
   const [saving, setSaving] = useState(false);
 
   // template: { [dayIndex]: Set(slotNo) }
@@ -99,7 +102,7 @@ export default function ClassScheduleEditor({ cls, label, initialTemplate, onClo
   }
 
   return (
-    <Modal title={`${label || cls.toUpperCase()} – Ders Programı Penceresi`} onClose={onClose} wide>
+    <Modal title={`${label || classShortUpper(classes, cls)} – Ders Programı Penceresi`} onClose={onClose} wide>
       <p className="text-[11px] mb-3 px-1" style={{ color: 'var(--text-muted)' }}>
         Bu sınıfa ders yerleştirilebilecek saatleri işaretleyin (mavi = açık). Program
         Oluşturucu yalnızca işaretli saatlere ders koyar. Gün başlığına tıklayarak o günün

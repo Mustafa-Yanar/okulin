@@ -7,7 +7,8 @@ import { BookOpen, ClipboardList, Clock, Calendar, ChevronRight, ChevronLeft, Ed
 import SchedulePrint, { type ScheduleDay, type ScheduleLesson } from '../program/SchedulePrint';
 import type { LucideIcon } from 'lucide-react';
 import { classLabel, ALL_DAYS } from '@/lib/constants';
-import { classLabelFrom, type ClassEntry } from '@/lib/classCatalog';
+import { classLabelFrom, classShortUpper, type ClassEntry } from '@/lib/classCatalog';
+import { useClasses } from '../ClassesContext';
 import { GROUPS, api, Modal, guidanceSubjectsFor } from './shared';
 import { StudentAttendanceView } from './Attendance';
 import { StudentBookingsView } from '../StudentBookingsView';
@@ -244,6 +245,7 @@ interface ClassScheduleModalProps {
 }
 
 export function ClassScheduleModal({ cls, label, onClose }: ClassScheduleModalProps) {
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (başlık fallback)
   const [schedule, setSchedule] = useState<Record<number, ClassLessonDTO[]> | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPrint, setShowPrint] = useState(false);
@@ -299,7 +301,7 @@ export function ClassScheduleModal({ cls, label, onClose }: ClassScheduleModalPr
   }));
 
   return (
-    <Modal title={`${label || cls.toUpperCase()} – Ders Programı`} onClose={onClose} wide>
+    <Modal title={`${label || classShortUpper(classes, cls)} – Ders Programı`} onClose={onClose} wide>
       {!loading && visibleDays.length > 0 && (
         <div className="flex justify-end mb-3">
           <button onClick={() => setShowPrint(true)} className="btn-ghost !px-3 !py-1.5 text-sm flex items-center gap-1.5">
@@ -351,7 +353,7 @@ export function ClassScheduleModal({ cls, label, onClose }: ClassScheduleModalPr
         </div>
       )}
       {showPrint && (
-        <SchedulePrint title="Ders Programı" subtitle={label || cls.toUpperCase()} days={classDays} onClose={() => setShowPrint(false)} />
+        <SchedulePrint title="Ders Programı" subtitle={label || classShortUpper(classes, cls)} days={classDays} onClose={() => setShowPrint(false)} />
       )}
     </Modal>
   );

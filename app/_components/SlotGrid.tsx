@@ -12,7 +12,7 @@ import type { DayInfo, Slot } from '@/lib/constants';
 import type { SlotCell as SlotCellData, ProgramEntry } from '@/lib/slots';
 import { useClasses } from './ClassesContext';
 import { useSlotTimes } from './SlotTimesContext';
-import { classLabelFrom, coursesForClass } from '@/lib/classCatalog';
+import { classLabelFrom, classShortUpper, coursesForClass } from '@/lib/classCatalog';
 import { isSlotPast } from './shared';
 import type { Session } from '@/lib/auth';
 import type { StudentDTO } from './types';
@@ -102,6 +102,7 @@ interface SlotCellProps {
 // SlotCell — desktop'ta <td>, mobile'da <div> olarak sarılır (asDiv prop'u).
 // İçindeki tüm <td className="py-1 px-1"> wrapper'ları Wrap ile parametrize edildi.
 function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teacher, onCellClick, onCancel, weekKey, asDiv = false }: SlotCellProps) {
+  const { classes } = useClasses(); // s_ UUID şube kimliklerini kayıtlı ada çevirmek için
   const Wrap = asDiv ? 'div' : 'td';
   const isDirector = session.role === 'director';
   const isPast = isSlotPast(weekKey, dayIndex, slot.label);
@@ -114,7 +115,7 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
 
   if (slotData.disabled) {
     if (isLesson) {
-      const cls = lessonCls ? lessonCls.toUpperCase() : '—';
+      const cls = lessonCls ? classShortUpper(classes, lessonCls) : '—';
       const subShort = lessonSubBranch === 'TYT Matematik' ? 'TYT' : lessonSubBranch === 'AYT Matematik' ? 'AYT' : lessonSubBranch === 'Geometri' ? 'Geo' : lessonSubBranch;
       return (
         <Wrap className="py-1 px-1">
@@ -181,7 +182,7 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
       (session.role === 'student' && slotData.studentId === session.id) ||
       (session.role === 'teacher' && teacher.id === session.id && bookedBy === 'teacher');
 
-    const clsDisplay = (slotData.studentCls || '').toUpperCase();
+    const clsDisplay = classShortUpper(classes, slotData.studentCls || '');
 
     const colorMap: Record<string, { bg: string; border: string; name: string; sub: string; label: string }> = {
       student: { bg: 'bg-indigo-50', border: 'border-indigo-100', name: 'text-indigo-700', sub: 'text-indigo-400', label: 'Öğrenci' },

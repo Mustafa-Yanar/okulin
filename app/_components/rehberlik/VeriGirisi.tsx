@@ -6,6 +6,8 @@ import { Upload, ScanLine, FileText, Image as ImageIcon, Trash2, Plus, Save, Che
 import { getTemplate, boxLength, normalizeRaw, CHOICES } from '@/lib/deneme/template';
 import { parseDat, datSupports, type ParseDatResult } from '@/lib/deneme/dat';
 import { useConfirm } from '../ConfirmProvider';
+import { useClasses } from '../ClassesContext';
+import { classShort } from '@/lib/classCatalog';
 import type { DenemeExam, DenemeRow } from '@/lib/deneme/types';
 import type { ShowToast, StudentDTO } from '../types';
 
@@ -447,6 +449,7 @@ interface KayitListesiProps {
 
 // ---- Kayıtlar + öğrenci eşleştirme ----
 function KayitListesi({ exam, rows, onChanged, showToast }: KayitListesiProps) {
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (öğrenci eşleştirme)
   const confirm = useConfirm();
   const [students, setStudents] = useState<StudentDTO[]>([]);
   const [matches, setMatches] = useState<Record<string, string>>({}); // rowId -> studentId
@@ -538,7 +541,7 @@ function KayitListesi({ exam, rows, onChanged, showToast }: KayitListesiProps) {
                   >
                     <option value="">— eşleştir —</option>
                     {students.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name}{s.cls ? ` (${s.cls})` : ''}</option>
+                      <option key={s.id} value={s.id}>{s.name}{s.cls ? ` (${classShort(classes, s.cls)})` : ''}</option>
                     ))}
                   </select>
                 </td>

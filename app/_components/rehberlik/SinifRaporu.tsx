@@ -6,6 +6,8 @@ import LoadingBox from '../Loading';
 import EmptyState from '../EmptyState';
 import NetChart, { type NetChartDatum } from './NetChart';
 import { kisalt } from './SonucListesi';
+import { useClasses } from '../ClassesContext';
+import { classShortUpper } from '@/lib/classCatalog';
 import type { ShowToast } from '../types';
 
 // ── /api/deneme/class-report DTO'ları (lib/deneme/report buildClassReport/Trend) ──
@@ -173,6 +175,7 @@ export default function SinifRaporu({ showToast, onBack }: SinifRaporuProps) {
 }
 
 function SinifTablosu({ list }: { list: ClassReportListDTO }) {
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (rapor tablosu)
   const subjects = list.subjects;
   return (
     <div className="card overflow-x-auto">
@@ -193,7 +196,7 @@ function SinifTablosu({ list }: { list: ClassReportListDTO }) {
           {list.classes.map((c) => (
             <tr key={c.cls} className="border-t border-gray-50">
               <td className="px-3 py-1.5 text-gray-400">{c.rank}</td>
-              <td className="px-3 py-1.5 text-gray-700" style={{ fontWeight: 600 }}>{c.cls}</td>
+              <td className="px-3 py-1.5 text-gray-700" style={{ fontWeight: 600 }}>{classShortUpper(classes, c.cls)}</td>
               <td className="px-2 py-1.5 text-right text-gray-400">{c.count}</td>
               {subjects.map((s) => (
                 <td key={s.key} className="px-2 py-1.5 text-right text-gray-500">{(c.subjects[s.key] ?? 0).toFixed(2)}</td>

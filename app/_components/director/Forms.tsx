@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { User, Check, BookOpen, Download } from 'lucide-react';
-import { classesForGroup, type ClassEntry } from '@/lib/classCatalog';
+import { classesForGroup, classShortUpper, type ClassEntry } from '@/lib/classCatalog';
 import { isValidTurkishMobile, formatTurkishMobile } from '@/lib/phone';
 import { GROUPS, Modal, Label, FormField } from './shared';
 import { useClasses } from '../ClassesContext';
@@ -323,6 +323,7 @@ interface ImportModalProps {
 }
 
 export function ImportModal({ onClose, showToast, onDone }: ImportModalProps) {
+  const { classes: registryClasses } = useClasses(); // s_ şube kimliği → kayıtlı ad (sonuç listesi)
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
 
@@ -388,7 +389,7 @@ export function ImportModal({ onClose, showToast, onDone }: ImportModalProps) {
               <p className="text-xs font-600 text-gray-500 mb-1" style={{fontWeight:600}}>Eklenen öğrenciler ve şifreleri:</p>
               {result.added.map((s, i) => (
                 <div key={i} className="flex items-center justify-between text-xs px-2 py-1.5 rounded bg-green-50">
-                  <span className="font-500" style={{fontWeight:500}}>{s.name} <span className="text-gray-400">({s.cls})</span></span>
+                  <span className="font-500" style={{fontWeight:500}}>{s.name} <span className="text-gray-400">({classShortUpper(registryClasses, s.cls)})</span></span>
                   <span className="text-gray-500 font-mono">{s.password}</span>
                 </div>
               ))}

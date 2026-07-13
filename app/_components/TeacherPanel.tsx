@@ -24,7 +24,7 @@ import { DavranisManager } from './davranis/Davranis';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { useSlotTimes } from './SlotTimesContext';
 import { useClasses } from './ClassesContext';
-import { classLabelFrom } from '@/lib/classCatalog';
+import { classLabelFrom, classShortUpper } from '@/lib/classCatalog';
 import { useUrlTab } from './useUrlTab';
 import { api, getAdjacentWeek, isSlotPast, WeekNav } from './shared';
 import type { Session } from '@/lib/auth';
@@ -225,6 +225,7 @@ interface TeacherAttendancePanelProps {
 }
 
 function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendancePanelProps) {
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (görünüm)
   const [program, setProgram] = useState<ProgramGrid | null>(null);
   const [etutler, setEtutler] = useState<EtutAllDTO[]>([]); // bu öğretmenin bu hafta efektif aktif + öğrenci atanmış etütleri
   const [students, setStudents] = useState<StudentDTO[]>([]);
@@ -406,7 +407,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                         className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-600 text-gray-800" style={{ fontWeight: 600 }}>{lessonNo}. Ders</span>
-                          <span className="text-xs text-indigo-600 font-600" style={{ fontWeight: 600 }}>({cls.toUpperCase()})</span>
+                          <span className="text-xs text-indigo-600 font-600" style={{ fontWeight: 600 }}>({classShortUpper(classes, cls)})</span>
                           <span className="text-xs text-gray-400">{stuList.length} öğrenci</span>
                         </div>
                         <ChevronRight size={14} className="text-gray-400 shrink-0 transition-transform" style={{ transform: lOpen ? 'rotate(90deg)' : 'rotate(0)' }} />
@@ -483,7 +484,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                             <div className="flex items-center gap-2 min-w-0">
                               <User size={12} className="text-gray-400 shrink-0" />
                               <span className="text-sm text-gray-800 truncate">{e.studentName}</span>
-                              {cls && <span className="text-xs text-gray-400">({cls.toUpperCase()})</span>}
+                              {cls && <span className="text-xs text-gray-400">({classShortUpper(classes, cls)})</span>}
                             </div>
                             <div className="flex gap-1 shrink-0 ml-2">
                               {STATUS_OPTS.map(opt => (
@@ -674,6 +675,7 @@ interface TeacherPanelProps {
 }
 
 export default function TeacherPanel({ session, showToast, externalTab, onExternalTabChange }: TeacherPanelProps) {
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (liste görünümü)
   const [weekKey, setWeekKey] = useState(getWeekKey());
   const [slots, setSlots] = useState<TeacherGrid | null | undefined>(null);
   const [program, setProgram] = useState<ProgramGrid>({});
@@ -763,7 +765,7 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
             slotLabel: slot.label,
             slotIdx,
             studentName: slotData.studentName,
-            studentCls: (slotData.studentCls || '').toUpperCase(),
+            studentCls: classShortUpper(classes, slotData.studentCls || ''),
             studentId: slotData.studentId,
             bookedBy: slotData.bookedBy || 'student',
             fixed: !!slotData.fixed,

@@ -12,6 +12,8 @@ import ProgramEditor from './ProgramEditor';
 import LoadingBox from '../Loading';
 import EmptyState from '../EmptyState';
 import { useSlotTimes } from '../SlotTimesContext';
+import { useClasses } from '../ClassesContext';
+import { classShortUpper } from '@/lib/classCatalog';
 import type { SlotCell as SlotCellData } from '@/lib/slots';
 import type { ShowToast, StudentDTO, TeacherDTO } from '../types';
 
@@ -48,6 +50,7 @@ export default function TeachersTab({
   onWeekChange, onCancelBooking,
 }: TeachersTabProps) {
   const { slotTimes } = useSlotTimes();
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (liste görünümleri)
   const selT = expandedTeacherId ? teachers.find(x => x.id === expandedTeacherId) : null;
 
   // İnline detay sayfası — bir öğretmen seçiliyse liste yerine bunu göster.
@@ -122,7 +125,7 @@ export default function TeachersTab({
                           dayIndex: day.index, dayLabel: day.label,
                           slotId: slot.id, slotLabel: slot.label, slotIdx,
                           studentName: sd.studentName,
-                          studentCls: (sd.studentCls||'').toUpperCase(),
+                          studentCls: classShortUpper(classes, sd.studentCls||''),
                           studentId: sd.studentId,
                           bookedBy: sd.bookedBy || 'student',
                           fixed: !!sd.fixed,
@@ -164,7 +167,7 @@ export default function TeachersTab({
                         day: day.index, dayLabel: day.label,
                         slotId: slot.id, slotLabel: slot.label,
                         studentName: sd.studentName,
-                        studentCls: (sd.studentCls||'').toUpperCase(),
+                        studentCls: classShortUpper(classes, sd.studentCls||''),
                       });
                     });
                   });

@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { Calendar, Download } from 'lucide-react';
 import { ALL_DAYS } from '@/lib/constants';
 import { api } from './shared';
+import { useClasses } from './ClassesContext';
+import { classShortUpper } from '@/lib/classCatalog';
 import SchedulePrint, { type ScheduleDay, type ScheduleLesson } from './program/SchedulePrint';
 
 // Salt-okunur sınıf ders programı tablosu. Öğrenci kendi (session.cls), veli çocuğunun
@@ -19,6 +21,7 @@ interface ClassLessonDTO {
 }
 
 export default function ClassScheduleView({ cls }: { cls?: string }) {
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (PDF başlığı)
   const [schedule, setSchedule] = useState<Record<number, ClassLessonDTO[]> | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPrint, setShowPrint] = useState(false);
@@ -120,7 +123,7 @@ export default function ClassScheduleView({ cls }: { cls?: string }) {
         </tbody>
       </table>
       </div>
-      {showPrint && <SchedulePrint title="Ders Programı" subtitle={cls?.toUpperCase() || 'Sınıf'} days={classDays} onClose={() => setShowPrint(false)} />}
+      {showPrint && <SchedulePrint title="Ders Programı" subtitle={cls ? classShortUpper(classes, cls) : 'Sınıf'} days={classDays} onClose={() => setShowPrint(false)} />}
     </div>
   );
 }

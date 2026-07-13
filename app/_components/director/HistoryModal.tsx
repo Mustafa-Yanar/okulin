@@ -4,6 +4,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BookOpen, ClipboardList, Clock } from 'lucide-react';
 import { api, Modal } from './shared';
+import { useClasses } from '../ClassesContext';
+import { classShortUpper } from '@/lib/classCatalog';
 
 // Arşiv satırı (GET /api/archive week.entries elemanı). "Bu hafta" satırları
 // canlı slot verisinden kurulur; oradan gelen ek alanlar da opsiyonel taşınır.
@@ -52,6 +54,7 @@ interface HistoryModalProps {
 }
 
 export default function HistoryModal({ target, onClose, currentWeekKey, currentEntries, inline = false }: HistoryModalProps) {
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad
   const isStudent = target.type === 'student';
   const [activeTab, setActiveTab] = useState('etut');
   const [weeks, setWeeks] = useState<ArchiveWeek[]>([]);
@@ -122,7 +125,7 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
         html += `<div style="${s.dayTitle}">${day.dayLabel}</div>`;
         day.entries.sort((a,b) => a.slotId.localeCompare(b.slotId)).forEach(e => {
           const right = target.type === 'teacher'
-            ? `${e.studentName} · ${(e.studentCls||'').toUpperCase()}`
+            ? `${e.studentName} · ${classShortUpper(classes, e.studentCls||'')}`
             : `${e.teacherName} · ${e.branch}`;
           html += `<div style="${s.entry}"><span style="${s.entryLeft}">${e.slotLabel}</span><span style="${s.entryRight}">${right}</span></div>`;
         });
@@ -196,7 +199,7 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
                               </div>
                               <span className="text-xs text-gray-500">
                                 {target.type === 'teacher'
-                                  ? `${e.studentName} · ${(e.studentCls||'').toUpperCase()}`
+                                  ? `${e.studentName} · ${classShortUpper(classes, e.studentCls||'')}`
                                   : `${e.teacherName} · ${e.branch}`}
                               </span>
                             </div>
