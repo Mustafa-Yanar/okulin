@@ -357,13 +357,13 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                   top, height, zIndex: 1,
                   // Atanan ders (sınıf yerleşmiş) → dolu mor, öne çıkar.
                   // Boş/müsait ders saati → soluk mavi + kesikli, geri planda.
-                  background: isDers ? 'color-mix(in srgb, #6366f1 20%, transparent)'
+                  background: isDers ? 'color-mix(in srgb, var(--brand,#6366f1) 20%, transparent)'
                     : aktif ? 'color-mix(in srgb, #3b82f6 8%, transparent)'
                     : 'var(--bg-muted, #f1f5f9)',
-                  border: isDers ? '1.5px solid #6366f1'
+                  border: isDers ? '1.5px solid var(--brand,#6366f1)'
                     : aktif ? '1px dashed #93c5fd'
                     : '1px dashed var(--border-subtle)',
-                  borderLeft: isDers ? '4px solid #4f46e5'
+                  borderLeft: isDers ? '4px solid var(--brand,#6366f1)'
                     : aktif ? '3px dashed #60a5fa'
                     : '1px dashed var(--border-subtle)',
                   opacity: past ? 0.4 : etutEngel ? 0.5 : 1,
@@ -405,8 +405,8 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                 className="absolute left-0.5 right-0.5 rounded-md px-1 overflow-hidden text-left"
                 style={{
                   top, height, zIndex: 5,
-                  background: aktif ? 'color-mix(in srgb, #14b8a6 22%, transparent)' : 'color-mix(in srgb, #94a3b8 16%, transparent)',
-                  borderLeft: `3px solid ${aktif ? '#14b8a6' : '#94a3b8'}`,
+                  background: aktif ? 'color-mix(in srgb, var(--time-etut) 22%, transparent)' : 'color-mix(in srgb, #94a3b8 16%, transparent)',
+                  borderLeft: `3px solid ${aktif ? 'var(--time-etut)' : '#94a3b8'}`,
                   opacity: aktif ? 1 : 0.7,
                 }}
                 title={`Etüt ${sb.start}–${sb.end}${aktif ? '' : ' (pasif)'} · tıkla: seçenekler`}>

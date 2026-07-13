@@ -125,6 +125,10 @@ export default function EtutCalendar({
     hourLabels.push(`${String(h).padStart(2, '0')}:00`);
   }
 
+  // Şu anki dakika — bugün sütununda "şu an" çizgisi için
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
   return (
     <div>
       <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -175,6 +179,10 @@ export default function EtutCalendar({
                   <div key={i} className="absolute left-0 right-0 pointer-events-none"
                     style={{ top: i * HOUR_PX, borderTop: '1px solid var(--border-subtle)', opacity: 0.5 }} />
                 ))}
+                {/* Şu an çizgisi — yalnız bugün + çalışma saatleri içinde */}
+                {d.isToday && nowMin >= CAL_START_HOUR * 60 && nowMin <= CAL_END_HOUR * 60 && (
+                  <div className="time-now absolute left-0 right-0" style={{ top: minToTop(nowMin), zIndex: 6 }} aria-hidden="true" />
+                )}
                 {/* Bloklar (Faz 3+) */}
                 {renderDayContent && renderDayContent(d)}
               </div>

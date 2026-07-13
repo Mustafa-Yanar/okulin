@@ -323,10 +323,10 @@ export function ClassScheduleModal({ cls, label, onClose }: ClassScheduleModalPr
                     if (!lesson) return <td key={day.index} className="py-2 px-1"><div className="rounded py-2 text-center text-gray-200 bg-gray-50 text-[10px]">—</div></td>;
                     return (
                       <td key={day.index} className="py-1 px-1">
-                        <div className="rounded-lg py-1.5 px-2 bg-blue-50 border border-blue-100 text-center">
-                          <div className="text-[11px] font-700 text-blue-700 truncate" style={{ fontWeight: 700 }}>{lesson.teacherName}</div>
-                          <div className="text-[9px] text-blue-400 truncate">{lesson.subBranch || lesson.branch}</div>
-                          <div className="text-[9px] text-gray-400 truncate">{lesson.slotLabel}</div>
+                        <div className="time-block time-ders rounded-lg py-1.5 px-2 text-center">
+                          <div className="time-block__title text-[11px] truncate">{lesson.subBranch || lesson.branch}</div>
+                          <div className="time-block__sub text-[9px] truncate">{lesson.teacherName}</div>
+                          <div className="time-block__time text-[9px] truncate">{lesson.slotLabel}</div>
                         </div>
                       </td>
                     );
