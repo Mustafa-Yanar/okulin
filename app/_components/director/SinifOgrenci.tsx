@@ -7,12 +7,13 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Plus, Trash2, Edit3, Calendar, CalendarClock, GraduationCap, BookOpen, ChevronRight, ChevronLeft, ArrowRightLeft, Check,
+  Plus, Trash2, Edit3, Calendar, CalendarClock, GraduationCap, BookOpen, ChevronRight, ChevronLeft, ArrowRightLeft, Check, Users,
 } from 'lucide-react';
 import { classLabel } from '@/lib/constants';
 import { classLabelFrom } from '@/lib/classCatalog';
 import { api, Modal } from './shared';
 import { StudentExpandedView, ClassScheduleModal } from './StudentList';
+import StudentListPrint from './StudentListPrint';
 import type { BookingSlotEntry, BookingCancelArgs } from '../student-types';
 import ClassScheduleEditor from './ClassScheduleEditor';
 import { ClassFormModal, CourseCatalog, KADEME_LABEL, KADEME_ORDER, DAL_LABEL } from './ClassManager';
@@ -67,6 +68,7 @@ export default function SinifOgrenci({
   const [view, setView] = useState('list'); // list | catalog
   const [editClass, setEditClass] = useState<Partial<ClassRecord> | null>(null); // {} = yeni, kayıt = düzenle
   const [scheduleCls, setScheduleCls] = useState<{ cls: string; label: string } | null>(null);
+  const [printListCls, setPrintListCls] = useState<{ label: string; students: PanelStudent[] } | null>(null);
   const [windowCls, setWindowCls] = useState<{ id: string; label: string; slotTemplate: Record<string, number[]> | null } | null>(null); // sınıf program penceresi editörü
   const [searchQ, setSearchQ] = useState('');
   const [openClsId, setOpenClsId] = useState<string | null>(null);
@@ -282,6 +284,7 @@ export default function SinifOgrenci({
                         onToggle={() => setOpenClsId((prev) => (prev === c.id ? null : c.id))}
                         onEdit={() => setEditClass(c)}
                         onSchedule={() => setScheduleCls({ cls: c.id, label: c.ad })}
+                        onPrintList={() => setPrintListCls({ label: c.ad, students: studentsByClass[c.id] || [] })}
                         onWindow={() => setWindowCls({ id: c.id, label: c.ad, slotTemplate: (c.slotTemplate as Record<string, number[]> | null) || null })}
                         onDelete={() => handleDeleteClass(c)}
                         onSelectStudent={setExpandedId}
@@ -310,6 +313,14 @@ export default function SinifOgrenci({
       {scheduleCls && (
         <ClassScheduleModal cls={scheduleCls.cls} label={scheduleCls.label} onClose={() => setScheduleCls(null)} />
       )}
+      {printListCls && (
+        <StudentListPrint
+          title="Öğrenci Listesi"
+          subtitle={printListCls.label}
+          students={printListCls.students.map(s => ({ name: s.name, tcNo: s.tcNo, phone: s.phone, parentName: s.parentName, parentPhone: s.parentPhone }))}
+          onClose={() => setPrintListCls(null)}
+        />
+      )}
       {windowCls && (
         <ClassScheduleEditor
           cls={windowCls.id} label={windowCls.label} initialTemplate={windowCls.slotTemplate}
@@ -331,6 +342,7 @@ interface ClassRowProps {
   onEdit: () => void;
   onSchedule: () => void;
   onWindow: () => void;
+  onPrintList: () => void;
   onDelete: () => void;
   onSelectStudent: (id: string) => void;
   pendingGuidance?: Record<string, number>;
@@ -339,7 +351,7 @@ interface ClassRowProps {
 }
 
 // ─── Şube satırı (akordeon: başlık + 3 buton + açılınca öğrenciler) ───────────────────
-function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, onWindow, onDelete, onSelectStudent, pendingGuidance, readOnly = false, busy }: ClassRowProps) {
+function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, onWindow, onPrintList, onDelete, onSelectStudent, pendingGuidance, readOnly = false, busy }: ClassRowProps) {
   const hasWindow = c.slotTemplate && Object.keys(c.slotTemplate).length > 0;
   const courseLabel = (key: string) => courses.find((x) => x.key === key)?.ad || key;
   const dersler = c.dersler || [];
@@ -360,6 +372,7 @@ function ClassRow({ c, courses, students, isOpen, onToggle, onEdit, onSchedule, 
         <div className="flex gap-1 shrink-0">
           <button className="btn-icon" onClick={onEdit} aria-label="Şubeyi düzenle" title="Düzenle" disabled={busy}><Edit3 size={14} /></button>
           <button className="btn-icon" onClick={onSchedule} aria-label="Ders programı" title="Ders Programı"><Calendar size={14} /></button>
+          <button className="btn-icon" onClick={onPrintList} aria-label="Öğrenci listesi" title="Öğrenci Listesi (PDF)"><Users size={14} /></button>
           <button className="btn-icon" onClick={onWindow} aria-label="Program penceresi" title="Program Penceresi (ders saatleri)"
             style={hasWindow ? { color: '#3b82f6' } : undefined}>
             <CalendarClock size={14} />
