@@ -210,6 +210,11 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
     if (existing?.installments?.length) return existing.installments;
     return [];
   });
+  // Peşin ödeme (yalnız yeni kayıt): kayıt anında ödeme al, tarihi seçilebilir.
+  // Tutar boş bırakılırsa net ücretin tamamı alınır; tarih varsayılan bugün.
+  const [pesinDate, setPesinDate] = useState<string>(todayISO());
+  const [pesinAmount, setPesinAmount] = useState('');
+  const [pesinMethod, setPesinMethod] = useState('Nakit');
   const [saving, setSaving] = useState(false);
 
   const netFee = Math.max(0, (parseFloat(totalFee) || 0) - (parseFloat(discount) || 0));
@@ -261,6 +266,26 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
       });
       const data = (await res.json()) as { error?: string; record: FinanceDTO | null };
       if (!res.ok) throw new Error(data.error || 'Hata');
+      // Peşin plan (yeni kayıt): kaydın ardından peşin ödemeyi SEÇİLEN tarihte al.
+      // Tutar boşsa net ücretin tamamı. Kayıt otomatik "ödendi" olmaz — ödeme burada,
+      // kullanıcının seçtiği tarihle işlenir (kayıt tarihine sabitlenmez).
+      if (plan === 'pesin' && !existing) {
+        const amt = pesinAmount !== '' ? (parseFloat(pesinAmount) || 0) : netFee;
+        if (amt > 0) {
+          const payRes = await fetch('/api/finance/payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+              studentId: student.id || student.studentId,
+              amount: amt, date: pesinDate, method: pesinMethod,
+              note: 'Peşin ödeme', installmentIdx: null,
+            }),
+          });
+          const payData = (await payRes.json()) as { error?: string };
+          if (!payRes.ok) throw new Error(payData.error || 'Peşin ödeme kaydedilemedi');
+        }
+      }
       onSuccess(data.record);
     } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setSaving(false); }
@@ -308,6 +333,36 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
               ))}
             </div>
           </div>
+
+          {plan === 'pesin' && !existing && (
+            <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+              <p className="text-xs font-600 text-gray-500" style={{ fontWeight: 600 }}>Peşin Ödeme</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-label block mb-1.5">Ödeme Tarihi</label>
+                  <input type="date" value={pesinDate} onChange={e => setPesinDate(e.target.value)}
+                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-label block mb-1.5">Tutar (₺)</label>
+                  <input type="number" min="0" step="0.01" value={pesinAmount} onChange={e => setPesinAmount(e.target.value)}
+                    placeholder={totalFee ? fmt(netFee) : '0,00'}
+                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-indigo-400 focus:outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="text-label block mb-1.5">Ödeme Yöntemi</label>
+                <div className="flex gap-2">
+                  {METHODS.map(m => (
+                    <button key={m} type="button" onClick={() => setPesinMethod(m)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-600 border transition-all ${pesinMethod === m ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                      style={{ fontWeight: 600 }}>{m}</button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-caption text-gray-400">Tutar boş bırakılırsa net ücretin tamamı{totalFee ? ` (${fmt(netFee)} ₺)` : ''} peşin alınır. Ödeme almak istemiyorsan tutarı 0 yap.</p>
+            </div>
+          )}
 
           {plan === 'taksitli' && (
             <div>
