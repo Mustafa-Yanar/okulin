@@ -19,7 +19,7 @@ function money(n: number | undefined): string {
   return '₺' + (n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export interface SenetOgrenci { name: string; tc: string; }
+export interface SenetOgrenci { name: string; tc: string; phone?: string; donem?: string; }
 export interface SenetVeli { name: string; phone: string; address: string; tc: string; }
 
 interface SenetProps {
@@ -124,6 +124,8 @@ function SenetKart({ no, toplam, inst, kurum, unvan, ogrenci, veli, duzenlemeTar
           <Taraf title="Öğrenci">
             <div className="text-slate-800 font-600" style={{ fontWeight: 600 }}>{ogrenci.name}</div>
             {ogrenci.tc && <div className="text-slate-500">T.C.: {ogrenci.tc}</div>}
+            {ogrenci.phone && <div className="text-slate-500">Tel: {ogrenci.phone}</div>}
+            {ogrenci.donem && <div className="text-slate-500">Dönem: {ogrenci.donem}</div>}
           </Taraf>
           <Taraf title="Ödeyecek">
             <div className="text-slate-800 font-600" style={{ fontWeight: 600 }}>{veli.name || '—'}</div>

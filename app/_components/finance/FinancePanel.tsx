@@ -37,6 +37,15 @@ function todayISO(): string {
   return localYMD(new Date());
 }
 
+// Öğretim dönemi (akademik yıl) — kayıt tarihinden türetilir; Temmuz'dan (yeni sezon
+// kayıtları) itibaren yeni dönem. GEÇİCİ: dönem yönetimi (kurumun aktif dönemi seçmesi)
+// UI/UX ayrı çalışmada config'e taşınacak. Şimdilik registrationDate'ten hesaplanır.
+function academicYearOf(dateStr?: string): string {
+  const d = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+  const y = d.getFullYear();
+  return d.getMonth() >= 6 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+}
+
 function isOverdue(dueDate: string | null | undefined): boolean {
   if (!dueDate) return false;
   return new Date(dueDate) < new Date(todayISO());
@@ -679,10 +688,10 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
       {showSenet && finance && (
         <Senet
           kurum={kurum}
-          ogrenci={{ name: studentName, tc: item.studentTc || '' }}
+          ogrenci={{ name: studentName, tc: item.studentTc || '', phone: item.studentPhone || '', donem: academicYearOf(finance.registrationDate) }}
           veli={{ name: item.parentName || '', phone: item.parentPhone || '', address: item.parentAddress || '', tc: item.parentTcNo || '' }}
           installments={finance.installments}
-          duzenlemeTarihi={finance.registrationDate || new Date().toISOString().slice(0, 10)}
+          duzenlemeTarihi={finance.registrationDate || todayISO()}
           onClose={() => setShowSenet(false)}
         />
       )}

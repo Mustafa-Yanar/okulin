@@ -72,7 +72,7 @@ export const GET = withAuth('auth', 'finance', async (req, _ctx, session) => {
   const list = studs.map((s) => ({
     studentId: s.legacyId, studentName: s.name, studentCls: s.class?.legacyId || '',
     // Muhasebe belgeleri (senet/makbuz/gecikmiş liste) için öğrenci+veli kimlik bilgisi.
-    studentTc: s.tcNo || '', parentName: s.parentName || '', parentPhone: s.parentPhone || '',
+    studentTc: s.tcNo || '', studentPhone: s.phone || '', parentName: s.parentName || '', parentPhone: s.parentPhone || '',
     parentTcNo: s.parentTcNo || '', parentAddress: s.parentAddress || '', className: s.class?.ad || '',
     finance: financeOut(s.finance, s),
   }));

@@ -107,6 +107,7 @@ export interface FinanceListItemDTO {
   studentName: string;
   studentCls: string;
   studentTc?: string;      // muhasebe belgeleri (senet/makbuz)
+  studentPhone?: string;   // senet öğrenci bölümü (tel)
   parentName?: string;
   parentPhone?: string;
   parentTcNo?: string;
