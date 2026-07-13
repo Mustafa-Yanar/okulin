@@ -43,6 +43,9 @@ export default function Senet({ kurum, ogrenci, veli, installments, duzenlemeTar
 
   const unvan = kurum.officialName || kurum.name || 'Kurum';
   const rows = installments.filter(i => !i.paid); // ödenmemiş taksitler için senet
+  // Her A4 sayfaya 3 senet; sayfa içinde dikey yayılır (senet-sheet + space-between).
+  const chunks: InstallmentDTO[][] = [];
+  for (let i = 0; i < rows.length; i += 3) chunks.push(rows.slice(i, i + 3));
 
   return createPortal(
     <div id="print-preview"
@@ -59,14 +62,18 @@ export default function Senet({ kurum, ogrenci, veli, installments, duzenlemeTar
         </div>
       </div>
 
-      <div className="print-page bg-white text-slate-800 w-full max-w-[820px] shadow-xl print:shadow-none" style={{ padding: '10px 20px' }}>
-        {rows.length === 0
-          ? <div className="text-center py-10 text-slate-400 text-sm">Ödenmemiş taksit yok — senet üretilecek kalem bulunmuyor.</div>
-          : rows.map((inst, i) => (
-            <SenetKart key={i} no={i + 1} toplam={rows.length} inst={inst}
+      {rows.length === 0 ? (
+        <div className="print-page bg-white text-slate-800 w-full max-w-[820px] shadow-xl print:shadow-none" style={{ padding: '10px 20px' }}>
+          <div className="text-center py-10 text-slate-400 text-sm">Ödenmemiş taksit yok — senet üretilecek kalem bulunmuyor.</div>
+        </div>
+      ) : chunks.map((chunk, ci) => (
+        <div key={ci} className="print-page senet-sheet bg-white text-slate-800 w-full max-w-[820px] shadow-xl print:shadow-none" style={{ padding: '10px 20px' }}>
+          {chunk.map((inst, i) => (
+            <SenetKart key={i} no={ci * 3 + i + 1} toplam={rows.length} inst={inst}
               kurum={kurum} unvan={unvan} ogrenci={ogrenci} veli={veli} duzenlemeTarihi={duzenlemeTarihi} />
           ))}
-      </div>
+        </div>
+      ))}
     </div>,
     document.body
   );

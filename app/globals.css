@@ -849,6 +849,22 @@ html.dark .hover\:bg-amber-100:hover  { background: var(--color-warning-bg) !imp
     min-height: 0 !important;
   }
 
+  /* Senet sayfası: 3 senet A4'e DİKEY yayılır (üst senet sayfa üstüne, alt senet sayfa
+     altına, aralar eşit). height = A4 - @page 10mm margin (275mm güvenli pay); üst/alt
+     padding 0; child marginlar sıfırlanır (justify-content boşlukları yönetir). */
+  #print-preview .senet-sheet {
+    box-sizing: border-box;
+    height: 275mm;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  #print-preview .senet-sheet > * {
+    margin-bottom: 0 !important;
+  }
+
   /* Önizleme içindeki no-print (üst bar: PDF/Yazdır + Kapat) gizli kalsın. */
   #print-preview .no-print {
     display: none !important;
