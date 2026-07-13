@@ -432,7 +432,8 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                                         {STATUS_OPTS.map(opt => (
                                           <button key={opt.value}
                                             onClick={() => setStatus(date, cls, lessonNo, student.id, opt.value)}
-                                            className={`text-[11px] px-2.5 py-1 rounded-lg border font-600 transition ${current === opt.value ? opt.active : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                                            aria-pressed={current === opt.value}
+                                            className={`text-xs px-3 py-2 min-h-[36px] rounded-lg border font-600 transition ${current === opt.value ? opt.active : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
                                             style={{ fontWeight: 600 }}>
                                             {opt.label}
                                           </button>
@@ -490,7 +491,8 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                               {STATUS_OPTS.map(opt => (
                                 <button key={opt.value}
                                   onClick={() => setStatus(date, cls, lessonNo, e.studentId!, opt.value)}
-                                  className={`text-[11px] px-2.5 py-1 rounded-lg border font-600 transition ${current === opt.value ? opt.active : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                                  aria-pressed={current === opt.value}
+                                  className={`text-xs px-3 py-2 min-h-[36px] rounded-lg border font-600 transition ${current === opt.value ? opt.active : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
                                   style={{ fontWeight: 600 }}>
                                   {opt.label}
                                 </button>
