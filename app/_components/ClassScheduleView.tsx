@@ -76,7 +76,7 @@ export default function ClassScheduleView({ cls }: { cls?: string }) {
   // PDF çıktısı verisi (sınıf perspektifi: hücrede öğretmen adı).
   const classDays: ScheduleDay[] = ALL_DAYS.map(day => ({
     dayIndex: day.index, dayLabel: day.short, weekend: day.weekend,
-    lessons: (schedule?.[day.index] || []).map((l): ScheduleLesson => ({ main: l.teacherName || '', sub: l.subBranch || l.branch || '', time: l.slotLabel || '', slotId: l.slotId })),
+    lessons: (schedule?.[day.index] || []).map((l): ScheduleLesson => ({ main: l.subBranch || l.branch || 'Ders', sub: l.teacherName || '', time: l.slotLabel || '', slotId: l.slotId })),
   }));
 
   return (
