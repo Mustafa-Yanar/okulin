@@ -59,7 +59,7 @@ export default function Senet({ kurum, ogrenci, veli, installments, duzenlemeTar
         </div>
       </div>
 
-      <div className="print-page bg-white text-slate-800 w-full max-w-[820px] shadow-xl print:shadow-none" style={{ padding: '18px 22px' }}>
+      <div className="print-page bg-white text-slate-800 w-full max-w-[820px] shadow-xl print:shadow-none" style={{ padding: '10px 20px' }}>
         {rows.length === 0
           ? <div className="text-center py-10 text-slate-400 text-sm">Ödenmemiş taksit yok — senet üretilecek kalem bulunmuyor.</div>
           : rows.map((inst, i) => (
@@ -80,7 +80,7 @@ function SenetKart({ no, toplam, inst, kurum, unvan, ogrenci, veli, duzenlemeTar
   const kurusYazi = yazi.kurus;
   return (
     <div className="rounded-xl border border-slate-300 overflow-hidden flex flex-col"
-      style={{ breakInside: 'avoid', pageBreakInside: 'avoid', minHeight: '86mm', marginBottom: '7mm' }}>
+      style={{ breakInside: 'avoid', pageBreakInside: 'avoid', height: '85mm', marginBottom: '4mm' }}>
       {/* Üst şerit — gövdeyle AYNI kolon oranı (1.35/1) → sağ kutu bloğunun sol sınırı
           gövdedeki öğrenci kutusunun sol sınırıyla hizalanır. */}
       <div className="grid items-stretch" style={{ gridTemplateColumns: '1.35fr 1fr', borderBottom: '1px solid #cbd5e1' }}>

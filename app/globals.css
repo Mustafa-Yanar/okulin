@@ -810,6 +810,10 @@ html.dark .hover\:bg-amber-100:hover  { background: var(--color-warning-bg) !imp
 .toast-info    { background: rgba(37,99,235,0.92);   color: white; }
 
 @media print {
+  /* Sayfa kenar boşluğunu SABİTLE — yazıcı/tarayıcı varsayılanı büyük olabiliyor
+     (kullanıcının "Kenar Boşlukları" ayarına bağlı), bu da senet gibi tam-A4 hesaplı
+     çıktıları (3 senet/sayfa) taşırıyordu. 10mm çoğu yazıcının basabildiği güvenli alan. */
+  @page { size: A4; margin: 10mm; }
   .no-print { display: none !important; }
   .print-page { page-break-after: always; }
 
