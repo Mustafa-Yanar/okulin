@@ -470,7 +470,7 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
                   <div className="flex gap-2 flex-wrap mt-1">
                     {bookableBranches.map(b => (
                       <button key={b} type="button" onClick={() => setBookingBranch(b)}
-                        className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${bookingBranch===b?'border-indigo-300 bg-indigo-50 text-indigo-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                        className={`px-3 py-1.5 rounded-lg text-sm border transition ${bookingBranch===b?'border-indigo-300 bg-indigo-50 text-indigo-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
                         {b}
                       </button>
                     ))}
@@ -508,7 +508,7 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
                   <div className="flex gap-2 flex-wrap mt-1">
                     {bookableBranches.map(b => (
                       <button key={b} type="button" onClick={() => setBookingBranch(b)}
-                        className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${bookingBranch===b?'border-indigo-300 bg-indigo-50 text-indigo-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                        className={`px-3 py-1.5 rounded-lg text-sm border transition ${bookingBranch===b?'border-indigo-300 bg-indigo-50 text-indigo-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
                         {b}
                       </button>
                     ))}

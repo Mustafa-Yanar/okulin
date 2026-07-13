@@ -142,7 +142,7 @@ export function TeacherForm({ initial, onClose, onSave }: TeacherFormProps) {
           <div className="flex gap-2 flex-wrap">
             {Object.entries(GROUPS).map(([key,label]) => (
               <button key={key} type="button" onClick={() => toggleGroup(key)}
-                className={`px-3 py-1.5 rounded-lg text-sm border transition-all font-500 ${allowedGroups.includes(key)?'border-indigo-300 bg-indigo-50 text-indigo-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                className={`px-3 py-1.5 rounded-lg text-sm border transition font-500 ${allowedGroups.includes(key)?'border-indigo-300 bg-indigo-50 text-indigo-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}
                 style={{ fontWeight:500 }}>
                 {allowedGroups.includes(key)&&<Check size={12} className="inline mr-1" />}{label}
               </button>
@@ -155,7 +155,7 @@ export function TeacherForm({ initial, onClose, onSave }: TeacherFormProps) {
           <div className="flex gap-2 flex-wrap">
             {visibleBranches.map(b => (
               <button key={b} type="button" onClick={() => toggleBranch(b)}
-                className={`px-3 py-1.5 rounded-lg text-sm border transition-all font-500 ${branches.includes(b)?'border-violet-300 bg-violet-50 text-violet-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                className={`px-3 py-1.5 rounded-lg text-sm border transition font-500 ${branches.includes(b)?'border-violet-300 bg-violet-50 text-violet-700':'border-gray-200 text-gray-500 hover:border-gray-300'}`}
                 style={{fontWeight:500}}>
                 {branches.includes(b)&&<Check size={12} className="inline mr-1" />}{b}
               </button>

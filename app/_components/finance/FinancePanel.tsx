@@ -161,7 +161,7 @@ function AddPaymentModal({ studentId, studentName, balance, installments, onClos
                 <button
                   key={m} type="button"
                   onClick={() => setMethod(m)}
-                  className={`flex-1 py-2 rounded-lg text-xs font-600 border transition-all ${method === m ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                  className={`flex-1 py-2 rounded-lg text-xs font-600 border transition ${method === m ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'}`}
                   style={{ fontWeight: 600 }}
                 >{m}</button>
               ))}
@@ -343,7 +343,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
             <div className="flex gap-2">
               {[['pesin', 'Peşin'], ['taksitli', 'Taksitli']].map(([v, l]) => (
                 <button key={v} type="button" onClick={() => setPlan(v)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-600 border transition-all ${plan === v ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-600 border transition ${plan === v ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-gray-50 border-gray-200 text-gray-500 hover:border-gray-300'}`}
                   style={{ fontWeight: 600 }}>{l}</button>
               ))}
             </div>
@@ -370,7 +370,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
                 <div className="flex gap-2">
                   {METHODS.map(m => (
                     <button key={m} type="button" onClick={() => setPesinMethod(m)}
-                      className={`flex-1 py-2 rounded-lg text-xs font-600 border transition-all ${pesinMethod === m ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                      className={`flex-1 py-2 rounded-lg text-xs font-600 border transition ${pesinMethod === m ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
                       style={{ fontWeight: 600 }}>{m}</button>
                   ))}
                 </div>

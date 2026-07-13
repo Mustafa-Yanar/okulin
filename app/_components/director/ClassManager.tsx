@@ -312,7 +312,7 @@ export function ClassFormModal({ initial, courses, sektor, onClose, onSaved, sho
                 const on = selected.includes(c.key);
                 return (
                   <button key={c.key} type="button" onClick={() => toggleDers(c.key)}
-                    className="px-2.5 py-1 rounded-lg text-xs border transition-all"
+                    className="px-2.5 py-1 rounded-lg text-xs border transition"
                     style={on ? {
                       background: 'color-mix(in srgb, var(--brand,#6366f1) 14%, transparent)',
                       borderColor: 'var(--brand,#6366f1)',

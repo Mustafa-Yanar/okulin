@@ -146,7 +146,7 @@ function NavItem({ item, active, collapsed, onClick }: NavItemProps) {
       onClick={() => onClick(item.key)}
       aria-current={active ? 'page' : undefined}
       className={`
-        w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all
+        w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition
         ${active ? 'nav-item-active' : 'hover:bg-[var(--bg-muted)]'}
         ${collapsed ? 'justify-center' : ''}
       `}
@@ -316,7 +316,7 @@ export default function Sidebar({
               title={collapsed ? 'Ayarlar' : undefined}
               aria-current={activeTab === 'ayarlar' ? 'page' : undefined}
               className={`
-                w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all
+                w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition
                 ${activeTab === 'ayarlar' ? 'nav-item-active' : 'hover:bg-[var(--bg-muted)]'}
                 ${collapsed ? 'justify-center' : ''}
               `}

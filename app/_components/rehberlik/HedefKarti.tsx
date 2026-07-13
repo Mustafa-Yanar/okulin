@@ -93,7 +93,7 @@ export default function HedefKarti({ studentId, editable }: HedefKartiProps) {
           <>
             <div className="w-full rounded-full overflow-hidden" style={{ height: 10, background: 'var(--bg-muted)' }}>
               <div
-                className="h-full rounded-full transition-all"
+                className="h-full rounded-full transition"
                 style={{
                   width: `${pct}%`,
                   background: reached ? 'var(--color-success, #16a34a)' : 'var(--brand, #6366f1)',

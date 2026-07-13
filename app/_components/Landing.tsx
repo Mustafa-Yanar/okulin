@@ -263,7 +263,7 @@ export default function Landing() {
 
 function FeatureCard({ icon: Icon, title, desc }: { icon: LucideIcon; title: string; desc: string }) {
   return (
-    <div className="card p-5 transition-all hover:-translate-y-0.5" style={{ transitionDuration: '160ms' }}>
+    <div className="card p-5 transition hover:-translate-y-0.5" style={{ transitionDuration: '160ms' }}>
       <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-3"
         style={{ background: 'color-mix(in srgb, var(--brand,#6366f1) 10%, var(--bg-surface))', color: '#6366f1' }}>
         <Icon size={21} strokeWidth={2} />

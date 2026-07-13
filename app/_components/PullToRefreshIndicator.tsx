@@ -15,7 +15,7 @@ export default function PullToRefreshIndicator({ pullDistance, refreshState }: P
 
   return (
     <div
-      className="absolute left-0 right-0 z-30 flex justify-center pointer-events-none transition-all duration-100"
+      className="absolute left-0 right-0 z-30 flex justify-center pointer-events-none transition duration-100"
       style={{
         top: '12px',
         height: `${pullDistance}px`,

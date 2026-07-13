@@ -213,7 +213,7 @@ export function DirectorAttendanceView({ showToast }: { showToast?: ShowToast })
           const isToday = day.index === todayIndex;
           return (
             <button key={day.index} onClick={() => setSelectedDay(day.index)}
-              className="flex-1 min-w-0 rounded-xl px-1 py-2 flex flex-col items-center gap-0.5 transition-all border"
+              className="flex-1 min-w-0 rounded-xl px-1 py-2 flex flex-col items-center gap-0.5 transition border"
               style={{
                 background: active ? 'var(--brand, #6366f1)' : 'var(--bg-surface)',
                 borderColor: active ? 'var(--brand, #6366f1)'

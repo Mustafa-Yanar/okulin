@@ -43,7 +43,7 @@ export default function ThemeToggle({ collapsed }: ThemeToggleProps) {
     <button
       onClick={toggle}
       title={dark ? 'Aydınlık temaya geç' : 'Karanlık temaya geç'}
-      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all w-full
+      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition w-full
                  text-[var(--text-secondary)] hover:bg-[var(--bg-muted)] hover:text-[var(--text-primary)]"
       style={{ justifyContent: collapsed ? 'center' : undefined }}
     >
