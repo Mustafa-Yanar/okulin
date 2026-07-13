@@ -191,16 +191,16 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
       ) : (
         <div>
           {/* Filters Bar */}
-          <div className="grid grid-cols-3 gap-2.5 mb-4">
-            <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} className="w-full text-xs border border-gray-200 rounded-xl px-2 py-2 bg-white">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
+            <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} aria-label="Derse göre filtrele" className="w-full text-sm border rounded-xl px-3 py-2.5 bg-[var(--bg-surface)] border-[var(--border-light)] text-[var(--text-primary)]">
               <option value="">Ders Seç...</option>
               {studentAllowedBranches.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
-            <select value={filterTeacher} onChange={e => setFilterTeacher(e.target.value)} className="w-full text-xs border border-gray-200 rounded-xl px-2 py-2 bg-white">
+            <select value={filterTeacher} onChange={e => setFilterTeacher(e.target.value)} aria-label="Öğretmene göre filtrele" className="w-full text-sm border rounded-xl px-3 py-2.5 bg-[var(--bg-surface)] border-[var(--border-light)] text-[var(--text-primary)]">
               <option value="">Öğretmen...</option>
               {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
-            <select value={filterDay} onChange={e => setFilterDay(e.target.value)} className="w-full text-xs border border-gray-200 rounded-xl px-2 py-2 bg-white">
+            <select value={filterDay} onChange={e => setFilterDay(e.target.value)} aria-label="Güne göre filtrele" className="w-full text-sm border rounded-xl px-3 py-2.5 bg-[var(--bg-surface)] border-[var(--border-light)] text-[var(--text-primary)]">
               <option value="">Gün Seç...</option>
               {ALL_DAYS.map(d => <option key={d.index} value={d.index}>{d.label}</option>)}
             </select>
