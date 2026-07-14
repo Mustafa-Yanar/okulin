@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { tdb, withScope } from '@/lib/sqldb';
+import { tdb } from '@/lib/sqldb';
 import { currentOrg, currentBranch } from '@/lib/tenant';
 import { newId } from '@/lib/id';
 import { renderPush, applyResult } from './policy';
@@ -42,11 +42,12 @@ function toTarget(d: DeliveryRow): PushTarget {
 }
 
 // Tek bir delivery satırını gönderir ve sonucunu DB'ye işler.
-// Dönüş: 'sent' | 'pending' | 'dead'. Kalıcı ölümde kaynak aboneliği de temizler.
+// Kalıcı ölümde kaynak aboneliği de temizler; resourceRemoved bunu yaptığında true
+// (removed sayacı bu dönüşe bağlıdır — durum eşitliğinden türetilmez).
 async function deliverOne(
   d: DeliveryRow,
   notif: { title: string; body: string; url?: string; tag?: string; requireInteraction?: boolean },
-): Promise<'sent' | 'pending' | 'dead'> {
+): Promise<{ status: 'sent' | 'pending' | 'dead'; resourceRemoved: boolean }> {
   const attempts = d.attempts + 1;
   const r = await deliver(toTarget(d), notif);
   const outcome = applyResult(attempts, r, new Date());
@@ -60,6 +61,7 @@ async function deliverOne(
       lastError: r.ok ? null : (r.error ?? 'bilinmeyen hata'),
     },
   });
+  let resourceRemoved = false;
   if (outcome.status === 'dead' && r.permanent) {
     // Ölü hedefi kaynak tablodan da düşür (eski sendPushToUser 404/410 temizliği)
     if (d.provider === 'webpush') {
@@ -67,8 +69,9 @@ async function deliverOne(
     } else {
       await prisma.deviceInstallation.updateMany({ where: { token: d.target }, data: { enabled: false } });
     }
+    resourceRemoved = true;
   }
-  return outcome.status;
+  return { status: outcome.status, resourceRemoved };
 }
 
 // Kullanıcının cihazlarına bildirim kuyruklar + anında göndermeyi dener.
@@ -97,19 +100,21 @@ export async function enqueueNotification(role: string, userId: string, payload:
       provider: di.provider, target: di.token,
     })),
   ];
-  // DİKKAT: transaction'da base `prisma` kullanılır — $extends'li tdb() client'ının
-  // promise'i base $transaction'a karıştırılamaz (runtime "Transaction API error").
-  // withScope aynı orgSlug/branch alanlarını data'ya enjekte eder → tenant garantisi aynı.
+  // DİKKAT: transaction'da base prisma kullanılır — $extends'li tdb() promise'i
+  // base $transaction'a karıştırılamaz (runtime "Transaction API error").
+  // withScope runtime'da alan EKLEMEZ (salt tip cast'i) → orgSlug/branch elle yazılır.
   await prisma.$transaction([
     prisma.notificationEvent.create({
-      data: withScope({
+      data: {
         id: eventId,
+        orgSlug: org,
+        branch,
         role, userId,
         title: payload.title, body: payload.body,
         url: payload.url, tag: payload.tag,
         sensitive: payload.sensitive ?? false,
         dispatchStatus: 'done', // fan-out bu transaction'da yazıldı
-      }) as never, // withScope dönüşü geniş tip — create data'ya daraltma
+      },
     }),
     ...deliveries.map((data) => prisma.notificationDelivery.create({ data })),
   ]);
@@ -121,10 +126,10 @@ export async function enqueueNotification(role: string, userId: string, payload:
   const notif = { ...pushText, url: payload.url, tag: payload.tag, requireInteraction: payload.requireInteraction };
   let sent = 0, failed = 0, removed = 0;
   for (const d of deliveries) {
-    const status = await deliverOne({ ...d, keys: d.keys ?? {}, attempts: 0 }, notif);
+    const { status, resourceRemoved } = await deliverOne({ ...d, keys: d.keys ?? {}, attempts: 0 }, notif);
     if (status === 'sent') sent++;
-    else if (status === 'dead') { failed++; removed++; }
     else failed++;
+    if (resourceRemoved) removed++;
   }
   return { sent, failed, removed };
 }
@@ -147,7 +152,7 @@ export async function dispatchDue(limit = 200): Promise<{ processed: number; sen
       continue;
     }
     const pushText = renderPush({ title: ev.title, body: ev.body, sensitive: ev.sensitive });
-    const status = await deliverOne(d, { ...pushText, url: ev.url ?? undefined, tag: ev.tag ?? undefined });
+    const { status } = await deliverOne(d, { ...pushText, url: ev.url ?? undefined, tag: ev.tag ?? undefined });
     if (status === 'sent') sent++;
     else if (status === 'dead') dead++;
     else retried++;
