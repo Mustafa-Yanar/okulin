@@ -167,6 +167,8 @@ Mevcut web cookie sistemi **aynen kalır**; mobil için yanına token katmanı e
 - Vercel Queues kullanılırsa yalnız **tetikleyici/hızlandırıcı**; kaynak gerçek daima PostgreSQL outbox (Queues beta, 24 saat retention, DLQ yok)
 - Statüler ayrık: sağlayıcıya teslim ≠ cihaza teslim ≠ okundu
 
+> **Uygulama notu (2026-07-15, Plan 1 tamam):** Ayrı `NotificationOutbox` tablosu `NotificationEvent.dispatchStatus`'a katlandı (aynı transaction garantisi, bir tablo az — ADR plan dosyasında). Idempotency anahtarı `eventId+target` (spec'teki `eventId+installationId` yerine; DeviceInstallation dolunca — Plan 3 — token rotasyonu için yeniden değerlendirilecek). Statüler `pending|sent|dead` + event.readAt'a indirgendi (web-push/FCM senkron cihaz-teslim makbuzu vermiyor). FCM canlıya alınmadan önce: `fcmAccessToken` json-parse try/catch + eşzamanlı OAuth de-dup; inbox şemasında requireInteraction/icon kalıcılığı.
+
 **Gizlilik (Apple 4.5.4 + KVKK):** Kilit ekranı payload'ı varsayılan **genel metin** ("Yeni bildiriminiz var / Detay için okulin'i açın"). Öğrenci adı + devamsızlık/borç detayı yalnız uygulama içi inbox'ta; kullanıcı açıkça "kilit ekranında önizleme" açarsa sınırlı ayrıntı. **Mevcut devamsızlık push'u buna göre düzeltilecek** (bugün öğrenci adı + durum kilit ekranına gidiyor).
 
 - Login → izin isteği **kullanıcı eylemiyle** (neden istendiği açıklanır, ilk açılışta otomatik değil); logout → aktif installation-hesap bağı kaldırılır (bildirim durur)
