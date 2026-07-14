@@ -709,18 +709,25 @@ export async function enqueueNotification(role: string, userId: string, payload:
   const eventId = newId('ne_');
   const org = currentOrg();
   const branch = currentBranch();
-  const deliveries = [
+  interface NewDelivery {
+    id: string; eventId: string; orgSlug: string; branch: string;
+    provider: string; target: string; keys?: object;
+  }
+  const deliveries: NewDelivery[] = [
     ...webSubs.map((s) => ({
       id: newId('nd_'), eventId, orgSlug: org, branch,
-      provider: 'webpush', target: s.endpoint, keys: s.keys ?? {},
+      provider: 'webpush', target: s.endpoint, keys: (s.keys ?? {}) as object,
     })),
     ...devices.map((di) => ({
       id: newId('nd_'), eventId, orgSlug: org, branch,
-      provider: di.provider, target: di.token, keys: undefined as unknown as object | undefined,
+      provider: di.provider, target: di.token,
     })),
   ];
+  // DİKKAT: transaction'da base `prisma` kullanılır — $extends'li tdb() client'ının
+  // promise'i base $transaction'a karıştırılamaz (runtime "Transaction API error").
+  // withScope aynı orgSlug/branch alanlarını data'ya enjekte eder → tenant garantisi aynı.
   await prisma.$transaction([
-    tdb().notificationEvent.create({
+    prisma.notificationEvent.create({
       data: withScope({
         id: eventId,
         role, userId,
@@ -728,7 +735,7 @@ export async function enqueueNotification(role: string, userId: string, payload:
         url: payload.url, tag: payload.tag,
         sensitive: payload.sensitive ?? false,
         dispatchStatus: 'done', // fan-out bu transaction'da yazıldı
-      }),
+      }) as never, // withScope dönüşü geniş tip — create data'ya daraltma
     }),
     ...deliveries.map((data) => prisma.notificationDelivery.create({ data })),
   ]);
