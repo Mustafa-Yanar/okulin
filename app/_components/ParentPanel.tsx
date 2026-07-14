@@ -8,7 +8,7 @@ import { StudentBookingsView } from './StudentBookingsView';
 import type { BookingSlotEntry } from './student-types';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
-import { guidanceSubjectsFor } from './director/shared';
+import { subjectsForClass } from './student-logic';
 import { useUrlTab } from './useUrlTab';
 import ClassScheduleView from './ClassScheduleView';
 import { AnnouncementInbox } from './announcements/Announcements';
@@ -269,9 +269,10 @@ function PayModal({ child, idx, inst, showToast, onClose, onPaid }: PayModalProp
 
 // ─── REHBERLİK (konu + deneme + çözülen, salt-okunur) ────────────────────────────
 function GuidanceView({ child }: { child: Child }) {
+  const { classes, courses } = useClasses();
   return (
     <RehberlikAccordion
-      subjects={guidanceSubjectsFor(child.cls)}
+      subjects={subjectsForClass(child.cls, classes, courses)}
       editable={false}
       studentId={child.id}
       solvedContent={<StudentGuidanceView studentId={child.id} readOnly />}

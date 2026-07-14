@@ -1,6 +1,26 @@
 // Öğrenci paneli saf yardımcıları — rehberlik ders listesi + grup etiketleri.
+import type { ClassRecord } from '@/lib/classes';
+import type { CourseRecord } from '@/lib/courses';
 
-// Rehberlik ders listesi seçimi
+// Sınıfın YAPILANDIRILMIŞ ders listesini (registry: class.dersler → ders adı) tercih eder;
+// kayıt yoksa (kayıtsız kurum / eski sayısal kod) guidanceSubjectsFor kod-parse'ına düşer.
+// Özel şubelerde cls = s_UUID → eski kod parseInt→NaN ile BOŞ dönüyordu (rehberlik/konu
+// takibi boş görünüyordu); bu, sınıfın gerçek derslerini kullanarak sorunu çözer.
+export function subjectsForClass(
+  cls: string | undefined,
+  classes: ClassRecord[] | undefined,
+  courses: CourseRecord[] | undefined,
+): string[] {
+  if (cls && classes && classes.length) {
+    const rec = classes.find((c) => c.id === cls);
+    if (rec && rec.dersler && rec.dersler.length) {
+      return rec.dersler.map((key) => (courses || []).find((x) => x.key === key)?.ad || key);
+    }
+  }
+  return guidanceSubjectsFor(cls);
+}
+
+// Rehberlik ders listesi seçimi (ESKİ sayısal sınıf kodu fallback'i — registry yoksa)
 export function guidanceSubjectsFor(cls: string | undefined): string[] {
   if (!cls) return [];
   if (cls.startsWith('7')) {

@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { Save } from 'lucide-react';
 import LoadingBox from './Loading';
 import { api } from './shared';
-import { guidanceSubjectsFor } from './student-logic';
+import { subjectsForClass } from './student-logic';
+import { useClasses } from './ClassesContext';
 import type { Session } from '@/lib/auth';
 import type { ShowToast } from './types';
 
@@ -18,7 +19,8 @@ interface StudentGuidancePanelProps {
 
 // ─── STUDENT GUIDANCE PANEL ────────────────────────────────────────────────────
 export default function StudentGuidancePanel({ session, showToast }: StudentGuidancePanelProps) {
-  const subjects = useMemo(() => guidanceSubjectsFor(session.cls), [session.cls]);
+  const { classes, courses } = useClasses();
+  const subjects = useMemo(() => subjectsForClass(session.cls, classes, courses), [session.cls, classes, courses]);
   const [entries, setEntries] = useState<GuidanceEntries>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

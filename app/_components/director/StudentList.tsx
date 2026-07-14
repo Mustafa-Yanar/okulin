@@ -9,7 +9,8 @@ import type { LucideIcon } from 'lucide-react';
 import { classLabel, ALL_DAYS } from '@/lib/constants';
 import { classLabelFrom, classShortUpper, groupStudentsByClass, type ClassEntry } from '@/lib/classCatalog';
 import { useClasses } from '../ClassesContext';
-import { GROUPS, api, Modal, guidanceSubjectsFor } from './shared';
+import { GROUPS, api, Modal } from './shared';
+import { subjectsForClass } from '../student-logic';
 import { StudentAttendanceView } from './Attendance';
 import { StudentBookingsView } from '../StudentBookingsView';
 import type { BookingSlotEntry, BookingCancelArgs } from '../student-types';
@@ -39,6 +40,7 @@ interface StudentExpandedViewProps {
 
 export function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceReviewed }: StudentExpandedViewProps) {
   const [tab, setTab] = useState('rehberlik');
+  const { classes, courses } = useClasses();
   return (
     <div className="px-3 py-2">
       <div className="pill-tabs mb-3">
@@ -61,7 +63,7 @@ export function StudentExpandedView({ student, allSlots, onCancelBooking, onGuid
       )}
       {tab === 'rehberlik' && (
         <RehberlikAccordion
-          subjects={guidanceSubjectsFor(student.cls)}
+          subjects={subjectsForClass(student.cls, classes, courses)}
           editable={true}
           studentId={student.id}
           solvedContent={<StudentGuidanceView studentId={student.id} onReviewed={onGuidanceReviewed} />}

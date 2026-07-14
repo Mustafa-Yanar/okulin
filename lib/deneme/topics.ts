@@ -31,7 +31,9 @@ export const SUBJECT_TOPICS: Record<string, string[]> = (() => {
   return map;
 })();
 
-// Bir dersin konu listesi (tanımsızsa boş)
+// Bir dersin konu listesi. Sabit listede olmayan (kuruma özel adlandırılmış) dersler
+// için de placeholder döndürür — böylece registry'den gelen özel ders adları konu
+// takibinde ATLANMAZ (müfredat henüz placeholder; gerçek konularla sonra değişecek).
 export function topicsFor(subject: string): string[] {
-  return SUBJECT_TOPICS[subject] || [];
+  return SUBJECT_TOPICS[subject] || placeholderTopics();
 }

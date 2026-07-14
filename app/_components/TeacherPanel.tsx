@@ -24,6 +24,7 @@ import { DavranisManager } from './davranis/Davranis';
 import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { useSlotTimes } from './SlotTimesContext';
 import { useClasses } from './ClassesContext';
+import { subjectsForClass } from './student-logic';
 import { classShortUpper, groupStudentsByClass } from '@/lib/classCatalog';
 import { useUrlTab } from './useUrlTab';
 import PanelHero from './PanelHero';
@@ -72,65 +73,6 @@ interface EtutAllDTO {
 // Lucide Chevron Icon Helpers inside WeekNav
 function ChevronLeft({ size, className }: { size: number; className?: string }) {
   return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m15 18-6-6 6-6"/></svg>;
-}
-
-// Rehberlik ders listesi seçimi
-function guidanceSubjectsFor(cls: string | undefined): string[] {
-  if (!cls) return [];
-  if (cls.startsWith('7')) {
-    return ['Türkçe', 'Matematik', 'Fen Bilgisi', 'Sosyal Bilgiler', 'İngilizce'];
-  }
-  if (cls.startsWith('8')) {
-    return ['Türkçe', 'Matematik', 'Fen Bilgisi', 'İnkılap Tarihi', 'İngilizce'];
-  }
-  let isSayisal = false;
-  let isEA = false;
-  let grade = 0;
-  if (cls.startsWith('m')) {
-    const n = parseInt(cls.slice(1));
-    isSayisal = n <= 5;
-    isEA = n > 5;
-    grade = 12;
-  } else {
-    grade = Math.floor(parseInt(cls) / 100);
-    const sec = parseInt(cls.slice(1));
-    if (grade === 3) { isSayisal = sec <= 3; isEA = sec > 3; }
-    if (grade === 4) { isSayisal = sec <= 5; isEA = sec > 5; }
-  }
-  if (grade === 1 || grade === 2) {
-    return ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Tarih', 'Coğrafya', 'Felsefe'];
-  }
-  if (grade === 3) {
-    if (isSayisal) return ['Türkçe', 'Matematik', 'Fizik', 'Kimya', 'Biyoloji'];
-    return ['Türkçe', 'Matematik', 'Tarih', 'Coğrafya', 'Felsefe'];
-  }
-  if (isSayisal) {
-    return [
-      'Türkçe',
-      'TYT Matematik', 'AYT Matematik', 'Geometri',
-      'TYT Fizik', 'AYT Fizik',
-      'TYT Kimya', 'AYT Kimya',
-      'TYT Biyoloji', 'AYT Biyoloji',
-      'TYT Tarih',
-      'TYT Coğrafya',
-      'TYT Felsefe',
-      'Din Kültürü',
-    ];
-  }
-  if (isEA) {
-    return [
-      'Türkçe', 'Edebiyat',
-      'TYT Matematik', 'AYT Matematik', 'Geometri',
-      'TYT Fizik',
-      'TYT Kimya',
-      'TYT Biyoloji',
-      'TYT Tarih', 'AYT Tarih',
-      'TYT Coğrafya', 'AYT Coğrafya',
-      'TYT Felsefe', 'AYT Felsefe',
-      'Din Kültürü',
-    ];
-  }
-  return [];
 }
 
 const GROUPS: Record<string, string> = { ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
@@ -527,7 +469,7 @@ interface TeacherStudentsViewProps {
 }
 
 function TeacherStudentsView({ students, branches = [] }: TeacherStudentsViewProps) {
-  const { classes } = useClasses();
+  const { classes, courses } = useClasses();
   const subjectMatchesAny = (subject: string) =>
     branches.length === 0 || branches.some(b => subjectMatchesBranch(subject, b));
   const filterSubjectsAny = (subjects: string[]) =>
@@ -630,7 +572,7 @@ function TeacherStudentsView({ students, branches = [] }: TeacherStudentsViewPro
                       {expandedId === s.id && (
                         <div className="border-t border-gray-100 bg-gray-50 px-3 py-3">
                           <RehberlikAccordion
-                            subjects={filterSubjectsAny(guidanceSubjectsFor(s.cls))}
+                            subjects={filterSubjectsAny(subjectsForClass(s.cls, classes, courses))}
                             editable={false}
                             studentId={s.id}
                             solvedContent={

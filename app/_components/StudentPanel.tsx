@@ -25,7 +25,7 @@ import AvailableTree from './AvailableTree';
 import ClassScheduleView from './ClassScheduleView';
 import { StudentBookingsView } from './StudentBookingsView';
 import StudentGuidancePanel from './StudentGuidancePanel';
-import { guidanceSubjectsFor, GROUPS } from './student-logic';
+import { subjectsForClass, GROUPS } from './student-logic';
 import type { Session } from '@/lib/auth';
 import type { ShowToast } from './types';
 import type { BookingSlotEntry, EtutAllDTO, BookEtutArgs, BookingCancelArgs } from './student-types';
@@ -40,7 +40,7 @@ interface StudentPanelProps {
 
 // ─── MAIN STUDENT PANEL ────────────────────────────────────────────────────────
 export default function StudentPanel({ session, showToast, externalTab, onExternalTabChange, selfBookingAllowed = true }: StudentPanelProps) {
-  const { classes } = useClasses();
+  const { classes, courses } = useClasses();
   const [weekKey, setWeekKey] = useState(getWeekKey());
   const [allSlots, setAllSlots] = useState<BookingSlotEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,7 +162,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
 
       {tab === 'rehberlik' ? (
         <RehberlikAccordion
-          subjects={guidanceSubjectsFor(session.cls)}
+          subjects={subjectsForClass(session.cls, classes, courses)}
           editable={true}
           studentId={undefined}
           solvedContent={<StudentGuidancePanel session={session} showToast={showToast} />}
