@@ -12,6 +12,7 @@ import DirectorPanel, { DirectorSettingsInline } from './DirectorPanel';
 import ChangePasswordModal from './ChangePasswordModal';
 import ForcedPasswordChange from './ForcedPasswordChange';
 import Sidebar from './Sidebar';
+import BackgroundScene from './BackgroundScene';
 import Landing from './Landing';
 import PullToRefreshIndicator from './PullToRefreshIndicator';
 import { usePullToRefresh } from './usePullToRefresh';
@@ -151,7 +152,7 @@ export default function AppContent() {
   // Süper-admin paneli yalnız gizli /yonetim-... sayfasında render edilir (orası
   // kendi oturum kontrolünü yapar). Böylece kurum adresine gidince yoluna karışmaz.
   if (!session || session.role === 'superadmin') return (
-    <><LoginScreen directorExists={directorExists} branding={branding} onLogin={async (s) => {
+    <><BackgroundScene /><LoginScreen directorExists={directorExists} branding={branding} onLogin={async (s) => {
       setSession(s);
       try {
         const times = await api<SlotTimesInput>('/api/slot-times');
@@ -194,7 +195,11 @@ export default function AppContent() {
 
   return (
     <ClassesProvider>
-    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-base)' }}>
+    {/* Enerjik arka plan sahnesi — panel içeriğinin ARKASINDA (fixed, z-0).
+        Kök şeffaf + z-1 → sahne yalnız <main> boşluklarında görünür; opak
+        sidebar/topbar üstünü kapatır. Body zaten bg-base boyar (beyaz flaş yok). */}
+    <BackgroundScene />
+    <div className="flex h-screen overflow-hidden relative" style={{ zIndex: 1 }}>
       <Sidebar
         session={session}
         branding={branding}

@@ -9,6 +9,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { brandGradient, type Branding } from '@/lib/branding';
 import ThemeToggle from './ThemeToggle';
+import BackgroundScenePicker from './BackgroundScenePicker';
 import NotificationButton from './NotificationButton';
 import type { Session } from '@/lib/auth';
 import type { ShowToast } from './types';
@@ -327,6 +328,7 @@ export default function Sidebar({
             </button>
           )}
           <ThemeToggle collapsed={collapsed} />
+          <BackgroundScenePicker collapsed={collapsed} />
         </div>
       </div>
     </div>
