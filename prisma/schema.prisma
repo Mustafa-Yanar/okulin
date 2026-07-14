@@ -603,3 +603,72 @@ model PushSub {
   keys     Json
   @@index([orgSlug, branch])
 }
+
+// ── Bildirim outbox (kayıpsız teslimat) ─────────────────────────────────────
+// NotificationEvent: kullanıcıya gösterilecek kalıcı bildirim kaydı (uygulama
+// içi inbox bunu okuyacak) + outbox işlevi (dispatchStatus). Domain olayıyla
+// aynı transaction'da yazılır → gönderim işi asla kaybolmaz.
+// sensitive=true → push'ta jenerik metin (kilit ekranı mahremiyeti, Apple 4.5.4);
+// tam title/body yalnız bu satırda (inbox'ta) durur.
+model NotificationEvent {
+  id             String    @id
+  orgSlug        String
+  branch         String    @default("main")
+  role           String // student|teacher|parent|acc|cou|director
+  userId         String // legacyId; parent için telefon (push.ts anahtarıyla birebir)
+  title          String
+  body           String
+  url            String?
+  tag            String?
+  sensitive      Boolean   @default(false)
+  data           Json?
+  dispatchStatus String    @default("pending") // pending|done (delivery fan-out yazıldı)
+  createdAt      DateTime  @default(now())
+  readAt         DateTime?
+
+  @@index([orgSlug, branch, role, userId, createdAt])
+  @@index([dispatchStatus])
+}
+
+// Cihaz başına teslimat denemesi. target: webpush=endpoint / fcm=cihaz token'ı
+// (denormalize — abonelik sonradan silinse de retry hedefini bilir).
+model NotificationDelivery {
+  id            String   @id
+  eventId       String
+  orgSlug       String
+  branch        String   @default("main")
+  provider      String // webpush|fcm
+  target        String
+  keys          Json? // yalnız webpush (p256dh/auth)
+  status        String   @default("pending") // pending|sent|dead
+  attempts      Int      @default(0)
+  nextAttemptAt DateTime @default(now())
+  providerId    String?
+  lastError     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([eventId, target])
+  @@index([status, nextAttemptAt])
+  @@index([orgSlug, branch])
+}
+
+// Native uygulama kurulumları (FCM/APNs token kaydı). Mobil app (Plan 3)
+// doldurur; bu planda yalnız fan-out okur (bugün boş döner).
+model DeviceInstallation {
+  id         String   @id // istemci üretimi rastgele installationId
+  orgSlug    String
+  branch     String   @default("main")
+  platform   String // android|ios
+  provider   String   @default("fcm") // fcm|apns
+  token      String
+  role       String
+  userId     String
+  appVersion String?
+  enabled    Boolean  @default(true)
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@unique([provider, token])
+  @@index([orgSlug, branch, role, userId])
+}
