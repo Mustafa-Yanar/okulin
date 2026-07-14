@@ -260,15 +260,38 @@ Mevcut Playwright `int` deseni (canlı testkurs'a karşı) mobil sözleşme test
 
 ---
 
-## 16. Açık Sorular (Mustafa'nın kararı gerekiyor — plan aşamasından önce)
+## 16. Açık Sorular — KARARA BAĞLANDI (Mustafa, 2026-07-14)
 
-1. **Mağaza hesabı türü:** Şahıs mı organizasyon mu? Organizasyon için şirket + D-U-N-S gerekir → O2 (mali müşavir/şirketleşme) kararıyla bağlı. Şahıs hesabıyla başlayıp sonra taşımak mümkün ama isim/organizasyon görünürlüğü değişir.
-2. **Dağıtım ülkesi:** Yalnız Türkiye mi? (Öneri: evet, v1.)
-3. **Tablet/iPad:** Destek mi, yalnız uyumluluk modu mu? (Öneri: uyumluluk modu, v1.)
-4. **Aynı cihazda çoklu hesap:** Veli+öğretmen veya kardeş öğrenciler için hesap değiştirici? (Öneri: hesap değiştirici var, aynı anda tek aktif hesap.)
-5. **Offline kapsamı:** v1'de yalnız okuma cache'i (program/duyuru çevrimdışı görüntüleme); rezervasyon/yoklama/ödeme yalnız online. (Öneri: kabul.)
-6. **Firebase projesi:** FCM için `mustafayanar54@gmail.com` altında mı, ayrı hesapta mı? (Cloud Run kararıyla tutarlılık: gmail + taşıma tetikleyicileri.)
-7. **Crash/analytics sağlayıcısı:** Sentry vs Firebase Crashlytics — KVKK etkisiyle planlama aşamasında seçilecek.
+1. **Mağaza hesabı türü:** ✅ **Şahıs hesabıyla başlanır**; şirket kurulunca organizasyon hesabına taşınır (Play "account transfer" destekler; O2 mali müşavir kararıyla senkron).
+2. **Dağıtım ülkesi:** ✅ **Yalnız Türkiye** (v1).
+3. **Tablet/iPad:** ✅ **Uyumluluk modu** (v1); beğenilmezse desteğe çevrilir.
+4. **Aynı cihazda çoklu hesap:** ✅ **Hesap değiştirici var, aynı anda tek aktif hesap.**
+5. **Offline kapsamı:** ✅ **Kabul** — v1'de yalnız okuma cache'i; rezervasyon/yoklama/ödeme yalnız online.
+6. **Firebase projesi:** ✅ **`mustafayanar54@gmail.com` altında** (Cloud Run kararıyla tutarlı; taşıma tetikleyicileri aynı mantıkla geçerli).
+7. **Crash/analytics sağlayıcısı:** ✅ Üçlü-AI istişaresiyle karara bağlandı — bkz. §17.
+
+---
+
+## 17. Crash/Analytics Kararı — Sentry Cloud EU (üçlü-AI mutabakatı, 3/3, 2026-07-14)
+
+**Karar: Sentry Cloud, EU/Frankfurt bölgesi.** Crashlytics "FCM zaten kurulacak" diye seçilmedi — Codex: "Crashlytics'i yalnız FCM kullanılacak diye seçmezdim."
+
+**Gerekçeler (Codex + Gemini + Claude ortak):**
+- **KVKK/lokasyon:** Sentry ücretsiz planda bile Frankfurt rezidansı sunar (Vercel fra1 + Neon Frankfurt ile uyumlu); Crashlytics'te bölge seçilemez, Google global işler
+- **Çocuk verisi/PII:** Sentry'de istemci `beforeSend` + sunucu tarafı scrubbing + IP temizleme programlanabilir; Crashlytics'te merkezi scrub zayıf
+- **Expo/RN:** resmî Sentry-Expo entegrasyonu — EAS Build/Update source map otomatik, release health; Crashlytics'te source map süreci kırılgan
+- **Tek araç üç katman:** mobil + web (`@sentry/nextjs`) + backend aynı organizasyonda ayrı projeler; Crashlytics web'i hiç desteklemez (WebView hataları ayrıca yakalanır — RN SDK tek başına WebView JS hatasını görmez, web tarafına Browser SDK girer)
+- **Maliyet:** Free 5.000 error/ay yeter (başlangıç); aşılırsa Team ~$26-29/ay
+
+**Kurulum kuralları (ADR):**
+- Organizasyon ilk günden **EU/Frankfurt** açılır (sonradan bölge taşınmaz)
+- `sendDefaultPii:false` · IP scrubbing + server-side scrubbing açık · Session Replay/ekran görüntüsü/request body/header/query-string toplama **kapalı**
+- İsim/telefon/e-posta/öğrenci ID'si asla gönderilmez; yalnız rastgele diagnostic/installation ID
+- **Ürün analitiği için Firebase Analytics EKLENMEZ** — DAU/WAU, rezervasyon tamamlama, yoklama süresi gibi az sayıda metrik mevcut backend/Neon üzerinde takma adlı olaylarla üretilir (Sentry ürün analitiği aracı değildir)
+
+**Hukuki not (Codex):** Frankfurt da Türkiye açısından yurt dışıdır — Sentry veya Google fark etmeksizin KVKK Md. 9 aktarım dayanağı + DPA/alt işleyen envanteri + aydınlatma gerekir; AB rezidansı tek başına yeterli değildir (§10 ile birlikte ele alınır).
+
+**Crashlytics'e dönüş koşulu:** maliyet kesinlikle $0 kalmak zorundaysa + web gözlemi önemsizse + Google'ın global veri işlemesi hukuken kabul edilmişse. Veri üçüncü tarafta hiç kalmamalıysa: self-hosted GlitchTip/Sentry (mevcut ölçekte bakım yükü nedeniyle ilk tercih değil).
 
 ---
 
