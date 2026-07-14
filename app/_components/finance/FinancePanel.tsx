@@ -7,7 +7,7 @@ import { CountUp } from '../useCountUp';
 import {
   TrendingUp, TrendingDown, DollarSign, Users, Plus, X, Check,
   ChevronDown, ChevronUp, Printer, Trash2, AlertCircle, Edit3,
-  Search, CreditCard, Banknote, Building2, FileText
+  Search, CreditCard, Banknote, Building2, FileText, CalendarClock
 } from 'lucide-react';
 import EmptyState from '../EmptyState';
 import { useConfirm } from '../ConfirmProvider';
@@ -21,6 +21,7 @@ import Makbuz from './belge/Makbuz';
 import Senet from './belge/Senet';
 import Ekstre from './belge/Ekstre';
 import GecikmisListe, { type GecikmisGrup, type GecikmisOgrenci } from './belge/GecikmisListe';
+import FinanceListePrint, { type FinanceListRow } from './belge/FinanceListePrint';
 
 const METHODS = ['Nakit', 'Havale/EFT', 'Kredi Kartı'];
 
@@ -768,6 +769,76 @@ function buildGecikmis(list: FinanceListItemDTO[]): { gruplar: GecikmisGrup[]; g
   };
 }
 
+// Beklenen ödemeler: [start,end] tarih aralığında vadesi dolan ÖDENMEMİŞ taksitler,
+// sınıf/şube bazlı gruplu (gecikmiş raporuyla aynı yapı; yalnız filtre tarih aralığı).
+function buildBeklenen(list: FinanceListItemDTO[], start: string, end: string): { gruplar: GecikmisGrup[]; genelToplam: number; ogrenciSayisi: number } {
+  const grupMap = new Map<string, GecikmisOgrenci[]>();
+  for (const item of list) {
+    if (!item.finance) continue;
+    const matched = item.finance.installments.filter(i => !i.paid && i.dueDate && i.dueDate >= start && i.dueDate <= end);
+    if (matched.length === 0) continue;
+    const paidDates = item.finance.installments.filter(i => i.paid && i.paidDate).map(i => i.paidDate as string);
+    const payDates = (item.finance.payments || []).map(p => p.date);
+    const sonTahsil = [...paidDates, ...payDates].filter(Boolean).sort().pop() || '';
+    const ogr: GecikmisOgrenci = {
+      name: item.studentName, tc: item.studentTc || '',
+      parentName: item.parentName || '', parentPhone: item.parentPhone || '', sonTahsil,
+      taksitler: matched.map(i => ({ no: i.idx + 1, dueDate: i.dueDate, amount: i.amount })),
+      toplam: matched.reduce((s, i) => s + (i.amount || 0), 0),
+    };
+    const key = item.className || item.studentCls || 'Diğer';
+    (grupMap.get(key) || grupMap.set(key, []).get(key)!).push(ogr);
+  }
+  const gruplar: GecikmisGrup[] = [...grupMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], 'tr'))
+    .map(([baslik, ogrenciler]) => ({
+      baslik,
+      ogrenciler: ogrenciler.sort((a, b) => a.name.localeCompare(b.name, 'tr')),
+      araToplam: ogrenciler.reduce((s, o) => s + o.toplam, 0),
+    }));
+  return {
+    gruplar,
+    genelToplam: gruplar.reduce((s, g) => s + g.araToplam, 0),
+    ogrenciSayisi: gruplar.reduce((s, g) => s + g.ogrenciler.length, 0),
+  };
+}
+
+// Tarih aralığı seçici (Beklenen Ödemeler için). Varsayılan: içinde bulunulan ay.
+function BeklenenPicker({ onOpen, onClose }: { onOpen: (start: string, end: string) => void; onClose: () => void }) {
+  const now = new Date();
+  const first = localYMD(new Date(now.getFullYear(), now.getMonth(), 1));
+  const last = localYMD(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  const [start, setStart] = useState(first);
+  const [end, setEnd] = useState(last);
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div role="dialog" aria-modal="true" aria-label="Beklenen ödemeler tarih aralığı" className="modal w-full max-w-sm animate-modal-in">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+          <h3 className="font-700 text-lg" style={{ fontWeight: 700 }}>Beklenen Ödemeler</h3>
+          <button onClick={onClose} aria-label="Kapat" className="btn-icon"><X size={16} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-caption">Seçilen tarih aralığında vadesi dolacak (ödenmemiş) taksitler sınıf bazlı listelenir.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-label block mb-1.5">Başlangıç</label>
+              <input type="date" value={start} onChange={e => setStart(e.target.value)} className="input" />
+            </div>
+            <div>
+              <label className="text-label block mb-1.5">Bitiş</label>
+              <input type="date" value={end} onChange={e => setEnd(e.target.value)} className="input" />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => onOpen(start, end)} disabled={!start || !end || start > end} className="btn-primary flex-1">Raporu Aç</button>
+            <button onClick={onClose} className="btn-ghost">İptal</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Filtre dropdown ──────────────────────────────────────────────────────────
 const FILTER_OPTIONS: { value: string; label: string; dot: string | null }[] = [
   { value: 'all',          label: 'Tümü',           dot: null },
@@ -885,6 +956,9 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterClass, setFilterClass] = useState('all'); // sınıf-bazlı filtre (aramayla KESİŞİR)
   const [showGecikmis, setShowGecikmis] = useState(false);
+  const [showBeklenenPicker, setShowBeklenenPicker] = useState(false); // tarih aralığı seçici
+  const [beklenen, setBeklenen] = useState<{ start: string; end: string } | null>(null); // rapor
+  const [showListPrint, setShowListPrint] = useState(false); // öğrenci ödemeleri listesi PDF
 
   // Listede geçen sınıflar (id → ad), ada göre sıralı — sınıf filtre menüsü için.
   const classOptions = useMemo(() => {
@@ -969,10 +1043,21 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
           </select>
         )}
         <button
+          onClick={() => setShowBeklenenPicker(true)}
+          className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-brand-soft text-brand text-sm font-600 hover:bg-brand-soft-hover transition-colors whitespace-nowrap"
+          style={{ fontWeight: 600 }}
+        ><CalendarClock size={14} /> Beklenen Ödemeler</button>
+        <button
           onClick={() => setShowGecikmis(true)}
           className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-600 hover:bg-red-100 transition-colors whitespace-nowrap"
           style={{ fontWeight: 600 }}
         ><AlertCircle size={14} /> Gecikmiş Rapor</button>
+        <button
+          onClick={() => setShowListPrint(true)}
+          title="Görünen listeyi PDF/yazdır"
+          className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border text-sm font-600 whitespace-nowrap transition-colors hover:bg-[var(--bg-surface-2)]"
+          style={{ fontWeight: 600, borderColor: 'var(--border-light)', color: 'var(--text-secondary)' }}
+        ><Printer size={14} /> PDF</button>
       </div>
 
       {/* Liste */}
@@ -998,6 +1083,38 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
       {showGecikmis && (() => {
         const g = buildGecikmis(list);
         return <GecikmisListe kurum={kurum} gruplar={g.gruplar} genelToplam={g.genelToplam} ogrenciSayisi={g.ogrenciSayisi} onClose={() => setShowGecikmis(false)} />;
+      })()}
+
+      {showBeklenenPicker && (
+        <BeklenenPicker
+          onClose={() => setShowBeklenenPicker(false)}
+          onOpen={(start, end) => { setShowBeklenenPicker(false); setBeklenen({ start, end }); }}
+        />
+      )}
+      {beklenen && (() => {
+        const b = buildBeklenen(list, beklenen.start, beklenen.end);
+        const fmtD = (s: string) => s.split('-').reverse().join('.');
+        return <GecikmisListe kurum={kurum} gruplar={b.gruplar} genelToplam={b.genelToplam} ogrenciSayisi={b.ogrenciSayisi}
+          title="BEKLENEN ÖDEMELER LİSTESİ" subtitle={`${fmtD(beklenen.start)} – ${fmtD(beklenen.end)}`}
+          emptyText="Bu tarih aralığında beklenen ödeme bulunmuyor." onClose={() => setBeklenen(null)} />;
+      })()}
+      {showListPrint && (() => {
+        const rows: FinanceListRow[] = filtered.map(item => {
+          const net = item.finance?.netFee || 0;
+          const balance = item.finance?.balance || 0;
+          return {
+            name: item.studentName,
+            cls: classShortUpper(classes, item.studentCls || ''),
+            net, paid: net - balance, balance,
+            status: !item.finance ? 'Kayıt Yok' : balance <= 0 ? 'Ödendi' : balance < net ? 'Kısmen' : 'Ödenmedi',
+          };
+        });
+        const desc = [
+          filterClass !== 'all' ? `Sınıf: ${classShortUpper(classes, filterClass)}` : '',
+          filterStatus !== 'all' ? `Durum: ${FILTER_OPTIONS.find(o => o.value === filterStatus)?.label || ''}` : '',
+          search ? `Arama: "${search}"` : '',
+        ].filter(Boolean).join(' · ');
+        return <FinanceListePrint kurum={kurum} rows={rows} subtitle={desc || undefined} onClose={() => setShowListPrint(false)} />;
       })()}
     </div>
   );

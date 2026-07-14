@@ -22,9 +22,13 @@ interface GecikmisListeProps {
   genelToplam: number;
   ogrenciSayisi: number;
   onClose: () => void;
+  // Yeniden kullanım: aynı gruplu rapor "Beklenen Ödemeler" için de basılır.
+  title?: string;      // başlık (varsayılan: gecikmiş)
+  subtitle?: string;   // sağ üstte ek satır (ör. tarih aralığı)
+  emptyText?: string;  // boş durum metni
 }
 
-export default function GecikmisListe({ kurum, gruplar, genelToplam, ogrenciSayisi, onClose }: GecikmisListeProps) {
+export default function GecikmisListe({ kurum, gruplar, genelToplam, ogrenciSayisi, onClose, title = 'GECİKMİŞ ÖDEMELER LİSTESİ', subtitle, emptyText = 'Vadesi geçmiş ödeme bulunmuyor.' }: GecikmisListeProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
@@ -41,7 +45,7 @@ export default function GecikmisListe({ kurum, gruplar, genelToplam, ogrenciSayi
     <div id="print-preview"
       className="fixed inset-0 z-50 bg-slate-800/60 overflow-auto p-4 print:bg-white print:static print:p-0 print:overflow-visible flex flex-col items-center gap-4">
       <div className="no-print sticky top-0 z-10 w-full max-w-[860px] flex items-center justify-between bg-white rounded-xl shadow-lg px-4 py-2.5">
-        <span className="font-700 text-slate-700 text-sm" style={{ fontWeight: 700 }}>Gecikmiş Ödemeler — Önizleme</span>
+        <span className="font-700 text-slate-700 text-sm" style={{ fontWeight: 700 }}>{title.replace(' LİSTESİ', '')} — Önizleme</span>
         <div className="flex gap-2">
           <button onClick={() => window.print()}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-brand text-white text-sm font-600 transition-colors"
@@ -59,17 +63,18 @@ export default function GecikmisListe({ kurum, gruplar, genelToplam, ogrenciSayi
               : <div className="h-12 w-12 rounded-xl shrink-0 flex items-center justify-center text-white font-800" style={{ fontWeight: 800, background: 'linear-gradient(135deg,#4f46e5,#6366f1)' }}>{(kurum.name || 'K')[0]}</div>}
             <div className="min-w-0">
               <div className="font-800 text-[15px] leading-tight text-slate-900" style={{ fontWeight: 800 }}>{unvan}</div>
-              <div className="text-[12px] text-indigo-600 font-700" style={{ fontWeight: 700 }}>GECİKMİŞ ÖDEMELER LİSTESİ</div>
+              <div className="text-[12px] text-indigo-600 font-700" style={{ fontWeight: 700 }}>{title}</div>
             </div>
           </div>
           <div className="text-right shrink-0 text-[11px] text-slate-500">
             <div>Tarih: <b className="text-slate-800" style={{ fontWeight: 600 }}>{trDate(bugun)}</b></div>
+            {subtitle && <div className="text-slate-700" style={{ fontWeight: 600 }}>{subtitle}</div>}
             <div>{ogrenciSayisi} öğrenci · {gruplar.length} sınıf</div>
           </div>
         </div>
 
         {gruplar.length === 0 ? (
-          <div className="text-center py-12 text-slate-400 text-sm">Vadesi geçmiş ödeme bulunmuyor.</div>
+          <div className="text-center py-12 text-slate-400 text-sm">{emptyText}</div>
         ) : gruplar.map((g, gi) => (
           <div key={gi} className="mt-4" style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
             {/* Grup başlığı */}
