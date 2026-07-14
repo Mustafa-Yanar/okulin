@@ -102,8 +102,8 @@ export default function StudentListPrint({ title, subtitle, students, onClose }:
             </table>
           </div>
         ) : (
-          // Sadece isim — numaralı, 2 sütuna akan temiz liste (boş sütun kalmasın).
-          <div className="mt-4" style={{ columnCount: 2, columnGap: '36px' }}>
+          // Sadece isim — numaralı, TEK sütun temiz liste.
+          <div className="mt-4">
             {sorted.map((s, i) => (
               <div key={i} className="flex items-baseline gap-2.5 py-1.5" style={{ breakInside: 'avoid', borderBottom: '1px solid #f1f5f9' }}>
                 <span className="text-slate-400 font-600 tabular-nums text-right" style={{ fontWeight: 600, minWidth: 22 }}>{i + 1}.</span>
