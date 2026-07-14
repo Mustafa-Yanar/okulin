@@ -46,3 +46,4 @@ node_modules/.cache/ms-playwright
 
 # TypeScript derleme onbellegi
 tsconfig.tsbuildinfo
+!docs/superpowers/**
