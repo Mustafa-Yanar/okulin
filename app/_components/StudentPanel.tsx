@@ -10,6 +10,7 @@ import { TakvimView } from './etkinlik/Takvim';
 import { FormRespond } from './form/Formlar';
 import { DavranisView } from './davranis/Davranis';
 import { useUrlTab } from './useUrlTab';
+import PanelHero from './PanelHero';
 import { useClasses } from './ClassesContext';
 import { classLabelFrom, coursesForClass } from '@/lib/classCatalog';
 import {
@@ -153,6 +154,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
 
   return (
     <div>
+      {tab === 'available' && <PanelHero name={session.name} />}
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-gray-500">{classLabelFrom(classes, session.cls || '', classLabel)} · {GROUPS[session.group || '']}</p>
         <WeekNav weekKey={weekKey} onPrev={() => { const w = getAdjacentWeek(weekKey,-1); setWeekKey(w); loadData(w); }} onNext={() => { const w = getAdjacentWeek(weekKey,1); setWeekKey(w); loadData(w); }} />

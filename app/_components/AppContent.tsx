@@ -262,6 +262,7 @@ export default function AppContent() {
         {/* İçerik */}
         <main ref={setScrollContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-6 relative">
           <PullToRefreshIndicator pullDistance={pullDistance} refreshState={refreshState} />
+          <div className="reveal">
           {isDirectorRole && (
             <>
               {activeTab === 'ayarlar' && session.role === 'director' ? (
@@ -292,6 +293,7 @@ export default function AppContent() {
           {session.role === 'parent' && (
             <ParentPanel session={session} showToast={showToast} externalTab={activeTab} onExternalTabChange={handleTabChange} />
           )}
+          </div>
         </main>
       </div>
 

@@ -26,6 +26,7 @@ import { useSlotTimes } from './SlotTimesContext';
 import { useClasses } from './ClassesContext';
 import { classShortUpper, groupStudentsByClass } from '@/lib/classCatalog';
 import { useUrlTab } from './useUrlTab';
+import PanelHero from './PanelHero';
 import { api, getAdjacentWeek, isSlotPast, WeekNav } from './shared';
 import type { Session } from '@/lib/auth';
 import type { SlotCell as SlotCellData, ProgramEntry } from '@/lib/slots';
@@ -769,6 +770,7 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
     <div>
       {activeTab === 'rezervasyon' && (
         <>
+          <PanelHero name={session.name} />
           <div className="flex items-center justify-between mb-4">
             <div className="pill-tabs shrink-0">
               <button
