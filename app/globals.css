@@ -12,7 +12,10 @@
      kontrast 1.06, muted #f3f4f6 sadece 1.02 (gözle görünmez). Koyu modda farklı
      luminance olduğu için orada sorun yoktu. Tonlar koyulaştırıldı: muted→#e2e6ee
      (1.10), surface-2→#eef1f7 (1.05→ama .input border'ıyla birlikte net). */
-  --bg-base:        #f0f2f7;
+  /* Enerjik yön: zemin hafif MOR-bias'lı (#f3f2fb) — #f0f2f7'den yalnız daha açık +
+     mor tonlu, yani üzerindeki koyu metin kontrastı DÜŞMEZ (artar), AA notları geçerli.
+     Enerjinin çoğu aksan+gölge+sahne+gradyandan gelir; zemin bunları birbirine bağlar. */
+  --bg-base:        #f3f2fb;
   --bg-surface:     #ffffff;
   --bg-surface-2:   #eef1f7;
   --bg-muted:       #e2e6ee;
@@ -77,11 +80,34 @@
   --radius-lg:  16px;
   --radius-xl:  20px;
   --radius-2xl: 24px;
+
+  /* ─── Enerjik kimlik (2026-07 görsel yön) ──────────────────────────────────
+     Marka (--brand) white-label ile dinamik KALIR. Buradaki aksanlar DEKORATİF
+     (KPI gradyanı, modül tint'i, slot çeşitliliği) ve semantik renklerden
+     (success/warning/danger) AYRIDIR — onlar durum, bunlar canlılık taşır.
+     Renkli gölgeler --brand'e color-mix ile bağlı → kurum rengi değişince glow uyar. */
+  --coral: #ff6a48;
+  --teal:  #10c4ac;
+  --amber: #ffab2e;
+  --pink:  #ff4d8d;
+
+  /* Marka türevleri (gradyan derinliği) — --brand'ten türetilir, white-label uyumlu.
+     --brand JS ile documentElement'e set edilir (light/dark'ta sabit), bu türevler onu izler. */
+  --brand-deep: color-mix(in srgb, var(--brand, #6366f1) 82%, #000);
+  --brand-lift: color-mix(in srgb, var(--brand, #6366f1) 78%, #fff);
+
+  /* Katmanlı renkli gölge — nötr derinlik + brand-tint glow (mor-tint) */
+  --sh-sm: 0 1px 2px rgba(16,12,40,0.06),  0 2px 8px  color-mix(in srgb, var(--brand,#6366f1) 12%, transparent);
+  --sh-md: 0 4px 12px rgba(16,12,40,0.07), 0 12px 30px color-mix(in srgb, var(--brand,#6366f1) 16%, transparent);
+  --sh-lg: 0 10px 26px rgba(16,12,40,0.10),0 26px 60px color-mix(in srgb, var(--brand,#6366f1) 24%, transparent);
 }
 
 html.dark {
-  --bg-base:        #0f1117;
-  --bg-surface:     #1a1d2e;
+  /* Enerjik yön: mor-siyah zemin (#0b0917) — #0f1117'den daha koyu + mor, açık metin
+     kontrastı DÜŞMEZ (artar). Yüzeyler mor-bias'lı koyu (surface #16132a) → sahne/gradyan
+     ile uyumlu, ama luminance korunur (AA notları geçerli). */
+  --bg-base:        #0b0917;
+  --bg-surface:     #16132a;
   --bg-surface-2:   #252836;
   --bg-muted:       #2d3144;
   --border-subtle:  rgba(255,255,255,0.07);
@@ -113,6 +139,16 @@ html.dark {
   --time-etut:            #a78bfa;
   --color-info-bg:        rgba(96,165,250,0.08);
   --color-info-border:    rgba(96,165,250,0.18);
+
+  /* Enerjik kimlik — koyu tema: aksanlar koyu zeminde okunur olsun diye hafif parlar,
+     gölgeler daha derin siyah + güçlü brand glow. */
+  --coral: #ff8062;
+  --teal:  #2fd6be;
+  --amber: #ffc04d;
+  --pink:  #ff6ba0;
+  --sh-sm: 0 1px 2px rgba(0,0,0,0.40),  0 2px 8px  color-mix(in srgb, var(--brand,#6366f1) 18%, transparent);
+  --sh-md: 0 4px 12px rgba(0,0,0,0.45), 0 12px 30px color-mix(in srgb, var(--brand,#6366f1) 24%, transparent);
+  --sh-lg: 0 10px 26px rgba(0,0,0,0.50),0 26px 60px color-mix(in srgb, var(--brand,#6366f1) 34%, transparent);
 }
 
 * { box-sizing: border-box; }
@@ -562,6 +598,36 @@ body {
   to   { opacity: 1; transform: translateY(0)    scale(1); }
 }
 .animate-modal-in { animation: modal-in 0.28s var(--ease-out); }
+
+/* ─── Enerjik giriş & etkileşim (2026-07 görsel yön) ─────────────────────────
+   .reveal: kart/panel yumuşak yükselerek belirir. .reveal-stagger konteyneri
+   doğrudan çocuklarına artan gecikme verir (grid/track girişleri için — inline
+   animation-delay gerekmez). .hover-lift: brand-tint glow ile yükselme.
+   .nums: hizalı rakamlar. prefers-reduced-motion'da hepsi anında son duruma oturur. */
+@keyframes reveal-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+.reveal { opacity: 0; animation: reveal-rise 0.6s var(--ease-out) forwards; }
+.reveal-stagger > * { opacity: 0; animation: reveal-rise 0.55s var(--ease-out) forwards; }
+.reveal-stagger > *:nth-child(1)  { animation-delay: 0.03s; }
+.reveal-stagger > *:nth-child(2)  { animation-delay: 0.07s; }
+.reveal-stagger > *:nth-child(3)  { animation-delay: 0.11s; }
+.reveal-stagger > *:nth-child(4)  { animation-delay: 0.15s; }
+.reveal-stagger > *:nth-child(5)  { animation-delay: 0.19s; }
+.reveal-stagger > *:nth-child(6)  { animation-delay: 0.23s; }
+.reveal-stagger > *:nth-child(7)  { animation-delay: 0.27s; }
+.reveal-stagger > *:nth-child(8)  { animation-delay: 0.31s; }
+.reveal-stagger > *:nth-child(9)  { animation-delay: 0.35s; }
+.reveal-stagger > *:nth-child(10) { animation-delay: 0.39s; }
+.reveal-stagger > *:nth-child(n+11) { animation-delay: 0.43s; }
+
+.hover-lift { transition: transform 0.32s var(--ease-out), box-shadow 0.32s var(--ease-out); }
+.hover-lift:hover { transform: translateY(-4px); box-shadow: var(--sh-lg); }
+
+.nums { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal, .reveal-stagger > * { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .hover-lift:hover { transform: none; }
+}
 
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
