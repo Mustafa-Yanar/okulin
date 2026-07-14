@@ -373,6 +373,15 @@ body {
 }
 .input::placeholder { color: var(--text-muted); }
 
+/* Sol ikonlu arama inputları: .input `@tailwind utilities`'ten SONRA tanımlı olduğu için
+   `padding: 11px 14px` shorthand'i `pl-9` gibi utility'leri eziyordu → ikon (büyüteç)
+   placeholder metniyle ÜST ÜSTE biniyordu. Daha yüksek özgüllük (.input.pl-N = 2 sınıf)
+   ile sol padding'i geri kazandır — tüm ikonlu inputları tek noktadan düzeltir. */
+.input.pl-8  { padding-left: 2rem; }
+.input.pl-9  { padding-left: 2.25rem; }
+.input.pl-10 { padding-left: 2.5rem; }
+.input.pl-11 { padding-left: 2.75rem; }
+
 /* ── Giriş durumları (Figma Text Fields ilhamı) ───────────────────────────── */
 /* Hata: kırmızı çerçeve + halo. Geçerli/başarı: yeşil. */
 .input-error,
