@@ -725,17 +725,20 @@ export async function enqueueNotification(role: string, userId: string, payload:
   ];
   // DİKKAT: transaction'da base `prisma` kullanılır — $extends'li tdb() client'ının
   // promise'i base $transaction'a karıştırılamaz (runtime "Transaction API error").
-  // withScope aynı orgSlug/branch alanlarını data'ya enjekte eder → tenant garantisi aynı.
+  // withScope runtime'da alan EKLEMEZ (salt tip cast'i; gerçek enjeksiyon tdb()
+  // middleware'inde) → orgSlug/branch delivery satırları gibi ELLE yazılır.
   await prisma.$transaction([
     prisma.notificationEvent.create({
-      data: withScope({
+      data: {
         id: eventId,
+        orgSlug: org,
+        branch,
         role, userId,
         title: payload.title, body: payload.body,
         url: payload.url, tag: payload.tag,
         sensitive: payload.sensitive ?? false,
         dispatchStatus: 'done', // fan-out bu transaction'da yazıldı
-      }) as never, // withScope dönüşü geniş tip — create data'ya daraltma
+      },
     }),
     ...deliveries.map((data) => prisma.notificationDelivery.create({ data })),
   ]);
