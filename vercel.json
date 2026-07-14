@@ -19,7 +19,7 @@
     },
     {
       "path": "/api/cron/notif-dispatch",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 3 * * *"
     }
   ]
 }
