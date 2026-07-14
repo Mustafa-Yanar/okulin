@@ -21,6 +21,8 @@ interface StudentListPrintProps {
 
 export default function StudentListPrint({ title, subtitle, students, onClose }: StudentListPrintProps) {
   const [mounted, setMounted] = useState(false);
+  // Varsayılan: sadece isim (posta/pano için, KVKK dostu). "Detaylı" ile TC/tel geri gelir.
+  const [detailed, setDetailed] = useState(false);
   const { data: org } = useSWR<{ branding: Branding; legal?: KurumBilgi }>('/api/org');
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
@@ -38,8 +40,13 @@ export default function StudentListPrint({ title, subtitle, students, onClose }:
     <div id="print-preview"
       className="fixed inset-0 z-50 bg-slate-800/60 overflow-auto p-4 print:bg-white print:static print:p-0 print:overflow-visible flex flex-col items-center gap-4">
       <div className="no-print sticky top-0 z-10 w-full max-w-[900px] flex items-center justify-between bg-white rounded-xl shadow-lg px-4 py-2.5">
-        <span className="font-700 text-slate-700 text-sm" style={{ fontWeight: 700 }}>{title} — {subtitle} ({sorted.length})</span>
-        <div className="flex gap-2">
+        <span className="font-700 text-slate-700 text-sm truncate" style={{ fontWeight: 700 }}>{title} — {subtitle} ({sorted.length})</span>
+        <div className="flex items-center gap-2 shrink-0">
+          {/* İçerik geçişi: Sadece İsim (varsayılan) / Detaylı (TC + tel + veli) */}
+          <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #e2e8f0' }}>
+            <button onClick={() => setDetailed(false)} className="px-3 py-1.5 text-xs" style={{ fontWeight: 600, background: detailed ? '#fff' : 'var(--brand, #6366f1)', color: detailed ? '#475569' : '#fff' }}>Sadece İsim</button>
+            <button onClick={() => setDetailed(true)} className="px-3 py-1.5 text-xs" style={{ fontWeight: 600, background: detailed ? 'var(--brand, #6366f1)' : '#fff', color: detailed ? '#fff' : '#475569' }}>Detaylı</button>
+          </div>
           <button onClick={() => window.print()}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-brand text-white text-sm font-600 transition-colors"
             style={{ fontWeight: 600 }}><Printer size={14} /> Yazdır / PDF</button>
@@ -67,7 +74,7 @@ export default function StudentListPrint({ title, subtitle, students, onClose }:
 
         {sorted.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-sm">Bu şubede öğrenci bulunmuyor.</div>
-        ) : (
+        ) : detailed ? (
           <div className="overflow-x-auto mt-4">
             <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
               <thead>
@@ -93,6 +100,16 @@ export default function StudentListPrint({ title, subtitle, students, onClose }:
                 ))}
               </tbody>
             </table>
+          </div>
+        ) : (
+          // Sadece isim — numaralı, 2 sütuna akan temiz liste (boş sütun kalmasın).
+          <div className="mt-4" style={{ columnCount: 2, columnGap: '36px' }}>
+            {sorted.map((s, i) => (
+              <div key={i} className="flex items-baseline gap-2.5 py-1.5" style={{ breakInside: 'avoid', borderBottom: '1px solid #f1f5f9' }}>
+                <span className="text-slate-400 font-600 tabular-nums text-right" style={{ fontWeight: 600, minWidth: 22 }}>{i + 1}.</span>
+                <span className="text-slate-800 font-600 text-sm" style={{ fontWeight: 600 }}>{s.name}</span>
+              </div>
+            ))}
           </div>
         )}
 
