@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import useSWR from 'swr';
 import LoadingBox from '../Loading';
+import { CountUp } from '../useCountUp';
 import {
   TrendingUp, TrendingDown, DollarSign, Users, Plus, X, Check,
   ChevronDown, ChevronUp, Printer, Trash2, AlertCircle, Edit3,
@@ -893,22 +894,24 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
 
   return (
     <div>
-      {/* Özet — nötr, sakin premium: gradient/text-white yerine .card yüzeyi + semantik ince
-          aksan (tahsil yeşil, borç kırmızı); değer büyük+kalın (hiyerarşi renkle değil
-          ağırlıkla), tabular-nums ile hizalı. */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      {/* Özet — enerjik KPI: gradyan dolgu + beyaz metin + sayaç + tabular. Renkler
+          anlam taşır (öğrenci=kurum, alacak=mor, tahsil=yeşil, borç=kırmızı); dekoratif
+          daire + brand-tint gölge + hover lift. Sayaç 0→hedef yumuşak sayar. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 reveal-stagger">
         {[
-          { label: 'Kayıtlı Öğrenci', value: stats.totalStudents, icon: Users, accent: 'var(--text-muted)', valueColor: 'var(--text-primary)', suffix: '' },
-          { label: 'Toplam Alacak', value: fmt(stats.totalFee), icon: DollarSign, accent: 'var(--text-muted)', valueColor: 'var(--text-primary)', suffix: '₺' },
-          { label: 'Tahsil Edilen', value: fmt(stats.totalPaid), icon: TrendingUp, accent: 'var(--color-success)', valueColor: 'var(--color-success)', suffix: '₺' },
-          { label: 'Kalan Borç', value: fmt(stats.totalBalance), icon: TrendingDown, accent: 'var(--color-danger)', valueColor: 'var(--color-danger)', suffix: '₺' },
+          { label: 'Kayıtlı Öğrenci', value: stats.totalStudents, icon: Users, cls: 'kpi-brand', money: false },
+          { label: 'Toplam Alacak', value: stats.totalFee, icon: DollarSign, cls: 'kpi-violet', money: true },
+          { label: 'Tahsil Edilen', value: stats.totalPaid, icon: TrendingUp, cls: 'kpi-emerald', money: true },
+          { label: 'Kalan Borç', value: stats.totalBalance, icon: TrendingDown, cls: 'kpi-rose', money: true },
         ].map(card => (
-          <div key={card.label} className="card px-4 py-3">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <card.icon size={14} style={{ color: card.accent }} />
-              <span className="text-caption">{card.label}</span>
+          <div key={card.label} className={`kpi-card ${card.cls} hover-lift`}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="kpi-label">{card.label}</p>
+                <div className="kpi-num">{card.money ? '₺' : ''}<CountUp value={card.value} /></div>
+              </div>
+              <div className="kpi-ic"><card.icon size={18} /></div>
             </div>
-            <div className="tabular-nums" style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1, color: card.valueColor }}>{card.suffix}{card.value}</div>
           </div>
         ))}
       </div>

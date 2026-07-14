@@ -624,6 +624,24 @@ body {
 
 .nums { font-variant-numeric: tabular-nums; }
 
+/* ─── Enerjik KPI kartı (gradyan dolgu + beyaz metin + dekoratif daire) ────────
+   Mockup'taki KPI dili: dolu gradyan, beyaz metin, sağ-üst dekoratif daire, sayaç
+   (JS) + tabular rakam. .kpi-brand kurum rengini (white-label) izler; diğerleri
+   dekoratif aksan. Kullanım: <div class="kpi-card kpi-teal hover-lift">…</div> */
+.kpi-card { position: relative; border-radius: var(--radius-xl); padding: 20px; color: #fff; overflow: hidden; box-shadow: var(--sh-md); }
+.kpi-card::after { content: ''; position: absolute; width: 130px; height: 130px; border-radius: 50%; right: -34px; top: -34px; background: rgba(255,255,255,0.16); pointer-events: none; }
+.kpi-card .kpi-label { font-size: 12.5px; font-weight: 600; opacity: .93; color: #fff; margin: 0; }
+.kpi-card .kpi-num   { font-size: 28px; font-weight: 800; letter-spacing: -.02em; margin-top: 6px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.kpi-card .kpi-sub   { font-size: 12px; opacity: .86; margin-top: 4px; }
+.kpi-card .kpi-ic    { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: rgba(255,255,255,0.18); color: #fff; flex-shrink: 0; }
+.kpi-brand  { background: linear-gradient(140deg, var(--brand,#6366f1), var(--brand-deep, #4a2bd6)); }
+.kpi-violet { background: linear-gradient(140deg, var(--brand-lift,#9a5cff), var(--brand,#6366f1)); }
+.kpi-teal   { background: linear-gradient(140deg, var(--teal), #0a9d8a); }
+.kpi-coral  { background: linear-gradient(140deg, var(--coral), var(--pink)); }
+.kpi-amber  { background: linear-gradient(140deg, var(--amber), #f0851a); }
+.kpi-rose   { background: linear-gradient(140deg, #fb7185, #e11d48); }
+.kpi-emerald{ background: linear-gradient(140deg, #34d399, #059669); }
+
 @media (prefers-reduced-motion: reduce) {
   .reveal, .reveal-stagger > * { animation: none !important; opacity: 1 !important; transform: none !important; }
   .hover-lift:hover { transform: none; }

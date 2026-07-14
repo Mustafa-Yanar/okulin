@@ -7,6 +7,7 @@ import {
   Users, Receipt, Calendar,
 } from 'lucide-react';
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
+import { CountUp } from '../useCountUp';
 import { useConfirm } from '../ConfirmProvider';
 import type { Session } from '@/lib/auth';
 import type { ShowToast, FinanceListItemDTO } from '../types';
@@ -146,22 +147,23 @@ export default function ExpensePanel({ session, showToast }: ExpensePanelProps) 
 
   return (
     <div>
-      {/* Özet kartları */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+      {/* Özet kartları — enerjik KPI: gradyan + beyaz metin + sayaç + brand-tint gölge +
+          hover lift. Net pozitif=kurum rengi (white-label), negatif=amber uyarı. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5 reveal-stagger">
         {[
-          { label: 'Toplam Gelir', value: summary.income, icon: TrendingUp, color: 'from-emerald-500 to-green-600' },
-          { label: 'Toplam Gider', value: summary.expense, icon: TrendingDown, color: 'from-rose-500 to-red-600' },
-          { label: 'Net', value: summary.net, icon: Scale, color: summary.net >= 0 ? 'from-indigo-500 to-blue-600' : 'from-amber-500 to-orange-600' },
+          { label: 'Toplam Gelir', value: summary.income, icon: TrendingUp, cls: 'kpi-emerald' },
+          { label: 'Toplam Gider', value: summary.expense, icon: TrendingDown, cls: 'kpi-rose' },
+          { label: 'Net', value: summary.net, icon: Scale, cls: summary.net >= 0 ? 'kpi-brand' : 'kpi-amber' },
         ].map(c => {
           const Icon = c.icon;
           return (
-            <div key={c.label} className={`rounded-2xl p-4 text-white bg-gradient-to-br ${c.color} shadow-sm`}>
+            <div key={c.label} className={`kpi-card ${c.cls} hover-lift`}>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs opacity-90 font-600" style={{ fontWeight: 600 }}>{c.label}</span>
+                <span className="kpi-label">{c.label}</span>
                 <Icon size={16} className="opacity-80" />
               </div>
-              <div className="text-2xl font-800" style={{ fontWeight: 800 }}>
-                {c.value < 0 ? '−' : ''}₺{fmt(Math.abs(c.value))}
+              <div className="kpi-num">
+                {c.value < 0 ? '−' : ''}₺<CountUp value={Math.abs(c.value)} />
               </div>
             </div>
           );
