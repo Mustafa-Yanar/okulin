@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import useSWR from 'swr';
 import LoadingBox from '../Loading';
 import { CountUp } from '../useCountUp';
@@ -255,11 +255,28 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
     });
   }
 
+  // Taksit yapısını kur: plan/taksit sayısı/ilk tarih değişince tarihleri OTOMATİK dağıt
+  // (ilk taksitten aylık) + tutarları eşit böl. Manuel tarih düzenlemesi bundan SONRA
+  // yapılır; ücret/indirim değişince aşağıdaki effect yalnız tutarı günceller, tarihi korur.
   useEffect(() => {
     if (plan === 'taksitli' && totalFee) {
       setInstallments(buildInstallments(installmentCount, netFee));
     }
-  }, [plan, installmentCount, totalFee, discount, firstDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan, installmentCount, firstDate]);
+
+  // Ücret/indirim değişince YALNIZ tutarları yeniden böl; taksit tarihlerini (kullanıcının
+  // elle düzenlediği dahil) ve ödenmiş taksitleri koru — manuel tarih düzenlemesi silinmez.
+  useEffect(() => {
+    if (plan !== 'taksitli' || !totalFee) return;
+    setInstallments(prev => {
+      if (!prev.length) return buildInstallments(installmentCount, netFee);
+      const count = prev.length;
+      const per = netFee > 0 ? Math.round((netFee / count) * 100) / 100 : 0;
+      return prev.map((x, i) => x.paid ? x : { ...x, amount: i === count - 1 ? Math.round((netFee - per * (count - 1)) * 100) / 100 : per });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalFee, discount]);
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -394,6 +411,7 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
                   {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => <option key={n} value={n}>{n} Taksit</option>)}
                 </select>
               </div>
+              <p className="text-caption mb-2">Tarihler ilk taksitten itibaren aylık otomatik dağıtılır; her taksit tarihini ve tutarını elle düzenleyebilirsiniz.</p>
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                 {installments.map((inst, i) => (
                   <div key={i} className={`flex items-center gap-2 p-2 rounded-lg border ${inst.paid ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
@@ -862,9 +880,19 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
     taxNo: orgData?.legal?.taxNo || '',
     officialAddress: orgData?.legal?.officialAddress || '',
   };
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad
   const [search, setSearch] = useState(initialSearch || '');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [filterClass, setFilterClass] = useState('all'); // sınıf-bazlı filtre (aramayla KESİŞİR)
   const [showGecikmis, setShowGecikmis] = useState(false);
+
+  // Listede geçen sınıflar (id → ad), ada göre sıralı — sınıf filtre menüsü için.
+  const classOptions = useMemo(() => {
+    const ids = [...new Set(list.map(i => i.studentCls).filter((c): c is string => !!c))];
+    return ids
+      .map(id => ({ id, label: classShortUpper(classes, id) }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'tr'));
+  }, [list, classes]);
 
   // Özet istatistikler
   const stats = list.reduce((acc, item) => {
@@ -881,6 +909,8 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
     const q = search.toLowerCase();
     const nameMatch = !q || item.studentName.toLowerCase().includes(q) || item.studentCls?.toLowerCase().includes(q);
     if (!nameMatch) return false;
+    // Sınıf filtresi arama/durum ile KESİŞİR (hepsi birlikte daraltır).
+    if (filterClass !== 'all' && item.studentCls !== filterClass) return false;
     if (filterStatus === 'all') return true;
     if (filterStatus === 'unregistered') return !item.finance;
     if (filterStatus === 'paid') return item.finance && item.finance.balance <= 0;
@@ -927,6 +957,17 @@ export default function FinancePanel({ session, showToast, initialSearch }: Fina
           />
         </div>
         <FilterDropdown value={filterStatus} onChange={setFilterStatus} />
+        {classOptions.length > 0 && (
+          <select
+            value={filterClass}
+            onChange={e => setFilterClass(e.target.value)}
+            aria-label="Sınıfa göre filtrele"
+            className="input sm:w-auto sm:min-w-[9rem]"
+          >
+            <option value="all">Tüm sınıflar</option>
+            {classOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        )}
         <button
           onClick={() => setShowGecikmis(true)}
           className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-600 hover:bg-red-100 transition-colors whitespace-nowrap"
