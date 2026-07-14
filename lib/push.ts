@@ -1,28 +1,13 @@
-import webpush from 'web-push';
 import { currentOrg, currentBranch } from './tenant';
 import { tdb, withScope } from './sqldb';
 import { prisma } from './prisma';
+import { enqueueNotification } from './push/outbox';
 
 // Web Push altyapısı — VAPID ile tarayıcı push servislerine bildirim gönderir.
 //
 // Subscription saklama: PushSub tablosu (role, userId, endpoint, keys).
 //   Bir kullanıcının birden çok cihazı olabilir (telefon + tablet) → birden çok satır.
 //   Endpoint'e göre tekilleştirilir.
-
-let _configured = false;
-function ensureConfigured(): boolean {
-  if (_configured) return true;
-  const pub = process.env.VAPID_PUBLIC_KEY;
-  const priv = process.env.VAPID_PRIVATE_KEY;
-  const subject = process.env.VAPID_SUBJECT || 'mailto:admin@example.com';
-  if (!pub || !priv) {
-    console.warn('[push] VAPID anahtarları tanımlı değil — push gönderilemez');
-    return false;
-  }
-  webpush.setVapidDetails(subject, pub, priv);
-  _configured = true;
-  return true;
-}
 
 // Tarayıcının PushSubscription.toJSON() çıktısı (subscribe akışından gelir).
 export interface PushSubscriptionInput {
@@ -37,6 +22,9 @@ export interface PushPayload {
   tag?: string;
   icon?: string;
   requireInteraction?: boolean;
+  // true → push'ta jenerik metin (kilit ekranı mahremiyeti); tam metin yalnız
+  // NotificationEvent'te (uygulama içi inbox). Devamsızlık/taksit için.
+  sensitive?: boolean;
 }
 
 export interface PushSendResult {
@@ -75,30 +63,16 @@ export async function getSubscriptionCount(role: string, userId: string): Promis
   return await tdb().pushSub.count({ where: { role, userId } });
 }
 
-// Bir kullanıcının TÜM cihazlarına push gönderir.
-// payload: { title, body, url?, tag?, icon?, requireInteraction? }
-// Geçersiz/expired abonelikler (404/410) otomatik temizlenir.
-// Dönüş: { sent, failed, removed }
+// Bir kullanıcının TÜM cihazlarına push gönderir — OUTBOX üzerinden.
+// Bildirim önce NotificationEvent + NotificationDelivery olarak yazılır (kayıp
+// olmaz), anında gönderim denenir, başarısızlar cron'la (notif-dispatch) retry
+// edilir. İmza ve dönüş şekli eski davranışla birebir — çağıranlar değişmez.
 export async function sendPushToUser(role: string, userId: string, payload: PushPayload): Promise<PushSendResult> {
-  if (!ensureConfigured()) return { sent: 0, failed: 0, removed: 0, error: 'VAPID yok' };
-  const body = JSON.stringify(payload);
-
-  const rows = await tdb().pushSub.findMany({ where: { role, userId } });
-  if (rows.length === 0) return { sent: 0, failed: 0, removed: 0 };
-
-  let sent = 0, failed = 0;
-  const toRemove: string[] = [];
-  for (const row of rows) {
-    try {
-      // keys Json alanı — savePushSubscription {p256dh, auth} yazar
-      await webpush.sendNotification({ endpoint: row.endpoint, keys: row.keys as { p256dh: string; auth: string } }, body);
-      sent++;
-    } catch (err) {
-      failed++;
-      const code = (err as { statusCode?: number } | null)?.statusCode;
-      if (code === 404 || code === 410) toRemove.push(row.id); // geçersiz → düşür
-    }
+  try {
+    return await enqueueNotification(role, userId, payload);
+  } catch (err) {
+    // Outbox yazımı bile başarısızsa (DB kesintisi) eski best-effort sözleşmesi korunur
+    console.warn('[push] enqueue başarısız:', err instanceof Error ? err.message : err);
+    return { sent: 0, failed: 0, removed: 0, error: 'enqueue başarısız' };
   }
-  if (toRemove.length > 0) await tdb().pushSub.deleteMany({ where: { id: { in: toRemove } } });
-  return { sent, failed, removed: toRemove.length };
 }

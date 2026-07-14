@@ -48,6 +48,7 @@ export async function notifyAbsentParents(date: string, attendance: Record<strin
         body: `${names.join(', ')} bugün derse katılmadı.`,
         url: '/?sekme=program',
         tag: `devamsizlik-${date}`,
+        sensitive: true, // kilit ekranında öğrenci adı görünmez (Apple 4.5.4/KVKK)
       });
     }
   } catch {

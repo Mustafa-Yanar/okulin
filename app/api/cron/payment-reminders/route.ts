@@ -46,6 +46,7 @@ async function remindTenant(): Promise<{ parents: number; devices: number }> {
         body,
         url: '/?sekme=odeme',
         tag: 'odeme-hatirlatma',
+        sensitive: true, // kilit ekranında isim+tutar görünmez; detay panelde
       });
       parents++;
       devices += (r && r.sent) || 0;
