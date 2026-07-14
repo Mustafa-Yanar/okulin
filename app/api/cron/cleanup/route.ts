@@ -20,6 +20,10 @@ const ERRLOG_RETENTION_DAYS = 30; // lib/errlog.ts eski Redis TTL'i
 // dedupeKey geçmiş tarihe/sınava bağlı → süre geçince bir daha kontrol edilmez, ölü ağırlık.
 // 90 gün fazlasıyla güvenli (aynı gün/sınav 90 gün sonra tekrar bildirilmez).
 const NOTIFLOG_RETENTION_DAYS = 90;
+// Bildirim inbox kayıtları: 90 gün sonra kullanıcı için de bayat.
+const NOTIF_EVENT_RETENTION_DAYS = 90;
+// Sonuçlanmış (sent/dead) teslimat satırları: 30 gün hata ayıklama penceresi.
+const NOTIF_DELIVERY_RETENTION_DAYS = 30;
 
 function cutoff(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -48,6 +52,12 @@ export async function GET(req: Request) {
     () => prisma.errLog.deleteMany({ where: { at: { lt: cutoff(ERRLOG_RETENTION_DAYS) } } }));
   const notifDeleted = await purge('notifLog',
     () => prisma.notifLog.deleteMany({ where: { at: { lt: cutoff(NOTIFLOG_RETENTION_DAYS) } } }));
+  const eventDeleted = await purge('notificationEvent',
+    () => prisma.notificationEvent.deleteMany({ where: { createdAt: { lt: cutoff(NOTIF_EVENT_RETENTION_DAYS) } } }));
+  const deliveryDeleted = await purge('notificationDelivery',
+    () => prisma.notificationDelivery.deleteMany({
+      where: { status: { not: 'pending' }, updatedAt: { lt: cutoff(NOTIF_DELIVERY_RETENTION_DAYS) } },
+    }));
 
-  return NextResponse.json({ ok: true, auditDeleted, errDeleted, notifDeleted });
+  return NextResponse.json({ ok: true, auditDeleted, errDeleted, notifDeleted, eventDeleted, deliveryDeleted });
 }
