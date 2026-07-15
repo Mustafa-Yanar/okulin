@@ -147,7 +147,14 @@ export async function POST(req: NextRequest) {
       const known = await isKnownDevice(roleCategory);
       if (known) return null; // null = OTP yok, normal login devam etsin
       if (!phone) return null; // telefon kayıtlı değil → OTP atla (geri uyumluluk)
-      try { await sendOtp(phone); } catch { /* SMS hatası login'i engellemesin */ }
+      // SMS GÖNDERİLEMEZSE OTP'yi ATLA — aksi halde kullanıcı, kod hiç gelmeyen bir
+      // doğrulama ekranında KİLİTLİ kalıyordu (ör. Twilio yapılandırılmamış). OTP
+      // yalnız SMS gerçekten gidebiliyorsa zorunlu olur; gidemezse login normal sürer.
+      try {
+        await sendOtp(phone);
+      } catch {
+        return null;
+      }
       return NextResponse.json({ needsOtp: true, phone: maskPhone(phone) }, { status: 200 });
     }
 

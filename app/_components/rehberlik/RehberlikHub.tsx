@@ -22,15 +22,17 @@ interface RehberlikHubProps {
 }
 
 export default function RehberlikHub({ session, showToast }: RehberlikHubProps) {
-  const isCounselor = session?.role === 'counselor';
   const [rtab, setRtab] = useUrlParam('rtab');
   const [denemeTab, setDenemeTab] = useState('sinavlar');
 
+  // Denemeler rehbere de açık: tüm /api/deneme + /api/optik uçları zaten
+  // ['director','counselor']'a izinli (rehber = müdür eksi muhasebe; deneme analizi
+  // çekirdek rehberlik işidir). Eskiden yalnız müdürde gösteriliyordu — UI eksikti.
   const subtabs: [string, string, LucideIcon][] = [
     ['yoklama', 'Yoklama', ClipboardList],
     ['odev', 'Ödevler', NotebookPen],
     ['davranis', 'Davranış', Award],
-    ...(isCounselor ? [] : [['denemeler', 'Denemeler', BarChart2] as [string, string, LucideIcon]]),
+    ['denemeler', 'Denemeler', BarChart2],
   ];
   const active = subtabs.some(([k]) => k === rtab) ? rtab : 'yoklama';
 
@@ -49,7 +51,7 @@ export default function RehberlikHub({ session, showToast }: RehberlikHubProps) 
       {active === 'odev' && <OdevManager showToast={showToast} userRole={session.role} userId={session.id} />}
       {active === 'davranis' && <DavranisManager showToast={showToast} userRole={session.role} userId={session.id} />}
 
-      {active === 'denemeler' && !isCounselor && (
+      {active === 'denemeler' && (
         <div>
           <div className="pill-tabs mb-4">
             {([['sinavlar', 'Sınavlar', FileText], ['optik', 'Optik Form', ScanLine]] as [string, string, LucideIcon][]).map(([k, l, Icon]) => (
