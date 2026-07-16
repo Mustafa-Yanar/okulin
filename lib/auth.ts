@@ -219,16 +219,26 @@ function getSecret(): Uint8Array {
 }
 const COOKIE = 'etut_session';
 
-export async function signToken(payload: Session): Promise<string> {
-  return new SignJWT(payload)
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('7d')
-    .sign(getSecret());
+export async function signToken(payload: Session, expSec?: number): Promise<string> {
+  const jwt = new SignJWT(payload).setProtectedHeader({ alg: 'HS256' });
+  if (expSec != null) {
+    const nowSec = Math.floor(Date.now() / 1000);
+    jwt.setIssuedAt(nowSec).setExpirationTime(nowSec + expSec);
+  } else {
+    jwt.setExpirationTime('7d');
+  }
+  return jwt.sign(getSecret());
 }
 
 export async function verifyToken(token: string): Promise<Session | null> {
   try {
     const { payload } = await jwtVerify(token, getSecret());
+    // Defense-in-depth: audience taşıyan token (mobil access token, aud='okulin-mobile')
+    // web cookie oturumu olarak KABUL EDİLMEZ. Ayrı MOBILE_JWT_SECRET zaten çapraz
+    // doğrulamayı imza hatasıyla engeller; bu, dev fallback aynı secret'a düşse bile
+    // (veya iki secret yanlışlıkla eşitlenirse) yüzeyleri ayrık tutar. Web token'ları
+    // aud'suz imzalanır → eski oturumlar etkilenmez.
+    if (payload.aud) return null;
     return payload as Session; // imzalı token'ı biz ürettik — payload şekli Session
   } catch {
     return null;
@@ -261,16 +271,22 @@ export async function getSession(): Promise<Session | null> {
 // Set-Cookie yazabilen yanıt (NextResponse.cookies).
 type ResponseWithCookies = { cookies: { set: (name: string, value: string, opts: Record<string, unknown>) => unknown } };
 
-export async function setSession(res: ResponseWithCookies, payload: Session): Promise<void> {
+export async function setSession(
+  res: ResponseWithCookies,
+  payload: Session,
+  opts?: { maxAgeSec?: number },
+): Promise<void> {
   // Superadmin: '__super__'. Org_admin: '__hq__' branch. Diğerleri: currentOrg() + istek şubesi.
   const org = payload.role === 'superadmin' ? '__super__' : currentOrg();
   const branch = payload.role === 'org_admin' ? '__hq__' : (payload.branch || currentBranch());
-  const token = await signToken({ ...payload, org, branch });
+  const maxAge = opts?.maxAgeSec ?? 60 * 60 * 24 * 7;
+  // JWT exp = cookie maxAge (çalınan cookie DEĞERİ maxAge'den uzun yaşamasın).
+  const token = await signToken({ ...payload, org, branch }, maxAge);
   res.cookies.set(COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge,
     path: '/',
   });
 }
