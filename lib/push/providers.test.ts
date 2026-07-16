@@ -184,7 +184,7 @@ describe('fcmAccessToken sertleştirme (taze modül)', () => {
   it('deliver FCM gövdesine channel_id + data.eventId koyar', async () => {
     vi.resetModules();
     const { deliver } = await import('./providers');
-    const bodies: Array<Record<string, never>> = [];
+    const bodies: unknown[] = [];
     vi.stubGlobal('fetch', vi.fn(async (url: unknown, init?: RequestInit) => {
       if (String(url).includes('oauth2.googleapis.com')) {
         return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), { status: 200 });
