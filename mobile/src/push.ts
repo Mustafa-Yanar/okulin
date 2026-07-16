@@ -77,8 +77,12 @@ export function watchTokenRotation(api: ApiClient, base: RegisterBase, rotate?: 
         await api.post('/api/mobile/v1/push/register', { ...base, token: String(t.data) });
       } catch (e) {
         if (e instanceof ApiError && e.status === 409 && rotate) {
-          const installationId = await rotate();
-          await api.post('/api/mobile/v1/push/register', { ...base, installationId, token: String(t.data) }).catch(() => {});
+          try {
+            const installationId = await rotate();
+            await api.post('/api/mobile/v1/push/register', { ...base, installationId, token: String(t.data) }).catch(() => {});
+          } catch {
+            /* sessiz — bir sonraki açılış dener */
+          }
         }
       }
     })();
