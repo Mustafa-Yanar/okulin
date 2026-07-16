@@ -3,6 +3,7 @@ import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useSession } from '../store/session';
 import { Screen, Title, Sub, Button, Card, palette } from '../ui/kit';
+import { rolEtiketi } from '../rol';
 import type { DevicesResponse, DeviceView } from '../api/types';
 
 // Ayarlar: profil özeti + cihaz oturumları (listele / tek tek iptal / tümünden
@@ -63,7 +64,7 @@ export default function AyarlarEkrani() {
         <Card>
           <Text style={s.name}>{session?.name}</Text>
           <Sub>
-            {org?.name} · {session?.role}
+            {org?.name} · {rolEtiketi(session?.role)}
           </Sub>
         </Card>
         <Text style={s.section}>Cihazlar</Text>

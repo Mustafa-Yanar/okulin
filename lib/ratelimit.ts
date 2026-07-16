@@ -10,8 +10,9 @@
 import { Ratelimit } from '@upstash/ratelimit';
 import redis from './redis';
 
-// Login: 5 başarısız deneme / 15 dakika (sliding window)
-// Başarılı login sayaca dahil edilmez — sadece başarısızlıkta artar (login route'da yönetiliyor)
+// Login: 5 deneme / 15 dakika (sliding window)
+// NOT: sayaç HER denemede artar (başarılı dahil) — route'lar safeLimit'i şifre
+// doğrulamadan ÖNCE çağırır. Sık başarılı giriş de pencereyi doldurabilir.
 export const loginRatelimit = new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(5, '15 m'),

@@ -4,16 +4,7 @@ import { AppState, StyleSheet, Text, View } from 'react-native';
 import { useSession } from '../store/session';
 import { currentPermission, enablePush, refreshRegistration, watchTokenRotation, type EnableResult, type RegisterBase } from '../push';
 import { Screen, Title, Sub, Card, Button, palette } from '../ui/kit';
-
-const ROLE_LABEL: Record<string, string> = {
-  student: 'Öğrenci',
-  parent: 'Veli',
-  teacher: 'Öğretmen',
-  director: 'Müdür',
-  accountant: 'Muhasebeci',
-  counselor: 'Rehber',
-  org_admin: 'Kurum Yöneticisi',
-};
+import { rolEtiketi } from '../rol';
 
 export default function BugunEkrani() {
   const { org, session, api, installationId, appVersion, rotateInstallationId } = useSession();
@@ -69,7 +60,7 @@ export default function BugunEkrani() {
       <View style={s.wrap}>
         <Sub>{org?.name}</Sub>
         <Title>Merhaba{session?.name ? `, ${session.name}` : ''}</Title>
-        <Text style={s.role}>{ROLE_LABEL[session?.role ?? ''] ?? session?.role}</Text>
+        <Text style={s.role}>{rolEtiketi(session?.role)}</Text>
 
         {perm !== 'granted' ? (
           <Card>
