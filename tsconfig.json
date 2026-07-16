@@ -42,6 +42,7 @@
     "tmp",
     "solver-service",
     "e2e",
-    "testsprite_tests"
+    "testsprite_tests",
+    "mobile"
   ]
 }

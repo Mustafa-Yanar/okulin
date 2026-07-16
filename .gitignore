@@ -47,3 +47,10 @@ node_modules/.cache/ms-playwright
 # TypeScript derleme onbellegi
 tsconfig.tsbuildinfo
 !docs/superpowers/**
+.env*
+
+# Mobil (Expo) — yerel/native üretilen dosyalar + Firebase client config (public repo)
+mobile/android/
+mobile/ios/
+mobile/.expo/
+mobile/google-services.json

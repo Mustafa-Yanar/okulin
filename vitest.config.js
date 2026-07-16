@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 // 2) Next.js '@/*' path alias'ı vitest'te de çözülsün (örn lib/finance.test.js → @/lib/sqldb).
 export default defineConfig({
   test: {
-    exclude: ['e2e/**', 'node_modules/**', '.next/**', 'out-render/**', 'scripts/**'],
+    exclude: ['e2e/**', 'node_modules/**', '.next/**', 'out-render/**', 'scripts/**', 'mobile/**'],
   },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./', import.meta.url)) },
