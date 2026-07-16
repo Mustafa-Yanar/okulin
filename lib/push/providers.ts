@@ -25,6 +25,7 @@ export async function _fcmAssertion(email: string, pkcs8Key: string, nowSec: num
 }
 
 let _tokenCache: { token: string; expSec: number } | null = null;
+let _inflight: Promise<string | null> | null = null;
 
 export async function fcmAccessToken(): Promise<string | null> {
   const email = process.env.FCM_CLIENT_EMAIL;
@@ -34,23 +35,39 @@ export async function fcmAccessToken(): Promise<string | null> {
   const nowSec = Math.floor(Date.now() / 1000);
   if (_tokenCache && _tokenCache.expSec - 60 > nowSec) return _tokenCache.token;
 
-  const assertion = await _fcmAssertion(email, key, nowSec);
-  const res = await fetch(GOOGLE_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion,
-    }),
-  });
-  if (!res.ok) {
-    console.warn('[push:fcm] OAuth token alınamadı:', res.status, await res.text().catch(() => ''));
-    return null;
-  }
-  const data = (await res.json()) as { access_token?: string; expires_in?: number };
-  if (!data.access_token) return null;
-  _tokenCache = { token: data.access_token, expSec: nowSec + (data.expires_in || 3600) };
-  return data.access_token;
+  // Eşzamanlı fan-out (N cihaz = N deliverFcm) tek OAuth çağrısını paylaşsın —
+  // de-dup'sız Google'a N istek giderdi (Plan 1 takip notu).
+  if (_inflight) return _inflight;
+  _inflight = (async () => {
+    try {
+      const assertion = await _fcmAssertion(email, key, nowSec);
+      const res = await fetch(GOOGLE_TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          assertion,
+        }),
+      });
+      if (!res.ok) {
+        console.warn('[push:fcm] OAuth token alınamadı:', res.status, await res.text().catch(() => ''));
+        return null;
+      }
+      // Bozuk gövde (proxy/ağ arızası) fırlatmasın (Plan 1 takip notu: json guard).
+      const data = (await res.json().catch(() => null)) as { access_token?: string; expires_in?: number } | null;
+      if (!data?.access_token) return null;
+      _tokenCache = { token: data.access_token, expSec: nowSec + (data.expires_in || 3600) };
+      return data.access_token;
+    } catch (err) {
+      // Ağ/imza hatası fan-out veya cron döngüsünü FIRLATMASIN (İnceleme Codex #12) —
+      // teslimat 'FCM yapılandırılmamış/erişilemedi' geçici hatasıyla retry'a düşer.
+      console.warn('[push:fcm] OAuth ağ hatası:', err instanceof Error ? err.message : err);
+      return null;
+    } finally {
+      _inflight = null;
+    }
+  })();
+  return _inflight;
 }
 
 export interface ProviderResult {
@@ -70,6 +87,8 @@ export interface PushNotif {
   url?: string;
   tag?: string;
   requireInteraction?: boolean;
+  icon?: string; // web-push payload'ına girer (sw.js okur); FCM'de kullanılmaz
+  data?: Record<string, string>; // FCM data alanları (string zorunlu) — eventId vb.
 }
 
 let _vapidConfigured = false;
@@ -100,9 +119,9 @@ async function deliverWebPush(t: Extract<PushTarget, { provider: 'webpush' }>, n
 
 async function deliverFcm(t: Extract<PushTarget, { provider: 'fcm' }>, n: PushNotif): Promise<ProviderResult> {
   const projectId = process.env.FCM_PROJECT_ID;
-  const token = await fcmAccessToken();
-  if (!projectId || !token) return { ok: false, permanent: false, error: 'FCM yapılandırılmamış' };
   try {
+    const token = await fcmAccessToken();
+    if (!projectId || !token) return { ok: false, permanent: false, error: 'FCM yapılandırılmamış' };
     const res = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -110,9 +129,15 @@ async function deliverFcm(t: Extract<PushTarget, { provider: 'fcm' }>, n: PushNo
         message: {
           token: t.target,
           notification: { title: n.title, body: n.body },
-          // data alanları string olmak zorunda (FCM v1 kuralı)
-          data: n.url ? { url: n.url } : undefined,
-          android: { priority: 'HIGH', notification: n.tag ? { tag: n.tag } : undefined },
+          // data alanları string olmak zorunda (FCM v1 kuralı). eventId: bildirim
+          // merkezi eşleşmesi + dedupe hazırlığı (Plan 4 native routing okur).
+          data: { ...(n.url ? { url: n.url } : {}), ...(n.data ?? {}) },
+          android: {
+            priority: 'HIGH',
+            // İstemci 'default' kanalını oluşturur (mobile/src/push.ts) — Android 8+
+            // kanal belirtilmezse bildirim "Miscellaneous"a düşer.
+            notification: { channel_id: 'default', ...(n.tag ? { tag: n.tag } : {}) },
+          },
         },
       }),
     });
@@ -120,12 +145,16 @@ async function deliverFcm(t: Extract<PushTarget, { provider: 'fcm' }>, n: PushNo
       const data = (await res.json().catch(() => ({}))) as { name?: string };
       return { ok: true, permanent: false, providerId: data.name };
     }
-    // 404 UNREGISTERED / 400 INVALID_ARGUMENT → token ölü/bozuk, retry anlamsız
-    return {
-      ok: false,
-      permanent: res.status === 404 || res.status === 400,
-      error: `fcm ${res.status}`,
-    };
+    // Kalıcılık kararı (İnceleme Codex #12): 404 = UNREGISTERED (token ölü). 400 tek
+    // başına kalıcı DEĞİL — bozuk payload (bizim kod hatamız) da 400 döndürür ve tüm
+    // cihazları yanlışlıkla disable ederdi. 400'de yalnız FCM error.details içinde
+    // errorCode='UNREGISTERED' varsa kalıcı say.
+    let permanent = res.status === 404;
+    if (res.status === 400) {
+      const body = (await res.json().catch(() => null)) as { error?: { details?: { errorCode?: string }[] } } | null;
+      permanent = !!body?.error?.details?.some((d) => d.errorCode === 'UNREGISTERED');
+    }
+    return { ok: false, permanent, error: `fcm ${res.status}` };
   } catch (err) {
     return { ok: false, permanent: false, error: `fcm ağ hatası: ${err instanceof Error ? err.message : 'bilinmiyor'}` };
   }

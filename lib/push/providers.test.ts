@@ -110,3 +110,96 @@ describe('deliver — fcm', () => {
     expect(fcmBody.message.data).toEqual({ url: '/?sekme=odeme' });
   });
 });
+
+describe('fcmAccessToken sertleştirme (taze modül)', () => {
+  beforeEach(() => {
+    vi.stubEnv('FCM_PROJECT_ID', 'okulin-mobil');
+    vi.stubEnv('FCM_CLIENT_EMAIL', 'svc@x.iam.gserviceaccount.com');
+    vi.stubEnv('FCM_PRIVATE_KEY', pkcs8.replace(/\n/g, '\\n'));
+  });
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+
+  it('eşzamanlı iki çağrı TEK OAuth isteği yapar (in-flight de-dup)', async () => {
+    vi.resetModules();
+    const { fcmAccessToken } = await import('./providers');
+    let oauthCalls = 0;
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown) => {
+      if (String(url).includes('oauth2.googleapis.com')) {
+        oauthCalls++;
+        await new Promise((r) => setTimeout(r, 20)); // yarışı garantile
+        return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), { status: 200 });
+      }
+      throw new Error('beklenmeyen fetch');
+    }));
+    const [a, b] = await Promise.all([fcmAccessToken(), fcmAccessToken()]);
+    expect(a).toBe('tok');
+    expect(b).toBe('tok');
+    expect(oauthCalls).toBe(1);
+  });
+
+  it('bozuk OAuth gövdesi fırlatmaz, null döner', async () => {
+    vi.resetModules();
+    const { fcmAccessToken } = await import('./providers');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('html hata sayfası', { status: 200 })));
+    expect(await fcmAccessToken()).toBeNull();
+  });
+
+  it('OAuth ağ hatası fırlatmaz, null döner', async () => {
+    vi.resetModules();
+    const { fcmAccessToken } = await import('./providers');
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network'); }));
+    expect(await fcmAccessToken()).toBeNull();
+  });
+
+  it('FCM 400 (payload hatası) KALICI SAYILMAZ — cihaz yanlışlıkla disable edilmez', async () => {
+    vi.resetModules();
+    const { deliver } = await import('./providers');
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown) => {
+      if (String(url).includes('oauth2.googleapis.com')) {
+        return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: { status: 'INVALID_ARGUMENT', details: [] } }), { status: 400 });
+    }));
+    const r = await deliver({ provider: 'fcm', target: 'tok-x' }, { title: 't', body: 'b' });
+    expect(r.ok).toBe(false);
+    expect(r.permanent).toBe(false);
+  });
+
+  it('400 + details errorCode=UNREGISTERED → kalıcı (token gerçekten ölü)', async () => {
+    vi.resetModules();
+    const { deliver } = await import('./providers');
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown) => {
+      if (String(url).includes('oauth2.googleapis.com')) {
+        return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), { status: 200 });
+      }
+      return new Response(
+        JSON.stringify({ error: { status: 'INVALID_ARGUMENT', details: [{ errorCode: 'UNREGISTERED' }] } }),
+        { status: 400 },
+      );
+    }));
+    const r = await deliver({ provider: 'fcm', target: 'tok-olu' }, { title: 't', body: 'b' });
+    expect(r.permanent).toBe(true);
+  });
+
+  it('deliver FCM gövdesine channel_id + data.eventId koyar', async () => {
+    vi.resetModules();
+    const { deliver } = await import('./providers');
+    const bodies: Array<Record<string, never>> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url).includes('oauth2.googleapis.com')) {
+        return new Response(JSON.stringify({ access_token: 'tok', expires_in: 3600 }), { status: 200 });
+      }
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ name: 'projects/x/messages/1' }), { status: 200 });
+    }));
+    const r = await deliver(
+      { provider: 'fcm', target: 'cihaz-token' },
+      { title: 't', body: 'b', tag: 'etiket', url: '/x', data: { eventId: 'ne_1' } },
+    );
+    expect(r.ok).toBe(true);
+    const msg = (bodies[0] as { message: { android: { notification: Record<string, string> }; data: Record<string, string> } }).message;
+    expect(msg.android.notification.channel_id).toBe('default');
+    expect(msg.android.notification.tag).toBe('etiket');
+    expect(msg.data).toEqual({ url: '/x', eventId: 'ne_1' });
+  });
+});

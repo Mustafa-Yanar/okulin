@@ -3,7 +3,7 @@ import { tdb } from '@/lib/sqldb';
 import { currentOrg, currentBranch } from '@/lib/tenant';
 import { newId } from '@/lib/id';
 import { renderPush, applyResult } from './policy';
-import { deliver, type PushTarget } from './providers';
+import { deliver, type PushTarget, type PushNotif } from './providers';
 
 // Outbox: bildirim = önce DB kaydı (event + cihaz başına delivery), sonra gönderim.
 // Eski kusur: lib/push.ts doğrudan gönderir, hata yutulurdu → bildirim kaybolurdu.
@@ -46,7 +46,7 @@ function toTarget(d: DeliveryRow): PushTarget {
 // (removed sayacı bu dönüşe bağlıdır — durum eşitliğinden türetilmez).
 async function deliverOne(
   d: DeliveryRow,
-  notif: { title: string; body: string; url?: string; tag?: string; requireInteraction?: boolean },
+  notif: PushNotif,
 ): Promise<{ status: 'sent' | 'pending' | 'dead'; resourceRemoved: boolean }> {
   const attempts = d.attempts + 1;
   const r = await deliver(toTarget(d), notif);
@@ -113,6 +113,11 @@ export async function enqueueNotification(role: string, userId: string, payload:
         title: payload.title, body: payload.body,
         url: payload.url, tag: payload.tag,
         sensitive: payload.sensitive ?? false,
+        // Görsel meta cron retry'da kaybolmasın (Plan 1 takip notu) — şema değişikliği
+        // yok, mevcut Json `data` alanı kullanılır.
+        data: payload.icon || payload.requireInteraction
+          ? { icon: payload.icon, requireInteraction: payload.requireInteraction }
+          : undefined,
         dispatchStatus: 'done', // fan-out bu transaction'da yazıldı
       },
     }),
@@ -123,7 +128,14 @@ export async function enqueueNotification(role: string, userId: string, payload:
 
   // 3) Anında gönderim (hızlı yol) — başarısızlar pending kalır, cron toparlar
   const pushText = renderPush(payload);
-  const notif = { ...pushText, url: payload.url, tag: payload.tag, requireInteraction: payload.requireInteraction };
+  const notif: PushNotif = {
+    ...pushText,
+    url: payload.url,
+    tag: payload.tag,
+    icon: payload.icon,
+    requireInteraction: payload.requireInteraction,
+    data: { eventId },
+  };
   let sent = 0, failed = 0, removed = 0;
   for (const d of deliveries) {
     const { status, resourceRemoved } = await deliverOne({ ...d, keys: d.keys ?? {}, attempts: 0 }, notif);
@@ -151,8 +163,41 @@ export async function dispatchDue(limit = 200): Promise<{ processed: number; sen
       dead++;
       continue;
     }
+
+    // Sahiplik kontrolü (İnceleme Codex #2 — KVKK): teslimat kuyruğa girdikten sonra
+    // hedef cihaz logout / hesap silme / token devri ile el değiştirmiş olabilir.
+    // NotificationDelivery.target denormalize — körlemesine gönderilirse ESKİ
+    // kullanıcının bildirimi cihazın YENİ sahibine gider. Gönderimden hemen önce
+    // hedefin hâlâ event'in kullanıcısına bağlı olduğunu doğrula; değilse teslimatı
+    // kapat (anında gönderim yolu bu kontrolden muaf — fan-out aynı istekte taze).
+    const stillOwned = d.provider === 'webpush'
+      ? await prisma.pushSub.findFirst({
+          where: { endpoint: d.target, orgSlug: ev.orgSlug, role: ev.role, userId: ev.userId },
+          select: { id: true },
+        })
+      : await prisma.deviceInstallation.findFirst({
+          where: { provider: d.provider, token: d.target, enabled: true, orgSlug: ev.orgSlug, role: ev.role, userId: ev.userId },
+          select: { id: true },
+        });
+    if (!stillOwned) {
+      await prisma.notificationDelivery.update({
+        where: { id: d.id },
+        data: { status: 'dead', lastError: 'hedef sahiplik değişti/kaldırıldı' },
+      });
+      dead++;
+      continue;
+    }
+
+    const meta = (ev.data ?? {}) as { icon?: string; requireInteraction?: boolean };
     const pushText = renderPush({ title: ev.title, body: ev.body, sensitive: ev.sensitive });
-    const { status } = await deliverOne(d, { ...pushText, url: ev.url ?? undefined, tag: ev.tag ?? undefined });
+    const { status } = await deliverOne(d, {
+      ...pushText,
+      url: ev.url ?? undefined,
+      tag: ev.tag ?? undefined,
+      icon: meta.icon,
+      requireInteraction: meta.requireInteraction,
+      data: { eventId: ev.id },
+    });
     if (status === 'sent') sent++;
     else if (status === 'dead') dead++;
     else retried++;
