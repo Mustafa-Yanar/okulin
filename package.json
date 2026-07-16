@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "mobile:types": "node scripts/sync-mobile-api-types.mjs",
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio"
