@@ -70,7 +70,7 @@ export default function GirisEkrani() {
           color={brand}
           disabled={busy || !username.trim() || !password}
         />
-        <Button label="Kurum değiştir" onPress={() => void leaveOrg()} color={brand} variant="ghost" />
+        <Button label="Kurum değiştir" onPress={() => void leaveOrg().then(() => router.replace('/kurum'))} color={brand} variant="ghost" />
       </View>
     </Screen>
   );
