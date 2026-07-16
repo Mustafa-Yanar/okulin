@@ -24,6 +24,8 @@ const NOTIFLOG_RETENTION_DAYS = 90;
 const NOTIF_EVENT_RETENTION_DAYS = 90;
 // Sonuçlanmış (sent/dead) teslimat satırları: 30 gün hata ayıklama penceresi.
 const NOTIF_DELIVERY_RETENTION_DAYS = 30;
+// Kapanmış (revoke/expired) mobil oturum kayıtları: 30 gün denetim penceresi, sonra sil.
+const MOBILE_SESSION_RETENTION_DAYS = 30;
 
 function cutoff(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -58,6 +60,15 @@ export async function GET(req: Request) {
     () => prisma.notificationDelivery.deleteMany({
       where: { status: { not: 'pending' }, updatedAt: { lt: cutoff(NOTIF_DELIVERY_RETENTION_DAYS) } },
     }));
+  const mobileSessionDeleted = await purge('mobileSession',
+    () => prisma.mobileSession.deleteMany({
+      where: {
+        OR: [
+          { revokedAt: { lt: cutoff(MOBILE_SESSION_RETENTION_DAYS) } },
+          { expiresAt: { lt: cutoff(MOBILE_SESSION_RETENTION_DAYS) } },
+        ],
+      },
+    }));
 
-  return NextResponse.json({ ok: true, auditDeleted, errDeleted, notifDeleted, eventDeleted, deliveryDeleted });
+  return NextResponse.json({ ok: true, auditDeleted, errDeleted, notifDeleted, eventDeleted, deliveryDeleted, mobileSessionDeleted });
 }

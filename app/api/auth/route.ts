@@ -12,6 +12,7 @@ import { sendOtp } from '@/lib/sms';
 import { getOrgConfig } from '@/lib/config';
 import { tdb } from '@/lib/sqldb';
 import { verifyLogin, maskPhone, type RoleCategory } from '@/lib/login';
+import { revokeMobileSessionsFor } from '@/lib/mobile/sessions';
 
 // Bilinçli withAuth istisnası: bu route'un kendisi LOGIN ucu — oturum burada kurulur.
 // GET login ekranı için oturumsuz da çalışır; POST action'larının oturum gerektirenleri
@@ -194,6 +195,13 @@ export async function POST(req: NextRequest) {
       if (!ok) return NextResponse.json({ error: 'Mevcut şifre hatalı' }, { status: 400 });
       const newHash = await bcrypt.hash(newPassword, 10);
       await db[roleKey].update({ where: { id: rec.id }, data: { passwordHash: newHash, mustChangePassword: false } });
+      // Spec §7: şifre değişiminde tüm mobil refresh oturumları iptal (web oturumu sürer).
+      // Best-effort: iptal hatası şifre değişimini/setSession'ı düşürmesin (logAudit kalıbı).
+      try {
+        await revokeMobileSessionsFor(session!.role, String(session!.id ?? ''), 'şifre değişti');
+      } catch (e) {
+        console.warn('[mobil] şifre değişiminde oturum iptali başarısız:', e instanceof Error ? e.message : e);
+      }
       const res = NextResponse.json({ ok: true });
       await setSession(res, { ...session!, mustChangePassword: false, ...sessionPayloadFields });
       return res;
@@ -245,6 +253,14 @@ export async function POST(req: NextRequest) {
     const rec = await db[model].findFirst({ where: { legacyId: targetId } });
     if (!rec) return NextResponse.json({ error: `${labels[targetRole]} bulunamadı` }, { status: 404 });
     await db[model].update({ where: { id: rec.id }, data: { passwordHash: hash, mustChangePassword: true } });
+    // Mobil oturum iptali — müdür yardımcısı mobil oturumunda role='director' taşır.
+    // Best-effort: iptal hatası şifre sıfırlamanın/logAudit'in çalışmasını engellemesin.
+    const mobileRole = targetRole === 'assistant_director' ? 'director' : targetRole;
+    try {
+      await revokeMobileSessionsFor(mobileRole, targetId, 'şifre sıfırlandı');
+    } catch (e) {
+      console.warn('[mobil] şifre sıfırlamada oturum iptali başarısız:', e instanceof Error ? e.message : e);
+    }
     await logAudit({ ...actorFrom(session), action: 'auth.resetPassword', target: { type: targetRole, id: targetId, name: rec.name || targetId }, detail: `${labels[targetRole]} şifresi sıfırlandı: ${rec.name || targetId}` });
     return NextResponse.json({ ok: true });
   }
