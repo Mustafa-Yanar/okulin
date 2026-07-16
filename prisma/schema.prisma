@@ -672,3 +672,46 @@ model DeviceInstallation {
   @@unique([provider, token])
   @@index([orgSlug, branch, role, userId])
 }
+
+// ── Mobil cihaz oturumları (/api/mobile/v1 token auth) ──────────────────────
+// Refresh token DB'de yalnız sha256 hash olarak durur (düz token asla yazılmaz).
+// Rotation: her refresh'te yeni token, eskisi prevRefreshHash'e kayar; grace (30sn)
+// dışı prev kullanımı = REUSE → oturum revoke (lib/mobile/policy.ts durum makinesi).
+// payload: access token claim'lerinin snapshot'ı — refresh'te yeniden imzalanır.
+// revokedAt: logout/şifre değişimi/cihaz iptali → withMobileAuth her istekte kontrol eder.
+model MobileSession {
+  id              String    @id // ms_ önekli newId
+  orgSlug         String
+  branch          String    @default("main")
+  role            String // oturum rolü (assistant_director → 'director', payload ile aynı)
+  userId          String // legacyId; parent için telefon (web session.id ile birebir)
+  payload         Json
+  installationId  String? // istemci üretimi rastgele kurulum kimliği (reklam kimliği değil)
+  deviceName      String?
+  platform        String? // android|ios
+  refreshHash     String    @unique
+  prevRefreshHash String?
+  rotatedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  lastUsedAt      DateTime  @default(now())
+  expiresAt       DateTime // kayan pencere: her rotation +60 gün
+  revokedAt       DateTime?
+  revokedReason   String? // reuse|çıkış|cihaz iptali|tüm cihazlardan çıkış|şifre değişti|şifre sıfırlandı
+  createdIp       String?
+
+  @@index([orgSlug, branch, role, userId])
+  @@index([prevRefreshHash])
+}
+
+// Mobil uygulama GLOBAL konfigürasyonu — remote kill-switch (spec §9/3).
+// Tek satır (id='default'); superadmin API'siyle güncellenir; bootstrap okur.
+// GLOBAL tablo (kurum-bağımsız) → sqldb SKIP listesinde, base prisma ile erişilir.
+model MobileAppConfig {
+  id                  String   @id @default("default")
+  minSupportedVersion String   @default("0.0.0")
+  recommendedVersion  String   @default("0.0.0")
+  maintenance         Boolean  @default(false)
+  maintenanceMessage  String?
+  flags               Json?
+  updatedAt           DateTime @updatedAt
+}

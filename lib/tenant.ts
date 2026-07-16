@@ -92,6 +92,7 @@ export interface ScopedPipeline {
 
 export interface ScopedRedis {
   get<T = unknown>(key: string): Promise<T | null>;
+  getdel<T = unknown>(key: string): Promise<T | null>;
   set(key: string, val: unknown, opts?: SetOpts): Promise<unknown>;
   del(...keys: string[]): Promise<number>;
   exists(...keys: string[]): Promise<number>;
@@ -130,6 +131,7 @@ export function _scopedClient(client: Redis, prefix: string): ScopedRedis {
 
   return {
     get: (key) => client.get(k(key)),
+    getdel: (key) => client.getdel(k(key)),
     set: (key, val, opts) => (opts === undefined ? client.set(k(key), val) : client.set(k(key), val, opts)),
     del: (...keys) => client.del(...keys.map(k)),
     exists: (...keys) => client.exists(...keys.map(k)),
