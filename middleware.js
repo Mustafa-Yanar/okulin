@@ -10,6 +10,16 @@ import { resolveOrg, resolveBranch } from './lib/org';
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
 
+// /api/mobile/v1 oturumsuz JSON POST uçları — tarayıcı cookie'si TAŞIMAZ (native
+// istemci Origin göndermez) → CSRF vektörü yok. YALNIZ bu tam yollar muaf; Bearer
+// korumalı uçlar zaten aşağıdaki Bearer istisnasından geçer, session-open GET'tir.
+// SÖZLEŞME: bu listeye cookie-auth ile yetkilenen bir uç EKLENEMEZ (Task 11 testi denetler).
+const MOBILE_CSRF_EXEMPT = new Set([
+  '/api/mobile/v1/resolve-org',
+  '/api/mobile/v1/auth/login',
+  '/api/mobile/v1/auth/refresh',
+]);
+
 function csrfFail() {
   return NextResponse.json(
     { error: 'Geçersiz istek kaynağı (CSRF koruması)' },
@@ -34,7 +44,8 @@ export function middleware(req) {
     // Ödeme sağlayıcı callback'i (PayTR) server-to-server gelir, Origin yok —
     // HMAC hash ile doğrulanır, CSRF'ten muaf.
     const isPaymentCallback = req.nextUrl.pathname === '/api/payment/callback';
-    if (!isBearer && !isPaymentCallback) {
+    const isMobileExempt = MOBILE_CSRF_EXEMPT.has(req.nextUrl.pathname);
+    if (!isBearer && !isPaymentCallback && !isMobileExempt) {
       const source = req.headers.get('origin') || req.headers.get('referer');
       if (!source) return csrfFail();
       let sourceHost;
