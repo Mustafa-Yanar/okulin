@@ -130,6 +130,72 @@ describe('createApiClient', () => {
     expect(await tokens.getRefresh()).toBeNull(); // oturum diriltilmedi
   });
 
+  it('bayat refresh (yeniden giriş sonrası) taze oturumu EZMEZ — 200 dönüşü', async () => {
+    const expired = vi.fn();
+    const f = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (u.endsWith('/auth/refresh')) {
+        await new Promise((r) => setTimeout(r, 30));
+        return json(200, PAIR); // eski oturumun rotate ettiği (artık bayat) çift
+      }
+      return json(401, { error: 'Giriş gerekli' }); // eski access ile /me hep 401
+    }) as unknown as typeof fetch;
+    const { client, tokens } = makeClient(f, expired);
+    await tokens.setPair({ accessToken: 'eski-acc', refreshToken: 'eski-ref' });
+    const inflight = client.get('/api/mobile/v1/me').catch(() => {});
+    await new Promise((r) => setTimeout(r, 5));
+    // Kullanıcı tam bu anda çıkış yapıp YENİDEN girdi — taze oturum kuruldu.
+    await tokens.clear();
+    await tokens.setPair({ accessToken: 'yeni-acc', refreshToken: 'yeni-ref' });
+    await inflight; // bayat refresh burada 200 ile döner ama epoch uymaz
+    expect(await tokens.getRefresh()).toBe('yeni-ref');
+    expect(await tokens.getAccess()).toBe('yeni-acc');
+    expect(expired).not.toHaveBeenCalled();
+  });
+
+  it('bayat refresh (yeniden giriş sonrası) taze oturumu EZMEZ — 401 dönüşü', async () => {
+    const expired = vi.fn();
+    const f = vi.fn(async (url: unknown) => {
+      const u = String(url);
+      if (u.endsWith('/auth/refresh')) {
+        await new Promise((r) => setTimeout(r, 30));
+        return json(401, { error: 'Oturum geçersiz' }); // eski oturum sunucuda da geçersiz
+      }
+      return json(401, { error: 'Giriş gerekli' });
+    }) as unknown as typeof fetch;
+    const { client, tokens } = makeClient(f, expired);
+    await tokens.setPair({ accessToken: 'eski-acc', refreshToken: 'eski-ref' });
+    const inflight = client.get('/api/mobile/v1/me').catch(() => {});
+    await new Promise((r) => setTimeout(r, 5));
+    await tokens.clear();
+    await tokens.setPair({ accessToken: 'yeni-acc', refreshToken: 'yeni-ref' });
+    await inflight; // bayat refresh burada 401 (kimlik hatası) ile döner ama epoch uymaz
+    expect(await tokens.getRefresh()).toBe('yeni-ref');
+    expect(await tokens.getAccess()).toBe('yeni-acc');
+    expect(expired).not.toHaveBeenCalled();
+  });
+
+  it("eşzamanlı 401'lerde onSessionExpired TEK kez", async () => {
+    const expired = vi.fn();
+    const f = vi.fn(async (url: unknown) => {
+      if (String(url).endsWith('/auth/refresh')) {
+        await new Promise((r) => setTimeout(r, 20)); // yarışı garantile
+        return json(401, { error: 'Oturum geçersiz' });
+      }
+      return json(401, { error: 'Giriş gerekli' });
+    }) as unknown as typeof fetch;
+    const { client, tokens } = makeClient(f, expired);
+    await tokens.setPair({ accessToken: 'a', refreshToken: 'r' });
+    const results = await Promise.allSettled([
+      client.get('/api/mobile/v1/me'),
+      client.get('/api/mobile/v1/me'),
+    ]);
+    expect(results[0].status).toBe('rejected');
+    expect(results[1].status).toBe('rejected');
+    expect(expired).toHaveBeenCalledOnce();
+    expect(await tokens.getRefresh()).toBeNull();
+  });
+
   it('login: hata gövdesindeki error + correctRole ApiError\'a taşınır', async () => {
     const f = vi.fn(async () =>
       json(403, { error: 'Bu bilgiler Veli hesabına ait.', correctRole: 'parent' }),

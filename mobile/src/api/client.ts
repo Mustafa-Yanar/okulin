@@ -10,7 +10,10 @@ import type { TokenStore } from './tokens';
 // - 401 → TEK-UÇUŞ refresh mutex (Plan 2 devri Gemini #5: eşzamanlı 401'ler tek
 //   refresh paylaşır — rotation'da ikinci istek eski token'la reuse tetiklemesin) →
 //   başarılıysa isteği BİR KEZ tekrarlar.
-// - Refresh 401/4xx → oturum bitti: token'lar silinir + onSessionExpired.
+// - Refresh 401/4xx → oturum bitti: EPOCH o anki oturumla eşleşiyorsa token'lar
+//   silinir + onSessionExpired (tek-uçuş, doRefresh() İÇİNDE — bkz aşağı). Epoch
+//   değiştiyse (araya giren logout/yeniden-giriş) bu bayat sonuç 'stale' döner ve
+//   YENİ oturuma DOKUNULMAZ (bkz doRefresh yorumu).
 // - Refresh AĞ hatası → token'lar KORUNUR (offline oturum düşürmez), istek ApiError(0) atar.
 // - Token'lar asla loglanmaz.
 
@@ -42,7 +45,7 @@ export interface ApiClient {
   logout(): Promise<void>;
 }
 
-type RefreshOutcome = 'ok' | 'invalid' | 'network';
+type RefreshOutcome = 'ok' | 'invalid' | 'stale' | 'network';
 
 export function createApiClient(opts: ApiClientOpts): ApiClient {
   const f = opts.fetchFn ?? fetch;
@@ -65,9 +68,24 @@ export function createApiClient(opts: ApiClientOpts): ApiClient {
     );
   }
 
+  // doRefresh: oturum-düşürme YAN ETKİSİ (clear + onSessionExpired) BURADA, tek
+  // yerde ve EPOCH-KORUMALI yapılır (İnceleme: Önemli+Minör bulgu düzeltmesi).
+  // Neden burada: refreshing mutex sayesinde doRefresh() eşzamanlı 401'lerde TEK
+  // KEZ çalışır → yan etki de doğal olarak tek-uçuş olur (Minör bulgu biter).
+  // Neden epoch-korumalı: bu fetch havada asılıyken kullanıcı çıkış yapıp yeniden
+  // giriş yaparsa (clear → epoch+1, sonra login → yeni token'lar), bu bayat yanıt
+  // geldiğinde epoch artık eşleşmez — 'stale' döner, clear/onSessionExpired ASLA
+  // çalışmaz ve YENİ oturum ezilmez (Önemli bulgu biter). request() 'stale'i de
+  // 'invalid' gibi 401 olarak yansıtır ama kendisi hiçbir yan etki YAPMAZ.
   async function doRefresh(): Promise<RefreshOutcome> {
     const refreshToken = await opts.tokens.getRefresh();
-    if (!refreshToken) return 'invalid';
+    if (!refreshToken) {
+      // Refresh token hiç yok — gerçekten oturumsuz durum (yarış değil, fetch
+      // henüz yapılmadı → epoch karşılaştırması gereksiz).
+      await opts.tokens.clear();
+      opts.onSessionExpired?.();
+      return 'invalid';
+    }
     const epoch = opts.tokens.epoch(); // bayat-yanıt kilidi (İnceleme Codex #8)
     const attempt = () =>
       f(`${opts.baseUrl}/api/mobile/v1/auth/refresh`, {
@@ -94,13 +112,20 @@ export function createApiClient(opts: ApiClientOpts): ApiClient {
       // Yalnız KESİN kimlik hataları oturumu düşürür (İnceleme Codex #7): 429/5xx
       // (limit, bakım, geçici arıza) token'ları KORUR — okul NAT'ında IP limitinin
       // dolması kitlesel logout üretmesin.
-      if (res.status === 400 || res.status === 401 || res.status === 403) return 'invalid';
+      if (res.status === 400 || res.status === 401 || res.status === 403) {
+        if (opts.tokens.epoch() === epoch) {
+          await opts.tokens.clear();
+          opts.onSessionExpired?.();
+          return 'invalid';
+        }
+        return 'stale'; // arada logout/yeni giriş oldu — YENİ oturuma dokunma
+      }
       return 'network';
     }
     const pair = (await parseJson(res)) as unknown as TokenPairResponse | null;
     if (!pair?.accessToken) return 'network'; // bozuk 2xx gövdesi — oturumu düşürme
     const written = await opts.tokens.setPair(pair, epoch);
-    if (!written) return 'invalid'; // arada logout/kurum değişimi oldu — bayat yanıtı at
+    if (!written) return 'stale'; // arada logout/kurum değişimi oldu — bayat yanıtı at, YENİ oturuma dokunma
     return 'ok';
   }
 
@@ -122,9 +147,9 @@ export function createApiClient(opts: ApiClientOpts): ApiClient {
       });
       const outcome = await refreshing;
       if (outcome === 'ok') return request<T>(path, method, body, false);
-      if (outcome === 'invalid') {
-        await opts.tokens.clear();
-        opts.onSessionExpired?.();
+      // 'invalid'/'stale' yan etkisiz: clear + onSessionExpired doRefresh() İÇİNDE
+      // (epoch-korumalı, tek-uçuş) zaten yapıldı ya da bilinçli olarak ATLANDI.
+      if (outcome === 'invalid' || outcome === 'stale') {
         throw new ApiError(401, 'Oturum süresi doldu. Yeniden giriş yapın.');
       }
       throw new ApiError(0, 'Bağlantı kurulamadı. İnternetinizi kontrol edin.');
