@@ -1,17 +1,12 @@
-import { Text, View, StyleSheet } from "react-native";
+import { Redirect } from 'expo-router';
+import { useSession } from '../store/session';
+import { LoadingScreen } from '../ui/kit';
 
+// Duruma göre yönlendirici — ekranlar arası akışın tek karar noktası.
 export default function Index() {
-  return (
-    <View style={styles.container}>
-      <Text>Edit src/app/index.tsx to edit this screen.</Text>
-    </View>
-  );
+  const { status } = useSession();
+  if (status === 'loading') return <LoadingScreen />;
+  if (status === 'needs-org') return <Redirect href="/kurum" />;
+  if (status === 'needs-login') return <Redirect href="/giris" />;
+  return <Redirect href="/bugun" />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
