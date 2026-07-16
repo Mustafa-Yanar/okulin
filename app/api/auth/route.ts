@@ -4,67 +4,18 @@ import bcrypt from 'bcryptjs';
 import { tenantRedis, currentOrg } from '@/lib/tenant';
 import { orgFromHost } from '@/lib/org';
 import { normalizeBranding } from '@/lib/branding';
-import { getSession, setSession, clearSession, type Session } from '@/lib/auth';
+import { getSession, setSession, clearSession } from '@/lib/auth';
 import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait, safeLimit, isSuperadminIpAllowed } from '@/lib/ratelimit';
 import { logAudit, actorFrom } from '@/lib/audit';
-import { normalizeTurkishMobile } from '@/lib/phone';
 import { parseBody, z, zName, zPassword, zNewPassword, zId } from '@/lib/validate';
 import { sendOtp } from '@/lib/sms';
 import { getOrgConfig } from '@/lib/config';
 import { tdb } from '@/lib/sqldb';
-import type { ParentChild } from '@/lib/parents';
+import { verifyLogin, maskPhone, type RoleCategory } from '@/lib/login';
 
 // Bilinçli withAuth istisnası: bu route'un kendisi LOGIN ucu — oturum burada kurulur.
 // GET login ekranı için oturumsuz da çalışır; POST action'larının oturum gerektirenleri
 // (change_password, reset_password, update_director_name) kendi içinde getSession doğrular.
-
-// Rol tablolarından dönen kayıtların ortak görünümü (model başına alan farkları opsiyonel).
-interface RoleRow {
-  legacyId?: string;
-  name?: string | null;
-  phone?: string | null;
-  passwordHash: string;
-  mustChangePassword?: boolean;
-  branches?: string[];
-  allowedGroups?: string[];
-  class?: { legacyId: string } | null;
-  group?: string;
-  children?: unknown;
-}
-
-// makeLoginResponse'un beklediği eski (Redis) kayıt şekli.
-interface LegacyRec {
-  id: string;
-  name: string;
-  phone: string | null;
-  passwordHash: string;
-  mustChangePassword: boolean;
-  branches?: string[];
-  allowedGroups?: string[];
-  cls?: string;
-  group?: string;
-  children?: ParentChild[];
-  // eski kayıt fallback alanları (teacher)
-  branch?: string;
-  extraBranches?: string[];
-}
-
-// SQL rol satırını makeLoginResponse'un beklediği eski (Redis) kayıt şekline çevirir.
-// id = legacyId (parent: phone); student.cls = class.legacyId (cuid DEĞİL).
-function sqlRecToLegacy(role: string, r: (RoleRow & { phone?: string | null }) | null): LegacyRec | null {
-  if (!r) return null;
-  const base = { name: r.name || '', phone: r.phone || null, passwordHash: r.passwordHash, mustChangePassword: !!r.mustChangePassword };
-  if (role === 'teacher') return { ...base, id: r.legacyId || '', branches: r.branches || [], allowedGroups: r.allowedGroups || [] };
-  if (role === 'student') return { ...base, id: r.legacyId || '', cls: r.class?.legacyId || '', group: r.group };
-  if (role === 'parent') return { ...base, id: r.phone || '', name: r.name || '', children: ((r.children as ParentChild[] | null) || []) };
-  return { ...base, id: r.legacyId || '' }; // accountant | counselor | assistant_director
-}
-
-// Telefon numarasının ortasını maskele: "0532***67"
-function maskPhone(phone: string | null | undefined): string {
-  if (!phone || phone.length < 7) return '***';
-  return phone.slice(0, 4) + '***' + phone.slice(-2);
-}
 
 // action'a göre ayrışan gövde — her işlemin yalnız kendi alanları doğrulanır.
 const AuthSchema = z.discriminatedUnion('action', [
@@ -110,46 +61,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Katı rol seçimi + akıllı yönlendirme. Kullanıcı bir rol kartı seçer; bilgileri
-    // doğru ama seçtiği rol hesabın gerçek rolüyle uyuşmuyorsa, doğru girişe yönlendir.
-    // selectedRole yoksa (eski client) kapı devre dışı — geri uyumlu.
     const selectedRole = data.role;
-    const CATEGORY_LABEL: Record<string, string> = { student: 'Öğrenci', parent: 'Veli', teacher: 'Öğretmen', management: 'Yönetim' };
-    function roleCategory(role: string): string {
-      if (role === 'student') return 'student';
-      if (role === 'parent') return 'parent';
-      if (role === 'teacher') return 'teacher';
-      return 'management'; // director, accountant, org_admin, superadmin
-    }
-    function gateMismatch(actualRole: string): NextResponse | null {
-      if (!selectedRole) return null;
-      const actualCat = roleCategory(actualRole);
-      if (actualCat === selectedRole) return null;
-      return NextResponse.json({
-        error: `Bu bilgiler ${CATEGORY_LABEL[actualCat]} hesabına ait. Lütfen "${CATEGORY_LABEL[actualCat]}" girişini kullanın.`,
-        correctRole: actualCat,
-      }, { status: 403 });
-    }
 
-    // Cihaz tanıma: güvenilir cihaz cookie'si var ve Redis'te geçerliyse OTP atlanır.
-    // NOT: cihaz tanıma alt-sistemi (device:*) SQL'e taşınmadı — kısa ömürlü/geçici veri,
-    // Redis TTL doğası ile uyumlu. Ayrı bir göç işi.
+    // ── superadmin 2FA cihaz tanıma (KORUNUR — yalnız superadmin bloğu kullanır) ──
+    // NOT (2026-07-16): normal rollerin OTP/cihaz doğrulaması ASKIYA ALINDI (Mustafa).
+    // Aşağıdaki maybeOtp/isKnownDevice yalnız superadmin login'inde çağrılır; normal
+    // roller verifyLogin sonrası doğrudan cookie alır. Kod korunur (geri getirilebilir).
     const deviceToken = req.cookies.get('device_token')?.value;
-    async function isKnownDevice(roleCategory: string): Promise<boolean> {
+    async function isKnownDevice(cat: string): Promise<boolean> {
       if (!deviceToken) return false;
-      const key = `device:${roleCategory}:${username}:${deviceToken}`;
-      const data = await redis.get(key);
-      return !!data;
+      const found = await redis.get(`device:${cat}:${username}:${deviceToken}`);
+      return !!found;
     }
-
-    // Cihaz tanınmadığında OTP akışını başlat (telefon varsa SMS gönder).
-    async function maybeOtp(roleCategory: string, phone: string | null): Promise<NextResponse | null> {
-      const known = await isKnownDevice(roleCategory);
-      if (known) return null; // null = OTP yok, normal login devam etsin
-      if (!phone) return null; // telefon kayıtlı değil → OTP atla (geri uyumluluk)
-      // SMS GÖNDERİLEMEZSE OTP'yi ATLA — aksi halde kullanıcı, kod hiç gelmeyen bir
-      // doğrulama ekranında KİLİTLİ kalıyordu (ör. Twilio yapılandırılmamış). OTP
-      // yalnız SMS gerçekten gidebiliyorsa zorunlu olur; gidemezse login normal sürer.
+    async function maybeOtp(cat: string, phone: string | null): Promise<NextResponse | null> {
+      const known = await isKnownDevice(cat);
+      if (known) return null;
+      if (!phone) return null;
       try {
         await sendOtp(phone);
       } catch {
@@ -158,66 +85,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ needsOtp: true, phone: maskPhone(phone) }, { status: 200 });
     }
 
-    // Kayıttan oturum yanıtı üret (rol bazlı payload).
-    async function makeLoginResponse(role: string, rec: LegacyRec): Promise<NextResponse> {
-      const gate = gateMismatch(role);
-      if (gate) return gate;
-
-      // Modül geçidi (veli): veli paneli tek route'a değil çok sayıda paylaşılan uca
-      // yayılır (program/davranış/ödev/rehberlik/ödeme) → withAuth('...','veli') temiz
-      // olmaz. Onun yerine kaldıracı LOGIN'e koyuyoruz: kurum veli modülünü kapattıysa
-      // veli hiç giriş yapamaz (panelin tüm yüzeyi böylece kapanır).
-      if (role === 'parent') {
-        const { getOrgConfig } = await import('@/lib/config');
-        const mods = await getOrgConfig('modules');
-        if (mods.veli === false) {
-          return NextResponse.json({ error: 'Veli girişi bu kurumda kapalı' }, { status: 403 });
-        }
-      }
-
-      // Cihaz tanıma — roleCategory = selectedRole varsa o, yoksa gerçek rolden türetilir
-      const cat = selectedRole || roleCategory(role);
-      const phone = rec.phone || null;
-      const otpRes = await maybeOtp(cat, phone);
-      if (otpRes) return otpRes;
-
-      let payload: Session;
-      if (role === 'teacher') {
-        const branches = Array.isArray(rec.branches) ? rec.branches
-          : [rec.branch, ...(rec.extraBranches || [])].filter((b): b is string => Boolean(b)); // eski kayıt fallback
-        payload = { role: 'teacher', id: rec.id, name: rec.name, branches, allowedGroups: rec.allowedGroups || [], mustChangePassword: !!rec.mustChangePassword };
-      } else if (role === 'student') {
-        payload = { role: 'student', id: rec.id, name: rec.name, cls: rec.cls, group: rec.group, mustChangePassword: !!rec.mustChangePassword };
-      } else if (role === 'parent') {
-        const children = Array.isArray(rec.children) ? rec.children : [];
-        // Veli adı: kayıttaki gerçek ad (öğrenci formundan girilir). Header her zaman dolu
-        // olmalı → ad yoksa eski türetmeye düş. parentName ise SADECE gerçek ad (panel
-        // karşılaması için; boşsa karşılama gösterilmez).
-        const realName = rec.name || '';
-        const headerName = realName || (children.length === 1 ? `${children[0].name} (Veli)` : 'Veli');
-        payload = { role: 'parent', id: rec.id, name: headerName, parentName: realName, children, mustChangePassword: !!rec.mustChangePassword };
-      } else if (role === 'assistant_director') {
-        // Müdür yardımcısı: oturumda MÜDÜRLE BİREBİR aynı → role='director'. asst:true
-        // yalnız UI etiketi ("Müdür Yardımcısı") + audit ayrımı için. id = kendi legacyId'si
-        // (müdür 'director' sabitinden ayrışır, şifre değişimi kendi kaydını hedefler).
-        payload = { role: 'director', asst: true, id: rec.id, name: rec.name, mustChangePassword: !!rec.mustChangePassword };
-      } else { // accountant veya counselor (rehber) — aynı şekil
-        payload = { role, id: rec.id, name: rec.name, mustChangePassword: !!rec.mustChangePassword };
-      }
-      const res = NextResponse.json(payload);
-      await setSession(res, payload);
-      return res;
-    }
-
-    // Superadmin (global, kurum-bağımsız).
+    // Superadmin (global, kurum-bağımsız) — WEB'E ÖZGÜ, mobilde HİÇ üretilmez.
     // GÜVENLİK: yalnız gizli süper-admin sayfasından (role:'superadmin') denenebilir.
-    // Normal "Yönetim" girişi (role:'management' veya role yok) superadmin'i HİÇ kontrol
-    // etmez → süper-admin varlığı kurum giriş ekranından sızmaz/denenmez.
     if (selectedRole === 'superadmin') {
       // GÜVENLİK: süper-admin YALNIZ apex domain'den (okulin.com) girilebilir.
-      // Kurum subdomain'inde (testkurs.okulin.com) süper-admin girişi reddedilir —
-      // kurum-üstü rol, kurum bağlamından tamamen ayrı tutulur. orgFromHost apex/www'da
-      // null, subdomain'de kurum slug'ı döner.
       const host = headers().get('host');
       if (orgFromHost(host)) {
         return NextResponse.json({ error: 'Süper yönetici girişi bu adresten yapılamaz.' }, { status: 403 });
@@ -231,7 +102,7 @@ export async function POST(req: NextRequest) {
         const ok = await bcrypt.compare(password, superadmin.passwordHash);
         if (ok) {
           const saName = (superadmin as { name?: string }).name || 'Süper Admin';
-          // 2FA: telefon kayıtlıysa + cihaz tanınmıyorsa OTP iste (mevcut cihaz-tanıma altyapısı).
+          // 2FA: telefon kayıtlıysa + cihaz tanınmıyorsa OTP iste (KORUNUR).
           const otpRes = await maybeOtp('superadmin', superadmin.phone || null);
           if (otpRes) return otpRes;
           const res = NextResponse.json({ role: 'superadmin', name: saName });
@@ -239,61 +110,24 @@ export async function POST(req: NextRequest) {
           return res;
         }
       }
-      // superadmin sayfasından gelen başarısız deneme → sadece superadmin denenir,
-      // başka role'e düşmesin (kurum hesapları bu kapıdan girmesin).
       return NextResponse.json({ error: 'Kullanıcı adı veya şifre hatalı.' }, { status: 401 });
     }
 
-    // Org_admin (kurum-geneli, şube-bağımsız).
-    const org = currentOrg();
-    const orgAdmin = await tdb().orgAdmin.findFirst({ where: { orgSlug: org, username } });
-    if (orgAdmin && orgAdmin.username === username) {
-      const ok = await bcrypt.compare(password, orgAdmin.passwordHash);
-      if (ok) {
-        const gate = gateMismatch('org_admin'); if (gate) return gate;
-        // Org admin için cihaz tanıma yok
-        const res = NextResponse.json({ role: 'org_admin', name: orgAdmin.name });
-        await setSession(res, { role: 'org_admin', id: 'org_admin', name: orgAdmin.name || undefined });
-        return res;
-      }
+    // Ortak çekirdek: org_admin/director/rol tabloları/veli zinciri + rol kapısı +
+    // veli modül geçidi (lib/login.ts — mobil login de aynı çekirdeği kullanır).
+    // superadmin bloğu yukarıda return etti; kalan selectedRole RoleCategory'dir (cast).
+    const result = await verifyLogin(username, password, selectedRole as RoleCategory | undefined);
+    if (!result.ok) {
+      return NextResponse.json(
+        result.correctRole ? { error: result.error, correctRole: result.correctRole } : { error: result.error },
+        { status: result.status }
+      );
     }
 
-    // Director (zaten O(1)) — Director tablosundan username ile.
-    const director = await tdb().director.findFirst({ where: { username } });
-    if (director && director.username === username) {
-      const ok = await bcrypt.compare(password, director.passwordHash);
-      if (ok) {
-        const gate = gateMismatch('director'); if (gate) return gate;
-        // Director: cihaz tanıma uygula (Director kaydında telefon yok → OTP atlanır)
-        const otpRes = await maybeOtp('management', (director as { phone?: string | null }).phone || null);
-        if (otpRes) return otpRes;
-        const res = NextResponse.json({ role: 'director', name: director.name });
-        await setSession(res, { role: 'director', id: 'director', name: director.name });
-        return res;
-      }
-    }
-
-    // Rol tablolarını username ile doğrudan sorgula.
-    // Sıra: assistant_director→accountant→counselor→teacher→student, sonra veli.
-    const normP = normalizeTurkishMobile(username);
-    const tryRole = async (role: string, sqlRec: RoleRow | null): Promise<NextResponse | null> => {
-      const rec = sqlRecToLegacy(role, sqlRec);
-      if (!rec) return null;
-      const ok = await bcrypt.compare(password, rec.passwordHash);
-      if (!ok) return null;
-      return makeLoginResponse(role, rec);
-    };
-    let r: NextResponse | null;
-    r = await tryRole('assistant_director', await tdb().assistantDirector.findFirst({ where: { username } })); if (r) return r;
-    r = await tryRole('accountant', await tdb().accountant.findFirst({ where: { username } })); if (r) return r;
-    r = await tryRole('counselor', await tdb().counselor.findFirst({ where: { username } })); if (r) return r;
-    r = await tryRole('teacher', await tdb().teacher.findFirst({ where: { username } })); if (r) return r;
-    r = await tryRole('student', await tdb().student.findFirst({ where: { username }, include: { class: { select: { legacyId: true } } } })); if (r) return r;
-    // Veli: kullanıcı adı = telefon (ham veya kanonik); kayıtlı phone kanonik.
-    const phones = [username, normP].filter((p): p is string => Boolean(p));
-    const parent = phones.length ? await tdb().parent.findFirst({ where: { phone: { in: phones } } }) : null;
-    r = await tryRole('parent', parent); if (r) return r;
-    return NextResponse.json({ error: 'Kullanıcı adı veya şifre hatalı' }, { status: 401 });
+    // OTP ASKIYA ALINDI — normal roller şifre doğruysa doğrudan giriş yapar.
+    const res = NextResponse.json(result.payload);
+    await setSession(res, result.payload);
+    return res;
   }
 
   if (action === 'setup_director') {

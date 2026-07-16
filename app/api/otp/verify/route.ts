@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
 import { verifyOtp } from '@/lib/sms';
 import { tenantRedis } from '@/lib/tenant';
-import { normalizeTurkishMobile } from '@/lib/phone';
 import { parseBody, z } from '@/lib/validate';
-import { tdb } from '@/lib/sqldb';
 import { notifyNewDeviceLogin } from '@/lib/notify';
+import { getOtpIdentity } from '@/lib/login';
 
 import { newId as makeId } from '@/lib/id';
 
@@ -15,42 +14,6 @@ const Schema = z.object({
 });
 
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
-
-// Kullanıcı adı + rol kategorisinden hesabın telefonu + push kimliğini bul.
-// login action ile aynı arama mantığını kullanır. pushRole/pushId, push aboneliğinin
-// anahtarladığı (session.role, session.id) ile BİREBİR eşleşmeli (bkz. auth/route.ts):
-//   teacher/student/accountant/counselor → legacyId, parent → telefon, director → 'director'.
-interface OtpIdentity { phone: string | null; pushRole: string; pushId: string; }
-
-async function getOtpIdentity(username: string, roleCategory: string): Promise<OtpIdentity | null> {
-  if (roleCategory === 'superadmin') {
-    const sa = await tdb().superAdmin.findFirst({ where: { username } });
-    if (!sa) return null;
-    return { phone: sa.phone || null, pushRole: 'superadmin', pushId: 'superadmin' };
-  }
-  if (roleCategory === 'management') {
-    const dir = await tdb().director.findFirst({ where: { username } });
-    // NOT: Director modelinde phone kolonu yok → telefonsuz → OTP'ye hiç girmez (push moot).
-    if (dir) return { phone: (dir as typeof dir & { phone?: string | null }).phone || null, pushRole: 'director', pushId: 'director' };
-    const acc = await tdb().accountant.findFirst({ where: { username } });
-    if (acc) return { phone: acc.phone || null, pushRole: 'accountant', pushId: acc.legacyId };
-    const cou = await tdb().counselor.findFirst({ where: { username } });
-    if (cou) return { phone: cou.phone || null, pushRole: 'counselor', pushId: cou.legacyId };
-    return null;
-  }
-  if (roleCategory === 'parent') {
-    const normPhone = normalizeTurkishMobile(username);
-    const p = await tdb().parent.findFirst({ where: { phone: normPhone || username } });
-    if (!p) return null;
-    const ph = normPhone || username;
-    return { phone: ph, pushRole: 'parent', pushId: ph };
-  }
-  const rec = roleCategory === 'teacher'
-    ? await tdb().teacher.findFirst({ where: { username } })
-    : await tdb().student.findFirst({ where: { username } });
-  if (!rec) return null;
-  return { phone: rec.phone || null, pushRole: roleCategory, pushId: rec.legacyId };
-}
 
 // Bilinçli withAuth istisnası: OTP login akışının parçası — oturum henüz yok.
 export async function POST(req: Request) {
