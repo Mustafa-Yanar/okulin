@@ -105,18 +105,24 @@ test.describe('Mobil push kaydı + F1 hesap silme (canlı)', () => {
 
   test("eşzamanlı iki kayıt aynı token ile yarışırsa ikisi de 200 (P2002 retry)", async () => {
     const tokC = 'e2e-fcm-' + crypto.randomUUID();
+    const instC1 = 'e2e-inst-' + crypto.randomUUID();
+    const instC2 = 'e2e-inst-' + crypto.randomUUID();
     const [r1, r2] = await Promise.all([
       api.post(`${BASE}/api/mobile/v1/push/register`, {
         headers: H(),
-        data: { installationId: 'e2e-inst-' + crypto.randomUUID(), platform: 'android', token: tokC },
+        data: { installationId: instC1, platform: 'android', token: tokC },
       }),
       api.post(`${BASE}/api/mobile/v1/push/register`, {
         headers: H(),
-        data: { installationId: 'e2e-inst-' + crypto.randomUUID(), platform: 'android', token: tokC },
+        data: { installationId: instC2, platform: 'android', token: tokC },
       }),
     ]);
     expect(r1.status(), await r1.text()).toBe(200);
     expect(r2.status(), await r2.text()).toBe(200);
+
+    // Canlıda yetim kayıt bırakma — biri devralma yarışında zaten silinmiş olabilir (idempotent 200).
+    await api.delete(`${BASE}/api/mobile/v1/push/register`, { headers: H(), data: { installationId: instC1 } });
+    await api.delete(`${BASE}/api/mobile/v1/push/register`, { headers: H(), data: { installationId: instC2 } });
   });
 
   test('F1: rehber silinince mobil erişim ANINDA ölür (+ sahiplik 409)', async () => {
