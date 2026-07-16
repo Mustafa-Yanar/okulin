@@ -6,6 +6,7 @@ import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zName, zId } from '@/lib/validate';
 import { tdb, withScope } from '@/lib/sqldb';
 import { newId as makeId } from '@/lib/id';
+import { purgeMobileAccess } from '@/lib/mobile/purge';
 
 // Muhasebeci hesapları — müdür oluşturur/yönetir.
 
@@ -56,7 +57,11 @@ export const DELETE = withAuth(['director'], async (req, _ctx, session) => {
   const { id } = parsed.data;
 
   const a = await tdb().accountant.findFirst({ where: { legacyId: id } });
-  if (a) await tdb().accountant.delete({ where: { id: a.id } });
+  if (a) {
+    // Mobil erişim iptali SİLMEDEN ÖNCE ve fail-loud (F1) — bkz lib/mobile/purge.ts.
+    await purgeMobileAccess('accountant', [id], 'hesap silindi');
+    await tdb().accountant.delete({ where: { id: a.id } });
+  }
   await logAudit({
     ...actorFrom(session),
     action: 'accountant.delete',

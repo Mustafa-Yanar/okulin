@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { tdb, withScope } from './sqldb';
+import { purgeMobileAccess } from './mobile/purge';
+import { revokeMobileSessionsFor } from './mobile/sessions';
 
 // Veli (parent) — TELEFON-BAZLI kimlik. Bir veli telefonu → o telefonu `parentPhone`
 // olarak taşıyan TÜM öğrenciler (kardeşler tek girişte).
@@ -47,7 +49,12 @@ export async function syncParents() {
     }
   }
   for (const p of existing) {
-    if (!map.has(p.phone)) { await tdb().parent.delete({ where: { id: p.id } }); removed++; }
+    if (!map.has(p.phone)) {
+      // Mobil erişim iptali SİLMEDEN ÖNCE ve fail-loud (F1) — veli userId'si telefon.
+      await purgeMobileAccess('parent', [p.phone], 'hesap silindi');
+      await tdb().parent.delete({ where: { id: p.id } });
+      removed++;
+    }
   }
   const totalChildren = Array.from(map.values()).reduce((s, a) => s + a.children.length, 0);
   const totalStudents = await tdb().student.count();
@@ -73,5 +80,12 @@ export async function resetParent(phone: string): Promise<boolean> {
   const rec = await tdb().parent.findFirst({ where: { phone } });
   if (!rec) return false;
   await tdb().parent.update({ where: { id: rec.id }, data: { passwordHash: await bcrypt.hash(phone, 10), mustChangePassword: true } });
+  // Şifre sıfırlanınca mobil oturumlar da kapanır (auth route reset paritesi).
+  // Best-effort: iptal hatası şifre sıfırlamayı geri döndürmez.
+  try {
+    await revokeMobileSessionsFor('parent', phone, 'şifre sıfırlandı');
+  } catch (e) {
+    console.warn('[mobil] veli şifre sıfırlamada oturum iptali başarısız:', e instanceof Error ? e.message : e);
+  }
   return true;
 }

@@ -16,6 +16,11 @@ const TENANT_MODELS = [
   'slotBooking', 'tenantConfig', 'finance', 'expense', 'attendance', 'behavior', 'exam',
   'odev', 'hedef', 'etkinlik', 'form', 'lead', 'announcement', 'resource', 'topic',
   'guidance', 'auditLog', 'errLog', 'pushSub', 'payOrder',
+  // Mobil + bildirim tabloları (Plan 3, İnceleme Codex #5): kurum silinince cihaz
+  // oturumları/kayıtları ve bildirim kuyruğu da gitmeli — kalan MobileSession,
+  // silinmiş kurumun host'unda çalışmaya devam ederdi.
+  'assistantDirector', 'notifLog', 'notificationEvent', 'notificationDelivery',
+  'mobileSession', 'deviceInstallation',
 ];
 
 // Erişim: yalnız superadmin rolü (withAuth(['superadmin'])).

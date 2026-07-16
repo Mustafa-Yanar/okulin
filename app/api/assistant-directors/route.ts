@@ -6,6 +6,7 @@ import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zName, zId } from '@/lib/validate';
 import { tdb, withScope } from '@/lib/sqldb';
 import { newId as makeId } from '@/lib/id';
+import { purgeMobileAccess } from '@/lib/mobile/purge';
 
 // Müdür yardımcısı (assistant_director) hesapları — müdür oluşturur/yönetir.
 // Müdür yardımcısı = müdürle BİREBİR aynı yetki (login sonrası oturum role='director'
@@ -58,7 +59,12 @@ export const DELETE = withAuth(['director'], async (req, _ctx, session) => {
   const { id } = parsed.data;
 
   const a = await tdb().assistantDirector.findFirst({ where: { legacyId: id } });
-  if (a) await tdb().assistantDirector.delete({ where: { id: a.id } });
+  if (a) {
+    // Mobil erişim iptali SİLMEDEN ÖNCE ve fail-loud (F1). Müdür yardımcısı mobil
+    // oturumda role='director' + userId=legacyId taşır (şifre-sıfırlama paritesi).
+    await purgeMobileAccess('director', [id], 'hesap silindi');
+    await tdb().assistantDirector.delete({ where: { id: a.id } });
+  }
   await logAudit({
     ...actorFrom(session),
     action: 'assistantDirector.delete',

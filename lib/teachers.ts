@@ -6,6 +6,7 @@ import { defaultCoursesFor } from '@/lib/classes';
 import { HttpError } from '@/lib/errors';
 import { tdb, withScope } from '@/lib/sqldb';
 import { newId as makeId } from '@/lib/id';
+import { purgeMobileAccess } from '@/lib/mobile/purge';
 import type { Class, Prisma, TeacherPreset } from '@prisma/client';
 
 // Öğretmen servis katmanı — DB + iş kuralı + preset süzme. Route yalnız withAuth+
@@ -146,6 +147,10 @@ export async function updateTeacher(input: TeacherUpdateInput): Promise<void> {
 // Öğretmen sil (cascade: presets/etut/slot). Döner: audit için { name } (yoksa id fallback).
 export async function deleteTeacher(id: string): Promise<{ name: string }> {
   const t = await tdb().teacher.findFirst({ where: { legacyId: id } });
-  if (t) await tdb().teacher.delete({ where: { id: t.id } });
+  if (t) {
+    // Mobil erişim iptali SİLMEDEN ÖNCE ve fail-loud (F1) — bkz lib/mobile/purge.ts.
+    await purgeMobileAccess('teacher', [id], 'hesap silindi');
+    await tdb().teacher.delete({ where: { id: t.id } });
+  }
   return { name: t?.name || id };
 }

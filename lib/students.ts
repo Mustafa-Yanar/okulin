@@ -5,6 +5,7 @@ import { initialPassword } from '@/lib/auth';
 import { HttpError } from '@/lib/errors';
 import { tdb, withScope } from '@/lib/sqldb';
 import { newId as makeId } from '@/lib/id';
+import { purgeMobileAccess } from '@/lib/mobile/purge';
 import type { Prisma } from '@prisma/client';
 
 // Öğrenci servis katmanı — DB + iş kuralı + validasyon. Route yalnız withAuth+parseBody+
@@ -163,12 +164,17 @@ export async function updateStudent(input: StudentUpdateInput): Promise<void> {
 // Tekil sil. Döner: audit için { name, cls } (yoksa id fallback + boş cls).
 export async function deleteStudent(id: string): Promise<{ name: string; cls: string }> {
   const s = await tdb().student.findFirst({ where: { legacyId: id }, include: { class: true } });
-  if (s) await tdb().student.delete({ where: { id: s.id } }); // cascade: finance/behavior
+  if (s) {
+    // Mobil erişim iptali SİLMEDEN ÖNCE ve fail-loud (F1) — bkz lib/mobile/purge.ts.
+    await purgeMobileAccess('student', [id], 'hesap silindi');
+    await tdb().student.delete({ where: { id: s.id } }); // cascade: finance/behavior
+  }
   return { name: s?.name || id, cls: s?.class?.legacyId || '' };
 }
 
 // Toplu sil. Döner: silinen sayısı (girdi id sayısı — mevcut davranış).
 export async function bulkDeleteStudents(ids: string[]): Promise<number> {
+  await purgeMobileAccess('student', ids, 'hesap silindi'); // F1 — silmeden önce
   await tdb().student.deleteMany({ where: { legacyId: { in: ids } } }); // cascade: finance/behavior
   return ids.length;
 }

@@ -6,6 +6,7 @@ import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zName, zId } from '@/lib/validate';
 import { tdb, withScope } from '@/lib/sqldb';
 import { newId as makeId } from '@/lib/id';
+import { purgeMobileAccess } from '@/lib/mobile/purge';
 
 // Rehber (guidance counselor) hesapları — müdür oluşturur/yönetir.
 // Rehber = müdür yetkileri eksi muhasebe (bkz lib/auth.js isManager).
@@ -58,7 +59,11 @@ export const DELETE = withAuth(['director'], async (req, _ctx, session) => {
   const { id } = parsed.data;
 
   const a = await tdb().counselor.findFirst({ where: { legacyId: id } });
-  if (a) await tdb().counselor.delete({ where: { id: a.id } });
+  if (a) {
+    // Mobil erişim iptali SİLMEDEN ÖNCE ve fail-loud (F1) — bkz lib/mobile/purge.ts.
+    await purgeMobileAccess('counselor', [id], 'hesap silindi');
+    await tdb().counselor.delete({ where: { id: a.id } });
+  }
   await logAudit({
     ...actorFrom(session),
     action: 'counselor.delete',
