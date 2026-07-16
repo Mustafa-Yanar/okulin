@@ -55,6 +55,25 @@ export const errorLogRatelimit = new Ratelimit({
   prefix: 'rl:errlog',
 });
 
+// Mobil push cihaz kaydı: 20 kayıt / 10 dakika (IP başına).
+// Meşru istemci login/açılış/rotasyon başına 1 kayıt yapar; token-flood'u keser.
+export const mobileRegisterRatelimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(20, '10 m'),
+  analytics: false,
+  prefix: 'rl:mreg',
+});
+
+// Mobil refresh: 120 istek / 10 dakika (IP başına — NAT arkasında çok cihaz olabilir;
+// meşru cihaz ~15 dk'da 1 refresh yapar). Refresh-token taramasını yavaşlatır
+// (Plan 2 devri Codex #10/#11'in IP katmanı).
+export const mobileRefreshRatelimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(120, '10 m'),
+  analytics: false,
+  prefix: 'rl:mref',
+});
+
 export interface LimitResult {
   success: boolean;
   reset: number;

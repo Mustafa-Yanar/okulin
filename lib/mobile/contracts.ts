@@ -30,3 +30,14 @@ export const MobileConfigUpdateSchema = z.object({
   maintenanceMessage: z.string().max(500).nullable().optional(),
   flags: z.record(z.boolean()).optional(),
 });
+
+export const PushRegisterSchema = z.object({
+  installationId: z.string().min(8).max(100),
+  platform: z.enum(['android', 'ios']),
+  token: z.string().min(10).max(4096),
+  appVersion: z.string().max(20).optional(),
+});
+
+export const PushUnregisterSchema = z.object({
+  installationId: z.string().min(8).max(100),
+});

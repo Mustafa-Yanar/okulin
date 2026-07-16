@@ -61,6 +61,16 @@ export async function loadActiveSession(sid: string): Promise<{ revokedAt: Date 
   });
 }
 
+// Oturumun bağlı olduğu installationId — logout/cihaz-iptali push bağını koparırken
+// kullanılır. orgSlug=currentOrg(): başka kurumun sid'i bu host'ta bulunamaz.
+export async function installationIdOf(sid: string): Promise<string | null> {
+  const s = await tdb().mobileSession.findFirst({
+    where: { id: sid, orgSlug: currentOrg() },
+    select: { installationId: true },
+  });
+  return s?.installationId ?? null;
+}
+
 export type RefreshOutcome =
   | { ok: true; pair: MobileTokenPair; payload: Session }
   | { ok: false; status: number; error: string };
