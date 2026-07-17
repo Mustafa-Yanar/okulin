@@ -155,9 +155,22 @@ export async function dispatchDue(limit = 200): Promise<{ processed: number; sen
     orderBy: { nextAttemptAt: 'asc' },
     take: limit,
   });
+  if (due.length === 0) return { processed: 0, sent: 0, retried: 0, dead: 0 };
+
+  // Event toplu ön-yükleme (Plan 3 Minor #2): eski döngü teslimat başına event
+  // findUnique atıyordu — tek IN sorgusuna iner (event immutable, ön-yükleme risksiz).
+  // SAHİPLİK kontrolü İSE bilinçli olarak per-item ve gönderimden HEMEN ÖNCE kalır
+  // (İnceleme Codex #2): sahipliği batch başında okumak, token devri sırasında eski
+  // kullanıcının bildirimini yeni sahibe gönderebilecek saniyeler mertebesinde bir
+  // TOCTOU penceresi açardı (KVKK). N teslimat = 2N+1 sorgu (3N+'dan iner).
+  const events = await prisma.notificationEvent.findMany({
+    where: { id: { in: [...new Set(due.map((d) => d.eventId))] } },
+  });
+  const evById = new Map(events.map((e) => [e.id, e]));
+
   let sent = 0, retried = 0, dead = 0;
   for (const d of due) {
-    const ev = await prisma.notificationEvent.findUnique({ where: { id: d.eventId } });
+    const ev = evById.get(d.eventId);
     if (!ev) { // event silinmiş (retention) → teslimatı kapat
       await prisma.notificationDelivery.update({ where: { id: d.id }, data: { status: 'dead', lastError: 'event yok' } });
       dead++;
@@ -170,13 +183,15 @@ export async function dispatchDue(limit = 200): Promise<{ processed: number; sen
     // kullanıcının bildirimi cihazın YENİ sahibine gider. Gönderimden hemen önce
     // hedefin hâlâ event'in kullanıcısına bağlı olduğunu doğrula; değilse teslimatı
     // kapat (anında gönderim yolu bu kontrolden muaf — fan-out aynı istekte taze).
+    // branch koşulu YENİ (İnceleme Codex #1): aynı kurumun iki şubesinde aynı
+    // legacyId olabilir — şube de eşleşmeli (mevcut kodda eksikti, bilinçli sıkılaştırma).
     const stillOwned = d.provider === 'webpush'
       ? await prisma.pushSub.findFirst({
-          where: { endpoint: d.target, orgSlug: ev.orgSlug, role: ev.role, userId: ev.userId },
+          where: { endpoint: d.target, orgSlug: ev.orgSlug, branch: ev.branch, role: ev.role, userId: ev.userId },
           select: { id: true },
         })
       : await prisma.deviceInstallation.findFirst({
-          where: { provider: d.provider, token: d.target, enabled: true, orgSlug: ev.orgSlug, role: ev.role, userId: ev.userId },
+          where: { provider: d.provider, token: d.target, enabled: true, orgSlug: ev.orgSlug, branch: ev.branch, role: ev.role, userId: ev.userId },
           select: { id: true },
         });
     if (!stillOwned) {

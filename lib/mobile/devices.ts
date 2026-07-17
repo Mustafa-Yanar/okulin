@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { currentOrg, currentBranch } from '@/lib/tenant';
 
@@ -29,9 +30,14 @@ export async function registerDevice(role: string, userId: string, input: Regist
   // Token da farklıysa 'conflict' → route 409 döner, istemci YENİ installationId
   // üretip bir kez tekrar dener (mobile/src/push.ts). Böylece sızmış/tahmin edilmiş
   // bir installationId ile başka hesabın push bağı düşürülemez.
+  // Token karşılaştırması sabit-zamanlı (Plan 3 Minor #4): token cihaz-yerel sır —
+  // uzunluk farkını da gizlemek için sha256 özetleri karşılaştırılır.
+  const tokenMatches = (a: string, b: string) =>
+    timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest());
+
   const existing = await prisma.deviceInstallation.findUnique({ where: { id: input.installationId } });
   const sameOwner = existing != null && existing.role === role && existing.userId === userId && existing.orgSlug === org;
-  if (existing && !sameOwner && existing.token !== input.token) return 'conflict';
+  if (existing && !sameOwner && !tokenMatches(existing.token, input.token)) return 'conflict';
 
   // Token devri: aynı (provider,token) BAŞKA installationId'de kaldıysa (sil-kur,
   // cihaz sıfırlama) eski satır ölüdür → sil, yoksa upsert P2002'ye çarpar.

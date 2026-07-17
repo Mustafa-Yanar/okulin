@@ -140,7 +140,9 @@ export async function revokeMobileSessionsFor(role: string, userId: string, reas
   return r.count;
 }
 
-export interface DeviceView {
+// İç satır tipi (Date alanlı) — wire tipi api-types.ts'teki DeviceView (string alanlı,
+// JSON.stringify Date→ISO çevirir). Ad ayrımı Plan 3 Minor #3.
+export interface MobileDeviceRow {
   id: string;
   deviceName: string | null;
   platform: string | null;
@@ -149,7 +151,7 @@ export interface DeviceView {
   current: boolean;
 }
 
-export async function listMobileDevices(role: string, userId: string, currentSid: string): Promise<DeviceView[]> {
+export async function listMobileDevices(role: string, userId: string, currentSid: string): Promise<MobileDeviceRow[]> {
   const rows = await tdb().mobileSession.findMany({
     where: { orgSlug: currentOrg(), role, userId, revokedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { lastUsedAt: 'desc' },
