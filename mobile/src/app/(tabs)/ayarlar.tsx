@@ -1,11 +1,11 @@
 import { useCallback, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { useSession } from '../store/session';
-import { Screen, Title, Sub, Button, Card, palette } from '../ui/kit';
-import { rolEtiketi } from '../rol';
-import { confirmLeaveOrg } from '../confirm';
-import type { DevicesResponse, DeviceView } from '../api/types';
+import { useSession } from '../../store/session';
+import { Screen, Title, Sub, Button, Card, palette } from '../../ui/kit';
+import { rolEtiketi } from '../../rol';
+import { confirmLeaveOrg } from '../../confirm';
+import type { DevicesResponse, DeviceView } from '../../api/types';
 
 // Ayarlar: profil özeti + cihaz oturumları (listele / tek tek iptal / tümünden
 // çıkış — spec §7) + çıkış + kurumdan ayrıl.

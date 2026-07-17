@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import * as Sentry from '@sentry/react-native';
 import { SENTRY_DSN } from '../config';
 import { SessionProvider } from '../store/session';
+import { UnreadBadgeProvider } from '../store/badge';
 import { BootstrapGate } from '../ui/Gate';
 
 // Crash raporlama (spec §17, 3/3 karar): EU/Frankfurt, PII kapalı, replay YOK,
@@ -28,9 +29,11 @@ Notifications.setNotificationHandler({
 function RootLayout() {
   return (
     <SessionProvider>
-      <BootstrapGate>
-        <Stack screenOptions={{ headerShown: false }} />
-      </BootstrapGate>
+      <UnreadBadgeProvider>
+        <BootstrapGate>
+          <Stack screenOptions={{ headerShown: false }} />
+        </BootstrapGate>
+      </UnreadBadgeProvider>
     </SessionProvider>
   );
 }

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'expo-router';
 import { AppState, StyleSheet, Text, View } from 'react-native';
-import { useSession } from '../store/session';
-import { currentPermission, enablePush, refreshRegistration, watchTokenRotation, type EnableResult, type RegisterBase } from '../push';
-import { Screen, Title, Sub, Card, Button, palette } from '../ui/kit';
-import { rolEtiketi } from '../rol';
+import { useSession } from '../../store/session';
+import { currentPermission, enablePush, refreshRegistration, watchTokenRotation, type EnableResult, type RegisterBase } from '../../push';
+import { Screen, Title, Sub, Card, Button, palette } from '../../ui/kit';
+import { rolEtiketi } from '../../rol';
 
 export default function BugunEkrani() {
   const { org, session, api, installationId, appVersion, rotateInstallationId } = useSession();
