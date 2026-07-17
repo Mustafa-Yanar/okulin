@@ -49,3 +49,17 @@ export const InboxReadSchema = z
     all: z.boolean().optional(),
   })
   .refine((d) => Boolean(d.eventId) !== Boolean(d.all), { message: 'eventId veya all (yalnız biri) gerekli' });
+
+// Etüt rezervasyon (mobil — yalnız öğrenci kendini yazar; studentId GÖNDERİLMEZ,
+// server session.id kullanır). weekKey opsiyonel (yoksa server trToday).
+export const ReserveEtutSchema = z.object({
+  teacherId: z.string().min(1).max(100),
+  etutId: z.string().min(1).max(100),
+  branch: z.string().max(60).optional(),
+  // W01-W53 (İnceleme Codex #11): W00/W99 gibi biçimsel-geçerli ama anlamsız haftalar reddedilir.
+  weekKey: z.string().regex(/^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$/).optional(),
+});
+export const CancelEtutSchema = z.object({
+  teacherId: z.string().min(1).max(100),
+  etutId: z.string().min(1).max(100),
+});

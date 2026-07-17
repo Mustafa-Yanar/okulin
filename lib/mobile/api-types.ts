@@ -227,3 +227,37 @@ export interface ManagementToday extends TodayCommon {
   role: 'management'; // director/accountant/counselor/org_admin — native içerik 2. dalga (WebView girişi)
 }
 export type TodayResponse = StudentToday | ParentToday | TeacherToday | ManagementToday;
+
+// ── Etüt rezervasyon (spec §5.1 öğrenci) ────────────────────────────────────
+export interface EtutSlotView {
+  teacherId: string;
+  teacherName: string;
+  etutId: string;
+  dayIndex: number; // 0=Pzt
+  dayLabel: string; // "Salı"
+  start: string; // "14:00"
+  end: string;
+  branches: string[]; // seçilebilir ders adayları (öğrenci sınıfı ∩ öğretmen branşları)
+  booked: boolean; // başkası dolu
+  mine: boolean; // bu öğrencinin rezervasyonu
+  branch: string | null; // mine ise rezerve edilen ders
+}
+export interface EtutScreenResponse {
+  weekKey: string;
+  slots: EtutSlotView[]; // gün+saat sıralı; UI güne göre gruplar
+}
+export interface ReserveEtutRequest {
+  teacherId: string;
+  etutId: string;
+  branch?: string; // tek aday varsa boş bırakılabilir (sunucu otomatik seçer)
+  weekKey?: string;
+}
+export interface ReserveEtutResponse {
+  ok: true;
+  // güncellenmiş şablon (studentId dolu) — istemci listeyi tazeler; ham şablonu döner
+  etut: { id: string; dayIndex: number; start: string; end: string; branch?: string; studentName?: string };
+}
+export interface CancelEtutRequest {
+  teacherId: string;
+  etutId: string;
+}
