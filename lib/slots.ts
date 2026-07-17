@@ -386,6 +386,22 @@ export async function getDayCellsAllTeachers(weekKey: string, dayIndex: number):
   return out;
 }
 
+// Bir HAFTANIN tüm öğretmen hücreleri TEK sorguda, güne göre gruplu (mobil haftalık
+// program). getDayCellsAllTeachers'ın 7-gün kardeşi: dayIndex filtresi kalkar,
+// çıktı gün → hücreler. 1 teacher + 1 slotBooking sorgusu (tüm hafta).
+export async function getWeekCellsAllTeachers(weekKey: string): Promise<Record<number, DayCellRow[]>> {
+  const teachers = await tdb().teacher.findMany({ select: { id: true, legacyId: true, name: true } });
+  const byDbId = new Map(teachers.map((t) => [t.id, t]));
+  const rows = await tdb().slotBooking.findMany({ where: { weekKey } });
+  const out: Record<number, DayCellRow[]> = {};
+  for (const row of rows) {
+    const t = byDbId.get(row.teacherId);
+    if (!t) continue;
+    (out[row.dayIndex] ??= []).push({ teacherLegacyId: t.legacyId, teacherName: t.name, slotId: row.slotId, cell: cellFromRow(row) });
+  }
+  return out;
+}
+
 // Tüm öğretmenlerin program şablonları TEK sorguda (etüt şablonu taraması için).
 export interface TeacherTemplateRow {
   legacyId: string;

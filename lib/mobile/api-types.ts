@@ -261,3 +261,46 @@ export interface CancelEtutRequest {
   teacherId: string;
   etutId: string;
 }
+
+// ── Haftalık program (screens/week — spec §5.1) ─────────────────────────────
+// today.ts'in tek-gün TodayLesson/TodayEtut/TeacherSlotView tipleri 7 güne yayılır.
+export interface WeekDay {
+  dayIndex: number; // 0=Pzt
+  dayLabel: string; // "Pazartesi"
+  date: string; // YYYY-MM-DD
+  lessons: TodayLesson[];
+  etuts: TodayEtut[] | null; // etut modülü kapalı → null
+}
+export interface StudentWeek {
+  role: 'student';
+  weekKey: string;
+  days: WeekDay[]; // 7 gün (Pzt..Paz)
+}
+export interface ParentWeekChild {
+  id: string;
+  name: string;
+  cls: string;
+  days: WeekDay[];
+}
+export interface ParentWeek {
+  role: 'parent';
+  weekKey: string;
+  children: ParentChildView[];
+  child: ParentWeekChild | null; // çocuk yoksa null
+}
+export interface TeacherWeekDay {
+  dayIndex: number;
+  dayLabel: string;
+  date: string;
+  slots: TeacherSlotView[]; // ders + dolu etüt slotları (saat sıralı)
+}
+export interface TeacherWeek {
+  role: 'teacher';
+  weekKey: string;
+  days: TeacherWeekDay[];
+}
+export interface ManagementWeek {
+  role: 'management';
+  weekKey: string;
+}
+export type WeekResponse = StudentWeek | ParentWeek | TeacherWeek | ManagementWeek;
