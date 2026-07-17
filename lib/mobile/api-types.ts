@@ -113,3 +113,35 @@ export interface PushUnregisterRequest {
 export interface OkResponse {
   ok: true;
 }
+
+// ── Bildirim merkezi (inbox — spec §8) ──────────────────────────────────────
+// NotificationEvent tam içeriği taşır: push metni jenerikleşse bile (sensitive)
+// inbox gerçek title/body gösterir (jenerikleştirme yalnız push'a uygulanır).
+export interface InboxItem {
+  id: string; // NotificationEvent.id (ne_ önekli) — push data.eventId ile eşleşir
+  title: string;
+  body: string;
+  url: string | null; // web path'i (/?tab=odev vb.) — yönlendirme eşlemesi istemcide
+  createdAt: string; // ISO
+  read: boolean;
+}
+export interface InboxListResponse {
+  items: InboxItem[];
+  nextBefore: string | null; // OPAK sayfalama imleci — aynen geri gönderilir; null = son sayfa
+  unreadCount: number;
+}
+export interface InboxReadRequest {
+  eventId?: string;
+  all?: boolean;
+}
+export interface InboxReadResponse {
+  ok: true;
+  updated: number;
+  unreadCount: number;
+}
+
+// ── WebView oturum aktarımı (spec §7 — uç Plan 2'den beri canlı, tip şimdi paylaşılıyor) ──
+export interface SessionExchangeResponse {
+  code: string; // tek kullanımlık, 60 sn, IP-bağlı
+  expiresIn: number;
+}

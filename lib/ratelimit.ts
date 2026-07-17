@@ -75,6 +75,16 @@ export const mobileRefreshRatelimit = new Ratelimit({
   prefix: 'rl:mref',
 });
 
+// Mobil içerik uçları (screens/today, notifications): 240 istek / 10 dk — yalnız
+// oturum (sid) kovası. IP kovası bilinçli YOK: okul NAT'ında sabah yoğunluğu meşru
+// trafiği keserdi; token'sız istek zaten withMobileAuth'ta 401 yer (plan ADR'si).
+export const mobileContentRatelimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(240, '10 m'),
+  analytics: false,
+  prefix: 'rl:mcnt',
+});
+
 export interface LimitResult {
   success: boolean;
   reset: number;

@@ -41,3 +41,11 @@ export const PushRegisterSchema = z.object({
 export const PushUnregisterSchema = z.object({
   installationId: z.string().min(8).max(100),
 });
+
+// Inbox okundu işaretleme: tek event VEYA tümü (yalnız biri).
+export const InboxReadSchema = z
+  .object({
+    eventId: z.string().min(1).max(64).optional(),
+    all: z.boolean().optional(),
+  })
+  .refine((d) => Boolean(d.eventId) !== Boolean(d.all), { message: 'eventId veya all (yalnız biri) gerekli' });
