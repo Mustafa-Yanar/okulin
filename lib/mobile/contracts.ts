@@ -63,3 +63,11 @@ export const CancelEtutSchema = z.object({
   teacherId: z.string().min(1).max(100),
   etutId: z.string().min(1).max(100),
 });
+
+// Ödev teslim (mobil — yalnız öğrenci; id + opsiyonel not + done). studentId/cls
+// GÖNDERİLMEZ (server session'dan). done:false = teslimi geri al.
+export const OdevSubmitSchema = z.object({
+  id: z.string().min(1).max(100),
+  note: z.string().max(1000).optional(),
+  done: z.boolean().optional(),
+});

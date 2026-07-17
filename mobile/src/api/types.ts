@@ -304,3 +304,56 @@ export interface ManagementWeek {
   weekKey: string;
 }
 export type WeekResponse = StudentWeek | ParentWeek | TeacherWeek | ManagementWeek;
+
+// ── Ödev ekranı (spec §5.1 — öğrenci teslim + öğrenci/veli görüntüleme) ──────
+// status: '' (teslim edilmedi) | 'teslim' | 'kontrol' (öğretmen puanladı/onayladı)
+export interface OdevSubmission {
+  status: string; // '' | 'teslim' | 'kontrol'
+  note: string;
+  score: string;
+  feedback: string;
+  submittedAt: string;
+  checkedAt: string;
+}
+export interface OdevListItem {
+  id: string;
+  title: string;
+  desc: string;
+  branch: string;
+  dueDate: string; // YYYY-MM-DD veya ''
+  createdByName: string;
+  createdAt: string; // ISO veya ''
+  status: string; // '' | 'teslim' | 'kontrol' (öğrencinin kendi durumu)
+  note: string;
+  score: string;
+  feedback: string;
+  overdue: boolean; // dueDate geçmiş VE status='' (teslim edilmemiş)
+}
+export interface OdevParentChildRow {
+  childId: string;
+  childName: string;
+  cls: string;
+  status: string; // '' | 'teslim' | 'kontrol'
+}
+export interface OdevListItemParent {
+  id: string;
+  title: string;
+  desc: string;
+  branch: string;
+  dueDate: string;
+  createdByName: string;
+  createdAt: string;
+  children: OdevParentChildRow[];
+}
+export type OdevListResponse =
+  | { role: 'student'; items: OdevListItem[] }
+  | { role: 'parent'; items: OdevListItemParent[] };
+export interface OdevSubmitRequest {
+  id: string;
+  note?: string;
+  done?: boolean; // false = teslimi geri al
+}
+export interface OdevSubmitResponse {
+  ok: true;
+  status: string | null; // yeni durum ('teslim'|'kontrol') veya null (geri alındı)
+}
