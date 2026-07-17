@@ -46,7 +46,16 @@ function NotificationRouter() {
       const key = `${resp.notification.request.identifier}:${resp.actionIdentifier}`;
       if (handled.current.has(key)) return;
       handled.current.add(key);
-      setPending({ focus: eventIdFrom(resp.notification.request.content.data) });
+      // Killed-durum FCM tap'inde veri content.data yerine trigger.remoteMessage.data'da
+      // gelir (expo-notifications tepsi-teslim farkı — Task 11 cihaz turunda yakalandı;
+      // foreground/background'da content.data dolu). İki kaynaktan ilki kazanır.
+      const trig = resp.notification.request.trigger as
+        | { remoteMessage?: { data?: Record<string, string> | null } }
+        | null
+        | undefined;
+      setPending({
+        focus: eventIdFrom(resp.notification.request.content.data) ?? eventIdFrom(trig?.remoteMessage?.data),
+      });
     };
     let mounted = true;
     void Notifications.getLastNotificationResponseAsync().then((resp) => {
