@@ -218,7 +218,7 @@ export function ManagementTodayView({ brand }: { brand: string }) {
     <Card>
       <CardTitle>Yönetim paneli</CardTitle>
       <Sub>Program oluşturucu, muhasebe, CRM ve kurum ayarları web panelinde.</Sub>
-      <Button label="Paneli aç" onPress={() => (router.push as any)('/web')} color={brand} />
+      <Button label="Paneli aç" onPress={() => router.push('/web')} color={brand} />
     </Card>
   );
 }
