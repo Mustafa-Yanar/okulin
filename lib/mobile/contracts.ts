@@ -77,3 +77,9 @@ export const ChangePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(200),
   newPassword: z.string().min(6).max(200),
 });
+
+// Bildirim kategori toggle (mobil). guvenlik enum dışı (susturulamaz → 400).
+export const NotifPrefUpdateSchema = z.object({
+  category: z.enum(['devamsizlik', 'odev', 'davranis', 'deneme', 'duyuru', 'form', 'takvim', 'odeme']),
+  enabled: z.boolean(),
+});

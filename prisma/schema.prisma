@@ -715,3 +715,20 @@ model MobileAppConfig {
   flags               Json?
   updatedAt           DateTime @updatedAt
 }
+
+// Kullanıcı bazlı bildirim kategori tercihi (spec §5.1). Satır YOKSA = kategori AÇIK
+// (varsayılan enabled). Yalnız SUSTURULAN kategoriler için satır olur (enabled=false).
+// Kategori tag önekinden türetilir (lib/notify-prefs categoryOf) — NotificationEvent'te
+// kategori alanı yok. guvenlik kategorisi burada saklanmaz (asla susturulamaz).
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  orgSlug   String
+  branch    String   @default("main")
+  role      String
+  userId    String
+  category  String
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+  @@unique([orgSlug, branch, role, userId, category])
+  @@index([orgSlug, branch, role, userId])
+}

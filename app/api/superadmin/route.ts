@@ -20,7 +20,7 @@ const TENANT_MODELS = [
   // oturumları/kayıtları ve bildirim kuyruğu da gitmeli — kalan MobileSession,
   // silinmiş kurumun host'unda çalışmaya devam ederdi.
   'assistantDirector', 'notifLog', 'notificationEvent', 'notificationDelivery',
-  'mobileSession', 'deviceInstallation',
+  'mobileSession', 'deviceInstallation', 'notificationPreference',
 ];
 
 // Erişim: yalnız superadmin rolü (withAuth(['superadmin'])).

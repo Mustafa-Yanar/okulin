@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { tdb } from '@/lib/sqldb';
 import { currentOrg, currentBranch } from '@/lib/tenant';
 import { newId } from '@/lib/id';
+import { isPushMuted, categoryOf } from '@/lib/notify-prefs';
 import { renderPush, applyResult } from './policy';
 import { deliver, type PushTarget, type PushNotif } from './providers';
 
@@ -82,6 +83,11 @@ export async function enqueueNotification(role: string, userId: string, payload:
   const webSubs = await tdb().pushSub.findMany({ where: { role, userId } });
   const devices = await tdb().deviceInstallation.findMany({ where: { role, userId, enabled: true } });
 
+  // Kategori tercihi (spec §5.1): kullanıcı bu kategoriyi susturmuşsa PUSH gönderilmez
+  // ama NotificationEvent (inbox) YİNE yazılır — kayıp yok. guvenlik hep açık (isPushMuted).
+  // Muted → deliveries boş: event oluşur (dispatchStatus:'done'), retry'a düşmez.
+  const muted = await isPushMuted(role, userId, payload.tag);
+
   // 2) Event + delivery satırları TEK transaction'da (outbox garantisi)
   const eventId = newId('ne_');
   const org = currentOrg();
@@ -90,7 +96,7 @@ export async function enqueueNotification(role: string, userId: string, payload:
     id: string; eventId: string; orgSlug: string; branch: string;
     provider: string; target: string; keys?: object;
   }
-  const deliveries: NewDelivery[] = [
+  const deliveries: NewDelivery[] = muted ? [] : [
     ...webSubs.map((s) => ({
       id: newId('nd_'), eventId, orgSlug: org, branch,
       provider: 'webpush', target: s.endpoint, keys: (s.keys ?? {}) as object,
@@ -201,6 +207,22 @@ export async function dispatchDue(limit = 200): Promise<{ processed: number; sen
       });
       dead++;
       continue;
+    }
+
+    // Kategori tercihi re-check (İnceleme Codex #5): teslimat kuyruğa girdikten sonra
+    // kullanıcı kategoriyi susturmuş olabilir. base prisma (dispatchDue tenant-siz; org/branch
+    // event'ten). bilinmeyen (null) + guvenlik daima gider (isPushMuted paritesi).
+    const cat = categoryOf(ev.tag);
+    if (cat && cat !== 'guvenlik') {
+      const muted = await prisma.notificationPreference.findFirst({
+        where: { orgSlug: ev.orgSlug, branch: ev.branch, role: ev.role, userId: ev.userId, category: cat, enabled: false },
+        select: { id: true },
+      });
+      if (muted) {
+        await prisma.notificationDelivery.update({ where: { id: d.id }, data: { status: 'dead', lastError: 'kategori susturuldu' } });
+        dead++;
+        continue;
+      }
     }
 
     const meta = (ev.data ?? {}) as { icon?: string; requireInteraction?: boolean };

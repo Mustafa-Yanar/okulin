@@ -369,3 +369,23 @@ export interface ChangePasswordResponse {
   expiresIn: number;
   session: MobileSessionInfo; // mustChangePassword artık false
 }
+
+// ── Bildirim kategori tercihleri (spec §5.1) ────────────────────────────────
+export type NotifCategory =
+  | 'devamsizlik' | 'odev' | 'davranis' | 'deneme' | 'duyuru' | 'form' | 'takvim' | 'odeme' | 'guvenlik';
+export interface NotifPrefItem {
+  category: NotifCategory;
+  label: string; // sunucudan gelir (NOTIF_CATEGORY_LABELS)
+  enabled: boolean;
+}
+export interface NotifPrefsResponse {
+  items: NotifPrefItem[]; // yalnız role-relevant kategoriler (guvenlik dahil DEĞİL)
+}
+export interface NotifPrefUpdateRequest {
+  category: NotifCategory;
+  enabled: boolean;
+}
+export interface NotifPrefUpdateResponse {
+  ok: true;
+  items: NotifPrefItem[]; // güncellenmiş liste
+}
