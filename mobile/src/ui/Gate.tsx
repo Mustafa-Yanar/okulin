@@ -34,6 +34,11 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!org) {
+      // Kurumdan ayrılındı: sessiz-mod hafızası SIFIRLANIR — aynı kuruma yeniden
+      // girişte ilk kontrol tam kontroldür (fail-closed; reviewer bulgusu: eski hali
+      // ağ hatasında 'ok' bırakıp kill-switch'i atlatabiliyordu).
+      lastOkHost.current = null;
+      lastCheckAt.current = 0;
       setState('ok');
       return;
     }
