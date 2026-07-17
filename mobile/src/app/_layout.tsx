@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Stack, router, useRootNavigationState } from 'expo-router';
+import { Stack, router, usePathname, useRootNavigationState } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import * as Sentry from '@sentry/react-native';
 import { SENTRY_DSN } from '../config';
@@ -37,6 +37,7 @@ function NotificationRouter() {
   // Navigator mount olmadan router.push atılmaz (İnceleme Gemini #2: Gate 'checking'
   // iken status 'ready' olabilir — Stack henüz ekranda değilken push çökerdi).
   const rootNav = useRootNavigationState();
+  const pathname = usePathname();
   const [pending, setPending] = useState<{ focus: string | null } | null>(null);
   const handled = useRef<Set<string>>(new Set());
 
@@ -60,12 +61,19 @@ function NotificationRouter() {
     };
   }, []);
 
+  // Bekleyen rota, başarı DOĞRULANMADAN silinmez (İnceleme: rootNav?.key dış
+  // navigator'ı ölçer — nested Stack Gate 'ok' olana dek mount değildir; erken
+  // push expo-router'da sessizce düşer ve pending silinirse tap kaybolurdu).
+  // Desen: hedefteysek temizle; değilsek push dene; push düştüyse Stack'in
+  // mount/kayıt olması nav-state'i değiştirir → effect yeniden koşar → tekrar dener.
   useEffect(() => {
-    if (!pending || status !== 'ready') return; // login/kurum bekleniyor — rota bekler
-    if (!rootNav?.key) return; // Stack henüz mount olmadı (Gate checking) — bekle
+    if (!pending || status !== 'ready' || !rootNav?.key) return;
+    if (pathname === '/bildirimler') {
+      setPending(null); // hedefe varıldı (push'umuz ya da kullanıcı zaten oradaydı)
+      return;
+    }
     router.push(pending.focus ? { pathname: '/bildirimler', params: { focus: pending.focus } } : '/bildirimler');
-    setPending(null);
-  }, [pending, status, rootNav?.key]);
+  }, [pending, status, rootNav, pathname]);
 
   return null;
 }
