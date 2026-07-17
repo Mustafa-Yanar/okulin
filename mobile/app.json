@@ -38,7 +38,14 @@
       ],
       "expo-secure-store",
       "expo-notifications",
-      "@sentry/react-native"
+      "@sentry/react-native",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Kurum QR kodunu taramak için kamera izni gerekir.",
+          "recordAudioAndroid": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
