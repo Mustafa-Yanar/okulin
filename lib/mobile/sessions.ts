@@ -140,6 +140,53 @@ export async function revokeMobileSessionsFor(role: string, userId: string, reas
   return r.count;
 }
 
+// Kullanıcının MEVCUT sid HARİÇ tüm oturumlarını iptal (mobil şifre değişimi — kendi
+// oturumu logout olmadan diğer cihazlar düşer). revokeMobileSessionsFor'un "hariç" varyantı.
+export async function revokeMobileSessionsExcept(role: string, userId: string, exceptSid: string, reason: string): Promise<number> {
+  const r = await tdb().mobileSession.updateMany({
+    where: { orgSlug: currentOrg(), role, userId, revokedAt: null, id: { not: exceptSid } },
+    data: { revokedAt: new Date(), revokedReason: reason },
+  });
+  return r.count;
+}
+
+// Mobil şifre değişimi sonrası: diğer oturumları iptal + mevcut oturumun payload'ını
+// mustChangePassword:false yap + taze token çifti üret (rotation; prevRefreshHash sıfırlanır
+// → grace penceresi kapanır). Client yeni çifti yazar, session state'i günceller.
+// Oturum yoksa/kapatılmışsa null. (SKIP tablosu → orgSlug ELLE.)
+export async function applyPasswordChange(sid: string, role: string, userId: string): Promise<{ pair: MobileTokenPair; payload: Session } | null> {
+  const org = currentOrg();
+  await revokeMobileSessionsExcept(role, userId, sid, 'şifre değişti');
+  // CAS + retry (İnceleme Codex #1): eşzamanlı /refresh aynı kaydı rotate edebilir; CAS
+  // koşulu (refreshHash HÂLÂ okuduğumuz mu) olmadan son-yazan-kazanır → istemciye dönen
+  // çift anında geçersiz kalır veya eski refresh reuse sayılıp oturum kapanır. refreshHash'i
+  // where'e ekle; kaybedersek (count=0) yeniden oku ve bir kez dene.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const s = await tdb().mobileSession.findFirst({ where: { id: sid, orgSlug: org } });
+    if (!s || s.revokedAt) return null;
+    const payload = { ...(s.payload as unknown as Session), mustChangePassword: false };
+    const refreshToken = newRefreshToken();
+    const now = new Date();
+    const r = await tdb().mobileSession.updateMany({
+      where: { id: sid, orgSlug: org, revokedAt: null, refreshHash: s.refreshHash }, // CAS
+      data: {
+        payload: payload as object,
+        refreshHash: hashRefreshToken(refreshToken),
+        prevRefreshHash: null, // rotation zinciri sıfırlanır (grace kapanır)
+        rotatedAt: now,
+        lastUsedAt: now,
+        expiresAt: nextExpiry(now),
+      },
+    });
+    if (r.count > 0) {
+      const accessToken = await signMobileAccessToken(payload, sid);
+      return { pair: { accessToken, refreshToken, expiresIn: ACCESS_TTL_SEC, sessionId: sid }, payload };
+    }
+    // CAS kaybı: araya eşzamanlı rotasyon girdi → yeniden oku, tekrar dene (bir kez).
+  }
+  return null;
+}
+
 // İç satır tipi (Date alanlı) — wire tipi api-types.ts'teki DeviceView (string alanlı,
 // JSON.stringify Date→ISO çevirir). Ad ayrımı Plan 3 Minor #3.
 export interface MobileDeviceRow {

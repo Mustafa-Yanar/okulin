@@ -13,6 +13,7 @@ import { getOrgConfig } from '@/lib/config';
 import { tdb } from '@/lib/sqldb';
 import { verifyLogin, maskPhone, type RoleCategory } from '@/lib/login';
 import { revokeMobileSessionsFor } from '@/lib/mobile/sessions';
+import { changePasswordFor } from '@/lib/password';
 
 // Bilinçli withAuth istisnası: bu route'un kendisi LOGIN ucu — oturum burada kurulur.
 // GET login ekranı için oturumsuz da çalışır; POST action'larının oturum gerektirenleri
@@ -179,22 +180,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Şifre değiştirme yardımcısı — başarılı değişimde mustChangePassword:false setler
-    // ve session JWT'sini yeniler (frontend, yeni mustChange durumunu görsün).
-    // Dinamik model erişimi: rol → Prisma delegesi eşlemesi statik ifade edilemez (cast gerekçeli).
+    // Şifre değiştirme yardımcısı — DB+bcrypt gövdesi lib/password.ts changePasswordFor'a
+    // taşındı (web+mobil ortak). Oturum iptali + setSession (frontend yeni mustChange
+    // durumunu görsün) BURADA kalır — davranış-koruyan refactor.
     async function updatePasswordFor(roleKey: string, sessionPayloadFields: Record<string, unknown>): Promise<NextResponse> {
-      const db = tdb() as unknown as Record<string, {
-        findFirst: (a: { where: Record<string, string | undefined> }) => Promise<{ id: string; passwordHash: string } | null>;
-        update: (a: { where: { id: string }; data: { passwordHash: string; mustChangePassword: boolean } }) => Promise<unknown>;
-      }>;
-      const rec = roleKey === 'parent'
-        ? await db.parent.findFirst({ where: { phone: session!.id } })
-        : await db[roleKey].findFirst({ where: { legacyId: session!.id } });
-      if (!rec) return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 });
-      const ok = await bcrypt.compare(password, rec.passwordHash);
-      if (!ok) return NextResponse.json({ error: 'Mevcut şifre hatalı' }, { status: 400 });
-      const newHash = await bcrypt.hash(newPassword, 10);
-      await db[roleKey].update({ where: { id: rec.id }, data: { passwordHash: newHash, mustChangePassword: false } });
+      const r = await changePasswordFor(roleKey, String(session!.id ?? ''), password, newPassword);
+      if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
       // Spec §7: şifre değişiminde tüm mobil refresh oturumları iptal (web oturumu sürer).
       // Best-effort: iptal hatası şifre değişimini/setSession'ı düşürmesin (logAudit kalıbı).
       try {

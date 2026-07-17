@@ -71,3 +71,9 @@ export const OdevSubmitSchema = z.object({
   note: z.string().max(1000).optional(),
   done: z.boolean().optional(),
 });
+
+// Mobil şifre değiştirme (zorunlu değişim + isteğe bağlı). newPassword min 6 (web zNewPassword paritesi).
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(200),
+  newPassword: z.string().min(6).max(200),
+});

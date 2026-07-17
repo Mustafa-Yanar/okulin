@@ -357,3 +357,15 @@ export interface OdevSubmitResponse {
   ok: true;
   status: string | null; // yeni durum ('teslim'|'kontrol') veya null (geri alındı)
 }
+
+// ── Şifre değiştirme (spec §7 — mobil forced-change + isteğe bağlı) ──────────
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+export interface ChangePasswordResponse {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+  session: MobileSessionInfo; // mustChangePassword artık false
+}
