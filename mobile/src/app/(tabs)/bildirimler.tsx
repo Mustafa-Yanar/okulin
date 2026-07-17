@@ -106,18 +106,23 @@ export default function BildirimlerEkrani() {
     if (!focus || processedFocus.current === focus || items === null || !api) return;
     processedFocus.current = focus;
     const inList = items.find((x) => x.id === focus);
+    let cancelled = false;
     void (async () => {
       if (!inList) {
         try {
           const r = await api.get<InboxListResponse>(`/api/mobile/v1/notifications?id=${encodeURIComponent(focus)}`);
+          if (cancelled) return;
           if (r.items[0]) setFocusItem(r.items[0]);
           applyCounts(r.unreadCount);
         } catch {
           /* bulunamadı/ağ hatası — liste yine görünür */
         }
       }
-      if (!inList || !inList.read) await markRead(focus);
+      if (!cancelled && (!inList || !inList.read)) await markRead(focus);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [focus, items, api, markRead, applyCounts]);
 
   async function markAll() {
@@ -206,7 +211,7 @@ const s = StyleSheet.create({
     padding: 16,
     marginTop: 12,
   },
-  unreadItem: { backgroundColor: '#f5f3ff' },
+  unreadItem: { backgroundColor: palette.brandSoft },
   itemHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   itemTitle: { fontSize: 15, fontWeight: '700', color: palette.text, flexShrink: 1 },

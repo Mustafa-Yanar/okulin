@@ -129,7 +129,7 @@ export function ParentTodayView({
               <Pressable
                 key={ch.id}
                 onPress={() => onSelectChild(ch.id)}
-                style={[s.chip, active && { borderColor: brand, backgroundColor: '#fff' }]}
+                style={[s.chip, active && { borderColor: brand, backgroundColor: palette.card }]}
               >
                 <Text style={[s.chipLabel, active && { color: brand, fontWeight: '700' }]}>{ch.name}</Text>
               </Pressable>

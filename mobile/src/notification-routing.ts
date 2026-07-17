@@ -17,7 +17,9 @@ export function eventIdFrom(data: unknown): string | null {
 export type UrlTarget = { type: 'today' } | { type: 'web'; path: string } | null;
 
 export function targetForUrl(url: string | null | undefined, role: RoleCategory | null): UrlTarget {
-  if (!url || !url.startsWith('/') || url.startsWith('//')) return null;
+  // Backslash'li path'ler de reddedilir (WHATWG URL \'ı /'a çevirir — derinlemesine savunma;
+  // sunucu session-open origin-eşitliği zaten koruyor).
+  if (!url || !url.startsWith('/') || url.startsWith('//') || url.includes('\\')) return null;
   if (role === 'management') return { type: 'web', path: url };
   if (role === null) return null;
   if (url === '/') return null; // kök: inbox'tan gidilecek ek ekran yok

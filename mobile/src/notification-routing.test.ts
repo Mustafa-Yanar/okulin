@@ -32,6 +32,7 @@ describe('targetForUrl — inbox "İlgili ekranı aç" eşlemesi', () => {
     expect(targetForUrl('//evil.com', 'management')).toBeNull();
     expect(targetForUrl('', 'student')).toBeNull();
     expect(targetForUrl(null, 'management')).toBeNull();
+    expect(targetForUrl('/\\evil.com', 'management')).toBeNull();
   });
   it('rol yoksa aksiyon yok', () => {
     expect(targetForUrl('/?tab=odev', null)).toBeNull();

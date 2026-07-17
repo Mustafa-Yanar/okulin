@@ -28,7 +28,10 @@ const EXTERNAL_SCHEMES = ['https:', 'http:', 'mailto:', 'tel:'];
 export default function WebEkrani() {
   const { api, org, session, status, appVersion } = useSession();
   const params = useLocalSearchParams<{ path?: string }>();
-  const target = typeof params.path === 'string' && params.path.startsWith('/') && !params.path.startsWith('//') ? params.path : '/';
+  const target =
+    typeof params.path === 'string' && params.path.startsWith('/') && !params.path.startsWith('//') && !params.path.includes('\\')
+      ? params.path
+      : '/';
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const retried = useRef(false);
@@ -127,7 +130,8 @@ export default function WebEkrani() {
           }
           // Tenant sınırı (İnceleme Codex #10): yalnız KENDİ kurum host'u WebView
           // içinde — diğer *.okulin.com subdomainleri dahil her şey dışarıda.
-          if (protocol === 'https:' && hostname === org?.canonicalHost) return true;
+          // hostname WHATWG'de küçük harf — canonicalHost da normalize edilir (fail-closed sertleştirme)
+          if (protocol === 'https:' && org && hostname === org.canonicalHost.toLowerCase()) return true;
           // Dış bağlantı → sistem tarayıcısı, ama yalnız güvenli şemalar (spec §5.3);
           // intent:/javascript:/data: sessizce düşer (Codex #10).
           if (EXTERNAL_SCHEMES.includes(protocol)) {

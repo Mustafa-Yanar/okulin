@@ -20,6 +20,7 @@ export const palette = {
   text: '#0f172a',
   sub: '#64748b',
   line: '#e2e8f0',
+  brandSoft: '#f5f3ff',
   danger: '#dc2626',
   brandFallback: '#7c3aed',
 };
