@@ -63,6 +63,14 @@ export interface EtutSablonu {
   bookedAt?: string;
 }
 
+// Bir serbest etüt şablonu verilen haftada efektif aktif mi?
+// (kalıcı aktif + bu hafta pasif listesinde değil). etut-sablon/all + mobil today ortak.
+export function etutAktifThisWeek(sb: EtutSablonu, weekKey: string): boolean {
+  if (sb.aktif === false) return false;
+  if (Array.isArray(sb.pasifHaftalar) && sb.pasifHaftalar.includes(weekKey)) return false;
+  return true;
+}
+
 // Öğretmen program şablonundaki tek giriş (programTemplate Json).
 export interface ProgramEntry {
   type?: string;
@@ -355,6 +363,38 @@ export async function getAllTeachers() {
     allowedGroups: t.allowedGroups, offDays: t.offDays,
     username: t.username, phone: t.phone || null, photoUrl: t.photoUrl || null,
   }));
+}
+
+// Bir günün TÜM öğretmen hücreleri TEK sorguda (mobil "Bugün" ekranı). Öğretmen
+// başına getTeacherWeekSlots çağırmak yerine: 1 teacher + 1 slotBooking sorgusu.
+export interface DayCellRow {
+  teacherLegacyId: string;
+  teacherName: string;
+  slotId: string;
+  cell: SlotCell;
+}
+export async function getDayCellsAllTeachers(weekKey: string, dayIndex: number): Promise<DayCellRow[]> {
+  const teachers = await tdb().teacher.findMany({ select: { id: true, legacyId: true, name: true } });
+  const byDbId = new Map(teachers.map((t) => [t.id, t]));
+  const rows = await tdb().slotBooking.findMany({ where: { weekKey, dayIndex } });
+  const out: DayCellRow[] = [];
+  for (const row of rows) {
+    const t = byDbId.get(row.teacherId);
+    if (!t) continue;
+    out.push({ teacherLegacyId: t.legacyId, teacherName: t.name, slotId: row.slotId, cell: cellFromRow(row) });
+  }
+  return out;
+}
+
+// Tüm öğretmenlerin program şablonları TEK sorguda (etüt şablonu taraması için).
+export interface TeacherTemplateRow {
+  legacyId: string;
+  name: string;
+  template: Record<string, unknown>;
+}
+export async function getAllProgramTemplates(): Promise<TeacherTemplateRow[]> {
+  const rows = await tdb().teacher.findMany({ select: { legacyId: true, name: true, programTemplate: true } });
+  return rows.map((r) => ({ legacyId: r.legacyId, name: r.name, template: (r.programTemplate || {}) as Record<string, unknown> }));
 }
 
 export async function getAllStudents() {

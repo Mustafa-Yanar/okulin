@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withAuth, canReadStudent } from '@/lib/auth';
-import { getAllTeachers, getProgramTemplate, type EtutSablonu } from '@/lib/slots';
+import { getAllTeachers, getProgramTemplate, etutAktifThisWeek, type EtutSablonu } from '@/lib/slots';
 import { ALL_DAYS, getWeekKey } from '@/lib/constants';
 
 // GET /api/etut-sablon/all?week=YYYY-Www
@@ -8,13 +8,6 @@ import { ALL_DAYS, getWeekKey } from '@/lib/constants';
 // Öğrenci/veli panelinin "uygun etüt" + "etütlerim" görünümleri bunu kullanır.
 // Ders slot'larından (w1-w12) bağımsız — gerçek saatli etüt blokları.
 // Şablon kaynağı getProgramTemplate (SQL-aware): SQL modunda Teacher.programTemplate.
-
-// Bir şablon verilen haftada efektif aktif mi? (kalıcı aktif + bu hafta pasif listesinde değil)
-function aktifThisWeek(sb: EtutSablonu, weekKey: string): boolean {
-  if (sb.aktif === false) return false;
-  if (Array.isArray(sb.pasifHaftalar) && sb.pasifHaftalar.includes(weekKey)) return false;
-  return true;
-}
 
 // Bilinçli inline rol dallanması: veli yalnız kendi çocuğunun etütlerini görür.
 export const GET = withAuth('auth', 'etut', async (req, _ctx, session) => {
@@ -30,7 +23,7 @@ export const GET = withAuth('auth', 'etut', async (req, _ctx, session) => {
     const prog = await getProgramTemplate(teacher.id); // SQL-aware
     const list: EtutSablonu[] = Array.isArray(prog.etutSablonlari) ? (prog.etutSablonlari as EtutSablonu[]) : [];
     for (const sb of list) {
-      if (!aktifThisWeek(sb, weekKey)) continue;
+      if (!etutAktifThisWeek(sb, weekKey)) continue;
       etutler.push({
         teacherId: teacher.id,
         teacherName: teacher.name,

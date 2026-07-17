@@ -145,3 +145,85 @@ export interface SessionExchangeResponse {
   code: string; // tek kullanımlık, 60 sn, IP-bağlı
   expiresIn: number;
 }
+
+// ── Bugün ekranı (screens/today — spec §5.1/§9-1) ───────────────────────────
+// Modül kapalıysa ilgili alan null (istemci kartı gizler). date/dayIndex TR günü.
+export interface TodayLesson {
+  slotId: string;
+  slotLabel: string; // "09:45–10:20"
+  teacherId: string;
+  teacherName: string;
+  branch: string;
+  subBranch: string;
+}
+export interface TodayEtut {
+  id: string;
+  start: string; // "16:30"
+  end: string;
+  teacherName: string;
+  branch: string | null;
+  studentName: string | null; // öğretmen görünümünde dolu; öğrenci/veli kendi rezervasyonu
+  booked: boolean;
+}
+export interface TodayOdevItem {
+  id: string;
+  title: string;
+  branch: string;
+  dueDate: string; // 'YYYY-MM-DD' veya '' (vadesiz)
+  submitted: boolean;
+  overdue: boolean; // vadesi geçmiş ve hâlâ teslim edilmemiş (UI kırmızı vurgular)
+}
+export interface TodayCommon {
+  date: string; // YYYY-MM-DD (TR)
+  dayLabel: string; // "Cuma"
+  weekKey: string; // "2026-W29"
+  unreadNotifications: number;
+}
+export interface StudentToday extends TodayCommon {
+  role: 'student';
+  lessons: TodayLesson[];
+  etuts: TodayEtut[] | null; // etut modülü kapalıysa null
+  odev: { pending: number; items: TodayOdevItem[] } | null;
+  davranis: { total: number } | null;
+  deneme: { name: string; dateLabel: string; toplamNet: number; rank: number; total: number } | null;
+}
+export interface ParentChildView {
+  id: string;
+  name: string;
+  cls: string;
+}
+export interface ParentToday extends TodayCommon {
+  role: 'parent';
+  children: ParentChildView[];
+  child: {
+    id: string;
+    name: string;
+    cls: string;
+    lessons: TodayLesson[];
+    etuts: TodayEtut[] | null;
+    odev: { pending: number; items: TodayOdevItem[] } | null;
+    finance: {
+      netFee: number;
+      balance: number;
+      nextInstallment: { idx: number; dueDate: string; amount: number } | null;
+      overdueCount: number;
+    } | null; // finance modülü kapalı veya kayıt yoksa null
+  } | null; // çocuk kaydı yoksa null
+}
+export interface TeacherSlotView {
+  slotId: string;
+  slotLabel: string;
+  type: 'ders' | 'etut';
+  cls: string | null; // ders: sınıf; etüt: öğrenci sınıfı
+  studentName: string | null; // slot-etüt: öğrenci adı
+  branch: string;
+}
+export interface TeacherToday extends TodayCommon {
+  role: 'teacher';
+  lessons: TeacherSlotView[]; // bugünün grid'i (ders + dolu slot-etüt), saat sıralı
+  etuts: TodayEtut[] | null; // bugünkü serbest etüt şablonları (doluluk görünümü)
+}
+export interface ManagementToday extends TodayCommon {
+  role: 'management'; // director/accountant/counselor/org_admin — native içerik 2. dalga (WebView girişi)
+}
+export type TodayResponse = StudentToday | ParentToday | TeacherToday | ManagementToday;
