@@ -4,6 +4,7 @@ import type {
   TokenPairResponse,
 } from './types';
 import type { TokenStore } from './tokens';
+import { fetchWithTimeout } from './http';
 
 // Tipli /api/mobile/v1 istemcisi.
 // - Her istekte Bearer + x-okulin-app başlığı.
@@ -88,7 +89,7 @@ export function createApiClient(opts: ApiClientOpts): ApiClient {
     }
     const epoch = opts.tokens.epoch(); // bayat-yanıt kilidi (İnceleme Codex #8)
     const attempt = () =>
-      f(`${opts.baseUrl}/api/mobile/v1/auth/refresh`, {
+      fetchWithTimeout(f, `${opts.baseUrl}/api/mobile/v1/auth/refresh`, {
         method: 'POST',
         headers: baseHeaders(),
         body: JSON.stringify({ refreshToken }),
@@ -133,7 +134,7 @@ export function createApiClient(opts: ApiClientOpts): ApiClient {
     const access = await opts.tokens.getAccess();
     let res: Response;
     try {
-      res = await f(opts.baseUrl + path, {
+      res = await fetchWithTimeout(f, opts.baseUrl + path, {
         method,
         headers: { ...baseHeaders(), ...(access ? { authorization: `Bearer ${access}` } : {}) },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -168,7 +169,7 @@ export function createApiClient(opts: ApiClientOpts): ApiClient {
     async login(body: LoginRequest): Promise<TokenPairResponse> {
       let res: Response;
       try {
-        res = await f(`${opts.baseUrl}/api/mobile/v1/auth/login`, {
+        res = await fetchWithTimeout(f, `${opts.baseUrl}/api/mobile/v1/auth/login`, {
           method: 'POST',
           headers: baseHeaders(),
           body: JSON.stringify(body),

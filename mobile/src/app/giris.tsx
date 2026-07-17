@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useSession } from '../store/session';
 import { ApiError } from '../api/client';
 import { Screen, Title, Sub, Input, Button, ErrorText, palette } from '../ui/kit';
+import { confirmLeaveOrg } from '../confirm';
 import type { MobileRoleCategory } from '../api/types';
 
 // Rol kartlı giriş (web login kartlarının mobil karşılığı, spec §5.1).
@@ -70,7 +71,12 @@ export default function GirisEkrani() {
           color={brand}
           disabled={busy || !username.trim() || !password}
         />
-        <Button label="Kurum değiştir" onPress={() => void leaveOrg().then(() => router.replace('/kurum'))} color={brand} variant="ghost" />
+        <Button
+          label="Kurum değiştir"
+          onPress={() => confirmLeaveOrg(() => void leaveOrg().then(() => router.replace('/kurum')))}
+          color={brand}
+          variant="ghost"
+        />
       </View>
     </Screen>
   );

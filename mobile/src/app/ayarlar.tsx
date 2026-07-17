@@ -4,6 +4,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useSession } from '../store/session';
 import { Screen, Title, Sub, Button, Card, palette } from '../ui/kit';
 import { rolEtiketi } from '../rol';
+import { confirmLeaveOrg } from '../confirm';
 import type { DevicesResponse, DeviceView } from '../api/types';
 
 // Ayarlar: profil özeti + cihaz oturumları (listele / tek tek iptal / tümünden
@@ -88,7 +89,12 @@ export default function AyarlarEkrani() {
           }}
           color={brand}
         />
-        <Button label="Kurumdan ayrıl" onPress={() => void leaveOrg().then(() => router.replace('/kurum'))} color={brand} variant="ghost" />
+        <Button
+          label="Kurumdan ayrıl"
+          onPress={() => confirmLeaveOrg(() => void leaveOrg().then(() => router.replace('/kurum')))}
+          color={brand}
+          variant="ghost"
+        />
       </ScrollView>
     </Screen>
   );

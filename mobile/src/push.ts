@@ -31,17 +31,22 @@ export async function currentPermission(): Promise<PushPermission> {
   return p.canAskAgain ? 'undetermined' : 'denied';
 }
 
-async function registerToken(api: ApiClient, base: RegisterBase, rotate?: RotateInstallationId): Promise<void> {
-  const t = await Notifications.getDevicePushTokenAsync();
-  const token = String(t.data);
+// Kayıt + 409-rotate tek deseni (Plan 3 Minor #9): installationId çakışmasında
+// (başka hesaba bağlı) taze kimlik üretilip BİR KEZ tekrar denenir.
+async function postRegister(api: ApiClient, base: RegisterBase, token: string, rotate?: RotateInstallationId): Promise<void> {
   try {
     await api.post('/api/mobile/v1/push/register', { ...base, token });
   } catch (e) {
     if (!(e instanceof ApiError) || e.status !== 409 || !rotate) throw e;
-    const installationId = await rotate(); // kimlik çakışması → taze kimlikle tek tekrar
+    const installationId = await rotate();
     await api.post('/api/mobile/v1/push/register', { ...base, installationId, token });
   }
-  console.log('[push] cihaz kaydı sunucuda tamam'); // Task 11 gözlemi — token LOGLANMAZ
+}
+
+async function registerToken(api: ApiClient, base: RegisterBase, rotate?: RotateInstallationId): Promise<void> {
+  const t = await Notifications.getDevicePushTokenAsync();
+  await postRegister(api, base, String(t.data), rotate);
+  console.log('[push] cihaz kaydı sunucuda tamam'); // token LOGLANMAZ
 }
 
 // Kullanıcı "Bildirimleri Aç"a bastı: kanal → izin → token → kayıt.
@@ -72,19 +77,8 @@ export async function refreshRegistration(api: ApiClient, base: RegisterBase, ro
 // Uygulama AÇIKKEN token rotasyonunu yakala (FCM token'ı nadiren döner).
 export function watchTokenRotation(api: ApiClient, base: RegisterBase, rotate?: RotateInstallationId): { remove(): void } {
   return Notifications.addPushTokenListener((t) => {
-    void (async () => {
-      try {
-        await api.post('/api/mobile/v1/push/register', { ...base, token: String(t.data) });
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 409 && rotate) {
-          try {
-            const installationId = await rotate();
-            await api.post('/api/mobile/v1/push/register', { ...base, installationId, token: String(t.data) }).catch(() => {});
-          } catch {
-            /* sessiz — bir sonraki açılış dener */
-          }
-        }
-      }
-    })();
+    void postRegister(api, base, String(t.data), rotate).catch(() => {
+      /* sessiz — bir sonraki açılış dener (rotate() hatası dahil, Plan 3 fix'i korunur) */
+    });
   });
 }
