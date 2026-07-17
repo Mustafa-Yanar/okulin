@@ -5,6 +5,7 @@ import { orgFromHost } from '@/lib/org';
 import { getClientIp } from '@/lib/ratelimit';
 import { setSession, type Session } from '@/lib/auth';
 import { loadActiveSession } from '@/lib/mobile/sessions';
+import { isOutdatedWebView, outdatedWebViewHtml } from '@/lib/mobile/webview-compat';
 
 // Adım 2: WebView bu URL'i yükler → kod tek kullanımlık doğrulanır → KISA ömürlü
 // web cookie oturumu (12 saat, JWT exp de 12 saat) kurulur → next'e redirect. iOS cookie
@@ -21,6 +22,22 @@ export async function GET(req: NextRequest) {
   // Apex/bilinmeyen host DEFAULT_ORG'a düşer → varsayılan kurum kodu orada tüketilmesin.
   if (!orgFromHost(headers().get('host'))) {
     return NextResponse.json({ error: 'Geçersiz kurum adresi' }, { status: 400 });
+  }
+
+  // Eski-WebView tespiti (Plan 4 tur bulgusu — WebView 81 boş sayfa): eşik altı WebView
+  // modern bundle'ı parse edemez. UA'yı BURADA gör (WebView'in gerçek isteği), 302 yerine
+  // minimal statik HTML döndür. Kod TÜKETİLMEZ (getdel'den önce) → güncelleme sonrası
+  // taze exchange çalışır. Native köprü kurulmaz (Plan 4 ADR).
+  if (isOutdatedWebView(headers().get('user-agent'))) {
+    return new NextResponse(outdatedWebViewHtml(), {
+      status: 200,
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+        'referrer-policy': 'no-referrer', // kod query-string'i Play linkine referer olarak sızmasın (İnceleme Codex #8)
+        'x-content-type-options': 'nosniff',
+      },
+    });
   }
 
   const code = req.nextUrl.searchParams.get('code') || '';
