@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSession } from '../../store/session';
 import { useUnreadBadge } from '../../store/badge';
 import { Screen, Title, Sub, Button, ErrorText, palette } from '../../ui/kit';
+import { roleCategoryOf } from '../../rol';
+import { targetForUrl } from '../../notification-routing';
 import type { InboxItem, InboxListResponse, InboxReadResponse } from '../../api/types';
 
 // Bildirim merkezi (spec §8): NotificationEvent inbox'u. Kilit ekranı metni
@@ -11,7 +13,7 @@ import type { InboxItem, InboxListResponse, InboxReadResponse } from '../../api/
 // uygulanır — sunucu renderPush). Tap → okundu; focus paramı (push tap
 // yönlendirmesi) ilgili bildirimi okundu işaretleyip vurgular.
 export default function BildirimlerEkrani() {
-  const { api, org } = useSession();
+  const { api, org, session } = useSession();
   const { setUnread } = useUnreadBadge();
   const brand = org?.themeColor || palette.brandFallback;
   const params = useLocalSearchParams<{ focus?: string }>();
@@ -169,6 +171,22 @@ export default function BildirimlerEkrani() {
               </View>
               <Text style={s.itemBody}>{item.body}</Text>
               <Text style={s.itemDate}>{new Date(item.createdAt).toLocaleString('tr-TR')}</Text>
+              {(() => {
+                const t = targetForUrl(item.url, roleCategoryOf(session?.role));
+                if (!t) return null;
+                return (
+                  <Button
+                    label="İlgili ekranı aç"
+                    variant="ghost"
+                    color={brand}
+                    onPress={() => {
+                      if (!item.read) void markRead(item.id);
+                      if (t.type === 'today') router.push('/bugun');
+                      else router.push({ pathname: '/web', params: { path: t.path } });
+                    }}
+                  />
+                );
+              })()}
             </View>
           </Pressable>
         )}
