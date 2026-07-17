@@ -41,8 +41,16 @@ export default function KurumQrEkrani() {
       cooldownUntil.current = Date.now() + 2500; // başarısız çözümleme sonrası bekleme (Gemini #3)
       return;
     }
-    await saveOrg(r.org);
-    router.replace('/giris');
+    try {
+      await saveOrg(r.org);
+      router.replace('/giris');
+    } catch {
+      // SecureStore yazımı düşebilir — tarayıcı donuk kalmasın (inceleme bulgusu).
+      setError('Kurum kaydedilemedi. Yeniden deneyin.');
+      busy.current = false;
+      setResolving(false);
+      cooldownUntil.current = Date.now() + 2500;
+    }
   }
 
   if (!permission) return <LoadingScreen />;

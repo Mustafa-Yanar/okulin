@@ -29,9 +29,15 @@ export default function KurumEkrani() {
       setBusy(false);
       return;
     }
-    await saveOrg(r.org);
-    setBusy(false);
-    router.replace('/giris');
+    try {
+      await saveOrg(r.org);
+      setBusy(false);
+      router.replace('/giris');
+    } catch {
+      // SecureStore yazımı düşebilir (Keystore hatası) — buton kilitli kalmasın (inceleme bulgusu).
+      setError('Kurum kaydedilemedi. Yeniden deneyin.');
+      setBusy(false);
+    }
   }
 
   return (
