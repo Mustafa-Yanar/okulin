@@ -1,24 +1,59 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'expo-router';
-import { AppState, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AppState, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { useSession } from '../../store/session';
-import { currentPermission, enablePush, refreshRegistration, watchTokenRotation, type EnableResult, type RegisterBase } from '../../push';
-import { Screen, Title, Sub, Card, Button, palette } from '../../ui/kit';
+import { useUnreadBadge } from '../../store/badge';
+import { ApiError } from '../../api/client';
+import {
+  currentPermission, enablePush, refreshRegistration, watchTokenRotation,
+  type EnableResult, type RegisterBase,
+} from '../../push';
+import { Screen, Title, Sub, Card, Button, ErrorText, palette } from '../../ui/kit';
+import { StudentTodayView, ParentTodayView, TeacherTodayView, ManagementTodayView } from '../../ui/today';
 import { rolEtiketi } from '../../rol';
+import type { TodayResponse } from '../../api/types';
 
 export default function BugunEkrani() {
   const { org, session, api, installationId, appVersion, rotateInstallationId } = useSession();
+  const { setUnread } = useUnreadBadge();
   const brand = org?.themeColor || palette.brandFallback;
   const [perm, setPerm] = useState<EnableResult | null>(null);
+  const [today, setToday] = useState<TodayResponse | null>(null);
+  const [childId, setChildId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const base: RegisterBase | null = useMemo(
     () => (installationId ? { installationId, platform: 'android', appVersion } : null),
     [installationId, appVersion],
   );
 
-  // Soğuk açılış: izin varsa sessiz yeniden kayıt + rotasyon dinleyicisi.
-  // cancelled bayrağı: async kurulum bitmeden unmount olursa dinleyici sızmasın
-  // (İnceleme: Gemini 4.2).
+  const load = useCallback(async () => {
+    if (!api) return;
+    setError(null);
+    try {
+      const q = childId ? `?child=${encodeURIComponent(childId)}` : '';
+      const r = await api.get<TodayResponse>(`/api/mobile/v1/screens/today${q}`);
+      setToday(r);
+      setUnread(r.unreadNotifications);
+    } catch (e) {
+      setError(e instanceof ApiError && e.status !== 0 ? e.message : 'Bugün yüklenemedi. İnternetinizi kontrol edin.');
+    }
+  }, [api, childId, setUnread]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  async function refresh() {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }
+
+  // Soğuk açılış: izin varsa sessiz yeniden kayıt + rotasyon dinleyicisi (Plan 3 — aynen).
   useEffect(() => {
     if (!api || !base) return;
     let cancelled = false;
@@ -35,9 +70,7 @@ export default function BugunEkrani() {
     };
   }, [api, base]);
 
-  // Kullanıcı telefon Ayarları'ndan bildirim iznini değiştirip dönebilir — uygulama
-  // ön plana gelince izin durumunu tazele, yeni verilmişse kaydı tamamla
-  // (İnceleme: Gemini 4.1).
+  // Ayarlar'dan izin değişimi: ön plana dönüşte tazele (Plan 3 — aynen).
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       if (next !== 'active' || !api || !base) return;
@@ -57,10 +90,17 @@ export default function BugunEkrani() {
 
   return (
     <Screen>
-      <View style={s.wrap}>
+      <ScrollView
+        style={s.wrap}
+        contentContainerStyle={s.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} colors={[brand]} />}
+      >
         <Sub>{org?.name}</Sub>
         <Title>Merhaba{session?.name ? `, ${session.name}` : ''}</Title>
-        <Text style={s.role}>{rolEtiketi(session?.role)}</Text>
+        <Text style={s.role}>
+          {rolEtiketi(session?.role)}
+          {today ? ` · ${today.dayLabel}` : ''}
+        </Text>
 
         {perm !== 'granted' ? (
           <Card>
@@ -78,21 +118,20 @@ export default function BugunEkrani() {
           </Card>
         ) : null}
 
-        <Card>
-          <Text style={s.cardTitle}>Bugün</Text>
-          <Sub>Günün programı ve bekleyen işler yakında burada görünecek.</Sub>
-        </Card>
-        <Link href="/ayarlar" style={s.link}>
-          Ayarlar ve cihazlar →
-        </Link>
-      </View>
+        {error ? <ErrorText>{error}</ErrorText> : null}
+        {!today && !error ? <Sub>Yükleniyor…</Sub> : null}
+        {today?.role === 'student' ? <StudentTodayView data={today} /> : null}
+        {today?.role === 'parent' ? <ParentTodayView data={today} brand={brand} onSelectChild={setChildId} /> : null}
+        {today?.role === 'teacher' ? <TeacherTodayView data={today} /> : null}
+        {today?.role === 'management' ? <ManagementTodayView brand={brand} /> : null}
+      </ScrollView>
     </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  wrap: { flex: 1, padding: 24, paddingTop: 32 },
+  wrap: { flex: 1 },
+  content: { padding: 24, paddingTop: 32, paddingBottom: 48 },
   role: { fontSize: 14, color: palette.sub, marginTop: 2 },
   cardTitle: { fontSize: 16, fontWeight: '600', color: palette.text, marginBottom: 4 },
-  link: { marginTop: 16, fontSize: 16, color: palette.brandFallback, fontWeight: '600' },
 });
