@@ -125,10 +125,13 @@ export default function BugunEkrani() {
         {today?.role === 'teacher' ? <TeacherTodayView data={today} /> : null}
         {today?.role === 'management' ? <ManagementTodayView brand={brand} /> : null}
 
-        {today ? (
+        {today && today.role !== 'management' ? (
           <Card>
             <Text style={s.cardTitle}>Hızlı erişim</Text>
             {/* PLAN5-QUICKLINKS: sonraki task'lar buraya buton ekler */}
+            {today.role === 'student' || today.role === 'parent' || today.role === 'teacher' ? (
+              <Button label="Haftalık program" onPress={() => router.push('/hafta')} color={brand} variant="ghost" />
+            ) : null}
             {today.role === 'student' ? (
               <Button label="Etüt al / görüntüle" onPress={() => router.push('/etut')} color={brand} variant="ghost" />
             ) : null}
