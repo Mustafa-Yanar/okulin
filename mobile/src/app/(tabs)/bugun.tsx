@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppState, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSession } from '../../store/session';
 import { useUnreadBadge } from '../../store/badge';
 import { ApiError } from '../../api/client';
@@ -124,6 +124,16 @@ export default function BugunEkrani() {
         {today?.role === 'parent' ? <ParentTodayView data={today} brand={brand} onSelectChild={setChildId} /> : null}
         {today?.role === 'teacher' ? <TeacherTodayView data={today} /> : null}
         {today?.role === 'management' ? <ManagementTodayView brand={brand} /> : null}
+
+        {today ? (
+          <Card>
+            <Text style={s.cardTitle}>Hızlı erişim</Text>
+            {/* PLAN5-QUICKLINKS: sonraki task'lar buraya buton ekler */}
+            {today.role === 'student' ? (
+              <Button label="Etüt al / görüntüle" onPress={() => router.push('/etut')} color={brand} variant="ghost" />
+            ) : null}
+          </Card>
+        ) : null}
       </ScrollView>
     </Screen>
   );
