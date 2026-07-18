@@ -135,6 +135,9 @@ export default function BugunEkrani() {
             {today.role === 'student' ? (
               <Button label="Etüt al / görüntüle" onPress={() => router.push('/etut')} color={brand} variant="ghost" />
             ) : null}
+            {today.role === 'student' || today.role === 'parent' ? (
+              <Button label="Tüm ödevler" onPress={() => router.push('/odev')} color={brand} variant="ghost" />
+            ) : null}
           </Card>
         ) : null}
       </ScrollView>
