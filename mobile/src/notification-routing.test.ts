@@ -19,8 +19,7 @@ describe('targetForUrl — inbox "İlgili ekranı aç" eşlemesi', () => {
     expect(targetForUrl('/?tab=takvim', 'management')).toEqual({ type: 'web', path: '/?tab=takvim' });
     expect(targetForUrl('/', 'management')).toEqual({ type: 'web', path: '/' });
   });
-  it('öğrenci/veli/öğretmen: içerik kartları Bugün\'de', () => {
-    expect(targetForUrl('/?tab=odev', 'student')).toEqual({ type: 'today' });
+  it('öğrenci/veli/öğretmen: eşlenmeyen içerik kartları Bugün\'de (ödev/program artık native — bkz. alt describe)', () => {
     expect(targetForUrl('/?sekme=odeme', 'parent')).toEqual({ type: 'today' });
     expect(targetForUrl('/?tab=davranis', 'teacher')).toEqual({ type: 'today' });
   });
@@ -36,5 +35,26 @@ describe('targetForUrl — inbox "İlgili ekranı aç" eşlemesi', () => {
   });
   it('rol yoksa aksiyon yok', () => {
     expect(targetForUrl('/?tab=odev', null)).toBeNull();
+  });
+});
+
+describe('targetForUrl — derin native rotalar (Plan 5)', () => {
+  it('ödev url → native /odev (öğrenci)', () => {
+    expect(targetForUrl('/?tab=odev', 'student')).toEqual({ type: 'native', path: '/odev' });
+  });
+  it('program url → native /hafta (veli)', () => {
+    expect(targetForUrl('/?sekme=program', 'parent')).toEqual({ type: 'native', path: '/hafta' });
+  });
+  it('yönetim → daima web (native eşleme yok)', () => {
+    expect(targetForUrl('/?tab=odev', 'management')).toEqual({ type: 'web', path: '/?tab=odev' });
+  });
+  it('eşlenmeyen url (davranış) → today (native rol)', () => {
+    expect(targetForUrl('/?tab=davranis', 'student')).toEqual({ type: 'today' });
+  });
+  it('sahte substring (/?notab=odev) → today (tam param eşleşmesi, Codex #10)', () => {
+    expect(targetForUrl('/?notab=odev', 'student')).toEqual({ type: 'today' });
+  });
+  it('kök / → null', () => {
+    expect(targetForUrl('/', 'student')).toBeNull();
   });
 });

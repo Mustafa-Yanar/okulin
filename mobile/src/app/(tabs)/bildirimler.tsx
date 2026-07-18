@@ -108,17 +108,21 @@ export default function BildirimlerEkrani() {
     const inList = items.find((x) => x.id === focus);
     let cancelled = false;
     void (async () => {
+      let alreadyRead = inList?.read ?? false;
       if (!inList) {
         try {
           const r = await api.get<InboxListResponse>(`/api/mobile/v1/notifications?id=${encodeURIComponent(focus)}`);
           if (cancelled) return;
-          if (r.items[0]) setFocusItem(r.items[0]);
+          if (r.items[0]) {
+            setFocusItem(r.items[0]);
+            alreadyRead = r.items[0].read;
+          }
           applyCounts(r.unreadCount);
         } catch {
           /* bulunamadı/ağ hatası — liste yine görünür */
         }
       }
-      if (!cancelled && (!inList || !inList.read)) await markRead(focus);
+      if (!cancelled && !alreadyRead) await markRead(focus);
     })();
     return () => {
       cancelled = true;
@@ -187,7 +191,10 @@ export default function BildirimlerEkrani() {
                     onPress={() => {
                       if (!item.read) void markRead(item.id);
                       if (t.type === 'today') router.push('/bugun');
-                      else router.push({ pathname: '/web', params: { path: t.path } });
+                      else if (t.type === 'native') {
+                        if (t.path === '/odev') router.push('/odev');
+                        else router.push('/hafta');
+                      } else router.push({ pathname: '/web', params: { path: t.path } });
                     }}
                   />
                 );
