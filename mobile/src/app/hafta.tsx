@@ -46,7 +46,7 @@ export default function HaftaEkrani() {
           <Pressable style={st.navBtn} onPress={() => shift(1)}><Text style={[st.navLabel, { color: brand }]}>Sonraki ▶</Text></Pressable>
         </View>
         {error ? <ErrorText>{error}</ErrorText> : null}
-        {!data ? <Sub>Yükleniyor…</Sub> : null}
+        {!data && !error ? <Sub>Yükleniyor…</Sub> : null}
 
         {data?.role === 'parent' && data.children.length > 1 ? (
           <View style={st.chips}>

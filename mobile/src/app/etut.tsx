@@ -32,7 +32,7 @@ export default function EtutEkrani() {
     setBusy(slot.etutId);
     setError(null);
     try {
-      await api.post('/api/mobile/v1/etut/reserve', { teacherId: slot.teacherId, etutId: slot.etutId, branch });
+      await api.post('/api/mobile/v1/etut/reserve', { teacherId: slot.teacherId, etutId: slot.etutId, branch, weekKey: data?.weekKey });
       await load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Rezervasyon yapılamadı.');
@@ -69,7 +69,7 @@ export default function EtutEkrani() {
         <Title>Etüt rezervasyonu</Title>
         <Sub>Bu haftanın uygun etütleri. Grubuna ve dersine uygun bir etüt seçebilirsin.</Sub>
         {error ? <ErrorText>{error}</ErrorText> : null}
-        {!data ? <Sub>Yükleniyor…</Sub> : null}
+        {!data && !error ? <Sub>Yükleniyor…</Sub> : null}
         {data && byDay.length === 0 ? <Sub>Bu hafta rezerve edilebilir etüt yok.</Sub> : null}
         {byDay.map((day) => (
           <View key={day.dayLabel}>

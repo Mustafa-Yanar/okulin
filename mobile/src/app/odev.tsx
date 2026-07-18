@@ -48,7 +48,7 @@ export default function OdevEkrani() {
       <ScrollView contentContainerStyle={st.content}>
         <Title>Ödevler</Title>
         {error ? <ErrorText>{error}</ErrorText> : null}
-        {!data ? <Sub>Yükleniyor…</Sub> : null}
+        {!data && !error ? <Sub>Yükleniyor…</Sub> : null}
         {data && data.items.length === 0 ? <Sub>Ödev bulunmuyor.</Sub> : null}
 
         {data?.role === 'student' ? data.items.map((o: OdevListItem) => (

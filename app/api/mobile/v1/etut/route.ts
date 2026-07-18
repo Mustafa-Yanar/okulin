@@ -4,6 +4,7 @@ import { contentLimited } from '@/lib/mobile/limits';
 import { listBookableEtuts } from '@/lib/etut/rezervasyon';
 import { trToday } from '@/lib/mobile/today';
 import { ALL_DAYS } from '@/lib/constants';
+import { getOrgConfig } from '@/lib/config';
 
 // Öğrencinin bu hafta rezerve edebileceği etütler (spec §5.1). Yalnız öğrenci rolü;
 // veli/öğretmen/yönetim 403 (mobil etüt yazma = öğrenci self-servis, plan ADR).
@@ -14,6 +15,8 @@ export const GET = withMobileAuth(async (req: NextRequest, _ctx, session) => {
   if (session.role !== 'student') return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   const limited = await contentLimited(session.sid);
   if (limited) return limited;
+  const mods = await getOrgConfig('modules');
+  if (mods.etut === false) return NextResponse.json({ error: 'Bu modül kurumunuzda kapalı' }, { status: 403 });
 
   // Hafta biçim doğrulaması (İnceleme Codex #11): W00/W99 anlamsız haftalar getMondayOfWeek'i
   // saçma tarihlere normalize eder → geçersizde bu haftaya düş.

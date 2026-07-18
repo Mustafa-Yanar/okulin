@@ -48,7 +48,7 @@ export default function BildirimTercihleriEkrani() {
         <Title>Bildirim tercihleri</Title>
         <Sub>Kapattığınız kategorilerde push bildirimi almazsınız; bildirimler yine uygulama içinde (Bildirimler sekmesi) görünür. Güvenlik bildirimleri her zaman açıktır.</Sub>
         {error ? <ErrorText>{error}</ErrorText> : null}
-        {!items ? <Sub>Yükleniyor…</Sub> : null}
+        {!items && !error ? <Sub>Yükleniyor…</Sub> : null}
         {(items ?? []).map((item) => (
           <Card key={item.category}>
             <View style={st.row}>

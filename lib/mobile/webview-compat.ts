@@ -24,7 +24,7 @@ export function outdatedWebViewHtml(): string {
     '<!doctype html><html lang="tr"><head><meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width,initial-scale=1">',
     '<meta name="referrer" content="no-referrer">',
-    '<title>Guncelleme gerekli</title></head>',
+    '<title>Güncelleme gerekli</title></head>',
     '<body style="font-family:sans-serif;margin:0;padding:24px;background:#f8fafc;color:#0f172a">',
     '<div style="max-width:420px;margin:40px auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px">',
     '<h1 style="font-size:18px;margin:0 0 12px">Tarayıcı bileşeni güncel değil</h1>',
