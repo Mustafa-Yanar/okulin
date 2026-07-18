@@ -39,6 +39,8 @@ interface SessionContextValue {
   logout(localOnly?: boolean): Promise<void>;
   retryBoot(): void; // Gate "Yeniden dene" — /me açılış denemesini tekrarlar (offline kurtarma)
   rotateInstallationId(): Promise<string>; // push register 409'unda yeni kimlik (Codex #3)
+  // Mobil şifre değişimi sonrası: yeni token çifti + güncel session (mustChangePassword:false).
+  applyPasswordChanged(pair: { accessToken: string; refreshToken: string }, session: MobileSessionInfo): Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -188,11 +190,24 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     [api, installationId],
   );
 
+  const applyPasswordChanged = useCallback(
+    async (pair: { accessToken: string; refreshToken: string }, newSession: MobileSessionInfo) => {
+      // Epoch'u artır (İnceleme Codex #2 / Gemini #1 — Critical): şifre değişimi sırasında
+      // UÇUŞTA olan bir doRefresh yanıtı taze token'ları EZMESİN ve 401'ini logout'a
+      // çevirMESİN. clear() epoch++ → eski epoch'lu setPair reddedilir (false), eski
+      // epoch'lu doRefresh outcome 'stale' olur (onSessionExpired tetiklenmez).
+      await tokens.clear();
+      await tokens.setPair(pair);
+      setSession(newSession);
+    },
+    [tokens],
+  );
+
   // Context value memo'lu: her render'da yeni referans üretip TÜM tüketici
   // ekranları gereksiz re-render etmesin (İnceleme: Gemini 3.1).
   const value = useMemo<SessionContextValue>(
-    () => ({ status, org, session, api, installationId, appVersion, saveOrg, leaveOrg, login, logout, retryBoot, rotateInstallationId }),
-    [status, org, session, api, installationId, appVersion, saveOrg, leaveOrg, login, logout, retryBoot, rotateInstallationId],
+    () => ({ status, org, session, api, installationId, appVersion, saveOrg, leaveOrg, login, logout, retryBoot, rotateInstallationId, applyPasswordChanged }),
+    [status, org, session, api, installationId, appVersion, saveOrg, leaveOrg, login, logout, retryBoot, rotateInstallationId, applyPasswordChanged],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

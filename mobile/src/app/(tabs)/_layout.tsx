@@ -9,11 +9,12 @@ import { LoadingScreen, palette } from '../../ui/kit';
 // Rota guard'ı (İnceleme Codex #9): sekmelere deep link ile oturumsuz gelinirse
 // index yönlendirmesine döner — ekranlar api'siz boş durumda takılı kalmaz.
 export default function TabsLayout() {
-  const { org, status } = useSession();
+  const { org, status, session } = useSession();
   const { unread } = useUnreadBadge();
   const brand = org?.themeColor || palette.brandFallback;
   if (status === 'loading') return <LoadingScreen />;
   if (status !== 'ready') return <Redirect href="/" />;
+  if (status === 'ready' && session?.mustChangePassword) return <Redirect href="/sifre" />;
   return (
     <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: brand }}>
       <Tabs.Screen

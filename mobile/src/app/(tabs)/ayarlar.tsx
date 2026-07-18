@@ -68,6 +68,7 @@ export default function AyarlarEkrani() {
             {org?.name} · {rolEtiketi(session?.role)}
           </Sub>
         </Card>
+        <Button label="Şifre değiştir" onPress={() => router.push('/sifre')} color={brand} variant="ghost" />
         <Text style={s.section}>Cihazlar</Text>
         {devices === null ? <Sub>Yükleniyor…</Sub> : null}
         {devices?.length === 0 ? <Sub>Kayıtlı cihaz oturumu yok.</Sub> : null}
