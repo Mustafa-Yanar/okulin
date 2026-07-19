@@ -7,7 +7,15 @@ import { writeFileSync, mkdirSync } from 'fs';
 
 const APPLY = process.argv.includes('--apply');
 const orgArg = process.argv.indexOf('--org');
-const ORG = orgArg !== -1 ? process.argv[orgArg + 1] : null;
+let ORG = null;
+if (orgArg !== -1) {
+  const val = process.argv[orgArg + 1];
+  if (!val || val.startsWith('--')) {
+    console.error('HATA: --org bir değer bekliyor');
+    process.exit(1);
+  }
+  ORG = val;
+}
 const p = new PrismaClient();
 
 const backup = [];
@@ -23,13 +31,33 @@ const path = `scripts/backups/etut-json-backup-${new Date().toISOString().replac
 writeFileSync(path, JSON.stringify(backup, null, 2));
 console.log(`Yedek: ${path} (${backup.length} öğretmen)`);
 
-if (!APPLY) { console.log('DRY-RUN — JSON temizlenmedi. Temizlik için --apply.'); await p.$disconnect(); process.exit(0); }
+let ok = 0, skipped = 0, failed = 0;
+
+if (!APPLY) {
+  console.log('DRY-RUN — JSON temizlenmedi. Temizlik için --apply.');
+  console.log(`Özet: ${backup.length} tarandı, 0 temizlenecek (dry-run).`);
+  await p.$disconnect();
+  process.exit(0);
+}
 
 for (const b of backup) {
-  const t = await p.teacher.findUnique({ where: { id: b.teacherDbId } });
-  const tpl = { ...t.programTemplate };
-  delete tpl.etutSablonlari;
-  await p.teacher.update({ where: { id: b.teacherDbId }, data: { programTemplate: tpl } });
-  console.log(`Temizlendi: ${b.orgSlug} / ${b.name}`);
+  try {
+    const t = await p.teacher.findUnique({ where: { id: b.teacherDbId } });
+    if (!t) {
+      console.log(`ATLANDI (öğretmen silinmiş): ${b.orgSlug} / ${b.name}`);
+      skipped++;
+      continue;
+    }
+    const tpl = { ...t.programTemplate };
+    delete tpl.etutSablonlari;
+    await p.teacher.update({ where: { id: b.teacherDbId }, data: { programTemplate: tpl } });
+    console.log(`Temizlendi: ${b.orgSlug} / ${b.name}`);
+    ok++;
+  } catch (e) {
+    console.log(`HATA: ${b.orgSlug} / ${b.name}: ${String(e)}`);
+    failed++;
+  }
 }
+console.log(`Özet: ${ok} başarılı, ${skipped} atlandı, ${failed} hata.`);
+if (failed > 0) process.exitCode = 1;
 await p.$disconnect();

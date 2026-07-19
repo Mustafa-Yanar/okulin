@@ -9,14 +9,28 @@ if (!backupPath) { console.error('Kullanım: node scripts/rollback-etut-json.mjs
 const backup = JSON.parse(readFileSync(backupPath, 'utf8'));
 const p = new PrismaClient();
 
+let ok = 0, skipped = 0, failed = 0;
+
 for (const b of backup) {
   console.log(`${APPLY ? 'GERİ YÜKLENİYOR' : 'DRY-RUN'}: ${b.orgSlug} / ${b.name} (${b.etutSablonlari.length} şablon)`);
   if (!APPLY) continue;
-  const t = await p.teacher.findUnique({ where: { id: b.teacherDbId } });
-  await p.teacher.update({
-    where: { id: b.teacherDbId },
-    data: { programTemplate: { ...t.programTemplate, etutSablonlari: b.etutSablonlari } },
-  });
+  try {
+    const t = await p.teacher.findUnique({ where: { id: b.teacherDbId } });
+    if (!t) {
+      console.log(`ATLANDI (öğretmen silinmiş): ${b.orgSlug} / ${b.name}`);
+      skipped++;
+      continue;
+    }
+    await p.teacher.update({
+      where: { id: b.teacherDbId },
+      data: { programTemplate: { ...t.programTemplate, etutSablonlari: b.etutSablonlari } },
+    });
+    ok++;
+  } catch (e) {
+    console.log(`HATA: ${b.orgSlug} / ${b.name}: ${String(e)}`);
+    failed++;
+  }
 }
-console.log(`${backup.length} öğretmen işlendi (${APPLY ? 'APPLY' : 'dry-run'}).`);
+console.log(`Özet: ${ok} başarılı, ${skipped} atlandı, ${failed} hata.`);
+if (failed > 0) process.exitCode = 1;
 await p.$disconnect();
