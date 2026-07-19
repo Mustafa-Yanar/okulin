@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { withAuth, canReadStudent } from '@/lib/auth';
 import { getWeekKey, getTeacherWeekSlots, getAllTeachers, slotStartTime, getDaySlotTimes, getProgramTemplate, getWeekEvents, findBlockingEvent, dateStrForWeekDay, type SlotCell, type ProgramEntry } from '@/lib/slots';
-import { ALL_DAYS, daySlots, MEZUN_FORBIDDEN_ETUT_SLOT_NO, slotNoOf, MATH_FAMILY, allowedBranchesForClass } from '@/lib/constants';
+import { ALL_DAYS, daySlots, MEZUN_FORBIDDEN_ETUT_SLOT_NO, slotNoOf, MATH_FAMILY } from '@/lib/constants';
+import { pickAllowedBranches } from '@/lib/etut/rezervasyon';
 import { parseBody, z, zId } from '@/lib/validate';
 import { tdb } from '@/lib/sqldb';
 import type { Prisma } from '@prisma/client';
@@ -202,8 +203,8 @@ export const POST = withAuth(async (req, _ctx, session) => {
     return NextResponse.json({ error: 'Mezun öğrenciler hafta içi 9. slottaki etüde kayıt olamaz' }, { status: 400 });
   }
 
-  // Branş doğrulaması
-  const studentAllowed = allowedBranchesForClass(studentCls);
+  // Branş doğrulaması — registry-öncelikli (özel şube s_UUID için constants parseInt→NaN bozuk).
+  const studentAllowed = pickAllowedBranches(targetStudent.class?.dersler, studentCls);
   let bookingBranch: string | undefined = branch;
   if (!bookingBranch) {
     const candidates = (teacher.branches || []).filter(b => studentAllowed.includes(b));

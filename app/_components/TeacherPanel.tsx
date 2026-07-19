@@ -26,7 +26,7 @@ import StudentGuidanceView from './rehberlik/StudentGuidanceView';
 import { useSlotTimes } from './SlotTimesContext';
 import { useClasses } from './ClassesContext';
 import { subjectsForClass } from './student-logic';
-import { classShortUpper, groupStudentsByClass } from '@/lib/classCatalog';
+import { classShortUpper, groupStudentsByClass, coursesForClass } from '@/lib/classCatalog';
 import { useUrlTab } from './useUrlTab';
 import PanelHero from './PanelHero';
 import { api, getAdjacentWeek, isSlotPast, WeekNav } from './shared';
@@ -623,9 +623,13 @@ function TeacherEtutPanel({ session, students, showToast }: TeacherEtutPanelProp
   const teacherBranches = useMemo(() => session.branches || [], [session.branches]);
   const allowedGroups = useMemo(() => session.allowedGroups || [], [session.allowedGroups]);
   // Bir öğrenciye bu öğretmenin verebileceği ders adayları (branş ∩ sınıf dersleri).
+  // Registry-öncelikli (coursesForClass): özel şube s_UUID için constants parseInt→NaN bozuk.
   const candidatesFor = useCallback(
-    (cls: string) => teacherBranches.filter(b => allowedBranchesForClass(cls).includes(b)),
-    [teacherBranches]
+    (cls: string) => {
+      const allowed = coursesForClass(classes, cls) ?? allowedBranchesForClass(cls);
+      return teacherBranches.filter(b => allowed.includes(b));
+    },
+    [teacherBranches, classes]
   );
   // Atanabilir öğrenciler: öğretmenin grubuna açık + en az bir ders adayı olan.
   const eligibleStudents = useMemo(() =>
