@@ -9,7 +9,24 @@ import {
   type EtutSablonu,
 } from '@/lib/slots';
 import { allowedBranchesForClass, MATH_FAMILY, getWeekKey } from '@/lib/constants';
+import { getClass } from '@/lib/classes';
 import { HttpError } from '@/lib/errors';
+
+// Öğrencinin görebileceği/rezerve edebileceği dersler — ÖNCE kurum registry'si
+// (Class.dersler; özel şube s_UUID + yapılandırılmış sınıflar için TEK doğru kaynak),
+// registry'de kayıt/ders yoksa constants'a düş (legacy sayısal sınıf fallback).
+// Client (StudentPanel: coursesForClass ?? allowedBranchesForClass) ve rehberlik
+// subjectsForClass ile HİZALI. constants colKeyForClass 's_UUID'yi parseInt→NaN ile
+// yanlış 'Lise Ortak_9'a düşürüyordu → geçerli branş "Geçersiz ders" ile reddediliyordu.
+// Saf karar (birim testli): registry dersleri varsa onları, yoksa constants'ı kullan.
+export function pickAllowedBranches(registryDersler: string[] | null | undefined, cls: string | null | undefined): string[] {
+  if (registryDersler && registryDersler.length) return registryDersler;
+  return allowedBranchesForClass(cls);
+}
+async function resolveStudentBranches(cls: string | null | undefined): Promise<string[]> {
+  const clsRow = cls ? await getClass(cls) : null;
+  return pickAllowedBranches(clsRow?.dersler, cls);
+}
 
 // Etüt rezervasyon iş kuralları servisi (spec §9/6 — route'tan çıkarıldı, davranış birebir).
 // Web route (etut-sablon/rezervasyon) + mobil route (mobile/v1/etut/reserve) bu servisi çağırır.
@@ -94,7 +111,7 @@ export async function reserveEtut(
   const startAt = slotStartTime(weekKey, sb.dayIndex, sb.start);
   if (startAt.getTime() <= Date.now()) throw new HttpError(400, 'Geçmiş bir etüde rezervasyon yapılamaz');
 
-  const studentAllowed = allowedBranchesForClass(targetStudent.cls);
+  const studentAllowed = await resolveStudentBranches(targetStudent.cls);
   let bookingBranch: string | undefined = branch;
   if (!bookingBranch) {
     const candidates = (teacher.branches || []).filter((b) => studentAllowed.includes(b));
@@ -168,7 +185,7 @@ export async function listBookableEtuts(studentId: string, weekKey: string): Pro
   const [students, teachers, templates] = await Promise.all([getAllStudents(), getAllTeachers(), getAllProgramTemplates()]);
   const student = students.find((s) => s.id === studentId);
   if (!student) throw new HttpError(404, 'Öğrenci bulunamadı');
-  const studentAllowed = allowedBranchesForClass(student.cls);
+  const studentAllowed = await resolveStudentBranches(student.cls);
   const teacherById = new Map(teachers.map((t) => [t.id, t]));
   const out: BookableEtut[] = [];
   for (const tpl of templates) {
