@@ -739,24 +739,37 @@ model NotificationPreference {
 }
 
 // ── Etüt şablonu (Faz 1 göçü: Teacher.programTemplate.etutSablonlari JSON → tablo) ──
-// id JSON'daki mevcut kimlik KORUNARAK taşınır (EtutReservation FK'sı için).
+// id = DB PK (cuid); legacyId = JSON'daki kimlik (API'ler etutId olarak bunu kullanır).
 // Rezervasyon alanları BURADA DEĞİL — EtutReservation'da (hafta-bazlı).
 model EtutSablon {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   orgSlug       String
-  branch        String   @default("main")
-  teacherId     String   // legacyId (etutSablonlari JSON konvansiyonu — DİKKAT: SlotBooking.teacherId bundan FARKLI, Teacher.id kullanır)
-  teacher       Teacher  @relation(fields: [orgSlug, branch, teacherId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
+  branch        String    @default("main")
+  legacyId      String    // JSON şablon id (etutSablonlari[].id) — API'ler etutId olarak bunu kullanır
+  teacherId     String    // legacyId (etutSablonlari JSON konvansiyonu — DİKKAT: SlotBooking.teacherId bundan FARKLI, Teacher.id kullanır)
+  teacher       Teacher   @relation(fields: [orgSlug, branch, teacherId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
   dayIndex      Int
-  start         String   // "HH:MM"
+  start         String    // "HH:MM"
   end           String
-  aktif         Boolean  @default(true)
-  pasifHaftalar String[] @default([])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  aktif         Boolean   @default(true)
+  pasifHaftalar String[]  @default([])
+  deletedAt     DateTime? // soft-delete (Faz 2: normal silme yolu bunu doldurur; cascade yalnız bilinçli hard-delete — reset-all)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   reservations  EtutReservation[]
+  @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch, teacherId])
   @@index([orgSlug, branch])
+}
+
+enum EtutScope {
+  WEEK
+  RECURRING
+}
+
+enum EtutStatus {
+  ACTIVE
+  CANCELLED
 }
 
 // ── Hafta-bazlı etüt rezervasyonu (spec §3.2) ──
@@ -770,8 +783,8 @@ model EtutReservation {
   sablonId          String
   sablon            EtutSablon @relation(fields: [sablonId], references: [id], onDelete: Cascade)
   teacherId         String     // legacyId — sorgu kolaylığı (denormalize)
-  scope             String     // 'WEEK' | 'RECURRING'
-  status            String     @default("ACTIVE") // 'ACTIVE' | 'CANCELLED'
+  scope             EtutScope  // WEEK | RECURRING
+  status            EtutStatus @default(ACTIVE) // ACTIVE | CANCELLED
   weekKey           String     // WEEK: "YYYY-Www" | RECURRING: "*"
   effectiveFromWeek String?    // yalnız RECURRING: bu haftadan itibaren
   studentId         String
@@ -795,4 +808,5 @@ model EtutReservation {
   @@index([orgSlug, branch, weekKey])
   @@index([orgSlug, branch, studentId, weekKey])
   @@index([orgSlug, branch, teacherId, weekKey])
+  @@index([sablonId])
 }
