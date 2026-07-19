@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  isoWeekKeyTSI, slotStartTSI, nearestFutureActiveWeek, classifyReservation,
+  isoWeekKeyTSI, slotStartTSI, nearestFutureActiveWeek, classifyReservation, validateSablon,
 } from './etut-migration-lib.mjs';
 
 // Sabit "şimdi": Çarşamba 2026-07-22 10:00 TSİ (W30 içi; Pzt 20 Tem geçmiş)
@@ -59,5 +59,26 @@ describe('classifyReservation', () => {
     const r = classifyReservation(sb({ studentId: 's1', aktif: false }), NOW);
     expect(r.action).toBe('unresolved');
     expect(r.reason).toContain('aktif');
+  });
+});
+
+describe('validateSablon', () => {
+  it('geçerli şablon → ok:true', () => {
+    expect(validateSablon(sb())).toEqual({ ok: true });
+  });
+  it('null → ok:false', () => {
+    expect(validateSablon(null).ok).toBe(false);
+  });
+  it('dayIndex 7 → ok:false', () => {
+    expect(validateSablon(sb({ dayIndex: 7 })).ok).toBe(false);
+  });
+  it('dayIndex NaN → ok:false', () => {
+    expect(validateSablon(sb({ dayIndex: NaN })).ok).toBe(false);
+  });
+  it("start '9:00' (regex fail) → ok:false", () => {
+    expect(validateSablon(sb({ start: '9:00' })).ok).toBe(false);
+  });
+  it('end==start → ok:false', () => {
+    expect(validateSablon(sb({ start: '15:30', end: '15:30' })).ok).toBe(false);
   });
 });

@@ -68,3 +68,16 @@ export function classifyReservation(sb, now) {
   }
   return { action: 'migrate', weekKey };
 }
+
+// Şablon alan doğrulaması (göç öncesi). Dönen: { ok: true } | { ok: false, reason: string }
+export function validateSablon(sb) {
+  if (!sb || typeof sb !== 'object') return { ok: false, reason: 'şablon obje değil' };
+  if (!sb.id || typeof sb.id !== 'string') return { ok: false, reason: 'id eksik/geçersiz' };
+  if (!Number.isInteger(sb.dayIndex) || sb.dayIndex < 0 || sb.dayIndex > 6) return { ok: false, reason: `dayIndex geçersiz: ${sb.dayIndex}` };
+  const HHMM = /^\d{2}:\d{2}$/;
+  if (typeof sb.start !== 'string' || !HHMM.test(sb.start)) return { ok: false, reason: `start geçersiz: ${sb.start}` };
+  if (typeof sb.end !== 'string' || !HHMM.test(sb.end)) return { ok: false, reason: `end geçersiz: ${sb.end}` };
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  if (toMin(sb.end) <= toMin(sb.start)) return { ok: false, reason: `end <= start (${sb.start}-${sb.end})` };
+  return { ok: true };
+}
