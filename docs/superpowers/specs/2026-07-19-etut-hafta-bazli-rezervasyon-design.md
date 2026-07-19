@@ -19,6 +19,8 @@ Etüt rezervasyonu şu an `Teacher.programTemplate.etutSablonlari` JSON'ında `s
 6. **Etüt şablonu:** JSON'dan **ayrı EtutSablon tablosuna** taşınır (gerçek FK, cascade).
 7. **Servis:** **tam birleşik command service** — SlotBooking + etüt tüm yazmaları tek `bookEtut()`'tan geçer.
 8. **Kapsam:** her şey dahil (17 riskin tamamı + soft-delete + audit + kilit + interval + göç güvenliği).
+9. **Ders uygunluğu = DÜZEY bazlı (2026-07-20 onayı):** Öğrenci kendi SINIF listesiyle sınırlı DEĞİL — kendi **düzeyindeki (grup: ortaokul/lise/mezun)** tüm derslerden etüt alabilir. Lise öğrencisi İnkılap Tarihi alamaz (yalnız ortaokul dersi); ortaokul öğrencisi Fizik alamaz (yalnız lise dersi). Bkz §4a.
+10. **Bu hafta kuralı (netleştirme):** Öğrenci içinde bulunduğu haftanın **boş VE başlangıç saati geçmemiş** etütlerini alabilir; geçmişe dönük rezervasyon her koşulda reddedilir (`slotStartsAt > nowTSİ`).
 
 ## 3. Veri modeli
 
@@ -106,7 +108,7 @@ cancelEtut({ source, actor, targetId, weekKey, scope, reason? })
 ```
 Tüm iş kuralları TEK yerde (SlotBooking route'undan da taşınır):
 - studentSelfBooking config, cancelLockHours (etut'e de uygulanır), readOnly rehber reddi
-- kendi-etüdü (öğretmen), allowedGroups, öğretmen branşı ∩ öğrenci sınıf dersleri (registry-öncelikli — [[rehberlik-konu-takibi-fix]])
+- kendi-etüdü (öğretmen), allowedGroups, **öğretmen branşı ∩ öğrencinin DÜZEY dersleri** (§4a — sınıf listesi DEĞİL)
 - tatil/sınav/etkinlik engeli, mezun yasak slot politikası (etut için karar: uygulanır), pasif öğrenci
 - **rol+hafta penceresi** (§5), **tekrarlayan yetkisi** (müdür/rehber), iptal sahipliği
 - müdür/rehber bypass yalnız `force+reason` + **audit log**
@@ -115,6 +117,19 @@ Tüm iş kuralları TEK yerde (SlotBooking route'undan da taşınır):
 
 **Çakışma (birleşik, interval):** `studentWeekBookings(studentId, weekKey)` = EtutReservation(effective, o hafta) + SlotBooking(o hafta), hepsi `{startsAt,endsAt,dersBranch,dayIndex}`'e normalize. Çakışma: dakikaya çevir, `aStart<bEnd && bStart<aEnd`. Aynı ders / matematik ailesi / `maxWeeklyPerStudent` iki sistem TOPLAMI. Öğretmen tarafı çakışma da (kendi dersi/etüdü, izin günü, etkinlik) kontrol.
 **SlotBooking'e de startsAt/endsAt snapshot** eklenir (config değişince eski kayıt kaymasın).
+
+### 4a. Ders uygunluğu — düzey havuzu (`allowedBranchesForStudent`)
+
+Öğrencinin alabileceği ders adayları = **öğretmen branşları ∩ düzey havuzu**. Düzey havuzu:
+```
+levelPool(group) = ⋃ Class.dersler  (org'un o GRUPTAKI tüm sınıfları, registry)
+                   ∪ fallback: COL_COURSES'un o gruba ait sütunlarının birleşimi (registry boş/eksikse)
+```
+- Grup = `student.group` ('ortaokul' | 'lise' | 'mezun'). **cls ASLA parseInt edilmez** ([[rehberlik-konu-takibi-fix]] kuralı); havuz sınıf-bazlı değil grup-bazlıdır → s_UUID sorunu kökten yok.
+- Örnekler: lise öğrencisi → İnkılap Tarihi YOK (yalnız ortaokul havuzunda); ortaokul öğrencisi → Fizik YOK (yalnız lise havuzunda); lise öğrencisi kendi sınıf listesinde olmayan bir lise dersinden etüt ALABİLİR.
+- **Mezun notu (varsayım):** mezun havuzu = mezun sınıflarının birleşimi; org'da mezun sınıfı yoksa `COL_COURSES` Mezun sütunları. İçerik olarak lise düzeyiyle örtüşür — ayrı lise-birleşimi eklenmez (gerekirse ileride genişletilir).
+- Bu kural **tüm etüt yollarına** uygulanır (birleşik servis sayesinde tek yerde): web öğrenci/öğretmen/müdür, mobil, eski /api/slots yolu. UI ders-adayı hesapları (StudentPanel `selectableBranchesFor`, TeacherEtutPanel `candidatesFor`, SlotGrid) aynı havuzu kullanır.
+- Aynı-ders / matematik ailesi / haftalık limit kuralları DEĞİŞMEZ — yalnız aday kümesi genişler.
 
 ## 5. Rol + hafta pencere kuralları (sunucu, TSİ)
 
@@ -147,7 +162,7 @@ Tüm iş kuralları TEK yerde (SlotBooking route'undan da taşınır):
 **Bildirim/push:** rezervasyon kaynağı değişince etkilenen üretim yolları.
 
 ## 9. Test
-- **Birim:** effectiveReservation (week vs recurring önceliği + CANCELLED tombstone), allowedBookingWeeks (Pazar/TSİ sınırı), rol-bazlı bookEtut kararları, interval çakışma (dakika + yarı-açık), çapraz-sistem birleşik çakışma/limit, göç dönüşümü (saf fonksiyon: en-yakın-hafta, unresolved).
+- **Birim:** effectiveReservation (week vs recurring önceliği + CANCELLED tombstone), allowedBookingWeeks (Pazar/TSİ sınırı), rol-bazlı bookEtut kararları, interval çakışma (dakika + yarı-açık), çapraz-sistem birleşik çakışma/limit, göç dönüşümü (saf fonksiyon: en-yakın-hafta, unresolved), **düzey havuzu** (lise→İnkılap RED, ortaokul→Fizik RED, lise→sınıf-dışı lise dersi KABUL, s_UUID etkisiz).
 - **Entegrasyon (Playwright `int`):** reserve/cancel/recurring/pencere-sınırı/çapraz-sistem/eşzamanlı-yarış (2 paralel istek).
 - **Göç:** dry-run + canlı DB doğrulama (İrem W30, Ahmet W30) + rollback provası.
 - Her fazda **Codex/Gemini destekli doğrulama** ([[feedback_coklu-model-hata-ayiklama]]).
