@@ -10,6 +10,7 @@ import {
   ALL_DAYS,
   getWeekKey,
   classLabel,
+  allowedBranchesForClass,
   daySlots as buildDaySlots
 } from '@/lib/constants';
 import { subjectMatchesBranch } from '@/lib/deneme/branch';
@@ -597,6 +598,218 @@ function TeacherStudentsView({ students, branches = [] }: TeacherStudentsViewPro
   );
 }
 
+// ── Etütler sekmesi ──────────────────────────────────────────────────────────
+// Öğretmenin bu hafta EFEKTİF AKTİF serbest etüt slotları (boş + dolu). Öğretmen
+// buradan kendi etüdüne öğrenci atar/kaldırır. Veri: /api/etut-sablon/all (kendi
+// teacherId'sine süzülür); atama /api/etut-sablon/rezervasyon (reserveEtut servisi,
+// teacher rolü kendi etüdüne yazma yetkili — lib/etut/rezervasyon.ts). Ders (branch)
+// = öğretmenin branşları ∩ öğrencinin sınıf dersleri; tek adaysa otomatik seçilir.
+interface TeacherEtutPanelProps {
+  session: Session;
+  students: StudentDTO[];
+  showToast: ShowToast;
+}
+
+function TeacherEtutPanel({ session, students, showToast }: TeacherEtutPanelProps) {
+  const { classes } = useClasses();
+  const [weekKey, setWeekKey] = useState(getWeekKey());
+  const [etutler, setEtutler] = useState<EtutAllDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [assignFor, setAssignFor] = useState<string | null>(null); // atanmakta olan etüt id
+  const [selStudent, setSelStudent] = useState('');
+  const [selBranch, setSelBranch] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const teacherBranches = useMemo(() => session.branches || [], [session.branches]);
+  const allowedGroups = useMemo(() => session.allowedGroups || [], [session.allowedGroups]);
+  // Bir öğrenciye bu öğretmenin verebileceği ders adayları (branş ∩ sınıf dersleri).
+  const candidatesFor = useCallback(
+    (cls: string) => teacherBranches.filter(b => allowedBranchesForClass(cls).includes(b)),
+    [teacherBranches]
+  );
+  // Atanabilir öğrenciler: öğretmenin grubuna açık + en az bir ders adayı olan.
+  const eligibleStudents = useMemo(() =>
+    students.filter(s =>
+      (allowedGroups.length === 0 || allowedGroups.includes(s.group)) &&
+      candidatesFor(s.cls).length > 0
+    ), [students, allowedGroups, candidatesFor]);
+
+  const load = useCallback(async (wk: string) => {
+    setLoading(true);
+    try {
+      const data = await api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${wk}`)
+        .catch(() => ({ etutler: [] as EtutAllDTO[] }));
+      setEtutler((data.etutler || []).filter(e => e.teacherId === session.id));
+    } catch (err) {
+      showToast((err as Error).message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [session.id, showToast]);
+
+  useEffect(() => { load(weekKey); }, [load, weekKey]);
+
+  function resetAssign() { setAssignFor(null); setSelStudent(''); setSelBranch(''); }
+
+  async function submitAssign(etutId: string) {
+    const stu = students.find(s => s.id === selStudent);
+    if (!stu) { showToast('Öğrenci seçin', 'error'); return; }
+    const cands = candidatesFor(stu.cls);
+    const branch = selBranch || (cands.length === 1 ? cands[0] : '');
+    if (!branch) { showToast('Ders seçin', 'error'); return; }
+    setBusy(true);
+    try {
+      await api('/api/etut-sablon/rezervasyon', {
+        method: 'POST',
+        body: JSON.stringify({ teacherId: session.id, etutId, studentId: selStudent, branch, weekKey }),
+      });
+      showToast('Öğrenci etüde atandı', 'success');
+      resetAssign();
+      load(weekKey);
+    } catch (err) {
+      showToast((err as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeStudent(etutId: string) {
+    setBusy(true);
+    try {
+      await api('/api/etut-sablon/rezervasyon', {
+        method: 'DELETE',
+        body: JSON.stringify({ teacherId: session.id, etutId }),
+      });
+      showToast('Öğrenci etütten kaldırıldı', 'success');
+      load(weekKey);
+    } catch (err) {
+      showToast((err as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const days = useMemo(() => {
+    return ALL_DAYS.map(day => {
+      const items = etutler
+        .filter(e => e.dayIndex === day.index)
+        .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+      if (items.length === 0) return null;
+      return { dayIndex: day.index, dayLabel: day.label, items };
+    }).filter((d): d is NonNullable<typeof d> => Boolean(d));
+  }, [etutler]);
+
+  const changeWeek = (dir: number) => setWeekKey(w => getAdjacentWeek(w, dir));
+
+  return (
+    <div>
+      <div className="flex items-center justify-end mb-4">
+        {(() => {
+          const cw = getWeekKey();
+          const maxW = getAdjacentWeek(getAdjacentWeek(cw, 1), 1);
+          return (
+            <WeekNav weekKey={weekKey}
+              canPrev={weekKey !== cw}
+              canNext={weekKey !== maxW}
+              onPrev={() => changeWeek(-1)}
+              onNext={() => changeWeek(1)} />
+          );
+        })()}
+      </div>
+
+      {loading ? (
+        <LoadingBox height="h-40" />
+      ) : days.length === 0 ? (
+        <EmptyState card icon={Clock} title="Bu hafta tanımlı etüt yok"
+          description="Serbest etüt slotları müdür panelinden (Program Editörü) oluşturulur." />
+      ) : (
+        <div className="space-y-2">
+          {days.map(day => (
+            <div key={day.dayIndex} className="card overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0"
+                  style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))' }}>
+                  <Calendar size={15} />
+                </div>
+                <div className="font-700 text-sm" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{day.dayLabel}</div>
+                <span className="text-caption ml-auto">{day.items.length} etüt</span>
+              </div>
+              <div className="px-3 py-2 space-y-1.5">
+                {day.items.map(e => {
+                  const assigned = !!e.studentId;
+                  const isAssigning = assignFor === e.id;
+                  const stu = students.find(s => s.id === selStudent);
+                  const cands = stu ? candidatesFor(stu.cls) : [];
+                  return (
+                    <div key={e.id} className="time-block time-etut rounded-xl overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2.5 gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-600 shrink-0" style={{ fontWeight: 600, background: 'color-mix(in srgb, var(--time-etut) 22%, transparent)', color: 'var(--time-etut)' }}>ETÜT</span>
+                          <span className="time-block__time text-xs shrink-0">{e.start}–{e.end}</span>
+                          {assigned ? (
+                            <>
+                              {e.branch && <span className="text-xs font-600 shrink-0" style={{ fontWeight: 600, color: 'var(--time-etut)' }}>{e.branch}</span>}
+                              <span className="text-sm text-gray-800 truncate">
+                                {e.studentName}{e.studentCls ? ` · ${classShortUpper(classes, e.studentCls)}` : ''}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-sm text-gray-400">Boş</span>
+                          )}
+                        </div>
+                        <div className="shrink-0">
+                          {assigned ? (
+                            <button onClick={() => removeStudent(e.id)} disabled={busy}
+                              className="btn-icon btn-icon-danger" title="Öğrenciyi kaldır">
+                              <X size={13} />
+                            </button>
+                          ) : (
+                            <button onClick={() => { if (isAssigning) { resetAssign(); } else { setAssignFor(e.id); setSelStudent(''); setSelBranch(''); } }}
+                              className="text-xs px-3 py-1.5 rounded-lg font-600 text-white transition-colors"
+                              style={{ fontWeight: 600, background: 'var(--time-etut)' }}>
+                              {isAssigning ? 'Vazgeç' : 'Öğrenci ata'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {isAssigning && !assigned && (
+                        <div className="bg-white px-3 py-2.5 border-t border-gray-100 space-y-2">
+                          <select value={selStudent}
+                            onChange={ev => { setSelStudent(ev.target.value); setSelBranch(''); }}
+                            className="input text-sm">
+                            <option value="">Öğrenci seç...</option>
+                            {eligibleStudents.map(s => (
+                              <option key={s.id} value={s.id}>{s.name} ({classShortUpper(classes, s.cls)})</option>
+                            ))}
+                          </select>
+                          {selStudent && cands.length > 1 && (
+                            <select value={selBranch}
+                              onChange={ev => setSelBranch(ev.target.value)}
+                              className="input text-sm">
+                              <option value="">Ders seç...</option>
+                              {cands.map(b => <option key={b} value={b}>{b}</option>)}
+                            </select>
+                          )}
+                          <button onClick={() => submitAssign(e.id)} disabled={busy || !selStudent}
+                            className="w-full py-2 rounded-lg text-white text-xs font-600 transition-colors disabled:opacity-60"
+                            style={{ fontWeight: 600, background: 'var(--time-etut)' }}>
+                            {busy ? 'Atanıyor...' : 'Ata'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface TeacherPanelProps {
   session: Session;
   showToast: ShowToast;
@@ -611,7 +824,7 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
   const [program, setProgram] = useState<ProgramGrid>({});
   const [students, setStudents] = useState<StudentDTO[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTabInternal] = useUrlTab('rezervasyon', ['rezervasyon', 'yoklama', 'odev', 'davranis', 'ogrenciler', 'kutuphane', 'duyurular', 'takvim', 'formlar']);
+  const [activeTab, setActiveTabInternal] = useUrlTab('rezervasyon', ['rezervasyon', 'etutler', 'yoklama', 'odev', 'davranis', 'ogrenciler', 'kutuphane', 'duyurular', 'takvim', 'formlar']);
   const [viewMode, setViewMode] = useState('table');
   const { slotTimes } = useSlotTimes();
 
@@ -750,6 +963,10 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
               onCancel={item => handleCancel({ teacherId: session.id!, day: item.dayIndex, slotId: item.slotId })} />
           )}
         </>
+      )}
+
+      {activeTab === 'etutler' && (
+        <TeacherEtutPanel session={session} students={students} showToast={showToast} />
       )}
 
       {activeTab === 'yoklama' && (

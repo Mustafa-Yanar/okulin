@@ -60,6 +60,7 @@ const ITEMS_BY_ROLE: Record<string, SidebarItem[]> = {
   ],
   teacher: [
     { group: null,       key: 'rezervasyon', label: 'Program',           icon: Calendar },
+    { group: null,       key: 'etutler',     label: 'Etütler',           icon: Clock },
     { group: null,       key: 'yoklama',     label: 'Yoklama',           icon: ClipboardList },
     { group: null,       key: 'odev',        label: 'Ödevler',           icon: NotebookPen },
     { group: null,       key: 'davranis',    label: 'Davranış',          icon: Award },
