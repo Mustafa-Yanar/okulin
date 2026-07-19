@@ -1,16 +1,17 @@
 'use client';
 
+import { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, CalendarRange, CalendarDays, LayoutGrid, List
+  Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, CalendarRange, CalendarDays, LayoutGrid, List, Calendar, X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ALL_DAYS, daySlots as buildDaySlots } from '@/lib/constants';
 import { GROUPS, getAdjacentWeek, WeekNav, SectionHeader } from './shared';
-import { TeacherBookingsList } from '../TeacherPanel';
 import HistoryModal from './HistoryModal';
 import ProgramEditor from './ProgramEditor';
 import LoadingBox from '../Loading';
 import EmptyState from '../EmptyState';
+import { api } from '../shared';
 import { useSlotTimes } from '../SlotTimesContext';
 import { useClasses } from '../ClassesContext';
 import { classShortUpper } from '@/lib/classCatalog';
@@ -19,6 +20,95 @@ import type { ShowToast, StudentDTO, TeacherDTO } from '../types';
 
 // /api/slots öğretmen grid'i: gün → slotIdx → hücre.
 type TeacherGrid = Record<number, SlotCellData[]>;
+
+// GET /api/etut-sablon/all satırı (öğretmenin serbest/birebir etüt rezervasyonları).
+interface EtutRow {
+  id: string; teacherId: string; dayIndex: number;
+  start?: string; end?: string; branch?: string | null;
+  studentId?: string | null; studentName?: string | null; studentCls?: string | null;
+}
+
+// Müdür öğretmen-detay "Etütler" sekmesi — öğretmenin bu hafta EFEKTİF AKTİF etüt
+// rezervasyonları (etut-sablon). ESKİDEN SlotBooking (/api/slots grid) okunuyordu; etüt
+// rezervasyonları Faz 7'de etut-sablon'a taşındığından o liste hep boş çıkıyordu
+// (SlotBooking'de artık yalnız ders var). Öğrenci/veli/öğretmen-yoklama ile AYNI kaynak.
+function TeacherEtutReservations({ teacherId, weekKey, readOnly, showToast }: { teacherId: string; weekKey: string; readOnly: boolean; showToast: ShowToast }) {
+  const { classes } = useClasses();
+  const [rows, setRows] = useState<EtutRow[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setRows(null);
+    try {
+      const d = await api<{ etutler?: EtutRow[] }>(`/api/etut-sablon/all?week=${weekKey}`).catch(() => ({ etutler: [] as EtutRow[] }));
+      setRows((d.etutler || []).filter(e => e.teacherId === teacherId && e.studentId));
+    } catch (err) {
+      showToast((err as Error).message, 'error');
+      setRows([]);
+    }
+  }, [teacherId, weekKey, showToast]);
+  useEffect(() => { load(); }, [load]);
+
+  async function cancel(etutId: string) {
+    setBusy(etutId);
+    try {
+      await api('/api/etut-sablon/rezervasyon', { method: 'DELETE', body: JSON.stringify({ teacherId, etutId }) });
+      showToast('Rezervasyon iptal edildi', 'success');
+      load();
+    } catch (err) {
+      showToast((err as Error).message, 'error');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (rows === null) return <LoadingBox height="h-24" />;
+  if (rows.length === 0) {
+    return <EmptyState card icon={CalendarRange} title="Bu hafta hiç rezervasyon yok" description="Öğrenciler etüt aldıkça burada görünür." />;
+  }
+
+  const days = ALL_DAYS.map(day => {
+    const items = rows.filter(e => e.dayIndex === day.index).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+    return items.length ? { dayIndex: day.index, dayLabel: day.label, items } : null;
+  }).filter((d): d is NonNullable<typeof d> => Boolean(d));
+
+  return (
+    <div className="space-y-2">
+      {days.map(day => (
+        <div key={day.dayIndex} className="card overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0"
+              style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))' }}>
+              <Calendar size={15} />
+            </div>
+            <div className="font-700 text-sm" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{day.dayLabel}</div>
+            <span className="text-caption ml-auto">{day.items.length} öğrenci</span>
+          </div>
+          <div className="px-3 py-2 space-y-1.5">
+            {day.items.map(e => (
+              <div key={e.id} className="time-block time-etut rounded-xl flex items-center justify-between px-3 py-2.5 gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-600 shrink-0" style={{ fontWeight: 600, background: 'color-mix(in srgb, var(--time-etut) 22%, transparent)', color: 'var(--time-etut)' }}>ETÜT</span>
+                  <span className="time-block__time text-xs shrink-0">{e.start}–{e.end}</span>
+                  {e.branch && <span className="text-xs font-600 shrink-0" style={{ fontWeight: 600, color: 'var(--time-etut)' }}>{e.branch}</span>}
+                  <span className="text-sm text-gray-800 truncate">
+                    {e.studentName}{e.studentCls ? ` · ${classShortUpper(classes, e.studentCls)}` : ''}
+                  </span>
+                </div>
+                {!readOnly && (
+                  <button onClick={() => cancel(e.id)} disabled={busy === e.id}
+                    className="btn-icon btn-icon-danger shrink-0" title="Rezervasyonu iptal et">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 interface TeachersTabProps {
   teachers: TeacherDTO[];
@@ -56,7 +146,6 @@ export default function TeachersTab({
   // İnline detay sayfası — bir öğretmen seçiliyse liste yerine bunu göster.
   if (expandedTeacherId && selT) {
     const t = selT;
-    const slotsReady = selectedTeacherForSlots?.id === t.id && teacherSlots;
     return (
       <div>
         <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
@@ -109,42 +198,9 @@ export default function TeachersTab({
               )}
             </div>
 
-            {/* Etütler sekmesi */}
+            {/* Etütler sekmesi — etut-sablon rezervasyonları (eski SlotBooking listesi değil) */}
             {expandedTeacherTab === 'etutler' && (
-              slotsReady ? (
-                <TeacherBookingsList
-                  bookedList={(() => {
-                    const items: {
-                      dayIndex: number; dayLabel: string; slotId: string; slotLabel: string; slotIdx: number;
-                      studentName?: string | null; studentCls?: string; studentId?: string | null; bookedBy: string; fixed: boolean;
-                    }[] = [];
-                    ALL_DAYS.forEach(day => {
-                      buildDaySlots(day.index, slotTimes.days?.[day.index]).forEach((slot, slotIdx) => {
-                        const sd = teacherSlots?.[day.index]?.[slotIdx];
-                        if (sd?.booked) items.push({
-                          dayIndex: day.index, dayLabel: day.label,
-                          slotId: slot.id, slotLabel: slot.label, slotIdx,
-                          studentName: sd.studentName,
-                          studentCls: classShortUpper(classes, sd.studentCls||''),
-                          studentId: sd.studentId,
-                          bookedBy: sd.bookedBy || 'student',
-                          fixed: !!sd.fixed,
-                        });
-                      });
-                    });
-                    return items;
-                  })()}
-                  listColorMap={{
-                    student:  { badge: 'tag-student',  label: 'Öğrenci' },
-                    teacher:  { badge: 'tag-teacher',  label: 'Öğretmen' },
-                    director: { badge: 'tag-director', label: 'Müdür' },
-                  }}
-                  onCancel={item => onCancelBooking(t.id, item.dayIndex, item.slotId)}
-                  canCancelAll
-                />
-              ) : (
-                <LoadingBox height="h-24" />
-              )
+              <TeacherEtutReservations teacherId={t.id} weekKey={weekKey} readOnly={readOnly} showToast={showToast} />
             )}
 
             {/* Etüt Geçmişi sekmesi — inline */}
