@@ -30,7 +30,7 @@ model EtutSablon {
   id            String   @id @default(cuid())
   orgSlug       String
   branch        String   @default("main")
-  teacherId     String   // legacyId (SlotBooking konvansiyonu)
+  teacherId     String   // legacyId (etutSablonlari JSON konvansiyonu — DİKKAT: SlotBooking.teacherId bundan FARKLI, Teacher.id kullanır)
   teacher       Teacher  @relation(fields: [orgSlug, branch, teacherId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
   dayIndex      Int
   start         String   // "HH:MM"
