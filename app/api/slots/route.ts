@@ -438,9 +438,6 @@ export const DELETE = withAuth(async (req, _ctx, session) => {
 
   const orgSlug = currentOrg();
   const branchSlug = currentBranch();
-  // Kilit anahtarı için öğrenci id'si — pre-tx (stale) satırdan; yalnız kilit ALIRKEN
-  // kullanılır, sahiplik kararı aşağıda TAZE satırla tekrar verilir.
-  const preLockStudentId = String(existingRow.studentId ?? cell.studentId ?? '');
 
   return await tdb().$transaction(async (rawTx) => {
     // Tip köprüsü — bookEtut/POST'taki AYNI gerekçe (reservations.ts imzası
@@ -456,12 +453,12 @@ export const DELETE = withAuth(async (req, _ctx, session) => {
     // — aksi halde POST ve DELETE aynı hücreye AYNI ANDA dokunurken FARKLI kilit alır,
     // yarış kapanmaz.
     await lockResource(tx, `slot:${orgSlug}:${branchSlug}:${weekKey}:${teacher.id}:${day}:${slotId}`);
-    // SIRA: HER ZAMAN lockResource'tan SONRA (deadlock-free).
-    await lockStudentWeek(tx, orgSlug, branchSlug, preLockStudentId, weekKey);
 
     // Race penceresi: lock alınana kadar başka bir istek aynı hücreyi iptal etmiş/başka bir
     // öğrenciye yeniden rezerve etmiş olabilir — TAZE veriyle yeniden doğrula (bookEtut'un
-    // cancelEtutV2'sindeki AYNI ilke). Mesaj/status pre-tx kontrollerle BİREBİR.
+    // cancelEtutV2'sindeki AYNI ilke). Mesaj/status pre-tx kontrollerle BİREBİR. `slot:` kilidi
+    // artık ELDE — bu okumadan tx bitene kadar başka hiçbir transaction bu hücreyi
+    // değiştiremez (aynı kilidi bekler), TEK taze okuma yeterli.
     const freshRow = await tx.slotBooking.findUnique({
       where: {
         orgSlug_branch_weekKey_teacherId_dayIndex_slotId: {
@@ -472,12 +469,21 @@ export const DELETE = withAuth(async (req, _ctx, session) => {
     if (!freshRow || !freshRow.booked) {
       throw new HttpError(404, 'Rezervasyon bulunamadı');
     }
+    const freshCell = ((freshRow.data as SlotCell | null) || {});
+
+    // Öğrenci kilidi TAZE satırın sahibiyle alınır (Faz 4 audit-fix FIX-2 C, Codex YÜKSEK-4) —
+    // pre-tx (existingRow) sahibi ARTIK KULLANILMAZ: kilit beklenirken hücre başka bir
+    // öğrenciye geçmiş olabilirdi, eski kod bu durumda YANLIŞ öğrencinin haftasını kilitliyordu
+    // (gerçek yeni sahibin haftası kilitsiz kalıyordu — çapraz-sistem yarışı kapatan asıl
+    // amaç bozuluyordu). SIRA: HER ZAMAN lockResource'tan SONRA (deadlock-free) — slotweek →
+    // slot → student sırası korunur.
+    const freshStudentId = String(freshRow.studentId ?? freshCell.studentId ?? '');
+    await lockStudentWeek(tx, orgSlug, branchSlug, freshStudentId, weekKey);
 
     // Öğretmen kendi-slotu kontrolü satır-bağımsız (input.teacherId sabit, freshRow'a
     // bakmaz) — yukarıdaki pre-tx kontrol zaten yeterli, burada tekrarlanmaz (cancelEtutV2
     // ile AYNI ilke). Öğrenci sahipliği İSE hücrenin GÜNCEL sakinine bağlı — TAZE veriyle,
     // pre-tx kontrolle BİREBİR aynı 'Yetkisiz' metniyle yeniden doğrulanır.
-    const freshCell = ((freshRow.data as SlotCell | null) || {});
     if (session.role === 'student' && freshCell.studentId !== session.id) {
       throw new HttpError(403, 'Yetkisiz');
     }

@@ -7,6 +7,7 @@ import { currentOrg, currentBranch } from '@/lib/tenant';
 import { ALL_DAYS } from '@/lib/constants';
 import { getAllTeachers } from '@/lib/slots';
 import { getWeekReservations, resolveEffective } from './reservations';
+import { currentWeekKeyTSI } from './weeks';
 import type { EtutReservation } from '@prisma/client';
 
 // ArchiveEntry-uyumlu (HistoryModal / app/api/archive/route.ts şekliyle BİREBİR — Task 3 bu
@@ -46,17 +47,32 @@ export function buildEtutHistoryWeeks(
 }
 
 // Ortak iç fonksiyon — öğrenci/öğretmen geçmişi arasındaki TEK fark where'deki id alanı.
-// status ACTIVE + scope WEEK: yalnız SOMUT haftalar (recurring '*' marker'ı geçmiş listesi
-// değildir; dondurulmamış recurring haftalar freeze-on-rollover cron'u işledikçe somutlaşır).
+// status ACTIVE + scope WEEK: SOMUT (donmuş) haftalar — geçmiş haftalar için doğru kaynak
+// (recurring '*' marker'ı geçmiş listesi değildir; dondurulmamış recurring haftalar
+// freeze-on-rollover cron'u işledikçe somutlaşır). CARİ hafta İSTİSNA: aşağıda efektif
+// çözümle DEĞİŞTİRİLİR (Faz 4 audit-fix FIX-2 A, Codex+Gemini+Explore mutabık bulgusu).
 async function listEtutHistory(idField: 'studentId' | 'teacherId', id: string) {
   const orgSlug = currentOrg(); const branch = currentBranch();
-  const [rows, teachers] = await Promise.all([
-    tdb(orgSlug, branch).etutReservation.findMany({
+  const db = tdb(orgSlug, branch);
+  const cur = currentWeekKeyTSI();
+  const [rows, curWeekRows, teachers] = await Promise.all([
+    db.etutReservation.findMany({
       where: { orgSlug, branch, [idField]: id, status: 'ACTIVE', scope: 'WEEK' },
     }),
+    getWeekReservations(db, orgSlug, branch, cur),
     getAllTeachers(),
   ]);
-  return buildEtutHistoryWeeks(rows, new Map(teachers.map(t => [t.id, t.name])));
+  // Cari hafta henüz donmamış (freeze Pazar 11:00) — efektif çözüm (WEEK+RECURRING) kullanılır;
+  // geçmiş haftalar yalnız donmuş WEEK (3-denetim mutabık bulgusu). DB'den gelen cari-hafta WEEK
+  // satırları çıkarılır (aksi halde çift sayılır) — efektif set onları ZATEN içerir
+  // (resolveEffective WEEK-öncelikli, bkz. reservations.ts). RECURRING satırının weekKey'i '*'
+  // olduğundan buildEtutHistoryWeeks'in (r.weekKey ile gruplayan) doğru haftaya koyması için
+  // `{ ...r, weekKey: cur }` kopyasıyla geçilir.
+  const pastRows = rows.filter(r => r.weekKey !== cur);
+  const currentEffective = [...resolveEffective(curWeekRows, cur).values()]
+    .filter(r => r[idField] === id)
+    .map(r => (r.scope === 'RECURRING' ? { ...r, weekKey: cur } : r));
+  return buildEtutHistoryWeeks([...pastRows, ...currentEffective], new Map(teachers.map(t => [t.id, t.name])));
 }
 
 export async function listStudentEtutHistory(studentId: string) {

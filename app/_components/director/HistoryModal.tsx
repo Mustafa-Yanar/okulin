@@ -104,7 +104,13 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
     // Arşivdeki cari-hafta SlotBooking satırları ise currentEntries'in kopyası olurdu → atlanır
     // (çift-kart + çift-satır düzeltmesi; geçmiş haftalar etkilenmez).
     const currentEtut = archiveCurrent?.entries.filter(e => e.slotId.startsWith('etut:')) ?? [];
-    const current = [...(currentEntries ?? []), ...currentEtut];
+    // currentEntries (canlı SlotBooking) undefined/boşken arşivin cari-hafta DERS satırları
+    // düşmesin (Faz 4 audit-fix FIX-2 B, Gemini YÜKSEK-1 savunmacı bulgu) — çağıran (inline
+    // kullanım) currentEntries geçmezse arşivdeki cari-hafta ders satırlarına geri düş.
+    const currentSlots = (currentEntries && currentEntries.length > 0)
+      ? currentEntries
+      : (archiveCurrent?.entries.filter(e => !e.slotId.startsWith('etut:')) ?? []);
+    const current = [...currentSlots, ...currentEtut];
     if (current.length > 0) result.push({ weekKey: currentWeekKey, entries: current, isCurrent: true });
     result.push(...rest);
     return result;

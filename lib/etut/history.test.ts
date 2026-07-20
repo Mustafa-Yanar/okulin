@@ -44,6 +44,30 @@ describe('buildEtutHistoryWeeks — SAF: gruplama + sıralama + ArchiveEntry şe
     const weeks = buildEtutHistoryWeeks([row({ teacherId: 't9' })], new Map());
     expect(weeks[0].entries[0].teacherName).toBe('t9');
   });
+
+  // Faz 4 audit-fix FIX-2 A: history.ts'in cari-hafta efektif enjeksiyonu, RECURRING
+  // satırları `{ ...r, weekKey: cur }` kopyasıyla geçirir (RECURRING'in ham weekKey'i '*'
+  // marker'ıdır — yeniden yazılmazsa buildEtutHistoryWeeks onu ayrı, hayalet bir "hafta"ya
+  // koyardı). Bu test o kopyalama deseninin doğru haftaya girdiğini SAF düzeyde doğrular.
+  it('weekKey yeniden-yazılmış RECURRING satırı (cari-hafta efektif enjeksiyon şekli) doğru haftaya girer', () => {
+    const rows = [
+      row({ weekKey: '2026-W30', scope: 'WEEK', sablonId: 'c1' }),
+      row({ weekKey: '2026-W32', scope: 'RECURRING', sablonId: 'c9' }),
+    ];
+    const weeks = buildEtutHistoryWeeks(rows, new Map());
+    expect(weeks.map(w => w.weekKey)).toEqual(['2026-W32', '2026-W30']);
+    expect(weeks[0].entries[0].slotId).toBe('etut:c9');
+  });
+
+  it('aynı haftada (WEEK satırı + weekKey yeniden-yazılmış RECURRING kopyası) birlikte gruplanır, gün+saat ASC sıralanır', () => {
+    const rows = [
+      row({ weekKey: '2026-W32', scope: 'WEEK', sablonId: 'c1', dayIndex: 2, startsAt: '10:00', endsAt: '11:00' }),
+      row({ weekKey: '2026-W32', scope: 'RECURRING', sablonId: 'c9', dayIndex: 1, startsAt: '09:00', endsAt: '10:00' }),
+    ];
+    const weeks = buildEtutHistoryWeeks(rows, new Map());
+    expect(weeks).toHaveLength(1);
+    expect(weeks[0].entries.map(e => e.slotId)).toEqual(['etut:c9', 'etut:c1']);
+  });
 });
 
 describe('selectRecurringToFreeze — SAF: efektif haritadan yalnız scope RECURRING satırlar', () => {
