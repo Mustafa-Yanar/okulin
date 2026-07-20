@@ -1,10 +1,11 @@
 import { getAllTeachers, getAllStudents } from '@/lib/slots';
-import { allowedBranchesForClass, MATH_FAMILY } from '@/lib/constants';
+import { allowedBranchesForClass, MATH_FAMILY, ALL_DAYS } from '@/lib/constants';
 import { HttpError } from '@/lib/errors';
 import { tdb } from '@/lib/sqldb';
 import { currentOrg, currentBranch } from '@/lib/tenant';
 import { getWeekReservations, resolveEffective } from './reservations';
 import { levelPoolForStudent } from './level-pool';
+import type { EtutSablon, EtutReservation } from '@prisma/client';
 
 // Etüt rezervasyon iş kuralları — Faz 2b'den itibaren gerçek iş mantığı lib/etut/booking.ts
 // (bookEtut/cancelEtutV2) + lib/etut/booking-rules.ts (decideBooking) içinde yaşıyor.
@@ -121,4 +122,60 @@ export async function listBookableEtuts(studentId: string, weekKey: string): Pro
   }
   out.sort((a, b) => (a.dayIndex - b.dayIndex) || a.start.localeCompare(b.start));
   return out;
+}
+
+// ── listEtutlerForWeek — /api/etut-sablon/all + mobil today/week ortak kaynağı (Faz 3) ──
+// listBookableEtuts'un rol-bağımsız kardeşi: TÜM öğretmenlerin o hafta efektif-aktif
+// şablonları + efektif rezervasyon sahipliği. JSON (programTemplate.etutSablonlari)
+// OKUNMAZ. deletedAt:null süzgeci ZORUNLU (Gemini ORTA-2 — silinen şablonun rezervasyonu
+// hiçbir listede görünmez). Alan adları eski /all sözleşmesiyle BİREBİR + yeni `scope`.
+export interface EtutAllRow {
+  teacherId: string; teacherName: string; branches: string[]; allowedGroups: string[];
+  id: string;               // EtutSablon.legacyId (dış sözleşme)
+  dayIndex: number; dayLabel: string; start: string; end: string;
+  studentId: string | null; studentName: string | null; studentCls: string | null;
+  branch: string | null;    // efektif rezervasyonun dersBranch'i
+  bookedBy: string | null;  // efektif rezervasyonun bookedByRole'ü
+  booked: boolean;
+  scope: 'WEEK' | 'RECURRING' | null; // YENİ — 'Kalıcı' rozeti için
+}
+
+export function buildEtutAllList(
+  sablonRows: EtutSablon[],
+  teachers: { id: string; name: string; branches?: string[]; allowedGroups?: string[] }[],
+  effectiveMap: Map<string, EtutReservation>,
+  weekKey: string,
+): EtutAllRow[] {
+  const dayLabel = new Map(ALL_DAYS.map((d) => [d.index, d.label]));
+  const teacherById = new Map(teachers.map((t) => [t.id, t]));
+  const out: EtutAllRow[] = [];
+  for (const sb of sablonRows) {
+    if (sb.aktif === false || sb.pasifHaftalar.includes(weekKey)) continue; // efektif-aktiflik (listBookableEtuts ile aynı ifade)
+    const teacher = teacherById.get(sb.teacherId);
+    if (!teacher) continue;
+    const eff = effectiveMap.get(sb.id) ?? null;
+    out.push({
+      teacherId: teacher.id, teacherName: teacher.name,
+      branches: teacher.branches || [], allowedGroups: teacher.allowedGroups || [],
+      id: sb.legacyId, dayIndex: sb.dayIndex, dayLabel: dayLabel.get(sb.dayIndex) || '',
+      start: sb.start, end: sb.end,
+      studentId: eff?.studentId ?? null, studentName: eff?.studentName ?? null,
+      studentCls: eff?.studentCls ?? null, branch: eff?.dersBranch ?? null,
+      bookedBy: eff?.bookedByRole ?? null, booked: Boolean(eff),
+      scope: eff ? (eff.scope as 'WEEK' | 'RECURRING') : null,
+    });
+  }
+  out.sort((a, b) => (a.dayIndex - b.dayIndex) || a.start.localeCompare(b.start));
+  return out;
+}
+
+export async function listEtutlerForWeek(weekKey: string): Promise<EtutAllRow[]> {
+  const orgSlug = currentOrg();
+  const branch = currentBranch();
+  const [teachers, sablonRows, allReservations] = await Promise.all([
+    getAllTeachers(),
+    tdb().etutSablon.findMany({ where: { deletedAt: null } }),
+    getWeekReservations(tdb(orgSlug, branch), orgSlug, branch, weekKey),
+  ]);
+  return buildEtutAllList(sablonRows, teachers, resolveEffective(allReservations, weekKey), weekKey);
 }
