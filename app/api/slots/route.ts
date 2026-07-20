@@ -2,12 +2,14 @@ import { NextResponse } from 'next/server';
 import { withAuth, canReadStudent } from '@/lib/auth';
 import { getWeekKey, getTeacherWeekSlots, getAllTeachers, slotStartTime, getDaySlotTimes, getProgramTemplate, getWeekEvents, findBlockingEvent, dateStrForWeekDay, type SlotCell, type ProgramEntry } from '@/lib/slots';
 import { ALL_DAYS, daySlots, MEZUN_FORBIDDEN_ETUT_SLOT_NO, slotNoOf, MATH_FAMILY } from '@/lib/constants';
-import { pickAllowedBranches } from '@/lib/etut/rezervasyon';
 import { parseBody, z, zId } from '@/lib/validate';
 import { tdb } from '@/lib/sqldb';
 import type { Prisma } from '@prisma/client';
 import { currentOrg, currentBranch } from '@/lib/tenant';
 import { getOrgConfig } from '@/lib/config';
+import { studentWeekBookings } from '@/lib/etut/student-week';
+import { levelPoolForGroup } from '@/lib/etut/level-pool';
+import { findTimeConflict, toMin } from '@/lib/etut/overlap';
 
 const zDay = z.coerce.number().int().min(0).max(6);
 const zSlotId = z.string().min(1).max(20);
@@ -119,10 +121,11 @@ export const POST = withAuth(async (req, _ctx, session) => {
     if (etut?.studentSelfBooking === false) {
       return NextResponse.json({ error: 'Etüt rezervasyonu kurum tarafından kapatılmış. Lütfen öğretmeninize başvurun.' }, { status: 403 });
     }
-    // 2) Haftalık max etüt sınırı (0 = sınırsız).
+    // 2) Haftalık max etüt sınırı (0 = sınırsız). Sayaç artık BİRLEŞİK (SlotBooking +
+    // EtutReservation, spec §4 studentWeekBookings) — eski SlotBooking-only count yerine.
     const maxWeekly = parseInt(String(etut?.maxWeeklyPerStudent)) || 0;
     if (maxWeekly > 0) {
-      const used = await tdb().slotBooking.count({ where: { weekKey, booked: true, studentId: session.id } });
+      const { weeklyCount: used } = await studentWeekBookings(currentOrg(), currentBranch(), String(session.id ?? ''), weekKey);
       if (used >= maxWeekly) {
         return NextResponse.json({ error: `Bu hafta en fazla ${maxWeekly} etüt alabilirsiniz (${used} dolu).` }, { status: 403 });
       }
@@ -203,8 +206,11 @@ export const POST = withAuth(async (req, _ctx, session) => {
     return NextResponse.json({ error: 'Mezun öğrenciler hafta içi 9. slottaki etüde kayıt olamaz' }, { status: 400 });
   }
 
-  // Branş doğrulaması — registry-öncelikli (özel şube s_UUID için constants parseInt→NaN bozuk).
-  const studentAllowed = pickAllowedBranches(targetStudent.class?.dersler, studentCls);
+  // Branş doğrulaması — DÜZEY havuzu (§4a): öğrenci kendi sınıf listesiyle sınırlı değil,
+  // kendi düzeyindeki (ortaokul/lise/mezun) TÜM derslerden etüt alabilir. Eski
+  // pickAllowedBranches(class.dersler, cls) sınıf-bazlıydı; levelPoolForGroup(student.group)
+  // ile değişti — lib/etut/booking.ts'in autoPickBranch'iyle AYNI kaynak (tutarlılık için).
+  const studentAllowed = await levelPoolForGroup(targetStudent.group);
   let bookingBranch: string | undefined = branch;
   if (!bookingBranch) {
     const candidates = (teacher.branches || []).filter(b => studentAllowed.includes(b));
@@ -214,26 +220,29 @@ export const POST = withAuth(async (req, _ctx, session) => {
     return NextResponse.json({ error: 'Geçersiz veya seçilmemiş ders. Bu öğretmen-öğrenci için uygun bir ders seçin.' }, { status: 400 });
   }
 
-  // Çakışma kontrolü: bu öğrencinin bu haftadaki booked slotları (SQL'de verimli)
-  const studentSlots = await tdb().slotBooking.findMany({
-    where: { weekKey, booked: true, studentId: targetLegacyStudentId },
-  });
+  // Çakışma kontrolü: BİRLEŞİK (SlotBooking + EtutReservation) — spec §4 studentWeekBookings,
+  // eski SlotBooking-only sorgunun yerine. Kural sırası/hata metinleri AYNEN.
+  const { list: otherBookings } = await studentWeekBookings(currentOrg(), currentBranch(), String(targetLegacyStudentId ?? ''), weekKey);
 
-  // Kural 1: Aynı gün aynı saatte başka etüt
-  const timeConflict = studentSlots.some(s => s.dayIndex === day && s.slotId === slotId);
-  if (timeConflict) {
-    return NextResponse.json({ error: 'Bu öğrenci aynı gün aynı saatte başka bir etüde kayıtlı' }, { status: 400 });
+  // Kural 1: Aynı gün aynı saatte başka etüt (interval-bazlı; eski string slotId eşitliği
+  // DEĞİL — iki sistem arasında slotId uzayı ortak değil, saat çakışması tek doğru ölçüt).
+  if (slotDef) {
+    const candidate = { dayIndex: day, startMin: toMin(slotDef.start), endMin: toMin(slotDef.end) };
+    const timeConflict = findTimeConflict(otherBookings, candidate);
+    if (timeConflict) {
+      return NextResponse.json({ error: 'Bu öğrenci aynı gün aynı saatte başka bir etüde kayıtlı' }, { status: 400 });
+    }
   }
 
   if (session.role !== 'director' && session.role !== 'counselor') {
     // Kural 2: Aynı dersten ikinci etüt
-    const branchConflict = studentSlots.some(s => (((s.data as SlotCell | null)?.branch) || s.dersBranch) === bookingBranch);
+    const branchConflict = otherBookings.some(b => b.dersBranch === bookingBranch);
     if (branchConflict) {
       return NextResponse.json({ error: `Bu öğrenci bu hafta ${bookingBranch} dersinden zaten etüt almış` }, { status: 400 });
     }
     // Kural 3: TYT/AYT/Geometri matematik ailesi
     if (MATH_FAMILY.includes(bookingBranch)) {
-      const mathConflict = studentSlots.some(s => MATH_FAMILY.includes((((s.data as SlotCell | null)?.branch) || s.dersBranch) as string));
+      const mathConflict = otherBookings.some(b => b.dersBranch && MATH_FAMILY.includes(b.dersBranch));
       if (mathConflict) {
         return NextResponse.json({ error: 'Bu öğrenci bu hafta matematik (TYT/AYT/Geometri) etüdü zaten almış' }, { status: 400 });
       }
@@ -256,6 +265,10 @@ export const POST = withAuth(async (req, _ctx, session) => {
   // burada kullanılırsa satırsız haftaya ilk rezervasyon PrismaClientValidationError
   // ("orgSlug is missing") ile 500 döner.
   const scope = { orgSlug: currentOrg(), branch: currentBranch() };
+  // Saat snapshot'ı (spec §4): slotDef zaten yukarıda ("Geçmiş slot kontrolü") çözülü —
+  // slot saat config'i sonradan değişirse bu kayıt kaymasın diye start/end burada donuyor.
+  const startsAt = slotDef?.start ?? null;
+  const endsAt = slotDef?.end ?? null;
   await tdb().slotBooking.upsert({
     where: {
       orgSlug_branch_weekKey_teacherId_dayIndex_slotId: {
@@ -267,7 +280,7 @@ export const POST = withAuth(async (req, _ctx, session) => {
       booked: true, disabled: false, fixed: false,
       studentId: targetLegacyStudentId, studentName: targetStudent.name,
       studentCls: studentCls, dersBranch: bookingBranch, bookedBy: session.role,
-      data: bookedData,
+      data: bookedData, startsAt, endsAt,
     },
     create: {
       ...scope,
@@ -275,7 +288,7 @@ export const POST = withAuth(async (req, _ctx, session) => {
       booked: true, disabled: false, fixed: false,
       studentId: targetLegacyStudentId, studentName: targetStudent.name,
       studentCls: studentCls, dersBranch: bookingBranch, bookedBy: session.role,
-      data: bookedData,
+      data: bookedData, startsAt, endsAt,
     },
   });
 

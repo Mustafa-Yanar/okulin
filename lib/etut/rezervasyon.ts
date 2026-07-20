@@ -12,9 +12,11 @@ import { bookEtut, cancelEtutV2 } from './booking';
 // (bookEtut/cancelEtutV2) + lib/etut/booking-rules.ts (decideBooking) içinde yaşıyor.
 // BU DOSYADA KALANLAR:
 //   1) Saf kural yardımcıları (birim testli — timeConflicts/branchConflicts/mathFamilyConflict/
-//      pickAllowedBranches) — app/api/slots/route.ts hâlâ pickAllowedBranches'i kullanıyor
-//      (Task 6'da ele alınır), decideBooking KENDİ eşdeğerini taşıyor (kopya değil — decideBooking
-//      SlotBooking tarafını da kapsıyor, buradakiler daha dar/eski JSON-döneminden kalma imza).
+//      pickAllowedBranches) — Task 6 ile app/api/slots/route.ts artık pickAllowedBranches'i
+//      KULLANMIYOR (levelPoolForGroup'a geçti, §4a); fonksiyon yalnız birim testler için canlı
+//      kalıyor (rezervasyon.test.ts). decideBooking KENDİ eşdeğerini taşıyor (kopya değil —
+//      decideBooking SlotBooking tarafını da kapsıyor, buradakiler daha dar/eski JSON-döneminden
+//      kalma imza).
 //   2) reserveEtut/cancelEtut — ESKİ imza (EtutActor), İNCE ADAPTÖR: yalnız mobil route
 //      (app/api/mobile/v1/etut/reserve) hâlâ bunları çağırıyor (Task 7'de doğrudan
 //      bookEtut/cancelEtutV2'ye geçecek). Gövdeleri artık JSON'a DOKUNMUYOR — pseudo-Session
@@ -50,8 +52,9 @@ export function mathFamilyConflict(booked: { branch?: string }[], bookingBranch:
 // subjectsForClass ile HİZALI. constants colKeyForClass 's_UUID'yi parseInt→NaN ile
 // yanlış 'Lise Ortak_9'a düşürüyordu → geçerli branş "Geçersiz ders" ile reddediliyordu.
 // Saf karar (birim testli): registry dersleri varsa onları, yoksa constants'ı kullan.
-// NOT: app/api/slots/route.ts (SlotBooking — ders programı) hâlâ bu fonksiyonu kullanıyor;
-// listBookableEtuts (aşağıda) ARTIK bunu kullanmıyor — düzey havuzuna geçti (spec §4a).
+// NOT: hiçbir üretim çağıranı KALMADI (Task 6 ile app/api/slots/route.ts da levelPoolForGroup'a
+// geçti — listBookableEtuts zaten önceden geçmişti, spec §4a); yalnız rezervasyon.test.ts
+// tarafından kullanılıyor. Silinmedi — regresyon güvencesi için testler canlı tutuluyor.
 export function pickAllowedBranches(registryDersler: string[] | null | undefined, cls: string | null | undefined): string[] {
   if (registryDersler && registryDersler.length) return registryDersler;
   return allowedBranchesForClass(cls);
