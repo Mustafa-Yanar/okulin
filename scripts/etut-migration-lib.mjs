@@ -130,6 +130,11 @@ export function reconcileReservationOps(sb, futureRes, now) {
     // tablo yazımı daha yeni, JSON'la EZME.
     const cancelledAtTarget = future.find((r) => r.status === 'CANCELLED' && r.weekKey === cls.weekKey);
     if (cancelledAtTarget) { ops.push({ op: 'conflict-cancelled', weekKey: cls.weekKey }); return ops; }
+    // FIX-C (Faz 5 audit): hiç eşleşen ACTIVE gelecek satır yoksa normalde 'create'
+    // üretilir — ama aynı şablonda table-first RECURRING satır varsa, JSON'dan üretilecek
+    // yeni WEEK satırı onu EFEKTİF EZER (resolveEffective: WEEK > RECURRING). Fiziksel
+    // dokunmuyor ama gölgeliyor — sessizce gölgeleme, operatöre raporla.
+    if (recurring.length) { ops.push({ op: 'conflict-recurring', weekKey: cls.weekKey }); return ops; }
     ops.push({ op: 'create', weekKey: cls.weekKey });
     return ops;
   }

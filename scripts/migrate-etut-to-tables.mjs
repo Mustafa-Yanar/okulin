@@ -194,7 +194,7 @@ try {
 }
 
 if (RECONCILE) {
-  if (APPLY && (report.conflicts.length || report.unresolved.length || report.writeFailed.length)) {
+  if (APPLY && (report.conflicts.length || report.unresolved.length || report.writeFailed.length || report.invalidSablon.length || report.studentIdMissing.length)) {
     process.exitCode = 1;
   }
 } else if (APPLY && (report.unresolved.length || report.invalidSablon.length || report.writeFailed.length || report.studentIdMissing.length)) {
@@ -345,6 +345,13 @@ async function runReconcile(p, teachers, now, report, APPLY) {
           report.conflicts.push({
             org: t.orgSlug, teacher: t.name, sablonLegacyId: sb.id, weekKey: op.weekKey,
             jsonStudentId: String(sb.studentId), type: 'conflict-cancelled',
+          });
+        } else if (op.op === 'conflict-recurring') {
+          // FIX-C: create hedefinde table-first RECURRING satır bulundu — gölgeleme yapılmadı,
+          // mevcut conflict raporlama desenine uy (böylece FIX-B exit gate de bunu yakalar).
+          report.conflicts.push({
+            org: t.orgSlug, teacher: t.name, sablonLegacyId: sb.id, weekKey: op.weekKey,
+            jsonStudentId: String(sb.studentId), type: 'conflict-recurring',
           });
         } else if (op.op === 'tableOnly') {
           report.tableOnly.push({

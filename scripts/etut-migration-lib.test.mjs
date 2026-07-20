@@ -160,4 +160,8 @@ describe('reconcileReservationOps', () => {
     const out = reconcileReservationOps(sbJson({ studentId: null }), [res({ status: 'CANCELLED' })], NOW);
     expect(out).toEqual([{ op: 'none' }]);
   });
+  it('FIX-C: create hedefi + table-first RECURRING varsa → conflict-recurring (gölgeleme yok)', () => {
+    const out = reconcileReservationOps(sbJson(), [res({ scope: 'RECURRING', weekKey: '*', bookedById: 'u_1' })], NOW);
+    expect(out).toEqual([{ op: 'recurringPresent', count: 1 }, { op: 'conflict-recurring', weekKey: '2026-W30' }]);
+  });
 });
