@@ -267,10 +267,14 @@ export const POST = withAuth(async (req, _ctx, session) => {
     // uyumsuz görünür (Exact<>/SelectSubset<> jenerikleri) — reservations.ts'in imzası
     // Prisma.TransactionClient beklediğinden köprü BURADA, tek satırda kurulur.
     const tx = rawTx as unknown as Prisma.TransactionClient;
-    // Kaynak-bazlı advisory lock (Faz 2 audit-fix FIX-A, KRİTİK) — ÖNCE (slot hücresi
-    // kaynağı). Kök neden: yalnız lockStudentWeek varken İKİ FARKLI öğrenci AYNI hücreye
-    // eşzamanlı POST atınca FARKLI kilit alıyordu → ikisi de "boş" görüp ikisi de upsert
-    // ediyordu (2. istek 1.'yi sessizce eziyordu — unique kısıt upsert'te tetiklenmez).
+    // Faz 4 Y3: initWeekForTeacher (hafta-grid yeniden kurulumu) ile AYNI anahtar/sıra —
+    // slotweek İLK (grid rebuild sırasında bu POST'un rezervasyonu kaybolmasın). Kilit
+    // sırası GLOBAL: slotweek → slot-cell → student.
+    await lockResource(tx, `slotweek:${orgSlug}:${branchSlug}:${weekKey}:${teacher.id}`);
+    // Kaynak-bazlı advisory lock (Faz 2 audit-fix FIX-A, KRİTİK) — slotweek'ten SONRA (slot
+    // hücresi kaynağı). Kök neden: yalnız lockStudentWeek varken İKİ FARKLI öğrenci AYNI
+    // hücreye eşzamanlı POST atınca FARKLI kilit alıyordu → ikisi de "boş" görüp ikisi de
+    // upsert ediyordu (2. istek 1.'yi sessizce eziyordu — unique kısıt upsert'te tetiklenmez).
     await lockResource(tx, `slot:${orgSlug}:${branchSlug}:${weekKey}:${teacher.id}:${day}:${slotId}`);
     // SIRA: HER ZAMAN lockResource'tan SONRA (deadlock-free, bkz. reservations.ts lockResource).
     await lockStudentWeek(tx, orgSlug, branchSlug, targetStudentId, weekKey);
@@ -443,8 +447,12 @@ export const DELETE = withAuth(async (req, _ctx, session) => {
     // Prisma.TransactionClient bekliyor, $extends sarmalı tx tipi tsc'ye yapısal uyumsuz
     // görünür ama çalışma zamanında aynı delegedir).
     const tx = rawTx as unknown as Prisma.TransactionClient;
-    // Kaynak-bazlı advisory lock (Faz 2 audit-fix FIX-A, KRİTİK) — ÖNCE, POST ile AYNI
-    // anahtar biçimi (`slot:${orgSlug}:${branch}:${weekKey}:${teacherId}:${day}:${slotId}`)
+    // Faz 4 Y3: initWeekForTeacher (hafta-grid yeniden kurulumu) ile AYNI anahtar/sıra —
+    // slotweek İLK, POST ile de AYNI (grid rebuild ile bu DELETE aynı anda çalışırsa
+    // serileşsin). Kilit sırası GLOBAL: slotweek → slot-cell → student.
+    await lockResource(tx, `slotweek:${orgSlug}:${branchSlug}:${weekKey}:${teacher.id}`);
+    // Kaynak-bazlı advisory lock (Faz 2 audit-fix FIX-A, KRİTİK) — slotweek'ten SONRA, POST
+    // ile AYNI anahtar biçimi (`slot:${orgSlug}:${branch}:${weekKey}:${teacherId}:${day}:${slotId}`)
     // — aksi halde POST ve DELETE aynı hücreye AYNI ANDA dokunurken FARKLI kilit alır,
     // yarış kapanmaz.
     await lockResource(tx, `slot:${orgSlug}:${branchSlug}:${weekKey}:${teacher.id}:${day}:${slotId}`);

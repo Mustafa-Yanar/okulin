@@ -5,6 +5,8 @@ import { ALL_DAYS, daySlots, DEFAULT_WEEKDAY_TIMES, DEFAULT_WEEKEND_TIMES,
 export { getWeekKey };
 import { tdb } from './sqldb';
 import { Prisma, type SlotBooking } from '@prisma/client';
+import { currentOrg, currentBranch } from './tenant';
+import { lockResource } from './etut/reservations';
 
 // ── SLOT SAATLERİ (7-gün model) ───────────────────────────────────────────────
 // Depolama şekli (TenantConfig.slotTimes):
@@ -265,74 +267,93 @@ function scalarFromCell(cell: SlotCell) {
 
 // Bir haftanın slotlarını program'a göre init eder.
 export async function initWeekForTeacher(legacyTeacherId: string, weekKey: string): Promise<void> {
-  const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
+  const orgSlug = currentOrg(); const branch = currentBranch();
+  const teacher = await tdb(orgSlug, branch).teacher.findFirst({ where: { legacyId: legacyTeacherId } });
   if (!teacher) return;
   const hasGroups = teacher.allowedGroups && teacher.allowedGroups.length > 0;
   const offDays = new Set(teacher.offDays || []);
   // programTemplate Json — gün → slotId → giriş şeklinde saklanır
   const program = (teacher.programTemplate || {}) as Record<string, Record<string, ProgramEntry | undefined> | undefined>;
 
-  // Mevcut SlotBooking satırlarını oku (geçici rezervasyonları korumak için)
-  const existingRows = await tdb().slotBooking.findMany({ where: { weekKey, teacherId: teacher.id } });
-  const existingByKey: Record<string, SlotCell> = {};
-  for (const row of existingRows) {
-    existingByKey[`${row.dayIndex}:${row.slotId}`] = cellFromRow(row);
-  }
-
-  // Her slot için yeni hücre değeri hesapla (7-gün model: her gün kendi slotları)
+  // Slot saatleri (TenantConfig) — yarış konusu değil, tx dışında okunabilir.
   const slotTimes = await getDaySlotTimes();
-  const newRows: object[] = [];
-  for (const day of ALL_DAYS) {
-    const slots = daySlots(day.index, slotTimes.days[day.index]);
-    for (let slotNo = 1; slotNo <= slots.length; slotNo++) {
-      const slot = slots[slotNo - 1];
-      const entry = program[String(day.index)]?.[slot.id];
-      const existing = existingByKey[`${day.index}:${slot.id}`];
-      let cell: SlotCell;
 
-      // Mezun-only kuralı: hafta içi (gün<5) ilk 6 slot yalnız mezun öğretmene açık.
-      // Eski id-bazlı (w1-w6) kontrol → slot NUMARASINA taşındı (güne özgü id'lerde geçerli).
-      const isMezunOnlySlot = day.index < 5 && slotNo <= MEZUN_ONLY_LESSON_SLOTS.length;
+  // Faz 4 Y3: hafta-grid yeniden kurulumu (initWeek) ile eşzamanlı slot rezervasyonu
+  // (/api/slots POST/DELETE) arasındaki yarış — okuma (existingRows) ile deleteMany
+  // arasında commit olan bir booking sessizce kayboluyordu (deleteMany hepsini silip
+  // createMany şablondan yeniden kuruyordu, araya giren rezervasyonu görmeden). slotweek
+  // kilidi /api/slots POST/DELETE ile TAM AYNI anahtar formülünü kullanır (aşağıda) —
+  // üçü de aynı öğretmen+hafta üzerinde serileşir. Kilit sırası GLOBAL: slotweek →
+  // slot-cell → student; initWeek yalnız slotweek alır (tek kaynak, hücre/öğrenci
+  // kilidine ihtiyaç yok — tüm hafta tek seferde sıfırdan kuruluyor).
+  await tdb(orgSlug, branch).$transaction(async (rawTx) => {
+    const tx = rawTx as unknown as Prisma.TransactionClient; // booking.ts'teki tip köprüsü gerekçesi (Exact<>/SelectSubset<> uyuşmazlığı)
+    await lockResource(tx, `slotweek:${orgSlug}:${branch}:${weekKey}:${teacher.id}`);
 
-      if (!hasGroups) {
-        // Grup etiketi (allowedGroups) olmasa bile müdürün elle/çözücüyle yazdığı sabit
-        // DERS grid'e materyalize edilmeli. Aksi halde ders öğretmen şablonunda görünür
-        // ama sınıf kartı / yoklama grid'i (SlotBooking okuyan taraf) dersi göremez —
-        // asimetri buradan doğuyordu. Boş/etüt/available slotları kapalı kalmaya devam eder.
-        cell = (entry?.type === 'ders' && !offDays.has(day.index))
-          ? computeCellFromEntry(entry, existing)
-          : { booked: false, disabled: true };
-      } else if (offDays.has(day.index)) {
-        cell = { booked: false, disabled: true };
-      } else if (isMezunOnlySlot) {
-        const groups = teacher.allowedGroups || [];
-        const onlyMezun = groups.length > 0 && groups.every(g => g === 'mezun');
-        // Route paritesi (program/route.ts): müdür bu slota DERS yazdıysa (mezun
-        // sınıfı veya sınıf-penceresi istisnası orada doğrulanır) şablon girdisi
-        // karma-gruplu öğretmende de materyalize olmalı. Aksi hâlde ders öğretmen
-        // panelinde (şablon) görünürken grid'e hiç düşmez → müdür yoklama özeti
-        // ve devamsızlık slot etiketi dersi göremez. Etüt/boş slotlar karma
-        // öğretmen için kapalı kalmaya devam eder (kural amacı korunur).
-        if (!onlyMezun && entry?.type !== 'ders') {
+    // Mevcut SlotBooking satırlarını oku (geçici rezervasyonları korumak için) — kilit
+    // ALINDIKTAN SONRA, TAZE (aksi halde yarış penceresi kapanmaz). tx raw client olduğu
+    // için $extends tenant-enjeksiyonundan geçmez — orgSlug/branch AÇIKÇA where'de.
+    const existingRows = await tx.slotBooking.findMany({ where: { orgSlug, branch, weekKey, teacherId: teacher.id } });
+    const existingByKey: Record<string, SlotCell> = {};
+    for (const row of existingRows) {
+      existingByKey[`${row.dayIndex}:${row.slotId}`] = cellFromRow(row);
+    }
+
+    // Her slot için yeni hücre değeri hesapla (7-gün model: her gün kendi slotları)
+    const newRows: object[] = [];
+    for (const day of ALL_DAYS) {
+      const slots = daySlots(day.index, slotTimes.days[day.index]);
+      for (let slotNo = 1; slotNo <= slots.length; slotNo++) {
+        const slot = slots[slotNo - 1];
+        const entry = program[String(day.index)]?.[slot.id];
+        const existing = existingByKey[`${day.index}:${slot.id}`];
+        let cell: SlotCell;
+
+        // Mezun-only kuralı: hafta içi (gün<5) ilk 6 slot yalnız mezun öğretmene açık.
+        // Eski id-bazlı (w1-w6) kontrol → slot NUMARASINA taşındı (güne özgü id'lerde geçerli).
+        const isMezunOnlySlot = day.index < 5 && slotNo <= MEZUN_ONLY_LESSON_SLOTS.length;
+
+        if (!hasGroups) {
+          // Grup etiketi (allowedGroups) olmasa bile müdürün elle/çözücüyle yazdığı sabit
+          // DERS grid'e materyalize edilmeli. Aksi halde ders öğretmen şablonunda görünür
+          // ama sınıf kartı / yoklama grid'i (SlotBooking okuyan taraf) dersi göremez —
+          // asimetri buradan doğuyordu. Boş/etüt/available slotları kapalı kalmaya devam eder.
+          cell = (entry?.type === 'ders' && !offDays.has(day.index))
+            ? computeCellFromEntry(entry, existing)
+            : { booked: false, disabled: true };
+        } else if (offDays.has(day.index)) {
           cell = { booked: false, disabled: true };
+        } else if (isMezunOnlySlot) {
+          const groups = teacher.allowedGroups || [];
+          const onlyMezun = groups.length > 0 && groups.every(g => g === 'mezun');
+          // Route paritesi (program/route.ts): müdür bu slota DERS yazdıysa (mezun
+          // sınıfı veya sınıf-penceresi istisnası orada doğrulanır) şablon girdisi
+          // karma-gruplu öğretmende de materyalize olmalı. Aksi hâlde ders öğretmen
+          // panelinde (şablon) görünürken grid'e hiç düşmez → müdür yoklama özeti
+          // ve devamsızlık slot etiketi dersi göremez. Etüt/boş slotlar karma
+          // öğretmen için kapalı kalmaya devam eder (kural amacı korunur).
+          if (!onlyMezun && entry?.type !== 'ders') {
+            cell = { booked: false, disabled: true };
+          } else {
+            cell = computeCellFromEntry(entry, existing);
+          }
         } else {
           cell = computeCellFromEntry(entry, existing);
         }
-      } else {
-        cell = computeCellFromEntry(entry, existing);
+
+        newRows.push({
+          orgSlug, branch, weekKey, teacherId: teacher.id, dayIndex: day.index, slotId: slot.id,
+          ...scalarFromCell(cell),
+        });
       }
-
-      newRows.push({
-        weekKey, teacherId: teacher.id, dayIndex: day.index, slotId: slot.id,
-        ...scalarFromCell(cell),
-      });
     }
-  }
 
-  // Eski satırları sil, yenilerini oluştur (tdb() orgSlug+branch enjekte eder)
-  await tdb().slotBooking.deleteMany({ where: { weekKey, teacherId: teacher.id } });
-  // orgSlug+branch tdb() enjeksiyonuyla gelir — createMany veri tipi bunu bilemez, cast gerekli.
-  if (newRows.length > 0) await tdb().slotBooking.createMany({ data: newRows as never });
+    // Eski satırları sil, yenilerini oluştur — tx client'la, tenant AÇIKÇA (raw tx $extends
+    // enjeksiyonundan GEÇMEZ — Faz 2a bulgusu; createMany'de orgSlug/branch newRows'a
+    // yukarıda elle eklendi).
+    await tx.slotBooking.deleteMany({ where: { orgSlug, branch, weekKey, teacherId: teacher.id } });
+    if (newRows.length > 0) await tx.slotBooking.createMany({ data: newRows as never });
+  });
 }
 
 // Tüm günler ve slotlar için grid döndürür (7-gün model)
