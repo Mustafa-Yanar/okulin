@@ -204,7 +204,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
         const [progData, stuData, etutData] = await Promise.all([
           api<{ program?: ProgramGrid }>(`/api/program?teacherId=${session.id}&week=${weekKey}`),
           api<StudentDTO[]>('/api/students'),
-          api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${weekKey}`).catch(() => ({ etutler: [] as EtutAllDTO[] })),
+          api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${weekKey}`),
         ]);
         setProgram(progData?.program || {});
         setStudents(stuData);

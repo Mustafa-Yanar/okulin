@@ -62,7 +62,7 @@ export function buildEtutAllList(
 export async function listEtutlerForWeek(weekKey: string): Promise<EtutAllRow[]>
 ```
 
-- [ ] **Step 1: Failing testler** — `lib/etut/rezervasyon.test.ts`'e `buildEtutAllList` bloğu (mevcut test dosyasının mk-helper idiomunu izle; `EtutSablon`/`EtutReservation` satırlarını düz obje olarak üret, tip için `as unknown as EtutSablon` cast'i kabul):
+- [x] **Step 1: Failing testler** — `lib/etut/rezervasyon.test.ts`'e `buildEtutAllList` bloğu (mevcut test dosyasının mk-helper idiomunu izle; `EtutSablon`/`EtutReservation` satırlarını düz obje olarak üret, tip için `as unknown as EtutSablon` cast'i kabul):
 
 ```ts
 describe('buildEtutAllList', () => {
@@ -107,8 +107,8 @@ describe('buildEtutAllList', () => {
 });
 ```
 
-- [ ] **Step 2: FAIL doğrula** — `npx vitest run lib/etut/rezervasyon.test.ts` → "buildEtutAllList is not a function" benzeri.
-- [ ] **Step 3: Implementasyon** — `lib/etut/rezervasyon.ts`'e (listBookableEtuts'un ALTINA):
+- [x] **Step 2: FAIL doğrula** — `npx vitest run lib/etut/rezervasyon.test.ts` → "buildEtutAllList is not a function" benzeri.
+- [x] **Step 3: Implementasyon** — `lib/etut/rezervasyon.ts`'e (listBookableEtuts'un ALTINA):
 
 ```ts
 // ── listEtutlerForWeek — /api/etut-sablon/all + mobil today/week ortak kaynağı (Faz 3) ──
@@ -160,8 +160,8 @@ export async function listEtutlerForWeek(weekKey: string): Promise<EtutAllRow[]>
 ```
 Import ekle: `ALL_DAYS` (`@/lib/constants`), `EtutSablon`/`EtutReservation` tipleri (`@prisma/client`, type-only).
 
-- [ ] **Step 4: PASS** — 7 yeni test yeşil, mevcut 13 rezervasyon testi bozulmadı.
-- [ ] **Step 5: Route'u bağla** — `app/api/etut-sablon/all/route.ts` TÜM gövde:
+- [x] **Step 4: PASS** — 7 yeni test yeşil, mevcut 13 rezervasyon testi bozulmadı.
+- [x] **Step 5: Route'u bağla** — `app/api/etut-sablon/all/route.ts` TÜM gövde:
 
 ```ts
 import { NextResponse } from 'next/server';
@@ -197,8 +197,8 @@ export const GET = withAuth('auth', 'etut', async (req, _ctx, session) => {
 ```
 (`getAllTeachers`/`getProgramTemplate`/`etutAktifThisWeek`/`EtutSablonu`/`ALL_DAYS` importları bu route'tan KALKAR.)
 
-- [ ] **Step 6: İstemci tipleri** — `app/_components/student-types.ts`: `EtutAllDTO`'ya `studentCls?: string | null;` ve `scope?: 'WEEK' | 'RECURRING' | null;`; `BookingSlotEntry`'ye `scope?: string | null;` ekle (davranış değişikliği yok — Task 5 kullanacak).
-- [ ] **Step 7:** `npm run build && npm test` yeşil. **Step 8: Commit** — `feat(etüt-faz3): /api/etut-sablon/all tablodan efektif okuma — listEtutlerForWeek + bookableWeeks (bayat JSON okuma yolu kapandı)`
+- [x] **Step 6: İstemci tipleri** — `app/_components/student-types.ts`: `EtutAllDTO`'ya `studentCls?: string | null;` ve `scope?: 'WEEK' | 'RECURRING' | null;`; `BookingSlotEntry`'ye `scope?: string | null;` ekle (davranış değişikliği yok — Task 5 kullanacak).
+- [x] **Step 7:** `npm run build && npm test` yeşil. **Step 8: Commit** — `feat(etüt-faz3): /api/etut-sablon/all tablodan efektif okuma — listEtutlerForWeek + bookableWeeks (bayat JSON okuma yolu kapandı)`
 
 ---
 
@@ -223,7 +223,7 @@ export async function listSablonlarWithRez(teacherLegacyId: string, weekKey: str
 
 **Consumes:** `getWeekReservations`/`resolveEffective` (reservations.ts), `toSablonDTO`, `currentOrg`/`currentBranch` (`@/lib/tenant`), `currentWeekKeyTSI` (weeks.ts), `bookEtut`/`cancelEtutV2` (booking.ts — PATCH zaten kullanıyor).
 
-- [ ] **Step 1: Failing testler** — `sablon-service.test.ts`'e:
+- [x] **Step 1: Failing testler** — `sablon-service.test.ts`'e:
 
 ```ts
 describe('mergeSablonRez', () => {
@@ -252,8 +252,8 @@ describe('mergeSablonRez', () => {
 ```
 (DİKKAT: Task 1'in `buildEtutAllList`'i pasifleri SÜZER, `mergeSablonRez` SÜZMEZ — ProgramEditor pasif şablonları gri gösterip aktifleştirebilmeli. Bilinçli asimetri.)
 
-- [ ] **Step 2: FAIL doğrula.**
-- [ ] **Step 3: Implementasyon** — `sablon-service.ts`'e (`listSablonlar`'ın altına):
+- [x] **Step 2: FAIL doğrula.**
+- [x] **Step 3: Implementasyon** — `sablon-service.ts`'e (`listSablonlar`'ın altına):
 
 ```ts
 // Faz 3: ProgramEditor için şablon + o haftanın EFEKTİF rezervasyonu (WEEK-ezer-RECURRING).
@@ -284,8 +284,8 @@ export async function listSablonlarWithRez(teacherLegacyId: string, weekKey: str
 ```
 Import ekle: `currentOrg, currentBranch` (`@/lib/tenant`), `getWeekReservations, resolveEffective` (`./reservations`), `EtutReservation` type.
 
-- [ ] **Step 4: PASS.**
-- [ ] **Step 5: Route güncelle** — `app/api/etut-sablon/route.ts`:
+- [x] **Step 4: PASS.**
+- [x] **Step 5: Route güncelle** — `app/api/etut-sablon/route.ts`:
   - `GET`: `?week=` opsiyonel param oku; `const wk = week || currentWeekKeyTSI();` → `listSablonlarWithRez(teacherId, wk)` döndür (yanıt `{ sablonlar }` aynen — alanlar EKLENDİ).
   - `POST`/`PUT`: gövde sonunda `listSablonlar(...)` yerine `listSablonlarWithRez(teacherId, weekKey || currentWeekKeyTSI())` döndür (`saveSablon`/`toggleSablon` iç mantığı DEĞİŞMEZ; onların dönüşü yok sayılıp WithRez yeniden çekilebilir — basitlik için: servis fonksiyonlarını çağır, sonra `listSablonlarWithRez` ile yanıtla).
   - `DELETE`: `DeleteSchema`'ya `weekKey: z.string().max(40).optional()` ekle; yanıt WithRez.
@@ -309,7 +309,7 @@ Import ekle: `currentOrg, currentBranch` (`@/lib/tenant`), `getWeekReservations,
     ```
   - Import: `isValidWeekKey, currentWeekKeyTSI` (`@/lib/etut/weeks`), `listSablonlarWithRez`.
   - Route başı yorumundaki "rezervasyon alanları YOK — Faz 3'te" notunu güncelle (artık VAR).
-- [ ] **Step 6:** `npm run build && npm test` yeşil. **Step 7: Commit** — `feat(etüt-faz3): sablon listesine efektif rezervasyon alanları (listSablonlarWithRez) + PATCH'e WEEK/RECURRING scope + weekKey`
+- [x] **Step 6:** `npm run build && npm test` yeşil. **Step 7: Commit** — `feat(etüt-faz3): sablon listesine efektif rezervasyon alanları (listSablonlarWithRez) + PATCH'e WEEK/RECURRING scope + weekKey`
 
 ---
 
@@ -321,7 +321,7 @@ Import ekle: `currentOrg, currentBranch` (`@/lib/tenant`), `getWeekReservations,
 
 **Consumes:** `listEtutlerForWeek` (Task 1). **Dönüş tipleri (`TodayEtut`) DEĞİŞMEZ** — yalnız kaynak değişir.
 
-- [ ] **Step 1: `collectClassDay`** — etüt bloğunu değiştir:
+- [x] **Step 1: `collectClassDay`** — etüt bloğunu değiştir:
 
 ```ts
 const etuts: TodayEtut[] = [];
@@ -341,7 +341,7 @@ if (etutStudentId) {
 ```
 `getAllProgramTemplates`/`etutAktifThisWeek`/`EtutSablonu` importları today.ts'te başka kullanım kalmıyorsa kaldır (`getProgramTemplate` buildTeacherToday'den de kalkacak — Step 2 sonrası kontrol et).
 
-- [ ] **Step 2: `buildTeacherToday`** — etüt bloğunu değiştir:
+- [x] **Step 2: `buildTeacherToday`** — etüt bloğunu değiştir:
 
 ```ts
 let etuts: TodayEtut[] | null = null;
@@ -358,7 +358,7 @@ if (mods.etut !== false) {
 }
 ```
 
-- [ ] **Step 3: `collectClassWeek`** — hafta TEK weekKey; döngü DIŞINDA bir kez çek:
+- [x] **Step 3: `collectClassWeek`** — hafta TEK weekKey; döngü DIŞINDA bir kez çek:
 
 ```ts
 // collectClassWeek başında (Promise.all içindeki getAllProgramTemplates yerine):
@@ -373,8 +373,8 @@ if (etutStudentId) {
 ```
 week.ts'ten `getAllProgramTemplates`/`etutAktifThisWeek`/`EtutSablonu` importlarını kaldır (başka kullanıcı yoksa).
 
-- [ ] **Step 4:** `npm run build && npm test` yeşil (mobil today/week mevcut saf testleri etkilenmez — etüt toplama I/O idi, testleri yoktu; davranış doğrulaması Task 7 canlı smoke'ta).
-- [ ] **Step 5: Commit** — `feat(etüt-faz3): mobil today/week etüt okumaları EtutReservation efektif kaynağına geçti`
+- [x] **Step 4:** `npm run build && npm test` yeşil (mobil today/week mevcut saf testleri etkilenmez — etüt toplama I/O idi, testleri yoktu; davranış doğrulaması Task 7 canlı smoke'ta).
+- [x] **Step 5: Commit** — `feat(etüt-faz3): mobil today/week etüt okumaları EtutReservation efektif kaynağına geçti`
 
 ---
 
@@ -385,7 +385,7 @@ week.ts'ten `getAllProgramTemplates`/`etutAktifThisWeek`/`EtutSablonu` importlar
 
 **Consumes:** Task 2 (`SablonRezDTO` tip — `import type { SablonRezDTO } from '@/lib/etut/sablon-service'`; type-only import, bundle'a sunucu kodu sızmaz; PATCH `scope`/`weekKey` sözleşmesi).
 
-- [ ] **Step 1: Tip + fetch değişimi:**
+- [x] **Step 1: Tip + fetch değişimi:**
   - `EtutSablonu` (lib/slots JSON tipi) yerine `SablonRezDTO` kullan: `etutSablonlar`/`selectedEtut` state tipleri, `EtutEylemModalProps.sablon`, `cakisanAktifEtut` dönüşü. (`EtutSablonu` importu kalkar.)
   - Şablon yükleme effect'i (satır ~83-90): dependency `[teacher.id, weekKey]` yap, URL'e `&week=${weekKey}` ekle, `.catch { setEtutSablonlar([]) }` sessiz dalını `showToast((e as Error).message, 'error')` + boş liste yap:
   ```ts
@@ -399,7 +399,7 @@ week.ts'ten `getAllProgramTemplates`/`etutAktifThisWeek`/`EtutSablonu` importlar
   }, [teacher.id, weekKey, showToast]);
   ```
   - `deleteEtutSablon` gövdesindeki DELETE body'sine `weekKey` ekle (`{ teacherId: teacher.id, id, weekKey }`).
-- [ ] **Step 2: `assignEtutSablon` imzasını genişlet:**
+- [x] **Step 2: `assignEtutSablon` imzasını genişlet:**
   ```ts
   async function assignEtutSablon(id: string, student: { id: string; name: string; cls: string } | null, scope: 'WEEK' | 'RECURRING') {
     try {
@@ -414,7 +414,7 @@ week.ts'ten `getAllProgramTemplates`/`etutAktifThisWeek`/`EtutSablonu` importlar
     } catch (e) { showToast((e as Error).message, 'error'); }
   }
   ```
-- [ ] **Step 3: `EtutEylemModal` yeniden düzenle** (Mustafa kararı 2: seçimli, kalıcı DEFAULT; kaldırırken kalıcıysa hafta/seri sorusu):
+- [x] **Step 3: `EtutEylemModal` yeniden düzenle** (Mustafa kararı 2: seçimli, kalıcı DEFAULT; kaldırırken kalıcıysa hafta/seri sorusu):
   - Props: `onAssign: (id: string, student: {...} | null, scope: 'WEEK' | 'RECURRING') => void`.
   - Atama bölümü: öğrenci select'inin ÜSTÜNE kapsam radio'su:
   ```tsx
@@ -447,12 +447,12 @@ week.ts'ten `getAllProgramTemplates`/`etutAktifThisWeek`/`EtutSablonu` importlar
   )}
   ```
   (PATCH `student:null, scope:'WEEK', weekKey` → o haftaya tombstone; `scope:'RECURRING'` → '*' serisi iptal — Task 2 sözleşmesi. Görüntülenen haftanın weekKey'i gittiği için müdür GELECEK haftanın tek-hafta iptalini de o haftaya gezinerek yapabilir.)
-- [ ] **Step 4: Takvim bloğu etiketi** — satır ~414 `sb.studentName || 'Etüt'` zaten SablonRezDTO ile yeniden dolacak; RECURRING'e işaret ekle:
+- [x] **Step 4: Takvim bloğu etiketi** — satır ~414 `sb.studentName || 'Etüt'` zaten SablonRezDTO ile yeniden dolacak; RECURRING'e işaret ekle:
   ```tsx
   {sb.studentName ? `${sb.studentName}${sb.rezScope === 'RECURRING' ? ' ↻' : ''}` : 'Etüt'}{aktif ? '' : ' (pasif)'}
   ```
-- [ ] **Step 5:** `npm run build && npm test` yeşil; TS hataları (EtutSablonu→SablonRezDTO geçişinde kalan alan uyuşmazlıkları) temizlenmiş olmalı.
-- [ ] **Step 6: Commit** — `feat(etüt-faz3): ProgramEditor hafta-bazlı rezervasyon görünümü + kalıcı/tek-hafta atama seçimi (öğrenci adı geri geldi)`
+- [x] **Step 5:** `npm run build && npm test` yeşil; TS hataları (EtutSablonu→SablonRezDTO geçişinde kalan alan uyuşmazlıkları) temizlenmiş olmalı.
+- [x] **Step 6: Commit** — `feat(etüt-faz3): ProgramEditor hafta-bazlı rezervasyon görünümü + kalıcı/tek-hafta atama seçimi (öğrenci adı geri geldi)`
 
 ---
 
@@ -468,7 +468,7 @@ week.ts'ten `getAllProgramTemplates`/`etutAktifThisWeek`/`EtutSablonu` importlar
 
 **Consumes:** Task 1 response sözleşmesi: `{ weekKey, etutler, bookableWeeks }`; `EtutAllDTO.scope`.
 
-- [ ] **Step 1: StudentPanel pencere UI:**
+- [x] **Step 1: StudentPanel pencere UI:**
   - State: `const [bookableWeeks, setBookableWeeks] = useState<string[]>([]);`
   - `loadData` içinde: `const etutData = await api<{ etutler?: EtutAllDTO[]; bookableWeeks?: string[] }>(...)` → `setBookableWeeks(etutData.bookableWeeks || []);` — map'e `scope: e.scope` alanını da taşı.
   - `const canBookThisWeek = bookableWeeks.includes(weekKey);`
@@ -485,22 +485,22 @@ week.ts'ten `getAllProgramTemplates`/`etutAktifThisWeek`/`EtutSablonu` importlar
   ```
   - `<AvailableTree ... bookingDisabled={!canBookThisWeek} />`
   - `handleCancel`: DELETE body'sine `weekKey` ekle: `JSON.stringify({ teacherId, etutId, weekKey })`.
-- [ ] **Step 2: AvailableTree `bookingDisabled`:**
+- [x] **Step 2: AvailableTree `bookingDisabled`:**
   - Props'a `bookingDisabled?: boolean` ekle; her iki `onBook` butonuna `disabled={bookingDisabled}` + `className`'e koşullu `opacity-40 cursor-not-allowed` + `title={bookingDisabled ? 'Bu hafta için rezervasyon henüz açık değil' : undefined}`.
-- [ ] **Step 3: StudentBookingsView:**
+- [x] **Step 3: StudentBookingsView:**
   - Rozet (mevcut 'Sabit' rozetinin yanına): `{s.scope === 'RECURRING' && (<span className="badge" style={{ background: 'color-mix(in srgb, var(--time-etut) 14%, transparent)', color: 'var(--time-etut)' }}>Her hafta</span>)}`
   - İptalin hafta bilgisi: bileşen weekKey BİLMEZ ve bilmesi gerekmez — StudentPanel `handleCancel` kendi `weekKey` state'ini gövdeye koyar (Step 1'de yapıldı). `BookingCancelArgs`'a alan EKLENMEZ.
-- [ ] **Step 4: TeacherEtutPanel (TeacherPanel.tsx ~:613-722):**
+- [x] **Step 4: TeacherEtutPanel (TeacherPanel.tsx ~:613-722):**
   - `load` içindeki `.catch(() => ({ etutler: [] }))` KALDIR — dış try/catch zaten showToast yapıyor; `bookableWeeks`'i de al: `const data = await api<{ etutler?: EtutAllDTO[]; bookableWeeks?: string[] }>(...)`; state'e yaz.
   - WeekNav sınırını SERBEST yap (Mustafa kararı 1): `canPrev`/`canNext` hesaplayan IIFE'yi kaldır, `<WeekNav weekKey={weekKey} onPrev={() => changeWeek(-1)} onNext={() => changeWeek(1)} />`.
   - `const canWrite = bookableWeeks.includes(weekKey);` — `canWrite` değilken 'Öğrenci ata' ve kaldır (X) butonları yerine bilgi metni: `<span className="text-caption">Salt görüntüleme</span>`; pencere bandı (StudentPanel Step 1'deki bandın aynısı, metin: gelecek hafta ise 'Gelecek haftanın ataması Pazar 11:00\'de açılır.', diğer: 'Bu hafta salt görüntüleme — atama penceresi dışında.').
   - `submitAssign`/`removeStudent` body'lerine zaten `weekKey` var mı kontrol et: submitAssign VAR, removeStudent YOK → `removeStudent` body'sine `weekKey` ekle.
   - Dolu satırda `e.scope === 'RECURRING'` ise öğrenci adının yanına küçük rozet: `<span className="badge badge-info shrink-0">Her hafta</span>`.
-- [ ] **Step 5: TeachersTab / TeacherEtutReservations:**
+- [x] **Step 5: TeachersTab / TeacherEtutReservations:**
   - `load` içindeki `.catch(() => ({ etutler: [] }))` kaldır (dış catch showToast+setRows([]) zaten var).
   - `EtutRow`'a `scope?: string | null` ekle; satırda RECURRING rozeti (Step 4'teki aynı badge).
   - `cancel(etutId)` → `cancel(etutId, scope)` yap; body: `JSON.stringify({ teacherId, etutId, weekKey, scope: 'week' })` — görüntülenen haftayı iptal eder (tombstone). Buton title'ı: `scope === 'RECURRING' ? 'Bu haftanın etüdünü iptal et (seri devam eder — seriyi ProgramEditor\'dan yönetin)' : 'Rezervasyonu iptal et'`.
-- [ ] **Step 6: ParentPanel ProgramView:**
+- [x] **Step 6: ParentPanel ProgramView:**
   - Etüt fetch'indeki `.catch(() => ({ etutler: [] }))` KALDIR; dış `catch { setAllSlots([]) }` yerine hata mesajı state'i:
   ```tsx
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -508,7 +508,7 @@ week.ts'ten `getAllProgramTemplates`/`etutAktifThisWeek`/`EtutSablonu` importlar
   // render: {loadError && <div className="card p-3 mb-3 text-sm" style={{ color: 'var(--danger, #dc2626)' }}>{loadError}</div>}
   ```
   - Map'e `scope: e.scope` ekle (StudentBookingsView rozeti veli tarafında da çalışsın).
-- [ ] **Step 7:** `npm run build && npm test` yeşil. **Step 8: Commit** — `feat(etüt-faz3): panel pencere UI — serbest hafta gezinme + bookableWeeks kapıları + weekKey'li iptal + 'Her hafta' rozetleri + sessiz catch temizliği`
+- [x] **Step 7:** `npm run build && npm test` yeşil. **Step 8: Commit** — `feat(etüt-faz3): panel pencere UI — serbest hafta gezinme + bookableWeeks kapıları + weekKey'li iptal + 'Her hafta' rozetleri + sessiz catch temizliği`
 
 ---
 
@@ -532,7 +532,7 @@ export interface EtutScreenResponse {
 }
 ```
 
-- [ ] **Step 1: Route** — `app/api/mobile/v1/etut/route.ts` GET gövdesi sonu:
+- [x] **Step 1: Route** — `app/api/mobile/v1/etut/route.ts` GET gövdesi sonu:
   ```ts
   import { allowedBookingWeeks, currentWeekKeyTSI, shiftWeekKey } from '@/lib/etut/weeks';
   // ...
@@ -547,8 +547,8 @@ export interface EtutScreenResponse {
   return NextResponse.json({ weekKey, currentWeekKey, nextWeekKey, bookableWeeks, slots });
   ```
   (`trToday` importu kullanılmıyorsa kaldır. NOT: hafta anahtarı artık `currentWeekKeyTSI` — `trToday().weekKey` ile aynı matematik, tek kaynak weeks.ts.)
-- [ ] **Step 2: Tipler** — `lib/mobile/api-types.ts`'te `EtutScreenResponse`'u yukarıdaki şekle genişlet; `npm run mobile:types` koş (mobile/src/api/types.ts byte-senkron).
-- [ ] **Step 3: etut.tsx** —
+- [x] **Step 2: Tipler** — `lib/mobile/api-types.ts`'te `EtutScreenResponse`'u yukarıdaki şekle genişlet; `npm run mobile:types` koş (mobile/src/api/types.ts byte-senkron).
+- [x] **Step 3: etut.tsx** —
   - Satır 10 stale yorum: `reserveEtut` → `bookEtut/cancelEtutV2 (lib/etut/booking.ts)`.
   - State: `const [week, setWeek] = useState<'current' | 'next'>('current');`
   - `load`: `api.get<EtutScreenResponse>('/api/mobile/v1/etut' + (week === 'next' && data?.nextWeekKey ? `?week=${data.nextWeekKey}` : ''))` — DİKKAT: ilk yüklemede nextWeekKey henüz bilinmez; `week` değişince mevcut `data.nextWeekKey` ile fetch; useFocusEffect + `[load, week]` dependency. Basit kalıp:
@@ -583,8 +583,8 @@ export interface EtutScreenResponse {
   - Rezerve butonlarını pencereyle kapıla: `const canBook = !!data && data.bookableWeeks.includes(data.weekKey);` — `canBook` false iken rezerve butonları yerine `<Text style={st.status}>Rezervasyon kapalı</Text>` (mine/İptal görünümü AYNEN kalır — iptal weekKey'li olarak her zaman gönderilebilir, sunucu karar verir).
   - `reserve`/`cancel`: her ikisi `weekKey: data?.weekKey` göndersin (reserve zaten gönderiyor; **cancel'a ekle**): `await api.del('/api/mobile/v1/etut/reserve', { teacherId: slot.teacherId, etutId: slot.etutId, weekKey: data?.weekKey });`
   - `reserve`/`cancel` sonrası `load(data?.weekKey)` (gösterilen haftayı yeniden çek — mevcut `load()` çağrıları güncellenir).
-- [ ] **Step 4:** `npm run build && npm test` yeşil; `cd mobile && npx tsc --noEmit` (Expo tip kontrolü) temiz.
-- [ ] **Step 5: Commit** — `feat(etüt-faz3): mobil etüt ekranına bu/gelecek hafta seçici (Pazar 11:00 pencere sunucu-otoriter) + cancel weekKey`
+- [x] **Step 4:** `npm run build && npm test` yeşil; `cd mobile && npx tsc --noEmit` (Expo tip kontrolü) temiz.
+- [x] **Step 5: Commit** — `feat(etüt-faz3): mobil etüt ekranına bu/gelecek hafta seçici (Pazar 11:00 pencere sunucu-otoriter) + cancel weekKey`
 
 ---
 
@@ -592,18 +592,18 @@ export interface EtutScreenResponse {
 
 **Files:** scratchpad smoke scripti (repo'ya GİRMEZ), plan checkbox işaretleme, `.superpowers/sdd/progress.md` (controller yazar).
 
-- [ ] **Step 1: Canlı smoke (testkurs, servis-katmanı — Faz 2 Task 7 kalıbı: runWithTenant + cleanup):** scratchpad'e tek seferlik script; senaryolar:
+- [x] **Step 1: Canlı smoke (testkurs, servis-katmanı — Faz 2 Task 7 kalıbı: runWithTenant + cleanup):** scratchpad'e tek seferlik script; senaryolar:
   1. **Hafta izolasyonu:** öğrenciyle `bookEtut`(WEEK, currentWeek) → `listEtutlerForWeek(currentWeek)` satırında `studentName` + `scope:'WEEK'`; `listEtutlerForWeek(nextWeek)` AYNI şablon `booked:false` (bug'ın öldüğünün kanıtı — eski JSON tüm haftalarda dolu gösterirdi).
   2. **Recurring görünürlüğü:** müdür aktörüyle `bookEtut`(RECURRING) → current VE current+3 haftalarında görünür (`scope:'RECURRING'`); bir haftaya `cancelEtutV2`(week) tombstone → O haftada `booked:false`, diğerlerinde dolu.
   3. **deletedAt süzgeci:** `softDeleteSablon` → `listEtutlerForWeek` VE `listSablonlarWithRez` şablonu DÖNDÜRMEZ; sonra DB'den `deletedAt:null` restore.
   4. **listSablonlarWithRez:** senaryo 2'nin recurring'i `rezScope:'RECURRING'` + `studentName` ile döner.
   5. **Mobil builder:** `buildStudentToday`/`buildStudentWeek` (rezervasyonlu öğrenci + doğru gün) etüt satırını TABLODAN döndürür.
   Cleanup: yaratılan EtutReservation satırları `deleteMany` → baseline'a dön (EtutReservation=0 doğrula). Çıktılar task raporuna.
-- [ ] **Step 2: Grep gate'leri:**
+- [x] **Step 2: Grep gate'leri:**
   - `grep -rn "etutSablonlari" app/ lib/ --include="*.ts" --include="*.tsx"` → yalnız: `app/api/program/route.ts` pass-through (bilinçli, Faz 5), `lib/slots.ts` tip/template yardımcıları, göç scriptleri. `app/api/etut-sablon/all`, `lib/mobile/today.ts`, `lib/mobile/week.ts` SONUÇTA YOK.
   - `grep -n "getAllProgramTemplates" lib/ app/ -r` → mobil today/week'te KALMADI.
   - `grep -rn "catch(() =>" app/_components/StudentPanel.tsx app/_components/TeacherPanel.tsx app/_components/ParentPanel.tsx app/_components/director/TeachersTab.tsx app/_components/director/ProgramEditor.tsx` → etüt fetch'lerinde sıfır.
-- [ ] **Step 3: Tam gate:** `npm run build` + `npm test` (343 + yeni testler) yeşil; plan checkboxları işaretli; kapanış commit — `docs(etüt-faz3): Faz 3 tamamlandı — tüm okuma yolları hafta-bazlı efektif kaynağa geçti`
+- [x] **Step 3: Tam gate:** `npm run build` + `npm test` (343 + yeni testler) yeşil; plan checkboxları işaretli; kapanış commit — `docs(etüt-faz3): Faz 3 tamamlandı — tüm okuma yolları hafta-bazlı efektif kaynağa geçti`
 - [ ] **Step 4 (controller):** Faz 3 BÜTÜNÜ çok-model denetimi (Codex + Gemini + Explore) — özel sorular: (a) `/all` + `listSablonlarWithRez` + mobil builder'ların efektif çözümü tutarlı mı (WEEK-ezer-RECURRING + tombstone + deletedAt), (b) pencere UI'ın sunucu kuralıyla uyumu (istemci TSİ hesabı sızdı mı), (c) PATCH scope genişletmesinin geriye uyumu, (d) response sözleşme kırılması var mı (eski alan adları). Bulgular kapanmadan Faz 4'e geçilmez.
 
 ## Faz 3 Bitiş Kriterleri
