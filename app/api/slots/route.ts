@@ -9,7 +9,7 @@ import { currentOrg, currentBranch } from '@/lib/tenant';
 import { getOrgConfig } from '@/lib/config';
 import { HttpError } from '@/lib/errors';
 import { studentWeekBookings, combineBookings, type SlotRowLike } from '@/lib/etut/student-week';
-import { getWeekReservations, resolveEffective, lockStudentWeek } from '@/lib/etut/reservations';
+import { getWeekReservations, resolveEffective, lockResource, lockStudentWeek } from '@/lib/etut/reservations';
 import { levelPoolForStudent } from '@/lib/etut/level-pool';
 import { findTimeConflict, toMin } from '@/lib/etut/overlap';
 
@@ -267,7 +267,29 @@ export const POST = withAuth(async (req, _ctx, session) => {
     // uyumsuz görünür (Exact<>/SelectSubset<> jenerikleri) — reservations.ts'in imzası
     // Prisma.TransactionClient beklediğinden köprü BURADA, tek satırda kurulur.
     const tx = rawTx as unknown as Prisma.TransactionClient;
-    await lockStudentWeek(tx, orgSlug, targetStudentId, weekKey);
+    // Kaynak-bazlı advisory lock (Faz 2 audit-fix FIX-A, KRİTİK) — ÖNCE (slot hücresi
+    // kaynağı). Kök neden: yalnız lockStudentWeek varken İKİ FARKLI öğrenci AYNI hücreye
+    // eşzamanlı POST atınca FARKLI kilit alıyordu → ikisi de "boş" görüp ikisi de upsert
+    // ediyordu (2. istek 1.'yi sessizce eziyordu — unique kısıt upsert'te tetiklenmez).
+    await lockResource(tx, `slot:${orgSlug}:${branchSlug}:${weekKey}:${teacher.id}:${day}:${slotId}`);
+    // SIRA: HER ZAMAN lockResource'tan SONRA (deadlock-free, bkz. reservations.ts lockResource).
+    await lockStudentWeek(tx, orgSlug, branchSlug, targetStudentId, weekKey);
+
+    // Doluluk TEKRAR-DOĞRULAMA (Faz 2 audit-fix FIX-A, OTORİTER): satır ~151'deki pre-tx
+    // okuma yarışa açıktı (stale) — kilit ALINDIKTAN SONRA hücreyi TAZE oku. Başka bir
+    // öğrenciye (yarışı kazanan eşzamanlı istek) geçmişse burada reddet — mesaj/status
+    // pre-tx kontrolle (satır ~159) BİREBİR. Aynı öğrenci zaten bu hücrede ise (idempotent
+    // yeniden-deneme) engellenmez — upsert aynı satırı günceller.
+    const freshCell = await tx.slotBooking.findUnique({
+      where: {
+        orgSlug_branch_weekKey_teacherId_dayIndex_slotId: {
+          orgSlug, branch: branchSlug, weekKey, teacherId: teacher.id, dayIndex: day, slotId,
+        },
+      },
+    });
+    if (freshCell?.booked && freshCell.studentId !== targetStudentId) {
+      throw new HttpError(400, 'Bu saat dilimi zaten dolu');
+    }
 
     const [allRows, slotRowsRaw] = await Promise.all([
       getWeekReservations(tx, orgSlug, branchSlug, weekKey),
@@ -385,6 +407,10 @@ export const DELETE = withAuth(async (req, _ctx, session) => {
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
   if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
 
+  // Pre-tx okuma (Faz 2 audit-fix FIX-A) — ucuz erken-red: en yaygın "rezervasyon yok" /
+  // "yetkisiz" durumlarını tx/lock açmadan keser. STALE olabilir — OTORİTER doğrulama
+  // aşağıda, kilit alındıktan SONRA, tx içinde TAZE satırla tekrarlanır (eskiden bu route
+  // tamamen kilitsizdi: iki eşzamanlı DELETE/POST aynı hücrede stale-update yarışına açıktı).
   const existingRow = await tdb().slotBooking.findFirst({
     where: { weekKey, teacherId: teacher.id, dayIndex: day, slotId },
   });
@@ -400,18 +426,62 @@ export const DELETE = withAuth(async (req, _ctx, session) => {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
-  // Slot'un program şablonundaki durumunu kontrol et (disabled mı yoksa açık mı)
+  // Slot'un program şablonundaki durumunu kontrol et (disabled mı yoksa açık mı) — statik
+  // şablon verisi, yarışa açık değil, tx dışında (lock'tan önce) hesaplanabilir.
   const program = await getProgramTemplate(legacyTeacherId) as Record<string, Record<string, ProgramEntry | undefined> | undefined>;
   const slotEntry = program[String(day)]?.[slotId];
   const disabled = !slotEntry || slotEntry.type !== 'etut';
 
-  await tdb().slotBooking.update({
-    where: { id: existingRow.id },
-    data: {
-      booked: false, disabled, fixed: false,
-      studentId: null, studentName: null, studentCls: null, dersBranch: null, bookedBy: null,
-      data: { booked: false, disabled },
-    },
+  const orgSlug = currentOrg();
+  const branchSlug = currentBranch();
+  // Kilit anahtarı için öğrenci id'si — pre-tx (stale) satırdan; yalnız kilit ALIRKEN
+  // kullanılır, sahiplik kararı aşağıda TAZE satırla tekrar verilir.
+  const preLockStudentId = String(existingRow.studentId ?? cell.studentId ?? '');
+
+  return await tdb().$transaction(async (rawTx) => {
+    // Tip köprüsü — bookEtut/POST'taki AYNI gerekçe (reservations.ts imzası
+    // Prisma.TransactionClient bekliyor, $extends sarmalı tx tipi tsc'ye yapısal uyumsuz
+    // görünür ama çalışma zamanında aynı delegedir).
+    const tx = rawTx as unknown as Prisma.TransactionClient;
+    // Kaynak-bazlı advisory lock (Faz 2 audit-fix FIX-A, KRİTİK) — ÖNCE, POST ile AYNI
+    // anahtar biçimi (`slot:${orgSlug}:${branch}:${weekKey}:${teacherId}:${day}:${slotId}`)
+    // — aksi halde POST ve DELETE aynı hücreye AYNI ANDA dokunurken FARKLI kilit alır,
+    // yarış kapanmaz.
+    await lockResource(tx, `slot:${orgSlug}:${branchSlug}:${weekKey}:${teacher.id}:${day}:${slotId}`);
+    // SIRA: HER ZAMAN lockResource'tan SONRA (deadlock-free).
+    await lockStudentWeek(tx, orgSlug, branchSlug, preLockStudentId, weekKey);
+
+    // Race penceresi: lock alınana kadar başka bir istek aynı hücreyi iptal etmiş/başka bir
+    // öğrenciye yeniden rezerve etmiş olabilir — TAZE veriyle yeniden doğrula (bookEtut'un
+    // cancelEtutV2'sindeki AYNI ilke). Mesaj/status pre-tx kontrollerle BİREBİR.
+    const freshRow = await tx.slotBooking.findUnique({
+      where: {
+        orgSlug_branch_weekKey_teacherId_dayIndex_slotId: {
+          orgSlug, branch: branchSlug, weekKey, teacherId: teacher.id, dayIndex: day, slotId,
+        },
+      },
+    });
+    if (!freshRow || !freshRow.booked) {
+      throw new HttpError(404, 'Rezervasyon bulunamadı');
+    }
+
+    // Öğretmen kendi-slotu kontrolü satır-bağımsız (input.teacherId sabit, freshRow'a
+    // bakmaz) — yukarıdaki pre-tx kontrol zaten yeterli, burada tekrarlanmaz (cancelEtutV2
+    // ile AYNI ilke). Öğrenci sahipliği İSE hücrenin GÜNCEL sakinine bağlı — TAZE veriyle,
+    // pre-tx kontrolle BİREBİR aynı 'Yetkisiz' metniyle yeniden doğrulanır.
+    const freshCell = ((freshRow.data as SlotCell | null) || {});
+    if (session.role === 'student' && freshCell.studentId !== session.id) {
+      throw new HttpError(403, 'Yetkisiz');
+    }
+
+    await tx.slotBooking.update({
+      where: { id: freshRow.id },
+      data: {
+        booked: false, disabled, fixed: false,
+        studentId: null, studentName: null, studentCls: null, dersBranch: null, bookedBy: null,
+        data: { booked: false, disabled },
+      },
+    });
+    return NextResponse.json({ ok: true });
   });
-  return NextResponse.json({ ok: true });
 });

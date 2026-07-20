@@ -115,7 +115,28 @@ export async function cancelRecurring(db: Db, orgSlug: string, branch: string, s
 }
 
 // Öğrenci+hafta advisory lock — çapraz-sistem (SlotBooking+EtutReservation) limit/çakışma
-// yarışını önler (Gemini denetimi). Transaction içinde çağrılır; tx bitince otomatik bırakılır.
-export async function lockStudentWeek(tx: Prisma.TransactionClient, orgSlug: string, studentId: string, weekKey: string): Promise<void> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${orgSlug}:${studentId}:${weekKey}`}, 0))`;
+// yarışını önler (Gemini denetimi). branch AÇIKÇA anahtarda (Faz 2 audit-fix FIX-A) —
+// eskiden yoktu, orgSlug+studentId+weekKey tek başına branch'ler arası da aynı anahtara
+// düşüyordu (aynı studentId farklı branch'lerde teorik olarak var olabilir — id şeması
+// bunu engellemese de anahtar tam-kapsamlı olmalı). Transaction içinde çağrılır; tx
+// bitince otomatik bırakılır. SIRA KURALI: HER ZAMAN lockResource'tan SONRA çağrılır
+// (deadlock-free — bkz. lockResource yorumu).
+export async function lockStudentWeek(tx: Prisma.TransactionClient, orgSlug: string, branch: string, studentId: string, weekKey: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${orgSlug}:${branch}:${studentId}:${weekKey}`}, 0))`;
+}
+
+// Kaynak-bazlı advisory lock (Faz 2 audit-fix FIX-A, KRİTİK) — kök neden: lockStudentWeek
+// yalnız öğrenci+hafta üzerinde kilitleniyordu; İKİ FARKLI öğrenci AYNI kaynağa (etüt
+// sablonId+weekKey, ya da SlotBooking hücresi) eşzamanlı başvurunca FARKLI kilit alıyor →
+// ikisi de boş görüyor → 2. yazma 1.'yi sessizce eziyor (ya da unique-ihlali → 500).
+// Çağıran, çekişilen kaynağı temsil eden herhangi bir string anahtar verir (örn.
+// `etut:${orgSlug}:${branch}:${sablonId}:${weekKey}` veya
+// `slot:${orgSlug}:${branch}:${weekKey}:${teacherId}:${day}:${slotId}`).
+// SIRA KURALI (deadlock-free, TÜM çağrı yerlerinde SABİT): ÖNCE lockResource, SONRA
+// lockStudentWeek. İki transaction ikisini de istiyorsa (aynı kaynak+aynı öğrenci) anahtar
+// çifti özdeş → aynı sırada alınır → döngü yok. Farklı öğrenci+aynı kaynak yalnız
+// kaynak-kilidinde, aynı öğrenci+farklı kaynak yalnız öğrenci-kilidinde çekişir → deadlock
+// yapısal olarak imkânsız.
+export async function lockResource(tx: Prisma.TransactionClient, key: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
 }

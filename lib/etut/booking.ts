@@ -18,7 +18,7 @@ import { currentWeekKeyTSI, allowedBookingWeeks, type BookingRole } from './week
 import { levelPoolForStudent } from './level-pool';
 import {
   getWeekReservations, resolveEffective, upsertWeekReservation, upsertRecurring,
-  cancelToTombstone, cancelRecurring, lockStudentWeek, type ReservationWrite,
+  cancelToTombstone, cancelRecurring, lockResource, lockStudentWeek, type ReservationWrite,
 } from './reservations';
 import { combineBookings, type SlotRowLike } from './student-week';
 import { toMin } from './overlap';
@@ -160,8 +160,16 @@ export async function bookEtut(session: Session, input: BookEtutInput): Promise<
     // $connect/$disconnect/$on/$extends eksik, ikisi de burada kullanılmıyor). reservations.ts
     // DEĞİŞTİRİLEMEDİĞİ için (brief: "Modify: YOK") tip köprüsü BURADA, tek satırda kurulur.
     const tx = rawTx as unknown as Prisma.TransactionClient;
+    // Kaynak-bazlı advisory lock (Faz 2 audit-fix FIX-A, KRİTİK) — ÖNCE. Kök neden: yalnız
+    // lockStudentWeek varken İKİ FARKLI öğrenci AYNI (sablonId, weekKey) kaynağına eşzamanlı
+    // başvurunca FARKLI kilit alıyordu → ikisi de boş görüp ikisi de upsert ediyordu (2.
+    // 1.'yi sessizce eziyordu). sablonRow null olabilir (geçersiz etutId — decideBooking
+    // kural 5'te 404 dönecek) — o durumda input.etutId'ye düşer (yine deterministik, yalnız
+    // lock-ömrü boyunca anlamlı bir anahtar; gerçek yazma olmayacağı için doğruluk etkilenmez).
+    await lockResource(tx, `etut:${orgSlug}:${branch}:${sablonRow?.id ?? input.etutId}:${weekKey}`);
     // Öğrenci+hafta advisory lock — SlotBooking+EtutReservation çapraz-sistem yarışını kapatır.
-    await lockStudentWeek(tx, orgSlug, targetStudentId, weekKey);
+    // SIRA: HER ZAMAN lockResource'tan SONRA (deadlock-free, bkz. reservations.ts lockResource).
+    await lockStudentWeek(tx, orgSlug, branch, targetStudentId, weekKey);
 
     // effective + otherBookings TX İÇİNDE yeniden okunur (lock alındıktan SONRA) — pre-tx
     // okuma yalnız DTO/ders otomatiği için, yarışa açık kararlar burada TAZE veriyle alınır.
@@ -300,7 +308,12 @@ export async function cancelEtutV2(session: Session, input: CancelEtutInput): Pr
     // Tip köprüsü — yukarıdaki bookEtut yorumuyla AYNI gerekçe (Prisma extension tipi vs
     // Prisma.TransactionClient uyuşmazlığı, reservations.ts değiştirilemediği için burada çözülür).
     const tx = rawTx as unknown as Prisma.TransactionClient;
-    await lockStudentWeek(tx, orgSlug, effectiveRow.studentId, weekKey);
+    // Kaynak-bazlı advisory lock (Faz 2 audit-fix FIX-A) — ÖNCE, bookEtut ile AYNI anahtar
+    // biçimi (`etut:${orgSlug}:${branch}:${sablonId}:${weekKey}`) — aksi halde bookEtut ve
+    // cancelEtutV2 aynı kaynağa AYNI ANDA dokunurken FARKLI kilitler alır, yarış kapanmaz.
+    await lockResource(tx, `etut:${orgSlug}:${branch}:${sablonRow.id}:${weekKey}`);
+    // SIRA: HER ZAMAN lockResource'tan SONRA (deadlock-free).
+    await lockStudentWeek(tx, orgSlug, branch, effectiveRow.studentId, weekKey);
 
     // Race penceresi: lock alınana kadar başka bir istek aynı satırı iptal etmiş/başka bir
     // öğrenciye yeniden rezerve etmiş olabilir — TAZE veriyle yeniden doğrula (bookEtut'taki
