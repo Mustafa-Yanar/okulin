@@ -59,6 +59,6 @@ describe('cancelToTombstone — weekKey guard', () => {
       cancelledByRole: 'director', cancelledById: 'd1',
       snapshot: { studentId: 'st1', studentName: 'Öğrenci', studentCls: 'c1', dersBranch: 'Fizik', dayIndex: 0, startsAt: '15:30', endsAt: '16:00' },
     };
-    await expect(cancelToTombstone({} as never, validInput)).rejects.toThrow();
+    await expect(cancelToTombstone({} as never, validInput)).rejects.toThrow(/haftalık iptal|cancelRecurring/);
   });
 });
