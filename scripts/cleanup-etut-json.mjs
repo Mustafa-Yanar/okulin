@@ -4,11 +4,18 @@
 //
 // FIX-A (Faz 5 audit güvenlik rayı): --apply ÖNCESİ en güncel reconcile-apply raporu
 // (scripts/backups/etut-migration-report-*.json, mode==='RECONCILE-APPLY') okunur.
-// KAYIP-riskli kova (unresolved/invalidSablon/studentIdMissing/writeFailed) DOLU ise
-// veya rapor yoksa/okunamıyorsa/yanlış moddaysa, temizlik REDDEDİLİR (exit 1) —
+// KAYIP-riskli kova (unresolved/invalidSablon/studentIdMissing/writeFailed/conflicts) DOLU
+// ise veya rapor yoksa/okunamıyorsa/yanlış moddaysa, temizlik REDDEDİLİR (exit 1) —
 // --force ile yalnız "kayıp-riskli kova dolu" durumu bilinçli geçilebilir; rapor
 // eksik/yanlış-mod durumu --force ile de geçilmez. Bu gate JSON'un TEK KOPYASI
 // silinmeden önce kalıcı veri kaybını önler.
+// FIX-E (org-kapsam uyumu): rapor org='ALL' değilse, cleanup kapsamına (ORG||'ALL')
+// EŞİT olmalı — yoksa REDDEDİLİR (exit 1, --force ile geçilebilir). Aksi halde dar
+// kapsamlı bir reconcile raporu (ör. tek org) daha geniş kapsamlı bir cleanup koşusunu
+// (ör. org'suz = tüm org'lar) kanıtsız "güvenli" gösterebilir.
+// FIX-F (conflicts=RISK): 'conflicts' migrate exit gate'iyle (migrate-etut-to-tables.mjs)
+// simetrik olarak RISK_BUCKETS'te — JSON'daki rezervasyon tabloda o öğrenci için AKTİF
+// satır olarak yok demektir, "kayıpsız" değil "kasıtlı-üstüne-yazılan".
 // Kullanım: node scripts/cleanup-etut-json.mjs [--apply] [--org <slug>] [--report <path>] [--force]
 import { PrismaClient } from '@prisma/client';
 import { writeFileSync, mkdirSync, readdirSync, readFileSync } from 'fs';
@@ -75,10 +82,15 @@ function loadReconcileReport() {
 
 // KAYIP-riskli: bu kovalardan biri doluysa, JSON'da olup tabloya AKTARILAMAMIŞ veri var
 // demektir — JSON silinirse KALICI KAYIP.
-const RISK_BUCKETS = ['unresolved', 'invalidSablon', 'studentIdMissing', 'writeFailed'];
+// FIX-F: 'conflicts' migrate exit gate'inde (satır ~197, migrate-etut-to-tables.mjs)
+// zaten exit-1 kovası — JSON'un rezervasyonu tabloda o öğrenci için AKTİF satır olarak
+// YOK demek (tablo başka öğrenci/cancelled/recurring-gölge tutuyor), yani "kasıtlı
+// üstüne yazılan" veri. Buradaki gate migrate ile SİMETRİK olmalı — WARN'da bırakmak
+// operatörün migrate exit-1'i görmezden gelip cleanup'ı sorunsuz koşabilmesine izin verirdi.
+const RISK_BUCKETS = ['unresolved', 'invalidSablon', 'studentIdMissing', 'writeFailed', 'conflicts'];
 // KAYIPSIZ: tabloda veri zaten var (ya da kasıtlı dokunulmadı) — JSON silmek kayıp değil,
 // yalnız bilgilendirme.
-const WARN_BUCKETS = ['conflicts', 'tableOnly', 'recurringPresent', 'sablonDeleteSkippedRecent'];
+const WARN_BUCKETS = ['tableOnly', 'recurringPresent', 'sablonDeleteSkippedRecent'];
 
 function evaluateReport(report) {
   const risky = RISK_BUCKETS.filter((k) => Array.isArray(report[k]) && report[k].length > 0);
@@ -111,8 +123,30 @@ if (!gate.ok) {
     process.exit(1);
   }
 } else {
-  const { risky, warn } = evaluateReport(gate.report);
   console.log(`Reconcile raporu: ${gate.path} (mode=${gate.report.mode})`);
+
+  // --- FIX-E: rapor kapsamı cleanup kapsamını KAPSAMALI ---
+  // migrate scripti raporda report.org = ORG || 'ALL' yazar; cleanup'ın kendi kapsamı
+  // da ORG || 'ALL'. Rapor 'ALL' değilse ve cleanup kapsamıyla eşleşmiyorsa, rapor bu
+  // cleanup koşusunun kapsadığı org'ları DOĞRULAMAMIŞ demektir (ör. testkurs raporu
+  // org'suz/tüm-org cleanup'ı "güvenli" gösterebilir) — JSON kanıtsız silinir.
+  const cleanupScope = ORG || 'ALL';
+  const reportOrg = gate.report.org;
+  const scopeMismatch = !(reportOrg === 'ALL' || reportOrg === cleanupScope);
+  if (scopeMismatch) {
+    const reason = `Rapor kapsamı (org=${reportOrg}) cleanup kapsamını (${cleanupScope}) kapsamıyor — aynı --org ile reconcile --apply koş`;
+    if (APPLY && !FORCE) {
+      console.error(`HATA: ${reason}`);
+      await p.$disconnect();
+      process.exit(1);
+    } else if (APPLY && FORCE) {
+      console.log(`FORCE: kapsam uyuşmazlığı görmezden gelindi — ${reason}`);
+    } else {
+      console.log(`  UYARI (kapsam uyuşmazlığı — --apply'da REDDEDİLİR, --force gerekir): ${reason}`);
+    }
+  }
+
+  const { risky, warn } = evaluateReport(gate.report);
   for (const k of warn) console.log(`  UYARI (kayıpsız, cleanup devam eder): ${k}=${gate.report[k].length}`);
   if (risky.length) {
     const summary = risky.map((k) => `${k}=${gate.report[k].length}`).join(', ');
