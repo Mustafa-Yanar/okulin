@@ -85,3 +85,79 @@ describe('validateSablon', () => {
     expect(validateSablon(sb({ start: '25:99' })).ok).toBe(false);
   });
 });
+
+// ---- Faz 5 reconcile karar çekirdeği ----
+import { reconcileSablonDeletes, reconcileReservationOps } from './etut-migration-lib.mjs';
+
+describe('reconcileSablonDeletes', () => {
+  const tRow = (legacyId, deletedAt = null) => ({ legacyId, deletedAt });
+  it('JSON\'da olmayan ACTIVE tablo şablonu → soft-delete adayı', () => {
+    expect(reconcileSablonDeletes(['a'], [tRow('a'), tRow('b')])).toEqual(['b']);
+  });
+  it('zaten soft-deleted satır tekrar aday OLMAZ (idempotent)', () => {
+    expect(reconcileSablonDeletes(['a'], [tRow('b', new Date())])).toEqual([]);
+  });
+  it('JSON boşsa tüm ACTIVE şablonlar aday', () => {
+    expect(reconcileSablonDeletes([], [tRow('a'), tRow('b')])).toEqual(['a', 'b']);
+  });
+});
+
+describe('reconcileReservationOps', () => {
+  // NOW: Çarşamba 2026-07-22 10:00 TSİ → currentWeek 2026-W30 (dosya başındaki NOW ile aynı)
+  const res = (over = {}) => ({
+    weekKey: '2026-W30', status: 'ACTIVE', scope: 'WEEK',
+    studentId: 's1', bookedById: 'migration', ...over,
+  });
+  const sbJson = (over = {}) => ({
+    id: 'x', dayIndex: 4, start: '15:30', end: '16:00', // Cuma — NOW'dan ileride
+    studentId: 's1', studentName: 'Ali', studentCls: '11', branch: 'Matematik', bookedBy: 'student',
+    ...over,
+  });
+
+  it('1a: aynı öğrenci ACTIVE gelecek satırda → synced', () => {
+    expect(reconcileReservationOps(sbJson(), [res()], NOW)).toEqual([{ op: 'synced', weekKey: '2026-W30' }]);
+  });
+  it('1b: farklı öğrenci, migration satırı → update (aynı hafta, çift üretme yok)', () => {
+    const out = reconcileReservationOps(sbJson({ studentId: 's2', studentName: 'Veli' }), [res()], NOW);
+    expect(out).toEqual([{ op: 'update', weekKey: '2026-W30', studentId: 's2', studentName: 'Veli', studentCls: '11', dersBranch: 'Matematik', bookedByRole: 'student' }]);
+  });
+  it('1c: farklı öğrenci, migration-OLMAYAN satır → conflict (dokunma)', () => {
+    const out = reconcileReservationOps(sbJson({ studentId: 's2' }), [res({ bookedById: 'u_99' })], NOW);
+    expect(out).toEqual([{ op: 'conflict', weekKey: '2026-W30', tableStudentId: 's1' }]);
+  });
+  it('1d: hiç gelecek satır yok → create (classifyReservation hedefi)', () => {
+    const out = reconcileReservationOps(sbJson(), [], NOW);
+    expect(out).toEqual([{ op: 'create', weekKey: '2026-W30' }]); // Cuma slotu NOW'dan ileride → W30
+  });
+  it('1d-unresolved: tüm hedefler geçmişte → unresolved', () => {
+    const out = reconcileReservationOps(sbJson({ aktif: false }), [], NOW);
+    expect(out).toEqual([{ op: 'unresolved', reason: expect.stringContaining('aktif=false') }]);
+  });
+  it('1e: hedef haftada CANCELLED satır → conflict-cancelled (post-deploy iptali ezme)', () => {
+    const out = reconcileReservationOps(sbJson(), [res({ status: 'CANCELLED', bookedById: 'u_5' })], NOW);
+    expect(out).toEqual([{ op: 'conflict-cancelled', weekKey: '2026-W30' }]);
+  });
+  it('2a: JSON öğrencisiz, migration ACTIVE gelecek satırlar → cancel', () => {
+    const out = reconcileReservationOps(sbJson({ studentId: null }), [res(), res({ weekKey: '2026-W31' })], NOW);
+    expect(out).toEqual([{ op: 'cancel', weekKeys: ['2026-W30', '2026-W31'] }]);
+  });
+  it('2b: JSON öğrencisiz, migration-olmayan ACTIVE satır → tableOnly (dokunma)', () => {
+    const out = reconcileReservationOps(sbJson({ studentId: null }), [res({ bookedById: 'u_7' })], NOW);
+    expect(out).toEqual([{ op: 'tableOnly', weekKeys: ['2026-W30'] }]);
+  });
+  it('2c: JSON öğrencisiz, tablo da boş → none', () => {
+    expect(reconcileReservationOps(sbJson({ studentId: null }), [], NOW)).toEqual([{ op: 'none' }]);
+  });
+  it('RECURRING satırlar karara girmez, recurring raporu döner', () => {
+    const out = reconcileReservationOps(sbJson({ studentId: null }), [res({ scope: 'RECURRING', weekKey: '*', bookedById: 'u_1' })], NOW);
+    expect(out).toEqual([{ op: 'recurringPresent', count: 1 }, { op: 'none' }]);
+  });
+  it('geçmiş hafta satırı (W29) karara girmez', () => {
+    const out = reconcileReservationOps(sbJson({ studentId: null }), [res({ weekKey: '2026-W29' })], NOW);
+    expect(out).toEqual([{ op: 'none' }]);
+  });
+  it('CANCELLED gelecek satır 2a cancel listesine GİRMEZ (idempotent ikinci koşu)', () => {
+    const out = reconcileReservationOps(sbJson({ studentId: null }), [res({ status: 'CANCELLED' })], NOW);
+    expect(out).toEqual([{ op: 'none' }]);
+  });
+});

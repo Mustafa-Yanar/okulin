@@ -81,3 +81,64 @@ export function validateSablon(sb) {
   if (toMin(sb.end) <= toMin(sb.start)) return { ok: false, reason: `end <= start (${sb.start}-${sb.end})` };
   return { ok: true };
 }
+
+// ---- Faz 5 reconcile karar çekirdeği (saf — DB'ye dokunmaz) ----
+// JSON-authoritative: prod JSON gerçek kaynak. bookedById==='migration' OLMAYAN
+// tablo satırları KORUNUR (post-deploy/smoke yazımı) — yalnız raporlanır.
+
+// JSON'da olmayan ACTIVE (deletedAt:null) tablo şablonları → soft-delete adayları.
+export function reconcileSablonDeletes(jsonIds, tableSablonlar) {
+  const jsonSet = new Set(jsonIds);
+  return tableSablonlar
+    .filter((ts) => ts.deletedAt === null && !jsonSet.has(ts.legacyId))
+    .map((ts) => ts.legacyId);
+}
+
+// Şablon başına rezervasyon senkron kararları. futureRes: tablodaki bu şablona ait
+// TÜM satırlar (script weekKey>=currentWeek daraltmadan verir; süzme burada —
+// karar mantığı tek yerde test edilsin). Dönen: op listesi (sıra: rapor-önce).
+export function reconcileReservationOps(sb, futureRes, now) {
+  const currentWeek = isoWeekKeyTSI(now);
+  const ops = [];
+  const recurring = futureRes.filter((r) => r.scope === 'RECURRING');
+  if (recurring.length) ops.push({ op: 'recurringPresent', count: recurring.length });
+  // Geçmiş haftalar tarihçe — karara girmez. Zero-padded lexicographic kıyas
+  // (yıl sınırında da doğru: '2026-W52' < '2027-W01').
+  const future = futureRes.filter((r) => r.scope === 'WEEK' && r.weekKey >= currentWeek);
+  const active = future.filter((r) => r.status === 'ACTIVE');
+
+  if (sb.studentId) {
+    const same = active.find((r) => r.studentId === String(sb.studentId));
+    if (same) { ops.push({ op: 'synced', weekKey: same.weekKey }); return ops; }
+    const other = active[0];
+    if (other) {
+      if (other.bookedById === 'migration') {
+        ops.push({
+          op: 'update', weekKey: other.weekKey,
+          studentId: String(sb.studentId), studentName: sb.studentName || '',
+          studentCls: sb.studentCls || '', dersBranch: sb.branch || '',
+          bookedByRole: sb.bookedBy || 'unknown',
+        });
+      } else {
+        ops.push({ op: 'conflict', weekKey: other.weekKey, tableStudentId: other.studentId });
+      }
+      return ops;
+    }
+    const cls = classifyReservation(sb, now);
+    if (cls.action === 'unresolved') { ops.push({ op: 'unresolved', reason: cls.reason }); return ops; }
+    // Hedef haftada CANCELLED satır: cutover penceresinde tabloya düşmüş taze iptal —
+    // tablo yazımı daha yeni, JSON'la EZME.
+    const cancelledAtTarget = future.find((r) => r.status === 'CANCELLED' && r.weekKey === cls.weekKey);
+    if (cancelledAtTarget) { ops.push({ op: 'conflict-cancelled', weekKey: cls.weekKey }); return ops; }
+    ops.push({ op: 'create', weekKey: cls.weekKey });
+    return ops;
+  }
+
+  // JSON öğrencisiz: migration-kökenli gelecek ACTIVE satırlar iptal edilir.
+  const migRows = active.filter((r) => r.bookedById === 'migration');
+  const otherRows = active.filter((r) => r.bookedById !== 'migration');
+  if (migRows.length) ops.push({ op: 'cancel', weekKeys: migRows.map((r) => r.weekKey) });
+  if (otherRows.length) ops.push({ op: 'tableOnly', weekKeys: otherRows.map((r) => r.weekKey) });
+  if (!migRows.length && !otherRows.length) ops.push({ op: 'none' });
+  return ops;
+}
