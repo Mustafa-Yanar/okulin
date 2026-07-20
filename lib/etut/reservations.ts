@@ -137,6 +137,11 @@ export async function lockStudentWeek(tx: Prisma.TransactionClient, orgSlug: str
 // çifti özdeş → aynı sırada alınır → döngü yok. Farklı öğrenci+aynı kaynak yalnız
 // kaynak-kilidinde, aynı öğrenci+farklı kaynak yalnız öğrenci-kilidinde çekişir → deadlock
 // yapısal olarak imkânsız.
+// Salt=1 (lockStudentWeek'in salt=0'ından FARKLI, Faz 2 audit-fix carry-over) — iki fonksiyon
+// STRING ANAHTAR ÇAKIŞMASI olasılığına karşı (örn. bir kaynak-anahtarı tesadüfen bir
+// öğrenci-hafta anahtarıyla bayt-bayt eşleşirse) ayrı hash NAMESPACE'lerinde yaşar; aksi halde
+// hashtextextended aynı (key,salt) çiftinden aynı lock-id üretir ve iki AYRI mantıksal kaynak
+// aynı advisory lock'u paylaşıp gereksiz yere serileşebilirdi.
 export async function lockResource(tx: Prisma.TransactionClient, key: string): Promise<void> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 1))`;
 }

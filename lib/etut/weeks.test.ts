@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentWeekKeyTSI, shiftWeekKey, allowedBookingWeeks } from './weeks';
+import { currentWeekKeyTSI, shiftWeekKey, allowedBookingWeeks, isValidWeekKey } from './weeks';
 
 // Referans: Pzt 20 Tem 2026 = 2026-W30 başlangıcı; Pazar 19 Tem = W29'un son günü.
 describe('currentWeekKeyTSI — sunucu-UTC bağımsız TSİ haftası', () => {
@@ -21,6 +21,27 @@ describe('shiftWeekKey', () => {
   });
   it('yıl sınırı: 2026-W53 +1 → 2027-W01', () => {
     expect(shiftWeekKey('2026-W53', 1)).toBe('2027-W01');
+  });
+});
+
+describe('isValidWeekKey — ISO-8601 hafta biçimi (Faz 2 audit-fix FIX-C)', () => {
+  it('geçerli haftalar (W01, W30, W53) → true', () => {
+    expect(isValidWeekKey('2026-W01')).toBe(true);
+    expect(isValidWeekKey('2026-W30')).toBe(true);
+    expect(isValidWeekKey('2026-W53')).toBe(true);
+  });
+  it('W00 → false (ISO hafta 1den başlar)', () => {
+    expect(isValidWeekKey('2026-W00')).toBe(false);
+  });
+  it('W99 / W54 → false (ölü-seri riski — effectiveFromWeek asla erişilemez olurdu)', () => {
+    expect(isValidWeekKey('2026-W99')).toBe(false);
+    expect(isValidWeekKey('2026-W54')).toBe(false);
+  });
+  it('bozuk biçim (kısa yıl, harf, boş) → false', () => {
+    expect(isValidWeekKey('26-W01')).toBe(false);
+    expect(isValidWeekKey('2026-W3')).toBe(false);
+    expect(isValidWeekKey('abc')).toBe(false);
+    expect(isValidWeekKey('')).toBe(false);
   });
 });
 

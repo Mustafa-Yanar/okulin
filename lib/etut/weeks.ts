@@ -29,6 +29,15 @@ export function currentWeekKeyTSI(now: Date = new Date()): string {
   return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
+// ISO-8601 hafta anahtarı biçim doğrulayıcı (Faz 2 audit-fix FIX-C) — W01..W53 aralığı
+// (W00 ve W54+ formatı tutsa da geçersiz ISO hafta olurdu). booking.ts normalizeWeekKey
+// (RECURRING'te geçersiz → 400; W99 gibi bir değer effectiveFromWeek'e yazılırsa
+// resolveEffective'in string karşılaştırmasında ASLA erişilemeyen 'ölü seri' yaratır) ve
+// app/api/etut-sablon/rezervasyon/route.ts POST şeması bunu kullanır.
+export function isValidWeekKey(wk: string): boolean {
+  return /^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$/.test(wk);
+}
+
 // weekKey'i delta hafta kaydır (ISO-doğru, yıl sınırı dahil).
 export function shiftWeekKey(weekKey: string, delta: number): string {
   const [y, wStr] = weekKey.split('-W');
