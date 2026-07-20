@@ -5,7 +5,7 @@ import type { Session } from '@/lib/auth';
 import { tdb } from '@/lib/sqldb';
 import { currentOrg, currentBranch } from '@/lib/tenant';
 import { getWeekReservations, resolveEffective } from './reservations';
-import { levelPoolForGroup } from './level-pool';
+import { levelPoolForStudent } from './level-pool';
 import { bookEtut, cancelEtutV2 } from './booking';
 
 // Etüt rezervasyon iş kuralları — Faz 2b'den itibaren gerçek iş mantığı lib/etut/booking.ts
@@ -127,8 +127,8 @@ export async function cancelEtut(actor: EtutActor, input: { teacherId: string; e
 // Öğrencinin grubuna açık öğretmenlerin, bu hafta efektif-aktif şablonları (EtutSablon
 // deletedAt:null + aktif/pasifHaftalar); her biri için doluluk/sahiplik EtutReservation
 // efektif satırından (resolveEffective — WEEK önce, sonra RECURRING), branş adayları
-// öğretmen branşları ∩ öğrencinin DÜZEY havuzu (levelPoolForGroup — spec §4a, sınıf
-// listesi DEĞİL; bookEtut'un autoPickBranch'iyle AYNI kaynak).
+// öğretmen branşları ∩ öğrencinin DÜZEY havuzu (levelPoolForStudent — spec §4a + Fix 2
+// boş-havuz fallback'i, sınıf listesi DEĞİL; bookEtut'un autoPickBranch'iyle AYNI kaynak).
 export interface BookableEtut {
   teacherId: string;
   teacherName: string;
@@ -149,7 +149,9 @@ export async function listBookableEtuts(studentId: string, weekKey: string): Pro
   const orgSlug = currentOrg();
   const branch = currentBranch();
   const [levelPool, sablonRows, allReservations] = await Promise.all([
-    levelPoolForGroup(student.group),
+    // levelPoolForStudent (Fix 2): grup havuzu boşsa öğrencinin kendi şubesine düşer —
+    // booking.ts'in autoPickBranch kaynağıyla AYNI (tutarlılık).
+    levelPoolForStudent(student.cls || '', student.group),
     // Tenant-scoped $extends enjeksiyonu — sablon-service.ts'teki AYNI idiom (teacherId filtresi
     // YOK: bu, TÜM öğretmenlerin şablonlarını tarayan öğrenci-merkezli bir liste).
     tdb().etutSablon.findMany({ where: { deletedAt: null } }),

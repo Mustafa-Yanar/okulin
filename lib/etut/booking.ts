@@ -15,7 +15,7 @@ import { getAllTeachers, getAllStudents, getDaySlotTimes, slotStartTime, type Sl
 import { getSablonForBooking } from './sablon-service';
 import { decideBooking, type BookingContext } from './booking-rules';
 import { currentWeekKeyTSI, allowedBookingWeeks, type BookingRole } from './weeks';
-import { levelPoolForGroup } from './level-pool';
+import { levelPoolForStudent } from './level-pool';
 import {
   getWeekReservations, resolveEffective, upsertWeekReservation, upsertRecurring,
   cancelToTombstone, cancelRecurring, lockStudentWeek, type ReservationWrite,
@@ -146,7 +146,10 @@ export async function bookEtut(
 
   const teacher = allTeachers.find((t) => t.id === input.teacherId) ?? null;
   const student = allStudents.find((s) => s.id === targetStudentId) ?? null;
-  const levelPool = student ? await levelPoolForGroup(student.group) : [];
+  // levelPoolForStudent (Fix 2, review bulgusu): grup havuzu boşsa (örn. 'ilkokul' —
+  // FALLBACK_KEYS'te yok + registry'de henüz sınıf yok) öğrencinin KENDİ şubesine düşer —
+  // levelPoolForGroup TEK BAŞINA o gruptaki TÜM öğrencileri branş doğrulamasında reddederdi.
+  const levelPool = student ? await levelPoolForStudent(student.cls || '', student.group) : [];
   const dersBranch = autoPickBranch(teacher?.branches ?? [], levelPool, input.branch);
 
   const allowedWeeks = allowedBookingWeeks(actorRole as BookingRole, new Date());
