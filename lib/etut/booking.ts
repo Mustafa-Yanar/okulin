@@ -14,21 +14,27 @@ import { logAudit, actorFrom } from '@/lib/audit';
 import { getAllTeachers, getAllStudents, getDaySlotTimes, slotStartTime, type SlotCell } from '@/lib/slots';
 import { getSablonForBooking } from './sablon-service';
 import { decideBooking, type BookingContext } from './booking-rules';
-import { currentWeekKeyTSI, allowedBookingWeeks, type BookingRole } from './weeks';
+import { currentWeekKeyTSI, allowedBookingWeeks, isValidWeekKey, type BookingRole } from './weeks';
 import { levelPoolForStudent } from './level-pool';
 import {
   getWeekReservations, resolveEffective, upsertWeekReservation, upsertRecurring,
-  cancelToTombstone, cancelRecurring, lockResource, lockStudentWeek, type ReservationWrite,
+  cancelToTombstone, cancelRecurring, lockResource, lockStudentWeek, RECURRING_WEEKKEY, type ReservationWrite,
 } from './reservations';
 import { combineBookings, type SlotRowLike } from './student-week';
 import { toMin } from './overlap';
 
-const WEEK_KEY_RE = /^\d{4}-W\d{2}$/;
-
-// weekKey doğrulama — mobil deseniyle uyumlu: format tutmuyorsa geçerli haftaya düş
-// (400 ile reddetmek yerine — brief: "geçersizse currentWeekKeyTSI()'ye düş").
-function normalizeWeekKey(weekKey: string | undefined): string {
-  return weekKey && WEEK_KEY_RE.test(weekKey) ? weekKey : currentWeekKeyTSI();
+// weekKey doğrulama (Faz 2 audit-fix FIX-C, isValidWeekKey — W00/W54+ artık "biçimi tutuyor"
+// sayılmıyor, weeks.ts'teki ISO-doğru aralığa göre). WEEK: mobil deseniyle uyumlu — format
+// tutmuyorsa 400 ile reddetmek yerine geçerli haftaya düş. RECURRING: AÇIKÇA verilmiş ama
+// geçersiz bir weekKey SESSİZCE düşürülMEZ — upsertRecurring bunu effectiveFromWeek'e yazar;
+// örn. '2026-W99' resolveEffective'in string karşılaştırmasında HER ZAMAN gerçek haftalardan
+// büyük kalır → seri ASLA effektif olmaz ("ölü seri"). weekKey hiç verilmemişse (undefined,
+// tipik PATCH akışı) sorun yok — currentWeekKeyTSI()'ye düşer, hata YOK.
+function normalizeWeekKey(weekKey: string | undefined, scope: 'WEEK' | 'RECURRING' = 'WEEK'): string {
+  if (weekKey === undefined) return currentWeekKeyTSI();
+  if (isValidWeekKey(weekKey)) return weekKey;
+  if (scope === 'RECURRING') throw new HttpError(400, 'Geçersiz hafta');
+  return currentWeekKeyTSI();
 }
 
 // Rehberin salt-okunur olup olmadığı — app/api/slots/route.ts POST/DELETE (satır 105-112 /
@@ -102,7 +108,7 @@ export async function bookEtut(session: Session, input: BookEtutInput): Promise<
   const actorRole = session.role;
   const actorId = String(session.id ?? '');
   const scope: 'WEEK' | 'RECURRING' = input.scope === 'RECURRING' ? 'RECURRING' : 'WEEK';
-  const weekKey = normalizeWeekKey(input.weekKey);
+  const weekKey = normalizeWeekKey(input.weekKey, scope);
 
   // Hedef öğrenci — DB'ye gitmeden, rol ihlallerini en erken noktada keser (legacy sırası).
   const targetStudentId = resolveTargetStudent(actorRole, actorId, input.teacherId, input.studentId);
@@ -166,7 +172,13 @@ export async function bookEtut(session: Session, input: BookEtutInput): Promise<
     // 1.'yi sessizce eziyordu). sablonRow null olabilir (geçersiz etutId — decideBooking
     // kural 5'te 404 dönecek) — o durumda input.etutId'ye düşer (yine deterministik, yalnız
     // lock-ömrü boyunca anlamlı bir anahtar; gerçek yazma olmayacağı için doğruluk etkilenmez).
-    await lockResource(tx, `etut:${orgSlug}:${branch}:${sablonRow?.id ?? input.etutId}:${weekKey}`);
+    // RECURRING'te kilit anahtarının hafta bileşeni RECURRING_WEEKKEY='*' (FIX-B carry-over,
+    // FIX-1 review) — yazma YİNE weekKey (cari/referans hafta) ile upsertRecurring'e gider
+    // (effectiveFromWeek=weekKey), yalnız KİLİT anahtarı '*' olur. Aksi halde bookEtut(RECURRING)
+    // cari-hafta kilidi alırken cancelEtutV2(recurring) '*' kilidi alır — FARKLI kaynaklar,
+    // aynı satıra eşzamanlı yazma/iptal yarışı KAPANMAZDI.
+    const lockWeekKey = scope === 'RECURRING' ? RECURRING_WEEKKEY : weekKey;
+    await lockResource(tx, `etut:${orgSlug}:${branch}:${sablonRow?.id ?? input.etutId}:${lockWeekKey}`);
     // Öğrenci+hafta advisory lock — SlotBooking+EtutReservation çapraz-sistem yarışını kapatır.
     // SIRA: HER ZAMAN lockResource'tan SONRA (deadlock-free, bkz. reservations.ts lockResource).
     await lockStudentWeek(tx, orgSlug, branch, targetStudentId, weekKey);
@@ -225,13 +237,24 @@ export async function bookEtut(session: Session, input: BookEtutInput): Promise<
       : upsertWeekReservation(tx, weekKey, write);
   });
 
-  await logAudit({
-    ...actorFrom(session),
-    action: 'etut.book',
-    target: { type: 'student', id: row.studentId, name: row.studentName },
-    detail: `Etüt rezervasyonu: ${row.studentName} → ${teacher?.name ?? input.teacherId} (${row.dersBranch}, ${weekKey}${scope === 'RECURRING' ? ', tekrarlayan' : ''})`,
-    ...(input.force ? { force: true, reason: input.reason } : {}),
-  }, { org: orgSlug, branch });
+  // Audit best-effort (Faz 2 audit-fix FIX-C) — try/catch: logAudit KENDİ İÇİNDE zaten
+  // hataları yutuyor (lib/audit.ts, asla throw etmez) ama tx COMMIT OLMUŞ bir rezervasyonu
+  // audit'in (bugünkü veya gelecekteki bir davranış değişikliğiyle) 500'e çevirmesi KESİN
+  // engellensin diye çağrı yerinde de savunma katmanı. force:true YALNIZ isManagerActor+
+  // input.force birlikteyken loglanır (Gemini DÜŞÜK-1) — yetkisiz/etkisiz bir force bayrağı
+  // (non-manager gönderirse decideBooking'de zaten sessizce yok sayılır) audit'te YANILTICI
+  // 'bypass yapıldı' izlenimi vermesin.
+  try {
+    await logAudit({
+      ...actorFrom(session),
+      action: 'etut.book',
+      target: { type: 'student', id: row.studentId, name: row.studentName },
+      detail: `Etüt rezervasyonu: ${row.studentName} → ${teacher?.name ?? input.teacherId} (${row.dersBranch}, ${weekKey}${scope === 'RECURRING' ? ', tekrarlayan' : ''})`,
+      ...(isManagerActor && input.force ? { force: true, reason: input.reason } : {}),
+    }, { org: orgSlug, branch });
+  } catch (e) {
+    console.warn('[booking] etut.book audit kaydı başarısız (rezervasyon commit edildi):', e instanceof Error ? e.message : e);
+  }
 
   return row;
 }
@@ -277,14 +300,65 @@ export async function cancelEtutV2(session: Session, input: CancelEtutInput): Pr
   const sablonRow = await getSablonForBooking(input.teacherId, input.etutId);
   if (!sablonRow) throw new HttpError(404, 'Etüt bulunamadı');
 
+  // ── FIX-B (Faz 2 audit-fix, YÜKSEK — 3/3 denetim): recurring iptal BAĞIMSIZ dal ──────
+  // Kök neden (eski kod): scope==='recurring' olsa BİLE aşağıdaki 'week' akışı ÇALIŞIYORDU —
+  // efektif-CARİ-HAFTA kaydını arıyordu (resolveEffective(weekKey)); o hafta tombstone'lanmışsa
+  // veya hiç görünür değilse (örn. pasifHaftalar) 404 dönüyordu — ACTIVE '*' satırı VARKEN.
+  // Reachable: ProgramEditor atama-kaldır → PATCH /api/etut-sablon → cancelEtutV2(scope:
+  // 'recurring'), weekKey YOK (cari haftaya düşer). Çözüm: recurring iptali HAFTADAN TAMAMEN
+  // BAĞIMSIZ — doğrudan '*' satırını arar, bulur, iptal eder. weekKey/effectiveRow/
+  // cancelLockHours/sahiplik-erken-çıkış AŞAĞIDAKİ 'week' akışına AİT, burada KULLANILMAZ
+  // (recurring iptali zaten yalnız müdür/rehbere açık — yukarıdaki guard; öğrenci/öğretmen
+  // sahiplik kontrolü bu yüzden MOOT).
+  if (scope === 'recurring') {
+    const recurringRow = await tdb(orgSlug, branch).$transaction(async (rawTx) => {
+      const tx = rawTx as unknown as Prisma.TransactionClient;
+      // Kaynak kilidi — anahtarın hafta bileşeni RECURRING_WEEKKEY='*' (bookEtut'un RECURRING
+      // yolundaki AYNI anahtar, bkz bookEtut lockWeekKey yorumu) — recurring atama ve recurring
+      // iptal AYNI '*' kaynağında serileşir.
+      await lockResource(tx, `etut:${orgSlug}:${branch}:${sablonRow.id}:${RECURRING_WEEKKEY}`);
+
+      // ACTIVE '*' RECURRING satırını DOĞRUDAN bul — kilit ALTINDA, TAZE (resource kilidi
+      // aynı sablonId+'*' üzerindeki her yazmayı serileştirdiği için bu okuma OTORİTER).
+      const row = await tx.etutReservation.findFirst({
+        where: { orgSlug, branch, sablonId: sablonRow.id, weekKey: RECURRING_WEEKKEY, scope: 'RECURRING', status: 'ACTIVE' },
+      });
+      if (!row) throw new HttpError(404, 'Bu etütte tekrarlayan rezervasyon yok');
+
+      // Öğrenci-hafta kilidi — resource kilidinden SONRA (deadlock-free sıra, bkz.
+      // reservations.ts lockResource yorumu). Recurring haftadan bağımsız olduğu için
+      // RECURRING_WEEKKEY sabit anahtarıyla kilitlenir (kaynak kilidiyle tutarlı).
+      await lockStudentWeek(tx, orgSlug, branch, row.studentId, RECURRING_WEEKKEY);
+
+      await cancelRecurring(tx, orgSlug, branch, sablonRow.id, { role: actorRole, id: actorId, reason: input.reason });
+      return row;
+    });
+
+    // Audit best-effort (FIX-C) — hedef BU TAZE satırdan (stale effectiveRow YOK, çünkü bu
+    // dalda hiç okunmadı).
+    try {
+      await logAudit({
+        ...actorFrom(session),
+        action: 'etut.cancel',
+        target: { type: 'student', id: recurringRow.studentId, name: recurringRow.studentName },
+        detail: `Etüt rezervasyonu iptal edildi: ${recurringRow.studentName} — ${recurringRow.dersBranch} (tekrarlayan, tümden)`,
+        ...(input.reason ? { reason: input.reason } : {}),
+      }, { org: orgSlug, branch });
+    } catch (e) {
+      console.warn('[booking] etut.cancel (recurring) audit kaydı başarısız (iptal commit edildi):', e instanceof Error ? e.message : e);
+    }
+    return;
+  }
+
+  // ── 'week' kapsamı — davranış AYNEN (FIX-B'den ETKİLENMEZ) ───────────────────────────
   const allRows = await getWeekReservations(tdb(orgSlug, branch), orgSlug, branch, weekKey);
   const effectiveRow = resolveEffective(allRows, weekKey).get(sablonRow.id) ?? null;
   if (!effectiveRow) throw new HttpError(404, 'Bu etütte rezervasyon yok');
 
   // Öğrenci iptal kilidi — app/api/slots/route.ts DELETE satır 302-317 ile config anahtarı
-  // (etut.cancelLockHours) + metin BİREBİR. Yalnız 'week' kapsamı: 'recurring' zaten yalnız
-  // isManager'a açık ve müdür/rehber/öğretmen bu kilitten MUAF (config yorumunda açık).
-  if (actorRole === 'student' && scope === 'week') {
+  // (etut.cancelLockHours) + metin BİREBİR. Yalnız 'week' kapsamı: 'recurring' artık YUKARIDA
+  // AYRI daldan döner, buraya hiç gelmez (müdür/rehber zaten bu kilitten MUAF olurdu).
+  if (actorRole === 'student') {
     const etutConfig = await getOrgConfig('etut', orgSlug, branch);
     const lockH = etutConfig.cancelLockHours;
     if (lockH > 0) {
@@ -304,7 +378,7 @@ export async function cancelEtutV2(session: Session, input: CancelEtutInput): Pr
   if (actorRole === 'teacher' && input.teacherId !== actorId) throw new HttpError(403, 'Yetkisiz');
   if (!isManagerActor && actorRole !== 'student' && actorRole !== 'teacher') throw new HttpError(403, 'Yetkisiz');
 
-  await tdb(orgSlug, branch).$transaction(async (rawTx) => {
+  const freshEffective = await tdb(orgSlug, branch).$transaction(async (rawTx) => {
     // Tip köprüsü — yukarıdaki bookEtut yorumuyla AYNI gerekçe (Prisma extension tipi vs
     // Prisma.TransactionClient uyuşmazlığı, reservations.ts değiştirilemediği için burada çözülür).
     const tx = rawTx as unknown as Prisma.TransactionClient;
@@ -319,38 +393,41 @@ export async function cancelEtutV2(session: Session, input: CancelEtutInput): Pr
     // öğrenciye yeniden rezerve etmiş olabilir — TAZE veriyle yeniden doğrula (bookEtut'taki
     // AYNI ilke).
     const freshRows = await getWeekReservations(tx, orgSlug, branch, weekKey);
-    const freshEffective = resolveEffective(freshRows, weekKey).get(sablonRow.id) ?? null;
-    if (!freshEffective) throw new HttpError(404, 'Bu etütte rezervasyon yok');
+    const fresh = resolveEffective(freshRows, weekKey).get(sablonRow.id) ?? null;
+    if (!fresh) throw new HttpError(404, 'Bu etütte rezervasyon yok');
 
-    // YETKİ TX İÇİNDE freshEffective'e karşı — lock-öncesi okuma yarışa açık (review bulgusu).
+    // YETKİ TX İÇİNDE fresh'e karşı — lock-öncesi okuma yarışa açık (review bulgusu).
     // Öğretmen kendi-etüdü kontrolü satır-bağımsız (input.teacherId sabit) — yukarıdaki
-    // pre-tx kontrol zaten yeterli, burada tekrarlanmaz. Öğrenci sahipliği İSE freshEffective
+    // pre-tx kontrol zaten yeterli, burada tekrarlanmaz. Öğrenci sahipliği İSE fresh
     // satırına bağlı (kim rezerve etmiş, tx öncesi/sonrası değişebilir) — bu yüzden burada
     // TAZE veriyle, legacy'nin AYNI 'Yetkisiz' metniyle yeniden doğrulanır.
-    if (actorRole === 'student' && freshEffective.studentId !== actorId) throw new HttpError(403, 'Yetkisiz');
+    if (actorRole === 'student' && fresh.studentId !== actorId) throw new HttpError(403, 'Yetkisiz');
 
-    if (scope === 'recurring') {
-      await cancelRecurring(tx, orgSlug, branch, sablonRow.id, { role: actorRole, id: actorId, reason: input.reason });
-    } else {
-      // Tombstone snapshot'ı EFEKTİF SAHİBİN bilgileriyle (Faz 2a kararı) — cancelledBy AYRI
-      // (kim iptal etti — actorRole/actorId), snapshot kim rezerve etmişti onu taşır.
-      await cancelToTombstone(tx, {
-        orgSlug, branch, sablonId: sablonRow.id, teacherId: input.teacherId,
-        weekKey, cancelledByRole: actorRole, cancelledById: actorId, cancelReason: input.reason,
-        snapshot: {
-          studentId: freshEffective.studentId, studentName: freshEffective.studentName,
-          studentCls: freshEffective.studentCls, dersBranch: freshEffective.dersBranch,
-          dayIndex: freshEffective.dayIndex, startsAt: freshEffective.startsAt, endsAt: freshEffective.endsAt,
-        },
-      });
-    }
+    // Tombstone snapshot'ı EFEKTİF SAHİBİN bilgileriyle (Faz 2a kararı) — cancelledBy AYRI
+    // (kim iptal etti — actorRole/actorId), snapshot kim rezerve etmişti onu taşır.
+    await cancelToTombstone(tx, {
+      orgSlug, branch, sablonId: sablonRow.id, teacherId: input.teacherId,
+      weekKey, cancelledByRole: actorRole, cancelledById: actorId, cancelReason: input.reason,
+      snapshot: {
+        studentId: fresh.studentId, studentName: fresh.studentName,
+        studentCls: fresh.studentCls, dersBranch: fresh.dersBranch,
+        dayIndex: fresh.dayIndex, startsAt: fresh.startsAt, endsAt: fresh.endsAt,
+      },
+    });
+    return fresh;
   });
 
-  await logAudit({
-    ...actorFrom(session),
-    action: 'etut.cancel',
-    target: { type: 'student', id: effectiveRow.studentId, name: effectiveRow.studentName },
-    detail: `Etüt rezervasyonu iptal edildi: ${effectiveRow.studentName} — ${effectiveRow.dersBranch} (${scope === 'recurring' ? 'tekrarlayan, tümden' : weekKey})`,
-    ...(input.reason ? { reason: input.reason } : {}),
-  }, { org: orgSlug, branch });
+  // Audit best-effort (FIX-C) — hedef TAZE satırdan (freshEffective), stale pre-tx
+  // effectiveRow'dan DEĞİL (review bulgusu: lock penceresinde sahip değişmiş olabilir).
+  try {
+    await logAudit({
+      ...actorFrom(session),
+      action: 'etut.cancel',
+      target: { type: 'student', id: freshEffective.studentId, name: freshEffective.studentName },
+      detail: `Etüt rezervasyonu iptal edildi: ${freshEffective.studentName} — ${freshEffective.dersBranch} (${weekKey})`,
+      ...(input.reason ? { reason: input.reason } : {}),
+    }, { org: orgSlug, branch });
+  } catch (e) {
+    console.warn('[booking] etut.cancel audit kaydı başarısız (iptal commit edildi):', e instanceof Error ? e.message : e);
+  }
 }

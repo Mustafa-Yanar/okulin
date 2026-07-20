@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
 import { bookEtut, cancelEtutV2 } from '@/lib/etut/booking';
+import { isValidWeekKey } from '@/lib/etut/weeks';
 
 // Serbest etüt şablonuna öğrenci REZERVASYONU. İş kuralları lib/etut/booking.ts (bookEtut/
 // cancelEtutV2, spec §9/6) + lib/etut/booking-rules.ts (decideBooking, saf karar çekirdeği)
@@ -16,7 +17,13 @@ const PostSchema = z.object({
   etutId: zId, // EtutSablon.legacyId
   branch: z.string().max(60).optional(),
   studentId: zId.optional(),
-  weekKey: z.string().max(40).optional(),
+  // isValidWeekKey (Faz 2 audit-fix FIX-C) — biçim tutmayan/ISO-dışı bir hafta girişini
+  // şema seviyesinde erken reddeder (bookEtut normalizeWeekKey RECURRING'te AYRICA 400 atar;
+  // WEEK'te mobil-uyumlu geçerli haftaya düşer — burası yalnız 'hiç geçersiz format şemadan
+  // GEÇMESİN' savunması, iş kuralı kararı YİNE booking.ts'te).
+  weekKey: z.string().max(40).optional().refine((wk) => wk === undefined || isValidWeekKey(wk), {
+    message: 'Geçersiz hafta formatı',
+  }),
   scope: z.enum(['WEEK', 'RECURRING']).optional(),
   force: z.boolean().optional(),
   reason: z.string().max(200).optional(),
