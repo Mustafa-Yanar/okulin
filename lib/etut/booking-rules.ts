@@ -2,6 +2,15 @@
 // Task 3 orkestratörü üzerinden BURADAN geçer; kural tek yerde yaşar (spec §4).
 // Kural sırası ve metinler eski uygulamaya (app/api/slots/route.ts POST +
 // lib/etut/rezervasyon.ts reserveEtut) BİREBİR sadık — kaynak her kuralın yorumunda.
+// İSTİSNA (Faz 2 audit-fix FIX-E, bilinçli sıra değişikliği): şablon/öğretmen/öğrenci
+// varlık kontrolü (eski kural 5) hafta-penceresi kontrolünün (eski kural 4) ÜSTÜNE
+// taşındı — geçersiz/silinmiş şablon + kapalı hafta artık '403 pencere' değil doğru
+// '404 Etüt bulunamadı' döner (pencere yalnız GEÇERLİ bir şablon için anlamlı).
+// FIX-D (RECURRING kapsam-daraltma, Gemini YÜKSEK-2): scope==='RECURRING' iken
+// hafta-ÖZGÜ kurallar (eski 9-doluluk, 10-saat çakışması, 11-aynı ders/mat ailesi, ve
+// 5'in pasifHaftalar parçası) ATLANIR — RECURRING duran bir seridir, o haftaya özel
+// geçici durum (bir WEEK override, o haftanın pasif olması) seriyi bloklamamalı; istisnalar
+// WEEK-seviye override/tombstone ile çözülür (spec: müdür recurring=tüm haftalar, güvenilir).
 import { MATH_FAMILY } from '@/lib/constants';
 import { findTimeConflict, type NormalizedBooking } from './overlap';
 import type { BookingRole } from './weeks';
@@ -46,22 +55,26 @@ export function decideBooking(ctx: BookingContext): BookingDeny | { ok: true } {
     return { error: 'Etüt rezervasyonu kurum tarafından kapatılmış. Lütfen öğretmeninize başvurun.', status: 403 };
   }
 
-  // 4) Hafta penceresi (YENİ — spec §5; RECURRING'te haftadan bağımsız, effectiveFrom orkestratörde)
-  if (ctx.scope === 'WEEK' && !ctx.allowedWeeks.includes(ctx.weekKey)) {
-    return { error: 'Bu hafta için rezervasyon henüz açık değil', status: 403 };
-  }
-
-  // 5) Şablon varlık/aktiflik (lib/etut/rezervasyon.ts reserveEtut satır 104/107 — metin birebir)
+  // 4) Şablon varlık/aktiflik (eski kural 5 — lib/etut/rezervasyon.ts reserveEtut satır
+  // 104/107 metin birebir; FIX-E ile hafta penceresinin ÜSTÜNE taşındı, bkz dosya başı not).
   if (!ctx.sablon || ctx.sablon.deletedAt) {
     return { error: 'Etüt bulunamadı', status: 404 };
   }
-  if (ctx.sablon.aktif === false || ctx.sablon.pasifHaftalar.includes(ctx.weekKey)) {
+  // pasifHaftalar yalnız WEEK'te bağlayıcı (FIX-D) — RECURRING haftadan bağımsız bir seri;
+  // o haftanın pasif olması seriyi durdurmaz (istisna WEEK-seviye override/tombstone'la).
+  if (ctx.sablon.aktif === false || (ctx.scope === 'WEEK' && ctx.sablon.pasifHaftalar.includes(ctx.weekKey))) {
     return { error: 'Bu etüt bu hafta aktif değil', status: 400 };
   }
   const teacher = ctx.teacher;
   if (!teacher) return { error: 'Öğretmen bulunamadı', status: 404 };
   const student = ctx.student;
   if (!student) return { error: 'Öğrenci bulunamadı', status: 404 };
+
+  // 5) Hafta penceresi (eski kural 4, YENİ — spec §5; RECURRING'te haftadan bağımsız,
+  // effectiveFrom orkestratörde)
+  if (ctx.scope === 'WEEK' && !ctx.allowedWeeks.includes(ctx.weekKey)) {
+    return { error: 'Bu hafta için rezervasyon henüz açık değil', status: 403 };
+  }
 
   // 6) Geçmiş slot (lib/etut/rezervasyon.ts satır 112 — metin birebir; WEEK için — RECURRING geleceğe akar)
   if (ctx.scope === 'WEEK' && ctx.slotStartsAt.getTime() <= ctx.now.getTime()) {
@@ -85,8 +98,11 @@ export function decideBooking(ctx: BookingContext): BookingDeny | { ok: true } {
   }
 
   // 9) Doluluk (lib/etut/rezervasyon.ts satır 108-109 — metin birebir; efektif = hafta-bazlı;
-  // force ile DAHİ geçilmez — force yalnız Kural 10 saat-çakışmasına uygulanır)
-  if (ctx.currentEffective) {
+  // force ile DAHİ geçilmez — force yalnız Kural 10 saat-çakışmasına uygulanır).
+  // FIX-D: RECURRING'te ATLANIR — currentEffective o HAFTAYA özgü bir okuma (bookEtut
+  // orkestratöründe hep referans/cari hafta için hesaplanır); bir öğrencinin o hafta
+  // tek-seferlik (WEEK) bir kaydı olması, seriye yeni öğrenci atanmasını bloklamamalı.
+  if (ctx.scope === 'WEEK' && ctx.currentEffective) {
     if (ctx.currentEffective.studentId !== student.id) {
       return { error: 'Bu etüt zaten dolu', status: 400 };
     }
@@ -95,14 +111,21 @@ export function decideBooking(ctx: BookingContext): BookingDeny | { ok: true } {
 
   // 10) Saat çakışması — İKİ SİSTEM birleşik, interval bazlı (YENİ mekanik, eski metin).
   // Yalnız müdür+force birlikte bypass eder; müdür TEK BAŞINA (force'suz) geçemez.
-  const clash = findTimeConflict(ctx.otherBookings, ctx.candidate);
-  if (clash && !(actor.isManager && ctx.force)) {
-    return { error: 'Bu öğrenci aynı gün aynı saatte başka bir etüde kayıtlı', status: 400 };
+  // FIX-D: RECURRING'te ATLANIR (otherBookings da o haftaya özgü bir anlık görüntü —
+  // gelecek haftalardaki çakışma müdürün BİLİNÇLİ kararına bırakılır, spec: güvenilir+override).
+  if (ctx.scope === 'WEEK') {
+    const clash = findTimeConflict(ctx.otherBookings, ctx.candidate);
+    if (clash && !(actor.isManager && ctx.force)) {
+      return { error: 'Bu öğrenci aynı gün aynı saatte başka bir etüde kayıtlı', status: 400 };
+    }
   }
 
   // 11) Aynı ders + matematik ailesi (lib/etut/rezervasyon.ts satır 128-134 — metin birebir;
-  // yalnız yönetici-olmayan; force burada ANLAMSIZ — müdür zaten muaf)
-  if (!actor.isManager) {
+  // yalnız yönetici-olmayan; force burada ANLAMSIZ — müdür zaten muaf).
+  // FIX-D: RECURRING zaten yalnız müdüre açık (kural 2) — actor.isManager burada HER ZAMAN
+  // true, yani bu blok pratikte RECURRING'te doğal olarak atlanır; scope kontrolü YİNE DE
+  // AÇIKÇA eklendi (savunmacı — gelecekte kural 2 gevşerse sessizce yanlış davranmasın).
+  if (ctx.scope === 'WEEK' && !actor.isManager) {
     if (ctx.otherBookings.some((b) => b.dersBranch === dersBranch)) {
       return { error: `Bu öğrenci bu hafta ${dersBranch} dersinden zaten etüt almış`, status: 400 };
     }

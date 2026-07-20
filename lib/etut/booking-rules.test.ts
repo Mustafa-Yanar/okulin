@@ -269,6 +269,60 @@ describe('Kural 11: aynı ders / matematik ailesi (yalnız yönetici-olmayan; li
   });
 });
 
+describe('FIX-D: RECURRING kapsam-daraltma (Gemini YÜKSEK-2, hafta-özgü kurallar RECURRING\'te atlanır)', () => {
+  const managerCtx = { actor: { role: 'director' as const, id: 'dir-1', isManager: true, readOnlyCounselor: false }, scope: 'RECURRING' as const };
+
+  it('doluluk (currentEffective başka öğrenci) RECURRING\'i bloklamaz → ok', () => {
+    const res = decideBooking(mk({ ...managerCtx, currentEffective: { studentId: 'stu-2' } }));
+    expect(res).toEqual({ ok: true });
+  });
+  it('saat çakışması (otherBookings) RECURRING\'i bloklamaz → ok', () => {
+    const res = decideBooking(mk({ ...managerCtx, otherBookings: [booking({ dersBranch: 'Fizik' })] }));
+    expect(res).toEqual({ ok: true });
+  });
+  it('o hafta pasifHaftalar içinde olsa da RECURRING\'i bloklamaz → ok (sablon.aktif hâlâ true)', () => {
+    const res = decideBooking(mk({ ...managerCtx, sablon: { aktif: true, pasifHaftalar: [WK], deletedAt: null } }));
+    expect(res).toEqual({ ok: true });
+  });
+  it('aynı-ders/matematik-ailesi çakışması RECURRING\'i bloklamaz → ok', () => {
+    const res = decideBooking(mk({ ...managerCtx, otherBookings: [booking({ dayIndex: 4, dersBranch: 'Matematik' })] }));
+    expect(res).toEqual({ ok: true });
+  });
+
+  it('silinmiş şablon RECURRING\'de de reddedilir → 404 Etüt bulunamadı', () => {
+    const res = decideBooking(mk({ ...managerCtx, sablon: { aktif: true, pasifHaftalar: [], deletedAt: new Date() } }));
+    expect(res).toEqual({ error: 'Etüt bulunamadı', status: 404 });
+  });
+  it('sablon.aktif===false RECURRING\'de de reddedilir → 400 Bu etüt bu hafta aktif değil', () => {
+    const res = decideBooking(mk({ ...managerCtx, sablon: { aktif: false, pasifHaftalar: [], deletedAt: null } }));
+    expect(res).toEqual({ error: 'Bu etüt bu hafta aktif değil', status: 400 });
+  });
+  it('yanlış grup RECURRING\'de de reddedilir → 400 Bu öğrenci bu öğretmenin etütlerine kayıt olamaz', () => {
+    const res = decideBooking(mk({ ...managerCtx, student: { id: 'stu-1', group: 'ortaokul' } }));
+    expect(res).toEqual({ error: 'Bu öğrenci bu öğretmenin etütlerine kayıt olamaz', status: 400 });
+  });
+  it('ders düzey havuzunda değilse RECURRING\'de de reddedilir → 400 DENY metni', () => {
+    const res = decideBooking(mk({
+      ...managerCtx,
+      dersBranch: 'İnkılap',
+      teacher: { legacyId: 'teacher-1', branches: ['Matematik', 'İnkılap'], allowedGroups: ['lise'] },
+      levelPool: ['Matematik', 'Fizik'],
+    }));
+    expect(res).toEqual({ error: 'Geçersiz veya seçilmemiş ders. Uygun bir ders seçin.', status: 400 });
+  });
+});
+
+describe('FIX-E: kural sırası — şablon varlığı hafta penceresinin ÜSTÜNDE (Gemini ORTA-1)', () => {
+  it('geçersiz şablon (silinmiş) + kapalı hafta → 404 Etüt bulunamadı (403 pencere DEĞİL)', () => {
+    const res = decideBooking(mk({
+      sablon: null,
+      weekKey: '2026-W31', // allowedWeeks=[WK]'de yok → pencere de reddederdi, ama şablon önce kontrol edilmeli
+      allowedWeeks: [WK],
+    }));
+    expect(res).toEqual({ error: 'Etüt bulunamadı', status: 404 });
+  });
+});
+
 describe('Kural 12: haftalık limit (yalnız öğrenci self-booking; app/api/slots/route.ts POST metni+status birebir)', () => {
   it('weeklyCount >= max (öğrenci) → 403 interpolated metin', () => {
     const res = decideBooking(mk({ maxWeeklyPerStudent: 2, weeklyCount: 2 }));
