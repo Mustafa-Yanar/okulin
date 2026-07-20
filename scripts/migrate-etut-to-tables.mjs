@@ -44,6 +44,7 @@ const report = {
   ...(RECONCILE ? {
     sablonSoftDeleted: [], sablonRevived: [], resUpdated: [], resCancelled: [], resSynced: [],
     conflicts: [], tableOnly: [], recurringPresent: [], ghostRows: [], ghostAllTimeCount: 0,
+    sablonDeleteSkippedRecent: [],
   } : {}),
 };
 
@@ -165,14 +166,17 @@ try {
   console.log(`Rapor: ${reportPath}`);
 
   if (RECONCILE) {
+    const planLabel = APPLY ? '' : ' (planlanan)';
     console.log(`\n--- RECONCILE ---`);
-    console.log(`Şablon soft-delete: ${report.sablonSoftDeleted.length}`);
+    console.log(`Şablon soft-delete${planLabel}: ${report.sablonSoftDeleted.length}`);
     for (const s of report.sablonSoftDeleted) console.log(`  → ${s.org} / ${s.teacher} / ${s.legacyId} (iptal edilen migration-rezervasyon: ${s.cancelledReservations})`);
-    console.log(`Şablon diriltildi (JSON'da yaşıyor, tabloda soft-deleted idi): ${report.sablonRevived.length}`);
+    console.log(`Soft-delete ATLANDI (son 60 dk'da oluşturulmuş — muhtemel post-deploy tablo-first): ${report.sablonDeleteSkippedRecent.length}`);
+    for (const s of report.sablonDeleteSkippedRecent) console.log(`  → ${s.org} / ${s.teacher} / ${s.legacyId} (createdAt=${s.createdAt.toISOString()})`);
+    console.log(`Şablon diriltildi (JSON'da yaşıyor, tabloda soft-deleted idi)${planLabel}: ${report.sablonRevived.length}`);
     for (const s of report.sablonRevived) console.log(`  → ${s.org} / ${s.teacher} / ${s.legacyId}`);
-    console.log(`Rezervasyon güncellendi: ${report.resUpdated.length}`);
+    console.log(`Rezervasyon güncellendi${planLabel}: ${report.resUpdated.length}`);
     for (const r of report.resUpdated) console.log(`  → ${r.org} / ${r.teacher} / ${r.sablonLegacyId} / ${r.weekKey} → ${r.studentName} (${r.studentId})`);
-    console.log(`Rezervasyon iptal edildi: ${report.resCancelled.length}`);
+    console.log(`Rezervasyon iptal edildi${planLabel}: ${report.resCancelled.length}`);
     for (const r of report.resCancelled) console.log(`  → ${r.org} / ${r.teacher} / ${r.sablonLegacyId} / ${r.weekKey} (${r.reason})`);
     console.log(`Zaten senkron: ${report.resSynced.length}`);
     console.log(`ÇAKIŞMA (dokunulmadı): ${report.conflicts.length}`);
@@ -222,24 +226,37 @@ async function runReconcile(p, teachers, now, report, APPLY) {
     const deleteIds = reconcileSablonDeletes(rawIds, tableSablonlar);
     for (const legacyId of deleteIds) {
       const row = tableSablonlar.find((r) => r.legacyId === legacyId);
+      // reconcile#2 (runbook: deploy SONRASI koşu) penceresinde yeni kodla tablo-first
+      // oluşturulmuş EtutSablon satırlarının JSON'da hiçbir zaman karşılığı olmaz — filtresiz
+      // bırakılırsa "JSON'dan silinmiş" sanılıp YANLIŞLIKLA soft-delete adayı olurlar. Runbook
+      // penceresi dakikalar sürdüğü için sabit 60dk (createdAt payı) yeterli ve güvenli.
+      const RECENT_CREATE_GUARD_MS = 60 * 60 * 1000;
+      if (row.createdAt.getTime() > now.getTime() - RECENT_CREATE_GUARD_MS) {
+        report.sablonDeleteSkippedRecent.push({ org: t.orgSlug, teacher: t.name, legacyId, createdAt: row.createdAt });
+        continue;
+      }
       const futureActive = await p.etutReservation.findMany({
-        where: { orgSlug: t.orgSlug, branch: t.branch, sablonId: row.id, weekKey: { gte: currentWeek }, status: 'ACTIVE' },
+        where: { orgSlug: t.orgSlug, branch: t.branch, sablonId: row.id, scope: 'WEEK', weekKey: { gte: currentWeek }, status: 'ACTIVE' },
         orderBy: { weekKey: 'asc' },
       });
       const migRows = futureActive.filter((r) => r.bookedById === 'migration');
       const tableOnlyRows = futureActive.filter((r) => r.bookedById !== 'migration');
       if (APPLY) {
         try {
-          await p.etutSablon.update({ where: { id: row.id, orgSlug: t.orgSlug, branch: t.branch }, data: { deletedAt: now } });
-          for (const r of migRows) {
-            await p.etutReservation.update({
+          // Şablon soft-delete + tüm migration-rezervasyon iptalleri TEK transaction —
+          // ortada hata olursa (örn. 3. iptalde) şablon "yarı silinmiş" (soft-deleted ama
+          // bazı rezervasyonlar hâlâ ACTIVE) durumda KALMAZ; ikinci reconcile koşusu bu
+          // şablonu artık aday saymadığından (deletedAt!==null) yarım durumu asla temizleyemezdi.
+          await p.$transaction([
+            p.etutSablon.update({ where: { id: row.id, orgSlug: t.orgSlug, branch: t.branch }, data: { deletedAt: now } }),
+            ...migRows.map((r) => p.etutReservation.update({
               where: { id: r.id, orgSlug: t.orgSlug, branch: t.branch },
               data: {
                 status: 'CANCELLED', cancelledByRole: 'migration', cancelledById: 'reconcile',
                 cancelledAt: now, cancelReason: 'cutover-reconcile: şablon JSON kaynağından silinmiş',
               },
-            });
-          }
+            })),
+          ]);
         } catch (e) {
           report.writeFailed.push({ org: t.orgSlug, teacher: t.name, sablonLegacyId: legacyId, weekKey: null, error: String(e) });
           continue;
