@@ -39,9 +39,10 @@ export default function StudentEtutTab({ student, readOnly = false, showToast }:
   useEffect(() => { load(weekKey); }, [load, weekKey]);
 
   const handleCancel = async ({ teacherId, etutId }: BookingCancelArgs) => {
+    const isRecurring = slots?.find(s => s.etutId === etutId)?.scope === 'RECURRING';
     try {
       await api('/api/etut-sablon/rezervasyon', { method: 'DELETE', body: JSON.stringify({ teacherId, etutId, weekKey, scope: 'week' }) });
-      showToast('Etüt iptal edildi');
+      showToast(isRecurring ? 'Bu haftanın etüdü iptal edildi (seri devam eder)' : 'Etüt iptal edildi');
       load(weekKey);
     } catch (err) { showToast((err as Error).message, 'error'); }
   };
