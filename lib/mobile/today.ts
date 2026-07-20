@@ -1,10 +1,9 @@
 import { tdb } from '@/lib/sqldb';
 import { ALL_DAYS, daySlots } from '@/lib/constants';
 import {
-  getTeacherWeekSlots, getProgramTemplate, getDaySlotTimes,
-  getDayCellsAllTeachers, getAllProgramTemplates,
-  etutAktifThisWeek, type EtutSablonu,
+  getTeacherWeekSlots, getDaySlotTimes, getDayCellsAllTeachers,
 } from '@/lib/slots';
+import { listEtutlerForWeek } from '@/lib/etut/rezervasyon';
 import { getOrgConfig } from '@/lib/config';
 import { listOdevForStudent, listOdevForParent } from '@/lib/odev';
 import { getStudentBehavior } from '@/lib/davranis';
@@ -99,7 +98,7 @@ function common(t: TrToday, unread: number): TodayCommon {
 // Bir sınıfın BUGÜNKÜ dersleri + (istenirse) bir öğrencinin bugünkü etüt rezervasyonları.
 // class-schedule route'unun gün-filtreli paritesi — ama öğretmen-başına sorgu YOK
 // (İnceleme Codex #6): tüm hücreler getDayCellsAllTeachers (1 teacher + 1 slotBooking),
-// etüt şablonları getAllProgramTemplates (1 sorgu). Toplam sabit sorgu sayısı.
+// etüt rezervasyonları listEtutlerForWeek (Faz 3, tablo-tabanlı, 1 sorgu seti). Toplam sabit sorgu sayısı.
 async function collectClassDay(
   cls: string,
   weekKey: string,
@@ -130,17 +129,15 @@ async function collectClassDay(
 
   const etuts: TodayEtut[] = [];
   if (etutStudentId) {
-    for (const t of await getAllProgramTemplates()) {
-      const list = Array.isArray(t.template.etutSablonlari) ? (t.template.etutSablonlari as EtutSablonu[]) : [];
-      for (const sb of list) {
-        if (sb.dayIndex !== dayIndex || !etutAktifThisWeek(sb, weekKey)) continue;
-        if (sb.studentId !== etutStudentId) continue; // yalnız KENDİ rezervasyonu (veri minimizasyonu)
-        etuts.push({
-          id: sb.id, start: sb.start, end: sb.end,
-          teacherName: t.name, branch: sb.branch || null,
-          studentName: sb.studentName || null, booked: true,
-        });
-      }
+    // Faz 3: EtutSablon+EtutReservation tablosundan efektif okuma (bayat JSON değil).
+    // listEtutlerForWeek deletedAt:null + efektif-aktiflik + WEEK-ezer-RECURRING'i içerir.
+    for (const r of await listEtutlerForWeek(weekKey)) {
+      if (r.dayIndex !== dayIndex || r.studentId !== etutStudentId) continue; // yalnız KENDİ rezervasyonu (veri minimizasyonu)
+      etuts.push({
+        id: r.id, start: r.start, end: r.end,
+        teacherName: r.teacherName, branch: r.branch,
+        studentName: r.studentName, booked: true,
+      });
     }
     etuts.sort((a, b) => a.start.localeCompare(b.start));
   }
@@ -257,16 +254,15 @@ export async function buildTeacherToday(session: Session, unread: number): Promi
 
   let etuts: TodayEtut[] | null = null;
   if (mods.etut !== false) {
-    const prog = await getProgramTemplate(me);
-    const list = Array.isArray(prog.etutSablonlari) ? (prog.etutSablonlari as EtutSablonu[]) : [];
-    etuts = list
-      .filter((sb) => sb.dayIndex === t.dayIndex && etutAktifThisWeek(sb, t.weekKey))
-      .map((sb) => ({
-        id: sb.id, start: sb.start, end: sb.end,
-        teacherName: String(session.name ?? ''), branch: sb.branch || null,
-        studentName: sb.studentName || null, booked: !!sb.studentId,
-      }))
-      .sort((a, b) => a.start.localeCompare(b.start));
+    // Faz 3: öğretmenin bugünkü şablonları + efektif doluluk tablodan.
+    etuts = (await listEtutlerForWeek(t.weekKey))
+      .filter((r) => r.teacherId === me && r.dayIndex === t.dayIndex)
+      .map((r) => ({
+        id: r.id, start: r.start, end: r.end,
+        teacherName: String(session.name ?? ''), branch: r.branch,
+        studentName: r.studentName, booked: r.booked,
+      }));
+    // listEtutlerForWeek zaten gün+saat sıralı — ek sort gerekmez.
   }
 
   return { role: 'teacher', ...common(t, unread), lessons, etuts };
