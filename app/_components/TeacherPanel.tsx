@@ -601,8 +601,8 @@ function TeacherStudentsView({ students, branches = [] }: TeacherStudentsViewPro
 // ── Etütler sekmesi ──────────────────────────────────────────────────────────
 // Öğretmenin bu hafta EFEKTİF AKTİF serbest etüt slotları (boş + dolu). Öğretmen
 // buradan kendi etüdüne öğrenci atar/kaldırır. Veri: /api/etut-sablon/all (kendi
-// teacherId'sine süzülür); atama /api/etut-sablon/rezervasyon (reserveEtut servisi,
-// teacher rolü kendi etüdüne yazma yetkili — lib/etut/rezervasyon.ts). Ders (branch)
+// teacherId'sine süzülür); atama /api/etut-sablon/rezervasyon (bookEtut/cancelEtutV2
+// servisi, teacher rolü kendi etüdüne yazma yetkili — lib/etut/booking.ts). Ders (branch)
 // = öğretmenin branşları ∩ öğrencinin sınıf dersleri; tek adaysa otomatik seçilir.
 interface TeacherEtutPanelProps {
   session: Session;

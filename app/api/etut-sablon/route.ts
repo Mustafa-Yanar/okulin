@@ -1,14 +1,18 @@
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
-import { getProgramTemplate, setProgramTemplate, type EtutSablonu } from '@/lib/slots';
 import { listSablonlar, saveSablon, toggleSablon, softDeleteSablon } from '@/lib/etut/sablon-service';
+import { bookEtut, cancelEtutV2 } from '@/lib/etut/booking';
 
 // Etüt şablonları — öğretmenin haftadan bağımsız, serbest saatli etüt blokları.
 // Ders slotlarından (w1-w12) BAĞIMSIZ; gerçek saat bazlı (calendar için).
 // GET/POST/PUT/DELETE: EtutSablon tablosu (lib/etut/sablon-service — Faz 2b Task 1).
-// PATCH (öğrenci atama): HALA Teacher.programTemplate.etutSablonlari JSON'u — Faz 2b
-// Task 5'te bookEtut/cancelEtut orkestratörüne devredilecek (bilinçli, bu görevin kapsamı DIŞI).
+// PATCH (öğrenci atama): bookEtut/cancelEtutV2 orkestratörüne devredildi (Faz 2b Task 5,
+// scope='RECURRING'/'recurring' — müdür/rehberin tekrarlayan atama yetkisiyle BİREBİR:
+// bu route zaten 'manage' guard'lı). Dönüş sözleşmesi DEĞİŞTİ: eski PATCH rezervasyon
+// alanlarını (studentName vb.) da taşıyan sablon listesi dönerdi; artık listSablonlar'ın
+// SAF EtutSablon DTO'su döner (rezervasyon alanları YOK) — ProgramEditor'ün bu alanları
+// okuyan kısımları Faz 3'te ele alınacak (bilinçli, bu görevin kapsamı DIŞI).
 
 const zTime = z.string().regex(/^\d{2}:\d{2}$/, 'Saat HH:MM olmalı');
 const zDay = z.number().int().min(0).max(6);
@@ -45,15 +49,6 @@ const AssignSchema = z.object({
   }).nullable(),
 });
 
-// programTemplate'ten etutSablonlari oku, değiştir, geri yaz — YALNIZ PATCH kullanır (Task 5'e kadar).
-async function updateSablonlar(teacherId: string, mutFn: (list: EtutSablonu[]) => EtutSablonu[]) {
-  const fullTemplate = await getProgramTemplate(teacherId);
-  const list: EtutSablonu[] = Array.isArray(fullTemplate.etutSablonlari) ? (fullTemplate.etutSablonlari as EtutSablonu[]) : [];
-  const newList = mutFn(list);
-  await setProgramTemplate(teacherId, { ...fullTemplate, etutSablonlari: newList });
-  return newList;
-}
-
 // GET /api/etut-sablon?teacherId=...
 export const GET = withAuth('auth', 'etut', async (req) => {
   const teacherId = new URL(req.url).searchParams.get('teacherId');
@@ -86,28 +81,21 @@ export const PUT = withAuth('manage', 'etut', async (req) => {
   return NextResponse.json({ ok: true, sablonlar });
 });
 
-// PATCH /api/etut-sablon → şablona öğrenci ata / kaldır
+// PATCH /api/etut-sablon → şablona öğrenci ata / kaldır (TEKRARLAYAN atama — spec §9;
+// tek-hafta atama artık /api/etut-sablon/rezervasyon POST/DELETE'in işi). student.name/cls
+// gövdeden gelse de KULLANILMAZ — bookEtut hedefi kendi çözer (DB'den taze ad/sınıf);
+// AssignSchema yalnız geriye dönük istemci uyumluluğu için bu alanları kabul eder.
 export const PATCH = withAuth('manage', 'etut', async (req, ctx, session) => {
   const parsed = await parseBody(req, AssignSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id, student } = parsed.data;
 
-  const sablonlar = await updateSablonlar(teacherId, (list) => {
-    const idx = list.findIndex(s => s.id === id);
-    if (idx === -1) return list;
-    const sb = { ...list[idx] };
-    if (student) {
-      sb.studentId = student.id;
-      sb.studentName = student.name;
-      sb.studentCls = student.cls || '';
-      sb.bookedBy = session.role;
-    } else {
-      delete sb.studentId; delete sb.studentName; delete sb.studentCls; delete sb.bookedBy;
-    }
-    const updated = [...list];
-    updated[idx] = sb;
-    return updated;
-  });
+  if (student) {
+    await bookEtut(session, { teacherId, etutId: id, studentId: student.id, scope: 'RECURRING' });
+  } else {
+    await cancelEtutV2(session, { teacherId, etutId: id, scope: 'recurring' });
+  }
+  const sablonlar = await listSablonlar(teacherId);
   return NextResponse.json({ ok: true, sablonlar });
 });
 

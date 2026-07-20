@@ -98,7 +98,15 @@ export interface BookEtutInput {
   reason?: string;
 }
 
-export async function bookEtut(session: Session, input: BookEtutInput): Promise<EtutReservation> {
+export async function bookEtut(
+  session: Session,
+  input: BookEtutInput,
+  // Yalnız lib/etut/rezervasyon.ts ince adaptörleri (EtutActor→bu servis köprüsü) kullanır —
+  // route'lar GEÇMEZ. Adaptörün elinde gerçek bir Session yok (yalnız role/id/isManager),
+  // canManage(session)/isReadOnlyCounselor(session) çağıramaz; actor.isManager zaten
+  // canManage(session) ile üretilmişti (route'ta), burada TEKRAR hesaplamak yerine bypass edilir.
+  precomputed?: { isManager: boolean; readOnlyCounselor: boolean },
+): Promise<EtutReservation> {
   const actorRole = session.role;
   const actorId = String(session.id ?? '');
   const scope: 'WEEK' | 'RECURRING' = input.scope === 'RECURRING' ? 'RECURRING' : 'WEEK';
@@ -110,10 +118,9 @@ export async function bookEtut(session: Session, input: BookEtutInput): Promise<
   const orgSlug = currentOrg();
   const branch = currentBranch();
 
-  const [isManagerActor, readOnlyCounselor] = await Promise.all([
-    canManage(session),
-    isReadOnlyCounselor(session, orgSlug, branch),
-  ]);
+  const [isManagerActor, readOnlyCounselor] = precomputed
+    ? [precomputed.isManager, precomputed.readOnlyCounselor]
+    : await Promise.all([canManage(session), isReadOnlyCounselor(session, orgSlug, branch)]);
 
   // erken çıkış — tx/lock açmadan; nihai otorite decideBooking kural 1 (aşağıda, tx içinde
   // AYNI ctx.actor.readOnlyCounselor bayrağıyla tekrar değerlendirilir — burası yalnız ucuz
@@ -236,7 +243,12 @@ export interface CancelEtutInput {
   reason?: string;
 }
 
-export async function cancelEtutV2(session: Session, input: CancelEtutInput): Promise<void> {
+export async function cancelEtutV2(
+  session: Session,
+  input: CancelEtutInput,
+  // bookEtut'taki AYNI gerekçe — yalnız lib/etut/rezervasyon.ts ince adaptörleri kullanır.
+  precomputed?: { isManager: boolean; readOnlyCounselor: boolean },
+): Promise<void> {
   const actorRole = session.role;
   const actorId = String(session.id ?? '');
   const scope: 'week' | 'recurring' = input.scope === 'recurring' ? 'recurring' : 'week';
@@ -245,10 +257,9 @@ export async function cancelEtutV2(session: Session, input: CancelEtutInput): Pr
   const orgSlug = currentOrg();
   const branch = currentBranch();
 
-  const [isManagerActor, readOnlyCounselor] = await Promise.all([
-    canManage(session),
-    isReadOnlyCounselor(session, orgSlug, branch),
-  ]);
+  const [isManagerActor, readOnlyCounselor] = precomputed
+    ? [precomputed.isManager, precomputed.readOnlyCounselor]
+    : await Promise.all([canManage(session), isReadOnlyCounselor(session, orgSlug, branch)]);
 
   // Salt-okunur rehber etüt iptali yapamaz (app/api/slots/route.ts DELETE satır 294-300 —
   // metin birebir; bookEtut'taki simetriği decideBooking kural 1'de yaşıyor, cancelEtutV2

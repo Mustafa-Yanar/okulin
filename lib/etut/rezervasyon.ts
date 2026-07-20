@@ -1,35 +1,29 @@
-import {
-  getAllTeachers,
-  getAllStudents,
-  getAllProgramTemplates,
-  getProgramTemplate,
-  setProgramTemplate,
-  slotStartTime,
-  etutAktifThisWeek,
-  type EtutSablonu,
-} from '@/lib/slots';
-import { allowedBranchesForClass, MATH_FAMILY, getWeekKey } from '@/lib/constants';
-import { getClass } from '@/lib/classes';
+import { getAllTeachers, getAllStudents, type EtutSablonu } from '@/lib/slots';
+import { allowedBranchesForClass, MATH_FAMILY } from '@/lib/constants';
 import { HttpError } from '@/lib/errors';
+import type { Session } from '@/lib/auth';
+import { tdb } from '@/lib/sqldb';
+import { currentOrg, currentBranch } from '@/lib/tenant';
+import { getWeekReservations, resolveEffective } from './reservations';
+import { levelPoolForGroup } from './level-pool';
+import { bookEtut, cancelEtutV2 } from './booking';
 
-// Öğrencinin görebileceği/rezerve edebileceği dersler — ÖNCE kurum registry'si
-// (Class.dersler; özel şube s_UUID + yapılandırılmış sınıflar için TEK doğru kaynak),
-// registry'de kayıt/ders yoksa constants'a düş (legacy sayısal sınıf fallback).
-// Client (StudentPanel: coursesForClass ?? allowedBranchesForClass) ve rehberlik
-// subjectsForClass ile HİZALI. constants colKeyForClass 's_UUID'yi parseInt→NaN ile
-// yanlış 'Lise Ortak_9'a düşürüyordu → geçerli branş "Geçersiz ders" ile reddediliyordu.
-// Saf karar (birim testli): registry dersleri varsa onları, yoksa constants'ı kullan.
-export function pickAllowedBranches(registryDersler: string[] | null | undefined, cls: string | null | undefined): string[] {
-  if (registryDersler && registryDersler.length) return registryDersler;
-  return allowedBranchesForClass(cls);
-}
-async function resolveStudentBranches(cls: string | null | undefined): Promise<string[]> {
-  const clsRow = cls ? await getClass(cls) : null;
-  return pickAllowedBranches(clsRow?.dersler, cls);
-}
-
-// Etüt rezervasyon iş kuralları servisi (spec §9/6 — route'tan çıkarıldı, davranış birebir).
-// Web route (etut-sablon/rezervasyon) + mobil route (mobile/v1/etut/reserve) bu servisi çağırır.
+// Etüt rezervasyon iş kuralları — Faz 2b'den itibaren gerçek iş mantığı lib/etut/booking.ts
+// (bookEtut/cancelEtutV2) + lib/etut/booking-rules.ts (decideBooking) içinde yaşıyor.
+// BU DOSYADA KALANLAR:
+//   1) Saf kural yardımcıları (birim testli — timeConflicts/branchConflicts/mathFamilyConflict/
+//      pickAllowedBranches) — app/api/slots/route.ts hâlâ pickAllowedBranches'i kullanıyor
+//      (Task 6'da ele alınır), decideBooking KENDİ eşdeğerini taşıyor (kopya değil — decideBooking
+//      SlotBooking tarafını da kapsıyor, buradakiler daha dar/eski JSON-döneminden kalma imza).
+//   2) reserveEtut/cancelEtut — ESKİ imza (EtutActor), İNCE ADAPTÖR: yalnız mobil route
+//      (app/api/mobile/v1/etut/reserve) hâlâ bunları çağırıyor (Task 7'de doğrudan
+//      bookEtut/cancelEtutV2'ye geçecek). Gövdeleri artık JSON'a DOKUNMUYOR — pseudo-Session
+//      kurup bookEtut/cancelEtutV2'ye delege ediyor, dönüş şeklini ESKİ EtutSablonu sözleşmesine
+//      geri çeviriyor (mobil route hâlâ etut.start/end/branch alanlarını okuyor).
+//   3) listBookableEtuts — mobil "rezerve edilebilir etütler" listesi, artık EtutSablon
+//      TABLOSUNDAN (JSON programTemplate DEĞİL) + EtutReservation efektif doluluğundan okur.
+//      Branş adayları artık sınıf-listesi DEĞİL öğrencinin DÜZEY havuzu (levelPoolForGroup,
+//      spec §4a — bookEtut'un autoPickBranch'iyle AYNI kaynak, tutarlılık için).
 
 export interface EtutActor {
   role: string;
@@ -49,126 +43,89 @@ export function mathFamilyConflict(booked: { branch?: string }[], bookingBranch:
   return booked.some((b) => MATH_FAMILY.includes((b.branch as string) ?? ''));
 }
 
-// Bir öğrencinin bu hafta yazılı TÜM etüt şablonları (tüm öğretmenlerde) — TEK sorgu
-// (getAllProgramTemplates, Plan 4). Eski route öğretmen başına getProgramTemplate atıyordu;
-// aynı sonuç kümesi, daha az sorgu (davranış-koruyan optimizasyon).
-async function studentBookedEtuts(studentId: string, weekKey: string): Promise<{ teacherId: string; sb: EtutSablonu }[]> {
-  const templates = await getAllProgramTemplates();
-  const out: { teacherId: string; sb: EtutSablonu }[] = [];
-  for (const t of templates) {
-    const list: EtutSablonu[] = Array.isArray(t.template.etutSablonlari) ? (t.template.etutSablonlari as EtutSablonu[]) : [];
-    for (const sb of list) {
-      if (sb.studentId === studentId && etutAktifThisWeek(sb, weekKey)) out.push({ teacherId: t.legacyId, sb });
-    }
-  }
-  return out;
+// Öğrencinin görebileceği/rezerve edebileceği dersler — ÖNCE kurum registry'si
+// (Class.dersler; özel şube s_UUID + yapılandırılmış sınıflar için TEK doğru kaynak),
+// registry'de kayıt/ders yoksa constants'a düş (legacy sayısal sınıf fallback).
+// Client (StudentPanel: coursesForClass ?? allowedBranchesForClass) ve rehberlik
+// subjectsForClass ile HİZALI. constants colKeyForClass 's_UUID'yi parseInt→NaN ile
+// yanlış 'Lise Ortak_9'a düşürüyordu → geçerli branş "Geçersiz ders" ile reddediliyordu.
+// Saf karar (birim testli): registry dersleri varsa onları, yoksa constants'ı kullan.
+// NOT: app/api/slots/route.ts (SlotBooking — ders programı) hâlâ bu fonksiyonu kullanıyor;
+// listBookableEtuts (aşağıda) ARTIK bunu kullanmıyor — düzey havuzuna geçti (spec §4a).
+export function pickAllowedBranches(registryDersler: string[] | null | undefined, cls: string | null | undefined): string[] {
+  if (registryDersler && registryDersler.length) return registryDersler;
+  return allowedBranchesForClass(cls);
 }
 
-// Rezerve et — route POST gövdesiyle BİREBİR kontrol sırası/metin/status.
+// ── reserveEtut/cancelEtut — İNCE ADAPTÖR (eski imza, mobil route için) ──────
+//
+// EtutActor'da session'ın kendisi yok — yalnız role/id/isManager. bookEtut/cancelEtutV2
+// içindeki canManage(session)/isReadOnlyCounselor(session) çağrıları GERÇEK bir Session
+// (JWT payload) bekler; burada onu YENİDEN HESAPLAMAK yerine (actor.isManager zaten
+// canManage(session) ile üretilmişti — route'larda `isManager: await canManage(session)`)
+// bookEtut/cancelEtutV2'nin opsiyonel `precomputed` parametresiyle bypass ediyoruz.
+//
+// Formül: precomputed.isManager = actor.isManager (birebir). precomputed.readOnlyCounselor:
+// lib/auth.ts canManage, counselor için `!perms.counselor.readOnly` döner — yani counselor
+// rolünde isManager===false ⇔ readOnly===true (canManage'in TEK counselor dalı budur;
+// director için isManager DAİMA true, diğer roller için isManager DAİMA false — ikisinde de
+// readOnlyCounselor anlamsız/false). Bu yüzden `role==='counselor' && !isManager` GÜVENİLİR
+// bir türetmedir (bkz. lib/auth.ts:78-85 — tek okunan alan session.role).
+function precomputedFrom(actor: EtutActor): { isManager: boolean; readOnlyCounselor: boolean } {
+  return { isManager: actor.isManager, readOnlyCounselor: actor.role === 'counselor' && !actor.isManager };
+}
+
+// Pseudo-Session — bookEtut/cancelEtutV2 yalnız session.role/session.id okur (hedef öğrenci
+// çözümü) + audit'te session.name (actorFrom) — EtutActor'da isim YOK, audit'te 'bilinmiyor'
+// görünür (mobil route'un tek çağıranı olduğu bu ince adaptör için kabul edilebilir; Task 7
+// mobil route'u gerçek session'la doğrudan bookEtut'a bağlayınca isim de doğru akacak).
+function actorSession(actor: EtutActor): Session {
+  return { role: actor.role, id: actor.id };
+}
+
+// EtutReservation (tablo satırı) → EtutSablonu (eski JSON şekli) — mobil route'un
+// etut.id/dayIndex/start/end/branch/studentName okuduğu ESKİ sözleşmeyi korur. id = etutId
+// (legacyId, çağıranın zaten elinde olan değer — DB cuid'i asla sızmaz, sablon-service.ts'teki
+// AYNI kural).
+function toLegacyEtutShape(etutId: string, row: Awaited<ReturnType<typeof bookEtut>>): EtutSablonu {
+  return {
+    id: etutId,
+    dayIndex: row.dayIndex,
+    start: row.startsAt,
+    end: row.endsAt,
+    branch: row.dersBranch,
+    studentId: row.studentId,
+    studentName: row.studentName,
+    studentCls: row.studentCls,
+    bookedBy: row.bookedByRole,
+    bookedAt: row.bookedAt.toISOString(),
+  };
+}
+
+// Rezerve et — mobil route (app/api/mobile/v1/etut/reserve POST) çağırıyor. scope YOK →
+// bookEtut 'WEEK'e düşer (öğrenci zaten decideBooking kural 2 gereği RECURRING yapamaz —
+// bu adaptörün WEEK varsayımı isabetli, geçici bir kısıtlama DEĞİL).
 export async function reserveEtut(
   actor: EtutActor,
   input: { teacherId: string; etutId: string; branch?: string; studentId?: string; weekKey?: string },
 ): Promise<EtutSablonu> {
-  const { teacherId, etutId, branch } = input;
-  const weekKey = input.weekKey || getWeekKey();
-
-  // Hedef öğrenci: öğrenci kendini, öğretmen kendi etüdüne, yönetici başkasını
-  let targetStudentId: string | undefined;
-  if (actor.role === 'student') {
-    targetStudentId = actor.id;
-  } else if (actor.role === 'teacher') {
-    if (teacherId !== actor.id) throw new HttpError(403, 'Sadece kendi etütlerinize öğrenci yazabilirsiniz');
-    targetStudentId = input.studentId;
-  } else if (actor.isManager) {
-    targetStudentId = input.studentId;
-  } else {
-    throw new HttpError(403, 'Yetkisiz');
-  }
-  if (!targetStudentId) throw new HttpError(400, 'Öğrenci belirtilmedi');
-
-  const allStudents = await getAllStudents();
-  const targetStudent = allStudents.find((s) => s.id === targetStudentId);
-  if (!targetStudent) throw new HttpError(404, 'Öğrenci bulunamadı');
-
-  const allTeachers = await getAllTeachers();
-  const teacher = allTeachers.find((t) => t.id === teacherId);
-  if (!teacher) throw new HttpError(404, 'Öğretmen bulunamadı');
-
-  const allowedGroups = teacher.allowedGroups || [];
-  if (allowedGroups.length === 0) throw new HttpError(400, 'Bu öğretmenin grup etiketi tanımlanmamış');
-  if (!allowedGroups.includes(targetStudent.group)) throw new HttpError(400, 'Bu öğrenci bu öğretmenin etütlerine kayıt olamaz');
-
-  const template = await getProgramTemplate(teacherId);
-  const list: EtutSablonu[] = Array.isArray(template.etutSablonlari) ? (template.etutSablonlari as EtutSablonu[]) : [];
-  const idx = list.findIndex((s) => s.id === etutId);
-  if (idx === -1) throw new HttpError(404, 'Etüt bulunamadı');
-  const sb = { ...list[idx] };
-
-  if (!etutAktifThisWeek(sb, weekKey)) throw new HttpError(400, 'Bu etüt bu hafta aktif değil');
-  if (sb.studentId && sb.studentId !== targetStudentId) throw new HttpError(400, 'Bu etüt zaten dolu');
-  if (sb.studentId === targetStudentId) throw new HttpError(400, 'Bu öğrenci zaten bu etüde kayıtlı');
-
-  const startAt = slotStartTime(weekKey, sb.dayIndex, sb.start);
-  if (startAt.getTime() <= Date.now()) throw new HttpError(400, 'Geçmiş bir etüde rezervasyon yapılamaz');
-
-  const studentAllowed = await resolveStudentBranches(targetStudent.cls);
-  let bookingBranch: string | undefined = branch;
-  if (!bookingBranch) {
-    const candidates = (teacher.branches || []).filter((b) => studentAllowed.includes(b));
-    if (candidates.length === 1) bookingBranch = candidates[0];
-  }
-  if (!bookingBranch || !(teacher.branches || []).includes(bookingBranch) || !studentAllowed.includes(bookingBranch)) {
-    throw new HttpError(400, 'Geçersiz veya seçilmemiş ders. Uygun bir ders seçin.');
-  }
-
-  const booked = await studentBookedEtuts(targetStudentId, weekKey);
-  if (timeConflicts(booked.map((b) => b.sb), sb.dayIndex, sb.start)) {
-    throw new HttpError(400, 'Bu öğrenci aynı gün aynı saatte başka bir etüde kayıtlı');
-  }
-  if (!actor.isManager) {
-    if (branchConflicts(booked.map((b) => b.sb), bookingBranch)) {
-      throw new HttpError(400, `Bu öğrenci bu hafta ${bookingBranch} dersinden zaten etüt almış`);
-    }
-    if (mathFamilyConflict(booked.map((b) => b.sb), bookingBranch)) {
-      throw new HttpError(400, 'Bu öğrenci bu hafta matematik (TYT/AYT/Geometri) etüdü zaten almış');
-    }
-  }
-
-  sb.studentId = targetStudentId;
-  sb.studentName = targetStudent.name;
-  sb.studentCls = targetStudent.cls || '';
-  sb.branch = bookingBranch;
-  sb.bookedBy = actor.role;
-  sb.bookedAt = new Date().toISOString();
-  list[idx] = sb;
-  template.etutSablonlari = list;
-  await setProgramTemplate(teacherId, template);
-  return sb;
+  const row = await bookEtut(actorSession(actor), input, precomputedFrom(actor));
+  return toLegacyEtutShape(input.etutId, row);
 }
 
-// İptal — route DELETE gövdesiyle BİREBİR.
+// İptal — mobil route (app/api/mobile/v1/etut/reserve DELETE) çağırıyor. weekKey/scope/reason
+// YOK → cancelEtutV2 mevcut haftaya + 'week' kapsamına düşer (reserveEtut'un yazdığı AYNI kapsam).
 export async function cancelEtut(actor: EtutActor, input: { teacherId: string; etutId: string }): Promise<void> {
-  const { teacherId, etutId } = input;
-  const template = await getProgramTemplate(teacherId);
-  const list: EtutSablonu[] = Array.isArray(template.etutSablonlari) ? (template.etutSablonlari as EtutSablonu[]) : [];
-  const idx = list.findIndex((s) => s.id === etutId);
-  if (idx === -1) throw new HttpError(404, 'Etüt bulunamadı');
-  const sb = { ...list[idx] };
-  if (!sb.studentId) throw new HttpError(404, 'Bu etütte rezervasyon yok');
-  if (actor.role === 'student' && sb.studentId !== actor.id) throw new HttpError(403, 'Yetkisiz');
-  if (actor.role === 'teacher' && teacherId !== actor.id) throw new HttpError(403, 'Yetkisiz');
-  if (!actor.isManager && actor.role !== 'student' && actor.role !== 'teacher') throw new HttpError(403, 'Yetkisiz');
-
-  delete sb.studentId; delete sb.studentName; delete sb.studentCls;
-  delete sb.branch; delete sb.bookedBy; delete sb.bookedAt;
-  list[idx] = sb;
-  template.etutSablonlari = list;
-  await setProgramTemplate(teacherId, template);
+  await cancelEtutV2(actorSession(actor), input, precomputedFrom(actor));
 }
 
+// ── listBookableEtuts — tablo-tabanlı (Faz 2b Task 5) ─────────────────────────
 // Öğrencinin bu hafta REZERVE EDEBİLECEĞİ etütler (mobil ekran listesi).
-// Öğrencinin grubuna açık öğretmenlerin, bu hafta efektif-aktif şablonları;
-// her biri için o öğrencinin görebileceği branş adayları + doluluk/sahiplik.
+// Öğrencinin grubuna açık öğretmenlerin, bu hafta efektif-aktif şablonları (EtutSablon
+// deletedAt:null + aktif/pasifHaftalar); her biri için doluluk/sahiplik EtutReservation
+// efektif satırından (resolveEffective — WEEK önce, sonra RECURRING), branş adayları
+// öğretmen branşları ∩ öğrencinin DÜZEY havuzu (levelPoolForGroup — spec §4a, sınıf
+// listesi DEĞİL; bookEtut'un autoPickBranch'iyle AYNI kaynak).
 export interface BookableEtut {
   teacherId: string;
   teacherName: string;
@@ -176,43 +133,56 @@ export interface BookableEtut {
   dayIndex: number;
   start: string;
   end: string;
-  branches: string[]; // öğrencinin seçebileceği ders adayları (öğretmen branşları ∩ sınıf dersleri)
+  branches: string[]; // öğrencinin seçebileceği ders adayları (öğretmen branşları ∩ düzey havuzu)
   booked: boolean;    // başka öğrenci tarafından dolu
   mine: boolean;      // bu öğrencinin rezervasyonu
   branch: string | null; // mine ise rezerve edilen ders
 }
 export async function listBookableEtuts(studentId: string, weekKey: string): Promise<BookableEtut[]> {
-  const [students, teachers, templates] = await Promise.all([getAllStudents(), getAllTeachers(), getAllProgramTemplates()]);
+  const [students, teachers] = await Promise.all([getAllStudents(), getAllTeachers()]);
   const student = students.find((s) => s.id === studentId);
   if (!student) throw new HttpError(404, 'Öğrenci bulunamadı');
-  const studentAllowed = await resolveStudentBranches(student.cls);
+
+  const orgSlug = currentOrg();
+  const branch = currentBranch();
+  const [levelPool, sablonRows, allReservations] = await Promise.all([
+    levelPoolForGroup(student.group),
+    // Tenant-scoped $extends enjeksiyonu — sablon-service.ts'teki AYNI idiom (teacherId filtresi
+    // YOK: bu, TÜM öğretmenlerin şablonlarını tarayan öğrenci-merkezli bir liste).
+    tdb().etutSablon.findMany({ where: { deletedAt: null } }),
+    // orgSlug/branch AÇIKÇA — getWeekReservations $extends'e dayanmaz (reservations.ts imzası).
+    getWeekReservations(tdb(orgSlug, branch), orgSlug, branch, weekKey),
+  ]);
+  const effectiveMap = resolveEffective(allReservations, weekKey);
   const teacherById = new Map(teachers.map((t) => [t.id, t]));
+
   const out: BookableEtut[] = [];
-  for (const tpl of templates) {
-    const teacher = teacherById.get(tpl.legacyId);
+  for (const sb of sablonRows) {
+    // Efektif-aktiflik — booking-rules.ts kural 5 ile AYNI ifade (tekrar, buradaki karar SAF
+    // görüntüleme filtresi; yazma yolunda otorite decideBooking'de).
+    if (sb.aktif === false || sb.pasifHaftalar.includes(weekKey)) continue;
+    const teacher = teacherById.get(sb.teacherId);
     if (!teacher) continue;
     const allowedGroups = teacher.allowedGroups || [];
-    // Öğrencinin grubuna kapalı öğretmenin etütleri listede gösterilmez (rezerve edilemez).
+    const effective = effectiveMap.get(sb.id) ?? null;
+    const mine = effective?.studentId === studentId;
+    // Öğrencinin grubuna kapalı öğretmenin etütleri listede gösterilmez (rezerve edilemez);
+    // kendi rezervasyonu farklı grup olsa bile görünsün (iptal için).
     const groupOk = allowedGroups.includes(student.group);
-    const list: EtutSablonu[] = Array.isArray(tpl.template.etutSablonlari) ? (tpl.template.etutSablonlari as EtutSablonu[]) : [];
-    for (const sb of list) {
-      if (!etutAktifThisWeek(sb, weekKey)) continue;
-      const mine = sb.studentId === studentId;
-      if (!groupOk && !mine) continue; // kendi rezervasyonu farklı grup olsa bile görünsün (iptal için)
-      const branches = (teacher.branches || []).filter((b) => studentAllowed.includes(b));
-      out.push({
-        teacherId: tpl.legacyId,
-        teacherName: teacher.name,
-        etutId: sb.id,
-        dayIndex: sb.dayIndex,
-        start: sb.start,
-        end: sb.end,
-        branches,
-        booked: Boolean(sb.studentId) && !mine,
-        mine,
-        branch: mine ? (sb.branch ?? null) : null,
-      });
-    }
+    if (!groupOk && !mine) continue;
+    const branches = (teacher.branches || []).filter((b) => levelPool.includes(b));
+    out.push({
+      teacherId: teacher.id,
+      teacherName: teacher.name,
+      etutId: sb.legacyId,
+      dayIndex: sb.dayIndex,
+      start: sb.start,
+      end: sb.end,
+      branches,
+      booked: Boolean(effective) && !mine,
+      mine,
+      branch: mine ? (effective?.dersBranch ?? null) : null,
+    });
   }
   out.sort((a, b) => (a.dayIndex - b.dayIndex) || a.start.localeCompare(b.start));
   return out;
