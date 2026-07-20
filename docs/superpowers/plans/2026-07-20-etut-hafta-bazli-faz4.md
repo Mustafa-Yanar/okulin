@@ -46,7 +46,7 @@ export function pickEtutLabel(src: EtutLabelSource): { branch: string; slotLabel
 // Öncelik: reservation (weekKey-join: dersBranch + startsAt/endsAt snapshot) → sablon (saat, branch '') → boş.
 ```
 
-- [ ] **Step 1: Failing testler** — `lib/etut/attendance-label.test.ts` (4 test):
+- [x] **Step 1: Failing testler** — `lib/etut/attendance-label.test.ts` (4 test):
 
 ```ts
 import { describe, it, expect } from 'vitest';
@@ -73,7 +73,7 @@ describe('pickEtutLabel', () => {
 });
 ```
 
-- [ ] **Step 2: FAIL doğrula** → **Step 3: `attendance-label.ts` implementasyonu:**
+- [x] **Step 2: FAIL doğrula** → **Step 3: `attendance-label.ts` implementasyonu:**
 
 ```ts
 // Yoklama geçmişi etüt etiketi (Faz 4 T1) — orijinal denetim gap #5'in kapanışı:
@@ -89,7 +89,7 @@ export function pickEtutLabel(src: EtutLabelSource): { branch: string; slotLabel
 }
 ```
 
-- [ ] **Step 4: Route'u bağla** — `app/api/attendance/student/route.ts` etüt dalını değiştir:
+- [x] **Step 4: Route'u bağla** — `app/api/attendance/student/route.ts` etüt dalını değiştir:
   - Yerel `interface EtutSablon` + `getProgramTemplate`/`progCache` KALKAR.
   - Döngü ÖNCESİ batch-lookup (N+1 yok):
   ```ts
@@ -130,7 +130,7 @@ export function pickEtutLabel(src: EtutLabelSource): { branch: string; slotLabel
     });
   }
   ```
-- [ ] **Step 5:** `npm run build && npm test` yeşil (353+4). **Step 6: Commit** — `feat(etüt-faz4): yoklama etüt etiketi EtutSablon+EtutReservation weekKey-join'ine geçti (bayat JSON okuma kapandı, branch hafta-scoped)`
+- [x] **Step 5:** `npm run build && npm test` yeşil (353+4). **Step 6: Commit** — `feat(etüt-faz4): yoklama etüt etiketi EtutSablon+EtutReservation weekKey-join'ine geçti (bayat JSON okuma kapandı, branch hafta-scoped)`
 
 ---
 
@@ -158,7 +158,7 @@ export function selectRecurringToFreeze(effective: Map<string, EtutReservation>)
 export async function freezeRecurringWeek(weekKey: string): Promise<number>  // dondurulmuş satır sayısı
 ```
 
-- [ ] **Step 1: Failing testler** — `history.test.ts` (6 test):
+- [x] **Step 1: Failing testler** — `history.test.ts` (6 test):
 
 ```ts
 // rez üretici: { weekKey:'2026-W30', scope:'WEEK', status:'ACTIVE', sablonId:'c1', teacherId:'t1',
@@ -172,7 +172,7 @@ it('selectRecurringToFreeze: yalnız scope RECURRING efektif satırlar döner (W
 it('selectRecurringToFreeze: boş map → boş liste', ...)
 ```
 
-- [ ] **Step 2: FAIL** → **Step 3: implementasyon:**
+- [x] **Step 2: FAIL** → **Step 3: implementasyon:**
 
 ```ts
 // lib/etut/history.ts — Faz 4 T2. Öğrenci/öğretmen TÜM-haftalar etüt geçmişi
@@ -247,7 +247,7 @@ export async function freezeRecurringWeek(weekKey: string): Promise<number> {
 ```
 (`EtutHistoryEntry` interface'i dosyada tam yazılır; `listTeacherEtutHistory` ortak iç fonksiyonla.)
 
-- [ ] **Step 4: PASS** (353+4+6). **Step 5: Commit** — `feat(etüt-faz4): all-weeks etüt geçmişi (listStudent/TeacherEtutHistory) + freeze-on-rollover yardımcısı (lib+test)`
+- [x] **Step 4: PASS** (353+4+6). **Step 5: Commit** — `feat(etüt-faz4): all-weeks etüt geçmişi (listStudent/TeacherEtutHistory) + freeze-on-rollover yardımcısı (lib+test)`
 
 ---
 
@@ -259,7 +259,7 @@ export async function freezeRecurringWeek(weekKey: string): Promise<number> {
 
 **Consumes:** Task 2 (`listStudentEtutHistory`/`listTeacherEtutHistory`/`freezeRecurringWeek`).
 
-- [ ] **Step 1: archive route** — SlotBooking `weeksMap` kurulduktan SONRA etüt haftalarını AYNI entry şekliyle merge et:
+- [x] **Step 1: archive route** — SlotBooking `weeksMap` kurulduktan SONRA etüt haftalarını AYNI entry şekliyle merge et:
   ```ts
   // Etüt geçmişi EtutReservation'dan (Faz 4 T3) — SlotBooking'de etüt artık yok (Faz 7c-3
   // sonrası ders-only); HistoryModal 'Geçmiş Etütler' bu satırlarla dolar. Entry şekli
@@ -270,7 +270,7 @@ export async function freezeRecurringWeek(weekKey: string): Promise<number> {
   }
   ```
   (import `listStudentEtutHistory, listTeacherEtutHistory` — `@/lib/etut/history`. `weeks` sıralaması mevcut sort'la aynı kalır.)
-- [ ] **Step 2: cron freeze** — `rollTenant()` içinde arşiv yazımından SONRA, `initWeekForTeacher` Promise.all'ından ÖNCE:
+- [x] **Step 2: cron freeze** — `rollTenant()` içinde arşiv yazımından SONRA, `initWeekForTeacher` Promise.all'ından ÖNCE:
   ```ts
   // Faz 4: biten haftanın efektif RECURRING etüt rezervasyonlarını somut WEEK satırlarına
   // dondur (spec §3.3 freeze-on-rollover) — recurring sahibi sonradan değişse/iptal edilse
@@ -278,7 +278,7 @@ export async function freezeRecurringWeek(weekKey: string): Promise<number> {
   const frozenEtut = await freezeRecurringWeek(currentWeek);
   ```
   Dönüş objesine `frozenEtut` ekle (`{ previousWeek, newWeek, teachers, frozenEtut }`). (import `freezeRecurringWeek` — `@/lib/etut/history`.)
-- [ ] **Step 3:** `npm run build && npm test` yeşil. **Step 4: Commit** — `feat(etüt-faz4): arşiv EtutReservation etüt haftalarını içeriyor + haftalık cron freeze-on-rollover (geçmiş kalıcılaştı)`
+- [x] **Step 3:** `npm run build && npm test` yeşil. **Step 4: Commit** — `feat(etüt-faz4): arşiv EtutReservation etüt haftalarını içeriyor + haftalık cron freeze-on-rollover (geçmiş kalıcılaştı)`
 
 ---
 
@@ -292,7 +292,7 @@ export async function freezeRecurringWeek(weekKey: string): Promise<number> {
 
 **Interfaces (Consumes):** `/api/etut-sablon/all?week=` → `{ weekKey, etutler: EtutAllDTO[], bookableWeeks }` (Faz 3 T1); iptal → `DELETE /api/etut-sablon/rezervasyon` `{ teacherId, etutId, weekKey, scope: 'week' }` (Faz 2b); `WeekNav/getAdjacentWeek/api` → `../shared`; `getWeekKey` → `@/lib/constants`; `StudentBookingsView` + `BookingSlotEntry` mevcut.
 
-- [ ] **Step 1: `StudentEtutTab.tsx`** — kendi veri-çeken sekme (TeachersTab/TeacherEtutReservations deseni):
+- [x] **Step 1: `StudentEtutTab.tsx`** — kendi veri-çeken sekme (TeachersTab/TeacherEtutReservations deseni):
 
 ```tsx
 'use client';
@@ -356,12 +356,12 @@ export default function StudentEtutTab({ student, readOnly = false, showToast }:
 }
 ```
 
-- [ ] **Step 2: Prop zinciri temizliği** —
+- [x] **Step 2: Prop zinciri temizliği** —
   - `StudentList.tsx` `StudentExpandedView`: `allSlots`/`onCancelBooking` propları KALKAR; yerine `readOnly?: boolean` + `showToast: ShowToast` gelir; `'etut'` sekmesi `<StudentEtutTab student={student} readOnly={readOnly} showToast={showToast} />`. `StudentListProps`'tan da `allSlots`/`onCancelBooking` kalkar (aynı ekleme: readOnly/showToast — mevcutta showToast yoksa ekle).
   - `SinifOgrenci.tsx`: `allSlots`/`onCancelBooking` propları KALKAR (satır ~34, ~55, ~204); `readOnly`+`showToast` zaten var/aktarılıyor mu kontrol et, yoksa geçir.
   - `DirectorPanel.tsx` SinifOgrenci çağrısı (~248-277): `allSlots={allSlots}` ve `onCancelBooking={...}` satırları KALKAR (`allSlots` state'i DirectorPanel'de KALIR — HistoryModal currentEntries + TeachersTab kullanıyor).
   - tsc'nin gösterdiği tüm kullanım yerlerini düzelt; başka tüketici kırılmadığını `npx tsc --noEmit` ile kanıtla.
-- [ ] **Step 3:** `npm run build && npm test` yeşil. **Step 4: Commit** — `feat(etüt-faz4): müdür öğrenci-detay Etüt sekmesi EtutReservation kaynağına + serbest hafta nav + hafta-tombstone iptal (İrem senaryosu müdür panelinde kapandı)`
+- [x] **Step 3:** `npm run build && npm test` yeşil. **Step 4: Commit** — `feat(etüt-faz4): müdür öğrenci-detay Etüt sekmesi EtutReservation kaynağına + serbest hafta nav + hafta-tombstone iptal (İrem senaryosu müdür panelinde kapandı)`
 
 ---
 
@@ -374,7 +374,7 @@ export default function StudentEtutTab({ student, readOnly = false, showToast }:
 
 **Consumes:** `lockResource` (lib/etut/reservations.ts). Kilit anahtarı: `` `slotweek:${orgSlug}:${branch}:${weekKey}:${teacherCUID}` `` — DİKKAT: SlotBooking.teacherId **Teacher.id (CUID)** kullanır (EtutSablon'un legacyId konvansiyonundan FARKLI); kilit anahtarında da CUID kullan, iki yol aynı değeri türetmeli.
 
-- [ ] **Step 1: Ölü dal temizliği** — `program/route.ts`:
+- [x] **Step 1: Ölü dal temizliği** — `program/route.ts`:
   - GET: satır ~70-77 "Geçici etüt" bloğunu KALDIR (etüt artık EtutReservation'da; SlotBooking'e etüt yazan yol kalmıyor — aşağıda). "Geçici ders" bloğu AYNEN kalır.
   - POST: satır ~203-206 `entry.type === 'etut' && entry.studentId` hücre-yazma dalını ve ~205-206 `type === 'etut'` boş-hücre dalını KALDIR; yerine:
   ```ts
@@ -383,7 +383,7 @@ export default function StudentEtutTab({ student, readOnly = false, showToast }:
               // eski istemci kalıntısı 'etut' girdisi sessizce yok sayılır (UI artık göndermiyor).
   ```
   - Grep-kanıt: `type:'etut'` veya `type: 'etut'` GÖNDEREN istemci kodu app/_components altında YOK (rapora yaz).
-- [ ] **Step 2: `initWeekForTeacher` kilidi** — gövdeyi `tdb().$transaction` içine al:
+- [x] **Step 2: `initWeekForTeacher` kilidi** — gövdeyi `tdb().$transaction` içine al:
   ```ts
   // Faz 4 Y3: hafta-grid yeniden kurulumu ile eşzamanlı slot rezervasyonu yarışı — okuma
   // (existingRows) ile deleteMany arasında commit olan booking kayboluyordu. slotweek kilidi
@@ -396,12 +396,12 @@ export default function StudentEtutTab({ student, readOnly = false, showToast }:
   });
   ```
   (Mevcut okuma/hesap/yazma adımları tx client (`tx.slotBooking...`) kullanacak şekilde taşınır; `getDaySlotTimes` tx-dışı kalabilir (config okuması). import: `lockResource` — dosya sunucu-lib, döngüsel import YOK (reservations.ts slots.ts'i import etmiyor — DOĞRULA; ediyorsa lockResource'u `lib/etut/locks.ts`'e çıkarıp iki taraftan import et).)
-- [ ] **Step 3: `/api/slots` POST/DELETE** — mevcut tx'lerde İLK kilit olarak (mevcut `lockResource(slot:...)` çağrısından ÖNCE):
+- [x] **Step 3: `/api/slots` POST/DELETE** — mevcut tx'lerde İLK kilit olarak (mevcut `lockResource(slot:...)` çağrısından ÖNCE):
   ```ts
   await lockResource(tx, `slotweek:${orgSlug}:${branch}:${weekKey}:${teacherRow.id}`);
   ```
   (POST'ta teacher CUID zaten çözülüyor — hangi değişkende olduğunu route'tan bul; DELETE'te de aynı. Kilit sırası yorumunu her iki noktaya yaz.)
-- [ ] **Step 4:** `npm run build && npm test` yeşil; `npx tsc --noEmit` temiz. **Step 5: Commit** — `fix(etüt-faz4): Y3 kapandı — program route etüt dalları kaldırıldı (EtutReservation tek yol) + initWeek/slots slotweek kilidi (grid-rebuild yarışı)`
+- [x] **Step 4:** `npm run build && npm test` yeşil; `npx tsc --noEmit` temiz. **Step 5: Commit** — `fix(etüt-faz4): Y3 kapandı — program route etüt dalları kaldırıldı (EtutReservation tek yol) + initWeek/slots slotweek kilidi (grid-rebuild yarışı)`
 
 ---
 
@@ -413,13 +413,13 @@ export default function StudentEtutTab({ student, readOnly = false, showToast }:
 - Modify: `app/_components/DirectorPanel.tsx` (:117 guidance, :130 slot-times)
 - Modify: `lib/etut/booking.ts` (yalnız YORUM: 2 karar notu)
 
-- [ ] **Step 1: HistoryModal** — iki catch'e hata durumu: `const [loadError, setLoadError] = useState<string | null>(null);` — arşiv catch'i `setLoadError('Arşiv yüklenemedi: ' + (e as Error).message)`; attendance catch'i mevcut boş-özet fallback'ini korur AMA `setLoadError(...)` de yazar. Render: etut/devamsizlik içeriklerinin üstünde `{loadError && <div className="card p-3 mb-3 text-sm" style={{ color: 'var(--danger, #dc2626)' }}>{loadError}</div>}`.
-- [ ] **Step 2: StudentList:246** — class-schedule catch'i: boş liste yerine hata state'i + aynı kırmızı satır deseni (bileşendeki mevcut state yapısına uyarla; `showToast` erişimi yoksa yerel hata satırı yeterli).
-- [ ] **Step 3: DirectorPanel** — `:117` `loadPendingGuidance` catch → `console.warn('[director] rehberlik bekleyen sayısı yüklenemedi:', e)` (rozet boş kalır — davranış aynı, artık teşhis edilebilir); `:130` slot-times `.catch(() => {})` → `.catch(e => { console.warn('[director] slot-times yüklenemedi:', e); showToast('Ders saatleri yüklenemedi', 'error'); })`.
-- [ ] **Step 4: Karar yorumları** — `lib/etut/booking.ts`:
+- [x] **Step 1: HistoryModal** — iki catch'e hata durumu: `const [loadError, setLoadError] = useState<string | null>(null);` — arşiv catch'i `setLoadError('Arşiv yüklenemedi: ' + (e as Error).message)`; attendance catch'i mevcut boş-özet fallback'ini korur AMA `setLoadError(...)` de yazar. Render: etut/devamsizlik içeriklerinin üstünde `{loadError && <div className="card p-3 mb-3 text-sm" style={{ color: 'var(--danger, #dc2626)' }}>{loadError}</div>}`.
+- [x] **Step 2: StudentList:246** — class-schedule catch'i: boş liste yerine hata state'i + aynı kırmızı satır deseni (bileşendeki mevcut state yapısına uyarla; `showToast` erişimi yoksa yerel hata satırı yeterli).
+- [x] **Step 3: DirectorPanel** — `:117` `loadPendingGuidance` catch → `console.warn('[director] rehberlik bekleyen sayısı yüklenemedi:', e)` (rozet boş kalır — davranış aynı, artık teşhis edilebilir); `:130` slot-times `.catch(() => {})` → `.catch(e => { console.warn('[director] slot-times yüklenemedi:', e); showToast('Ders saatleri yüklenemedi', 'error'); })`.
+- [x] **Step 4: Karar yorumları** — `lib/etut/booking.ts`:
   - `cancelEtutV2` 'week' dalının başına: `// ÜRÜN KARARI (Mustafa 2026-07-20, Faz 3 denetimi): öğrenci iptaline hafta-penceresi UYGULANMAZ — müdürün ileri-haftaya yerleştirdiği rezervasyonu da öğrenci iptal edebilir (esneklik; eski davranışla uyumlu; cancelLockHours ayrıca korur). İstişare sonrası kapatılmak istenirse: actorRole==='student' && !allowedBookingWeeks('student').includes(weekKey) → 403. Davranış T7 canlı smoke ile regresyon-sabit.`
   - `bookEtut` RECURRING yolu yakınına: `// ÜRÜN KARARI (Mustafa 2026-07-20, Faz 4): kalıcı atamanın GELECEK-hafta çakışmaları taranmaz/uyarılmaz (Y2 — 'görünürlük yeter'): WEEK satırı kalıcıyı ezer, müdür görünümü çakışmayı gösterir, elle çözülür.`
-- [ ] **Step 5:** `npm run build && npm test` yeşil. **Step 6: Commit** — `fix(etüt-faz4): kritik sessiz-catch'ler görünür hataya çevrildi (HistoryModal/StudentList/DirectorPanel) + ileri-iptal ve Y2 ürün-kararı yorumları`
+- [x] **Step 5:** `npm run build && npm test` yeşil. **Step 6: Commit** — `fix(etüt-faz4): kritik sessiz-catch'ler görünür hataya çevrildi (HistoryModal/StudentList/DirectorPanel) + ileri-iptal ve Y2 ürün-kararı yorumları`
 
 ---
 
@@ -427,15 +427,15 @@ export default function StudentEtutTab({ student, readOnly = false, showToast }:
 
 **Files:** scratchpad smoke scripti (repo'ya girmez), plan checkboxları.
 
-- [ ] **Step 1: Canlı smoke (testkurs, servis-katmanı, Faz 3 T7 kalıbı — baseline ölç/geri-dön, id-listeli temizlik):**
+- [x] **Step 1: Canlı smoke (testkurs, servis-katmanı, Faz 3 T7 kalıbı — baseline ölç/geri-dön, id-listeli temizlik):**
   1. **Arşiv/geçmiş:** öğrenciye 2 farklı haftaya WEEK rezervasyonu yaz → `listStudentEtutHistory` iki haftayı DESC sırayla, doğru entry alanlarıyla döner; `/api/archive` şekli (route-level değil servis-level: `listStudentEtutHistory` + SlotBooking merge mantığı) tutarlı.
   2. **Freeze:** müdür RECURRING ataması yaz → `freezeRecurringWeek(currentWeek)` → o hafta için somut WEEK satırı OLUŞTU (count=1); İKİNCİ çağrı count=0 (idempotent, skipDuplicates); tombstone'lu haftada freeze o şablonu ATLAR.
   3. **Yoklama etiketi:** rezervasyonlu şablon+hafta için attendance-label akışı (pickEtutLabel'e giden lookup'ların DB karşılığı): EtutReservation'lı haftada branch dolu; şablonu soft-delete edip lookup'ın yine saat döndürdüğünü doğrula → restore.
   4. **İleri-hafta iptal REGRESYONU (Mustafa kararı):** müdür aktörüyle öğrenciye +2 haftaya WEEK rezervasyonu → öğrenci aktörüyle `cancelEtutV2(scope:'week', weekKey=+2)` → BAŞARILI (403 YOK) + tombstone doğru haftada.
   5. **initWeek kilidi düz-yol:** `initWeekForTeacher` testkurs öğretmeninde çalışır, grid satır sayısı öncekiyle aynı (kilit davranışı bozmadı).
   Cleanup: yaratılan EtutReservation satırları id-listesiyle sil; baseline (EtutSablon=4, EtutReservation=0) birebir teyit.
-- [ ] **Step 2: Grep gate'leri:** `grep -rn "etutSablonlari" app/ lib/ --include="*.ts" --include="*.tsx"` → yalnız `app/api/program/route.ts` pass-through (~159-185, ~237-245) + `lib/slots.ts` tip/yardımcı + göç scriptleri (attendance/student SONUÇTA YOK); `grep -n "type === 'etut'\|type:'etut'" app/` → program route'ta yalnız yeni `continue` dalı.
-- [ ] **Step 3:** Tam gate: `npm run build` + `npm test` yeşil; plan checkboxları işaretle (Step 4 hariç); kapanış commit — `docs(etüt-faz4): Faz 4 tamamlandı — görünürlük+geçmiş EtutReservation'da, freeze-on-rollover canlı, Y3 kapandı`
+- [x] **Step 2: Grep gate'leri:** `grep -rn "etutSablonlari" app/ lib/ --include="*.ts" --include="*.tsx"` → yalnız `app/api/program/route.ts` pass-through (~159-185, ~237-245) + `lib/slots.ts` tip/yardımcı + göç scriptleri (attendance/student SONUÇTA YOK); `grep -n "type === 'etut'\|type:'etut'" app/` → program route'ta yalnız yeni `continue` dalı.
+- [x] **Step 3:** Tam gate: `npm run build` + `npm test` yeşil; plan checkboxları işaretle (Step 4 hariç); kapanış commit — `docs(etüt-faz4): Faz 4 tamamlandı — görünürlük+geçmiş EtutReservation'da, freeze-on-rollover canlı, Y3 kapandı`
 - [ ] **Step 4 (controller):** Faz 4 BÜTÜNÜ çok-model denetimi (Codex + Gemini `--sandbox --dangerously-skip-permissions` + Explore) — özel sorular: (a) freeze idempotency + tombstone etkileşimi, (b) slotweek kilit sırasının 3 yoldaki tutarlılığı (deadlock analizi), (c) arşiv/geçmiş entry-şekil uyumu (HistoryModal kırılmadı mı), (d) attendance deletedAt-istisnasının sınırı (yalnız tarihsel etiket mi). Bulgular kapanmadan Faz 5'e geçilmez.
 
 ## Faz 4 Bitiş Kriterleri
