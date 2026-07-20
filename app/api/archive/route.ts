@@ -3,6 +3,7 @@ import { withAuth } from '@/lib/auth';
 import { tdb } from '@/lib/sqldb';
 import { ALL_DAYS, daySlots } from '@/lib/constants';
 import { getDaySlotTimes } from '@/lib/slots';
+import { listStudentEtutHistory, listTeacherEtutHistory } from '@/lib/etut/history';
 import type { Prisma } from '@prisma/client';
 
 type BookingWithTeacher = Prisma.SlotBookingGetPayload<{ include: { teacher: { select: { name: true; legacyId: true } } } }>;
@@ -58,6 +59,14 @@ export const GET = withAuth(['director', 'counselor'], async (req) => {
     if (!weeksMap[b.weekKey]) weeksMap[b.weekKey] = [];
     weeksMap[b.weekKey].push(entry);
   });
+
+  // Etüt geçmişi EtutReservation'dan (Faz 4 T3) — SlotBooking'de etüt artık yok (Faz 7c-3
+  // sonrası ders-only); HistoryModal 'Geçmiş Etütler' bu satırlarla dolar. Entry şekli
+  // ArchiveEntry ile birebir (lib/etut/history.ts). Ders satırları (SlotBooking) aynen kalır.
+  const etutWeeks = type === 'teacher' ? await listTeacherEtutHistory(id) : await listStudentEtutHistory(id);
+  for (const w of etutWeeks) {
+    (weeksMap[w.weekKey] ||= []).push(...w.entries);
+  }
 
   const weeks = Object.entries(weeksMap)
     .map(([weekKey, entries]) => ({ weekKey, entries }))

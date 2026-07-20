@@ -6,6 +6,7 @@ import {
 } from '@/lib/slots';
 import { ALL_DAYS, daySlots } from '@/lib/constants';
 import { listActiveTenants, runWithTenant, type TenantRef } from '@/lib/tenant';
+import { freezeRecurringWeek } from '@/lib/etut/history';
 
 // Pazar 11:00 UTC+3 = 08:00 UTC → "0 8 * * 0"
 // Bilinçli withAuth istisnası: cron ucu — oturum yok, CRON_SECRET Bearer doğrulanır.
@@ -24,7 +25,7 @@ async function resetTenant(): Promise<{ weekKey: string }> {
 
 // Bir kurumu bir sonraki haftaya taşır: bu haftayı arşivle + tüm öğretmenlerin yeni
 // haftasını init et + current_week'i ilerlet.
-async function rollTenant(): Promise<{ previousWeek: string; newWeek: string; teachers: number } | { message: string }> {
+async function rollTenant(): Promise<{ previousWeek: string; newWeek: string; teachers: number; frozenEtut: number } | { message: string }> {
   const teachers = await getAllTeachers(); // SQL-aware (legacyId + name)
   if (!teachers || teachers.length === 0) return { message: 'No teachers' };
 
@@ -82,12 +83,24 @@ async function rollTenant(): Promise<{ previousWeek: string; newWeek: string; te
   }
   if (hasWriteOps) await writePipeline.exec();
 
+  // 2b. Faz 4: biten haftanın efektif RECURRING etüt rezervasyonlarını somut WEEK satırlarına
+  // dondur (spec §3.3 freeze-on-rollover) — recurring sahibi sonradan değişse/iptal edilse
+  // bile geçmiş haftaların görünümü (arşiv/geçmiş listeleri) değişmez. Freeze hatası rollover'ı
+  // DURDURMAMALI (öğretmen init + hafta ilerletme daha kritik) — best-effort, -1 ile raporla.
+  let frozenEtut: number;
+  try {
+    frozenEtut = await freezeRecurringWeek(currentWeek);
+  } catch (e) {
+    console.warn('[cron/weekly] freezeRecurringWeek failed', currentWeek, e);
+    frozenEtut = -1;
+  }
+
   // 3. Tüm öğretmenlerin yeni haftasını init et (SQL-aware)
   await Promise.all(teachers.map(t => initWeekForTeacher(t.id, nextWeek)));
 
   await setCurrentWeek(nextWeek); // SQL-aware
 
-  return { previousWeek: currentWeek, newWeek: nextWeek, teachers: teachers.length };
+  return { previousWeek: currentWeek, newWeek: nextWeek, teachers: teachers.length, frozenEtut };
 }
 
 export async function GET(req: Request) {
