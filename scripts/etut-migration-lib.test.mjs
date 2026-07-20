@@ -81,4 +81,7 @@ describe('validateSablon', () => {
   it('end==start → ok:false', () => {
     expect(validateSablon(sb({ start: '15:30', end: '15:30' })).ok).toBe(false);
   });
+  it("start '25:99' (invalid hour/minute) → ok:false", () => {
+    expect(validateSablon(sb({ start: '25:99' })).ok).toBe(false);
+  });
 });
