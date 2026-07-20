@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveEffective, RECURRING_WEEKKEY } from './reservations';
+import { resolveEffective, RECURRING_WEEKKEY, cancelToTombstone, type CancelInput } from './reservations';
 import type { EtutReservation } from '@prisma/client';
 
 // Test satırı üreticisi — yalnız çözümleyicinin okuduğu alanlar anlamlı.
@@ -48,5 +48,17 @@ describe('resolveEffective — WEEK önceliği + tombstone + recurring (spec §3
   it('hafta anahtarı string karşılaştırması ISO formatta güvenli (W09 < W10)', () => {
     const rec = row({ scope: 'RECURRING', weekKey: RECURRING_WEEKKEY, effectiveFromWeek: '2026-W09' });
     expect(resolveEffective([rec], '2026-W10').has('s1')).toBe(true);
+  });
+});
+
+describe('cancelToTombstone — weekKey guard', () => {
+  it("weekKey='*' ile çağrılırsa DB'ye dokunmadan hata fırlatır (recurring tümden iptali cancelRecurring'in işi)", async () => {
+    const validInput: CancelInput = {
+      orgSlug: 'o', branch: 'main', sablonId: 's1', teacherId: 't1',
+      weekKey: RECURRING_WEEKKEY,
+      cancelledByRole: 'director', cancelledById: 'd1',
+      snapshot: { studentId: 'st1', studentName: 'Öğrenci', studentCls: 'c1', dersBranch: 'Fizik', dayIndex: 0, startsAt: '15:30', endsAt: '16:00' },
+    };
+    await expect(cancelToTombstone({} as never, validInput)).rejects.toThrow();
   });
 });

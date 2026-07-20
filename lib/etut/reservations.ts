@@ -33,9 +33,10 @@ export function resolveEffective(rows: EtutReservation[], weekKey: string): Map<
 }
 
 // Bir haftanın TÜM ilgili satırları (o hafta + recurring) — tek sorgu (N+1 yok).
-export async function getWeekReservations(db: Db, weekKey: string): Promise<EtutReservation[]> {
+// orgSlug/branch AÇIK — $extends findMany'e enjekte etse de çıplak tx ile sızıntıyı yapısal olarak engeller.
+export async function getWeekReservations(db: Db, orgSlug: string, branch: string, weekKey: string): Promise<EtutReservation[]> {
   return (db as ReturnType<typeof tdb>).etutReservation.findMany({
-    where: { OR: [{ weekKey }, { weekKey: RECURRING_WEEKKEY }] },
+    where: { orgSlug, branch, OR: [{ weekKey }, { weekKey: RECURRING_WEEKKEY }] },
   });
 }
 
@@ -87,6 +88,7 @@ export interface CancelInput {
 // Haftayı iptal et: WEEK satır varsa CANCELLED'a çevir; yoksa (efektif kaynak recurring'di)
 // CANCELLED WEEK tombstone YARAT — o hafta boş görünür, diğer haftalar etkilenmez.
 export async function cancelToTombstone(db: Db, c: CancelInput): Promise<EtutReservation> {
+  if (c.weekKey === RECURRING_WEEKKEY) throw new Error("cancelToTombstone haftalık iptal içindir — recurring'in tümden iptali için cancelRecurring kullanın");
   const cancelFields = {
     status: 'CANCELLED' as const,
     cancelledByRole: c.cancelledByRole, cancelledById: c.cancelledById,
