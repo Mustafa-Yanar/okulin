@@ -114,7 +114,10 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     try {
       const data = await api<Record<string, number>>('/api/guidance/pending');
       setPendingGuidance(data || {});
-    } catch {}
+    } catch (e) {
+      // Rozet boş kalır — davranış AYNI (sessizce yutuluyordu), artık teşhis edilebilir (Faz 4 T6).
+      console.warn('[director] rehberlik bekleyen sayısı yüklenemedi:', e);
+    }
   }, []);
 
   useEffect(() => { loadPendingGuidance(); }, [loadPendingGuidance]);
@@ -127,7 +130,10 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       setSlotDays(data.days || {});
       if (data.etutSuresi != null) setSlotEtutSuresi(data.etutSuresi);
       if (data.molaSuresi != null) setSlotMolaSuresi(data.molaSuresi);
-    }).catch(() => {}).finally(() => setSlotTimesLoading(false));
+    }).catch(e => {
+      console.warn('[director] slot-times yüklenemedi:', e);
+      showToast('Ders saatleri yüklenemedi', 'error');
+    }).finally(() => setSlotTimesLoading(false));
   }, [tab, slotDays]);
 
   const loadAll = useCallback(async (wk?: string) => {

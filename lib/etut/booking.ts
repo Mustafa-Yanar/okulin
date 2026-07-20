@@ -232,6 +232,9 @@ export async function bookEtut(session: Session, input: BookEtutInput): Promise<
       dayIndex: sablonRow!.dayIndex, startsAt: sablonRow!.start, endsAt: sablonRow!.end,
     };
 
+    // ÜRÜN KARARI (Mustafa 2026-07-20, Faz 4): kalıcı atamanın GELECEK-hafta çakışmaları
+    // taranmaz/uyarılmaz (Y2 — 'görünürlük yeter'): WEEK satırı kalıcıyı ezer, müdür
+    // görünümü çakışmayı gösterir, elle çözülür.
     return scope === 'RECURRING'
       ? upsertRecurring(tx, weekKey, write)
       : upsertWeekReservation(tx, weekKey, write);
@@ -350,6 +353,11 @@ export async function cancelEtutV2(session: Session, input: CancelEtutInput): Pr
     return;
   }
 
+  // ÜRÜN KARARI (Mustafa 2026-07-20, Faz 3 denetimi): öğrenci iptaline hafta-penceresi
+  // UYGULANMAZ — müdürün ileri-haftaya yerleştirdiği rezervasyonu da öğrenci iptal
+  // edebilir (esneklik; eski davranışla uyumlu; cancelLockHours ayrıca korur). İstişare
+  // sonrası kapatılmak istenirse: actorRole==='student' && !allowedBookingWeeks('student')
+  // .includes(weekKey) → 403. Davranış T7 canlı smoke ile regresyon-sabit.
   // ── 'week' kapsamı — davranış AYNEN (FIX-B'den ETKİLENMEZ) ───────────────────────────
   const allRows = await getWeekReservations(tdb(orgSlug, branch), orgSlug, branch, weekKey);
   const effectiveRow = resolveEffective(allRows, weekKey).get(sablonRow.id) ?? null;

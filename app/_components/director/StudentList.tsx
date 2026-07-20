@@ -234,15 +234,18 @@ export function ClassScheduleModal({ cls, label, onClose }: ClassScheduleModalPr
   const [schedule, setSchedule] = useState<Record<number, ClassLessonDTO[]> | null>(null);
   const [loading, setLoading] = useState(true);
   const [showPrint, setShowPrint] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
+      setLoadError(null);
       try {
         const data = await api<{ schedule?: Record<number, ClassLessonDTO[]> }>(`/api/class-schedule?cls=${encodeURIComponent(cls)}`);
         setSchedule(data.schedule || {});
-      } catch {
+      } catch (e) {
         setSchedule({});
+        setLoadError('Ders programı yüklenemedi: ' + (e as Error).message);
       } finally {
         setLoading(false);
       }
@@ -287,6 +290,9 @@ export function ClassScheduleModal({ cls, label, onClose }: ClassScheduleModalPr
 
   return (
     <Modal title={`${label || classShortUpper(classes, cls)} – Ders Programı`} onClose={onClose} wide>
+      {loadError && (
+        <div className="card p-3 mb-3 text-sm" style={{ color: 'var(--danger, #dc2626)' }}>{loadError}</div>
+      )}
       {!loading && visibleDays.length > 0 && (
         <div className="flex justify-end mb-3">
           <button onClick={() => setShowPrint(true)} className="btn-ghost !px-3 !py-1.5 text-sm flex items-center gap-1.5">

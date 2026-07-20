@@ -61,15 +61,19 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
   const [loading, setLoading] = useState(true);
   const [attendance, setAttendance] = useState<AttendanceData | null>(null);
   const [attLoading, setAttLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const printRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
+      setLoadError(null);
       try {
         const data = await api<{ weeks?: ArchiveWeek[] }>(`/api/archive?type=${target.type}&id=${target.id}`);
         setWeeks(data.weeks || []);
-      } catch {}
+      } catch (e) {
+        setLoadError('Arşiv yüklenemedi: ' + (e as Error).message);
+      }
       setLoading(false);
     })();
   }, [target.id, target.type]);
@@ -81,8 +85,11 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
       try {
         const data = await api<AttendanceData>(`/api/attendance/student?studentId=${target.id}`);
         setAttendance(data);
-      } catch {
+      } catch (e) {
+        // Boş-özet fallback davranışı KORUNUR (T6 öncesi davranışla aynı) — yalnız artık
+        // hata da loadError ile görünür olur (Faz 4 T6, sessiz-catch temizliği).
         setAttendance({ entries: [], summary: { yok: 0, gec: 0 } });
+        setLoadError('Devamsızlık verisi yüklenemedi: ' + (e as Error).message);
       }
       setAttLoading(false);
     })();
@@ -309,6 +316,9 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
             <ClipboardList size={13} /> <span>Devamsızlık Bilgisi</span>
           </button>
         </div>
+      )}
+      {loadError && (
+        <div className="card p-3 mb-3 text-sm" style={{ color: 'var(--danger, #dc2626)' }}>{loadError}</div>
       )}
       {(!isStudent || activeTab === 'etut') && etutContent}
       {isStudent && activeTab === 'devamsizlik' && devamsizlikContent}
