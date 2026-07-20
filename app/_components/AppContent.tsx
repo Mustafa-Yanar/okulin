@@ -131,10 +131,10 @@ export default function AppContent() {
     });
   }, []);
 
-  const showToast = (msg: React.ReactNode, type = 'success') => {
+  const showToast = useCallback((msg: React.ReactNode, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
-  };
+  }, []);
 
   const logout = async () => {
     await api('/api/auth', { method: 'POST', body: JSON.stringify({ action: 'logout' }) });
