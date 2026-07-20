@@ -69,6 +69,7 @@ interface EtutAllDTO {
   studentId?: string | null;
   studentName?: string | null;
   studentCls?: string | null;
+  scope?: 'WEEK' | 'RECURRING' | null;
 }
 
 // Lucide Chevron Icon Helpers inside WeekNav
@@ -614,6 +615,7 @@ function TeacherEtutPanel({ session, students, showToast }: TeacherEtutPanelProp
   const { classes } = useClasses();
   const [weekKey, setWeekKey] = useState(getWeekKey());
   const [etutler, setEtutler] = useState<EtutAllDTO[]>([]);
+  const [bookableWeeks, setBookableWeeks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [assignFor, setAssignFor] = useState<string | null>(null); // atanmakta olan etüt id
   const [selStudent, setSelStudent] = useState('');
@@ -641,9 +643,9 @@ function TeacherEtutPanel({ session, students, showToast }: TeacherEtutPanelProp
   const load = useCallback(async (wk: string) => {
     setLoading(true);
     try {
-      const data = await api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${wk}`)
-        .catch(() => ({ etutler: [] as EtutAllDTO[] }));
+      const data = await api<{ etutler?: EtutAllDTO[]; bookableWeeks?: string[] }>(`/api/etut-sablon/all?week=${wk}`);
       setEtutler((data.etutler || []).filter(e => e.teacherId === session.id));
+      setBookableWeeks(data.bookableWeeks || []);
     } catch (err) {
       showToast((err as Error).message, 'error');
     } finally {
@@ -682,7 +684,7 @@ function TeacherEtutPanel({ session, students, showToast }: TeacherEtutPanelProp
     try {
       await api('/api/etut-sablon/rezervasyon', {
         method: 'DELETE',
-        body: JSON.stringify({ teacherId: session.id, etutId }),
+        body: JSON.stringify({ teacherId: session.id, etutId, weekKey }),
       });
       showToast('Öğrenci etütten kaldırıldı', 'success');
       load(weekKey);
@@ -704,22 +706,22 @@ function TeacherEtutPanel({ session, students, showToast }: TeacherEtutPanelProp
   }, [etutler]);
 
   const changeWeek = (dir: number) => setWeekKey(w => getAdjacentWeek(w, dir));
+  const canWrite = bookableWeeks.includes(weekKey);
 
   return (
     <div>
       <div className="flex items-center justify-end mb-4">
-        {(() => {
-          const cw = getWeekKey();
-          const maxW = getAdjacentWeek(getAdjacentWeek(cw, 1), 1);
-          return (
-            <WeekNav weekKey={weekKey}
-              canPrev={weekKey !== cw}
-              canNext={weekKey !== maxW}
-              onPrev={() => changeWeek(-1)}
-              onNext={() => changeWeek(1)} />
-          );
-        })()}
+        <WeekNav weekKey={weekKey} onPrev={() => changeWeek(-1)} onNext={() => changeWeek(1)} />
       </div>
+
+      {!canWrite && weekKey > getWeekKey() && (
+        <div className="card p-3 mb-3 text-sm flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+          <span aria-hidden>🔒</span>
+          {weekKey === getAdjacentWeek(getWeekKey(), 1)
+            ? 'Gelecek haftanın ataması Pazar 11:00\'de açılır.'
+            : 'Bu hafta salt görüntüleme — atama penceresi dışında.'}
+        </div>
+      )}
 
       {loading ? (
         <LoadingBox height="h-40" />
@@ -756,13 +758,18 @@ function TeacherEtutPanel({ session, students, showToast }: TeacherEtutPanelProp
                               <span className="text-sm text-gray-800 truncate">
                                 {e.studentName}{e.studentCls ? ` · ${classShortUpper(classes, e.studentCls)}` : ''}
                               </span>
+                              {e.scope === 'RECURRING' && (
+                                <span className="badge badge-info shrink-0">Her hafta</span>
+                              )}
                             </>
                           ) : (
                             <span className="text-sm text-gray-400">Boş</span>
                           )}
                         </div>
                         <div className="shrink-0">
-                          {assigned ? (
+                          {!canWrite ? (
+                            <span className="text-caption">Salt görüntüleme</span>
+                          ) : assigned ? (
                             <button onClick={() => removeStudent(e.id)} disabled={busy}
                               className="btn-icon btn-icon-danger" title="Öğrenciyi kaldır">
                               <X size={13} />
@@ -777,7 +784,7 @@ function TeacherEtutPanel({ session, students, showToast }: TeacherEtutPanelProp
                         </div>
                       </div>
 
-                      {isAssigning && !assigned && (
+                      {canWrite && isAssigning && !assigned && (
                         <div className="bg-white px-3 py-2.5 border-t border-gray-100 space-y-2">
                           <select value={selStudent}
                             onChange={ev => { setSelStudent(ev.target.value); setSelBranch(''); }}

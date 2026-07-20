@@ -77,6 +77,9 @@ export function StudentBookingsView({ student, allSlots, onCancel }: StudentBook
                       {s.fixed && (
                         <span className="badge" style={{ background: 'color-mix(in srgb, var(--time-etut) 14%, transparent)', color: 'var(--time-etut)' }}>Sabit</span>
                       )}
+                      {s.scope === 'RECURRING' && (
+                        <span className="badge" style={{ background: 'color-mix(in srgb, var(--time-etut) 14%, transparent)', color: 'var(--time-etut)' }}>Her hafta</span>
+                      )}
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-500 ${bookedByColor[s.bookedBy || ''] || bookedByColor.student}`} style={{ fontWeight: 500 }}>
                         {bookedByLabel[s.bookedBy || ''] || 'Öğrenci'}
                       </span>
