@@ -96,6 +96,10 @@ return rec ?? NONE
 ```
 Bulk: `getWeekReservations(weekKey W)` = tek sorgu `WHERE weekKey=W OR weekKey='*'`; JS'te sablonId başına gerçek-hafta öncelikli çöz + recurring effectiveFromWeek filtre. (N+1 yok — route içinde öğretmen başına sorgu KALDIRILIR.)
 
+**Yazma stratejisi (Faz 1 denetim kararı — UPSERT, tek-satır):** `(sablonId, weekKey)` başına EN FAZLA BİR satır yaşar. Yeniden rezervasyon (iptal sonrası aynı haftaya yeni öğrenci) = mevcut satırın UPSERT ile güncellenmesi (status→ACTIVE, yeni öğrenci alanları, cancelled* alanları temizlenir) — unique kısıt İHLAL EDİLMEZ (Gemini bulgusu bu stratejiyle çözülür; Codex "mevcut unique ile kurulabilir" onayı). Satır-içi audit alanları SON durumu tutar; TAM tarihçe okulin'in mevcut AuditLog disipliniyle loglanır (her book/cancel/override bir audit kaydı).
+
+**Recurring sahip-değişim geçmişi (Faz 1 denetim kararı):** Sablon başına tek `'*'` satırı korunur; sahip değişince satır güncellenir (`effectiveFromWeek` = değişim haftası) + AuditLog. Geçmiş haftaların görünümü bozulmasın diye **freeze-on-rollover**: haftalık cron (Pazar 11:00) biten haftanın efektif recurring rezervasyonlarını o haftanın WEEK satırı olarak dondurur (yoksa yaratır) — geçmiş haftalar böylece kalıcı per-week satırlara sahip olur (Faz 4'te cron'a eklenir, cutover'dan önce).
+
 **Doluluk `sablonId+weekKey` ile belirlenir; saat ŞABLONDAN canlı okunur.** startsAt/endsAt snapshot yalnız (a) interval çakışma matematiği, (b) şablon silinince geçmiş yoklama etiketi için.
 
 ## 4. Birleşik command service — `lib/etut/booking.ts`
@@ -134,7 +138,7 @@ levelPool(group) = ⋃ Class.dersler  (org'un o GRUPTAKI tüm sınıfları, regi
 ## 5. Rol + hafta pencere kuralları (sunucu, TSİ)
 
 `allowedBookingWeeks(role, nowTSİ)`:
-- **student/teacher:** `{ currentWeek } + { nextWeek EĞER bugün (TSİ) Pazar }`. Kesintisiz: Paz→{cur,next}; Pzt-Cmt→{cur}.
+- **student/teacher:** `{ currentWeek } + { nextWeek EĞER nowTSİ >= Pazar 11:00 }`. **Açılma anı Pazar 11:00 TSİ** (Mustafa kararı 2026-07-20 — mevcut haftalık cron'un koşma anıyla hizalı; Pazar 00:00-10:59 arası sonraki hafta HENÜZ kapalı). Pzt 00:00'da pencere {yeniCur}'a sıfırlanır.
 - **director/counselor:** düzenlenebilir pencere `current..+2` (isEditableWeek) tek-hafta; **RECURRING** her hafta.
 - Her rezervasyon ayrıca **`slotStartsAt(weekKey,day,start) > nowTSİ`** (geçmiş slot reddi — pencere içinde bile geçmiş güne yazılamaz).
 - weekKey format doğrulaması (regex `^\d{4}-W\d{2}$`) tüm yollarda (web POST + servis + mobil).
@@ -167,12 +171,13 @@ levelPool(group) = ⋃ Class.dersler  (org'un o GRUPTAKI tüm sınıfları, regi
 - **Göç:** dry-run + canlı DB doğrulama (İrem W30, Ahmet W30) + rollback provası.
 - Her fazda **Codex/Gemini destekli doğrulama** ([[feedback_coklu-model-hata-ayiklama]]).
 
-## 10. Fazlar
-1. **Şema+göç:** EtutSablon + EtutReservation tabloları, Prisma migration, göç scripti (A+B) + doğrulama + rollback.
-2. **Birleşik servis:** `lib/etut/booking.ts` (bookEtut/cancelEtut, tüm kurallar, transaction+lock, interval çakışma); reserveEtut/listBookableEtuts → yeni servis; SlotBooking POST/DELETE → servis.
-3. **Okuma yolları:** effectiveReservation'a geçir — etut-sablon/all, mobil today/week, tüm paneller; PATCH kaldır→ProgramEditor recurring toggle.
-4. **Görünürlük+geçmiş:** müdür tarafı etüt merge + öğrenci "Etüt Geçmişi" hafta nav (tablodan), attendance snapshot, archive/cron, sessiz-hata süpürmesi.
-5. **Tam doğrulama:** birim+int+canlı; çok-model final review.
+## 10. Fazlar (Faz 1 sonrası revize — hepsi `etut-hafta-bazli` dalında, prod'a TEK deploy Faz 5'te)
+1. **Şema+göç:** ✅ TAMAM (2026-07-20) — EtutSablon(+legacyId kimlik modeli, deletedAt, enum'lar) + EtutReservation tabloları canlıda, 61 şablon+2 rezervasyon göçtü (idempotent, JSON kaynak kaldı), çok-model denetim + düzeltmeler kapandı.
+2. **Faz 2a — kural çekirdeği + veri katmanı (lib-only):** allowedBookingWeeks (Pazar 11:00), interval overlap, düzey havuzu (levelPool), reservations veri katmanı (effective çözümü + tek-satır upsert + tombstone + advisory lock), EtutSablon tablo-CRUD servisi. Route değişikliği YOK — davranış aynen, hepsi birim testli.
+3. **Faz 2b — bookEtut/cancelEtut komut servisi + kablolama:** tüm iş kuralları tek serviste; etut-sablon route'ları (PATCH→servis), rezervasyon route +weekKey/scope, mobil, /api/slots POST/DELETE → servis; şablon CRUD table-first.
+4. **Faz 3 — okuma yolları:** etut-sablon/all + mobil today/week + tüm paneller effectiveReservation'a; ProgramEditor recurring toggle; öğrenci pencere UI.
+5. **Faz 4 — görünürlük+geçmiş:** müdür tarafı merge + öğrenci "Etüt Geçmişi" hafta nav (tablodan), attendance snapshot, archive/cron + **freeze-on-rollover**, sessiz-hata süpürmesi.
+6. **Faz 5 — cutover:** **reconciliation modu ZORUNLU** (göç scriptine `--reconcile`: JSON-authoritative senkron — tabloda güncelle/iptal et, skip-existing YETMEZ — Codex kritik bulgusu) → bakım penceresinde final senkron + JSON cleanup + main merge + canlı doğrulama + çok-model final review. Rollback prosedürü: cutover-sonrası tablo yazmaları JSON'a otomatik dönmez — rollback penceresi kısa tutulur, prosedür planda açık yazılır.
 
 ## 11. Açık/riskli notlar
 - EtutSablon FK'sı legacyId bileşik anahtara bağlı — Prisma bileşik FK doğrulanmalı (Faz 1 ilk adım).
