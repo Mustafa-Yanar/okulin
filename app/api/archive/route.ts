@@ -15,6 +15,7 @@ export const GET = withAuth(['director', 'counselor'], async (req) => {
   const id = searchParams.get('id');
 
   if (!type || !id) return NextResponse.json({ error: 'type ve id gerekli' }, { status: 400 });
+  if (type !== 'teacher' && type !== 'student') return NextResponse.json({ error: 'Geçersiz type' }, { status: 400 });
 
   let bookings: BookingWithTeacher[] = [];
   if (type === 'teacher') {

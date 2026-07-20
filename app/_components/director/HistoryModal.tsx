@@ -90,10 +90,16 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
 
   const allWeeks = useMemo(() => {
     const result: ArchiveWeek[] = [];
-    if (currentEntries && currentEntries.length > 0) {
-      result.push({ weekKey: currentWeekKey, entries: currentEntries, isCurrent: true });
-    }
-    result.push(...weeks);
+    const archiveCurrent = currentWeekKey ? weeks.find(w => w.weekKey === currentWeekKey) : undefined;
+    const rest = currentWeekKey ? weeks.filter(w => w.weekKey !== currentWeekKey) : weeks;
+    // Cari haftanın ETÜT satırları (EtutReservation-kaynaklı, slotId 'etut:' prefix'li — Faz 4 T3)
+    // canlı currentEntries'te (SlotBooking-kaynaklı) OLAMAZ → "Bu Hafta" kartına eklenir.
+    // Arşivdeki cari-hafta SlotBooking satırları ise currentEntries'in kopyası olurdu → atlanır
+    // (çift-kart + çift-satır düzeltmesi; geçmiş haftalar etkilenmez).
+    const currentEtut = archiveCurrent?.entries.filter(e => e.slotId.startsWith('etut:')) ?? [];
+    const current = [...(currentEntries ?? []), ...currentEtut];
+    if (current.length > 0) result.push({ weekKey: currentWeekKey, entries: current, isCurrent: true });
+    result.push(...rest);
     return result;
   }, [weeks, currentEntries, currentWeekKey]);
 
