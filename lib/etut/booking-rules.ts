@@ -19,6 +19,7 @@ export interface BookingContext {
   levelPool: string[];                                // levelPoolForGroup(student.group)
   dersBranch: string | undefined;                     // istenen ders (yoksa tek-aday otomatiği orkestratörde)
   currentEffective: { studentId: string } | null;     // o sablon+haftanın efektif rezervasyonu
+  // yalnız ACTIVE satırlar — resolveEffective/studentWeekBookings sözleşmesi (CANCELLED asla gelmez)
   otherBookings: NormalizedBooking[];                 // öğrencinin o haftaki DİĞER kayıtları (etut+slot, bu sablon hariç)
   candidate: { dayIndex: number; startMin: number; endMin: number };
   weeklyCount: number; maxWeeklyPerStudent: number | null;  // null = limitsiz; yalnız öğrenci self-booking'e uygulanır
