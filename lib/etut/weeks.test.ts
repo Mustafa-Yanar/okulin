@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentWeekKeyTSI, shiftWeekKey, allowedBookingWeeks, isValidWeekKey } from './weeks';
+import { currentWeekKeyTSI, shiftWeekKey, allowedBookingWeeks, isValidWeekKey, shouldRollWeek } from './weeks';
 
 // Referans: Pzt 20 Tem 2026 = 2026-W30 başlangıcı; Pazar 19 Tem = W29'un son günü.
 describe('currentWeekKeyTSI — sunucu-UTC bağımsız TSİ haftası', () => {
@@ -42,6 +42,24 @@ describe('isValidWeekKey — ISO-8601 hafta biçimi (Faz 2 audit-fix FIX-C)', ()
     expect(isValidWeekKey('2026-W3')).toBe(false);
     expect(isValidWeekKey('abc')).toBe(false);
     expect(isValidWeekKey('')).toBe(false);
+  });
+});
+
+describe('shouldRollWeek — rollover idempotency guard (Faz 4 FIX-1, Codex kritik)', () => {
+  it('stored === actual → true (normal devir)', () => {
+    expect(shouldRollWeek('2026-W30', '2026-W30')).toBe(true);
+  });
+  it('stored geride (< actual) → true (kaçırılmış hafta telafisi)', () => {
+    expect(shouldRollWeek('2026-W29', '2026-W30')).toBe(true);
+  });
+  it('stored 1 ileri (> actual) → false (devir zaten yapılmış, çifte tetik)', () => {
+    expect(shouldRollWeek('2026-W31', '2026-W30')).toBe(false);
+  });
+  it('yıl sınırı: stored 2027-W01, actual 2026-W53 → false (ileride, string kıyası doğru)', () => {
+    expect(shouldRollWeek('2027-W01', '2026-W53')).toBe(false);
+  });
+  it('yıl sınırı: stored 2026-W53, actual 2027-W01 → true (geride)', () => {
+    expect(shouldRollWeek('2026-W53', '2027-W01')).toBe(true);
   });
 });
 

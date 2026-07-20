@@ -49,6 +49,13 @@ export function shiftWeekKey(weekKey: string, delta: number): string {
   return currentWeekKeyTSI(new Date(mon.getTime() + 12 * 60 * 60 * 1000 - TSI_OFFSET_MS));
 }
 
+// Rollover kararı (Faz 4 FIX-1, Codex kritik bulgusu): stored current_week takvimden İLERİDEyse
+// devir ZATEN yapılmıştır (çifte cron/retry) → atla. Geride/eşitse devret (kaçırılmış hafta
+// telafisi: her koşu 1 hafta ilerletir, arka arkaya koşular yetişir).
+export function shouldRollWeek(storedWeek: string, actualWeek: string): boolean {
+  return storedWeek <= actualWeek; // ISO 'YYYY-Www' string kıyası kronolojik
+}
+
 // Rolün REZERVASYON YAZABİLECEĞİ haftalar (spec §5). Görüntüleme serbest — bu yazma kapısı.
 export function allowedBookingWeeks(role: BookingRole, now: Date = new Date()): string[] {
   const cur = currentWeekKeyTSI(now);
