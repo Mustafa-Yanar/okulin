@@ -250,7 +250,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           students={students}
           classes={classes}
           weekKey={weekKey}
-          allSlots={allSlots}
           isCounselor={isCounselor}
           readOnly={readOnly}
           onAddStudent={() => { setEditStudent(null); setShowStudentForm(true); }}
@@ -260,13 +259,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           onDeleteStudent={async s => {
             if (!(await confirm(`${s.name} silinsin mi?`))) return;
             try { await api('/api/students',{method:'DELETE',body:JSON.stringify({id:s.id})}); showToast('Öğrenci silindi'); loadAll(weekKey); } catch(err){showToast((err as Error).message,'error');}
-          }}
-          onCancelBooking={async ({ teacherId, day, slotId }) => {
-            try {
-              await api('/api/slots', { method: 'DELETE', body: JSON.stringify({ teacherId, day, slotId, weekKey }) });
-              showToast('Etüt iptal edildi');
-              loadAll(weekKey);
-            } catch(err) { showToast((err as Error).message, 'error'); }
           }}
           onHistory={s => setHistoryTarget({ type: 'student', id: s.id, name: s.name })}
           onClassesChanged={() => loadAll(weekKey)}

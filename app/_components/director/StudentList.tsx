@@ -12,8 +12,7 @@ import { useClasses } from '../ClassesContext';
 import { GROUPS, api, Modal } from './shared';
 import { subjectsForClass } from '../student-logic';
 import { StudentAttendanceView } from './Attendance';
-import { StudentBookingsView } from '../StudentBookingsView';
-import type { BookingSlotEntry, BookingCancelArgs } from '../student-types';
+import StudentEtutTab from './StudentEtutTab';
 import RehberlikAccordion from '../rehberlik/RehberlikAccordion';
 import StudentGuidanceView from '../rehberlik/StudentGuidanceView';
 import { useUrlParam } from '../useUrlParam';
@@ -33,12 +32,12 @@ interface ClassLessonDTO {
 
 interface StudentExpandedViewProps {
   student: ListStudent;
-  allSlots: BookingSlotEntry[];
-  onCancelBooking?: (args: BookingCancelArgs) => void;
+  readOnly?: boolean;
+  showToast: ShowToast;
   onGuidanceReviewed?: () => void;
 }
 
-export function StudentExpandedView({ student, allSlots, onCancelBooking, onGuidanceReviewed }: StudentExpandedViewProps) {
+export function StudentExpandedView({ student, readOnly, showToast, onGuidanceReviewed }: StudentExpandedViewProps) {
   const [tab, setTab] = useState('rehberlik');
   const { classes, courses } = useClasses();
   return (
@@ -56,7 +55,7 @@ export function StudentExpandedView({ student, allSlots, onCancelBooking, onGuid
         ))}
       </div>
       {tab === 'etut' && (
-        <StudentBookingsView student={student} allSlots={allSlots} onCancel={onCancelBooking} />
+        <StudentEtutTab student={student} readOnly={readOnly} showToast={showToast} />
       )}
       {tab === 'devamsizlik' && (
         <StudentAttendanceView studentId={student.id} />
@@ -76,9 +75,8 @@ export function StudentExpandedView({ student, allSlots, onCancelBooking, onGuid
 interface StudentListProps {
   students: ListStudent[];
   classes?: ClassEntry[];
-  allSlots: BookingSlotEntry[];
-  weekKey?: string;
-  onCancelBooking?: (args: BookingCancelArgs) => void;
+  readOnly?: boolean;
+  showToast: ShowToast;
   onEdit: (s: ListStudent) => void;
   onDelete: (s: ListStudent) => void;
   onDeleteClass?: (cls: string, students: ListStudent[]) => void;
@@ -88,7 +86,7 @@ interface StudentListProps {
   onSelectChange?: (id: string | null) => void;
 }
 
-export function StudentList({ students, classes = [], allSlots, weekKey, onCancelBooking, onEdit, onDelete, onDeleteClass, onHistory, pendingGuidance, onGuidanceReviewed, onSelectChange }: StudentListProps) {
+export function StudentList({ students, classes = [], readOnly, showToast, onEdit, onDelete, onDeleteClass, onHistory, pendingGuidance, onGuidanceReviewed, onSelectChange }: StudentListProps) {
   const [searchQ, setSearchQ] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
   const [openCls, setOpenCls] = useState<string | null>(null);
@@ -140,7 +138,7 @@ export function StudentList({ students, classes = [], allSlots, weekKey, onCance
               <p className="text-caption">{classLabelFrom(classes, selected.cls, classLabel)}</p>
             </div>
           </div>
-          <StudentExpandedView student={selected} allSlots={allSlots} onCancelBooking={onCancelBooking} onGuidanceReviewed={onGuidanceReviewed} />
+          <StudentExpandedView student={selected} readOnly={readOnly} showToast={showToast} onGuidanceReviewed={onGuidanceReviewed} />
         </div>
       </div>
     );
