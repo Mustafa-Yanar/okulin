@@ -115,6 +115,11 @@ export async function bookEtut(session: Session, input: BookEtutInput): Promise<
     isReadOnlyCounselor(session, orgSlug, branch),
   ]);
 
+  // erken çıkış — tx/lock açmadan; nihai otorite decideBooking kural 1 (aşağıda, tx içinde
+  // AYNI ctx.actor.readOnlyCounselor bayrağıyla tekrar değerlendirilir — burası yalnız ucuz
+  // bir fast-path, review bulgusu: cancelEtutV2 ile tutarlılık için eklendi).
+  if (readOnlyCounselor) throw new HttpError(403, 'Salt-okunur rehber etüt rezervasyonu yapamaz');
+
   // Force bypass yalnız isManager+force birlikte anlamlı (decideBooking kural 10 — force
   // TEK BAŞINA hiçbir şeyi geçmez). Reason zorunluluğu da bu yüzden yalnız bu kombinasyonda:
   // non-manager'dan gelen force zaten decideBooking'de sessizce yok sayılır, burada da
@@ -159,7 +164,9 @@ export async function bookEtut(session: Session, input: BookEtutInput): Promise<
     // okuma yalnız DTO/ders otomatiği için, yarışa açık kararlar burada TAZE veriyle alınır.
     const [allRows, slotRowsRaw] = await Promise.all([
       getWeekReservations(tx, orgSlug, branch, weekKey),
-      tx.slotBooking.findMany({ where: { weekKey, booked: true, studentId: targetStudentId } }),
+      // orgSlug/branch AÇIKÇA (review bulgusu) — bu, tx üzerinde $extends enjeksiyonuna
+      // dayanan TEK sorguydu; artık dosyadaki diğer tüm sorgularla aynı desende.
+      tx.slotBooking.findMany({ where: { orgSlug, branch, weekKey, booked: true, studentId: targetStudentId } }),
     ]);
     const effectiveMap = resolveEffective(allRows, weekKey);
     const currentEffectiveRow = sablonRow ? effectiveMap.get(sablonRow.id) ?? null : null;
@@ -277,7 +284,11 @@ export async function cancelEtutV2(session: Session, input: CancelEtutInput): Pr
     }
   }
 
-  // Sahiplik — lib/etut/rezervasyon.ts cancelEtut satır 158-160 ile BİREBİR.
+  // Sahiplik — lib/etut/rezervasyon.ts cancelEtut satır 158-160 ile BİREBİR. Bu, ucuz bir
+  // ERKEN-ÇIKIŞ (tx/lock açmadan önce en yaygın red durumlarını keser) — STALE effectiveRow'a
+  // dayandığından OTORİTER DEĞİL; nihai/otoriter kontrol tx içinde freshEffective'e karşı
+  // tekrarlanır (aşağıda — review bulgusu: lock-öncesi okuma ile lock arasında rezervasyon
+  // başka bir öğrenciye geçmiş olabilir, o durumda bu erken kontrol YANLIŞ pozitif verebilir).
   if (actorRole === 'student' && effectiveRow.studentId !== actorId) throw new HttpError(403, 'Yetkisiz');
   if (actorRole === 'teacher' && input.teacherId !== actorId) throw new HttpError(403, 'Yetkisiz');
   if (!isManagerActor && actorRole !== 'student' && actorRole !== 'teacher') throw new HttpError(403, 'Yetkisiz');
@@ -288,11 +299,19 @@ export async function cancelEtutV2(session: Session, input: CancelEtutInput): Pr
     const tx = rawTx as unknown as Prisma.TransactionClient;
     await lockStudentWeek(tx, orgSlug, effectiveRow.studentId, weekKey);
 
-    // Race penceresi: lock alınana kadar başka bir istek aynı satırı iptal etmiş olabilir —
-    // TAZE veriyle yeniden doğrula (bookEtut'taki AYNI ilke).
+    // Race penceresi: lock alınana kadar başka bir istek aynı satırı iptal etmiş/başka bir
+    // öğrenciye yeniden rezerve etmiş olabilir — TAZE veriyle yeniden doğrula (bookEtut'taki
+    // AYNI ilke).
     const freshRows = await getWeekReservations(tx, orgSlug, branch, weekKey);
     const freshEffective = resolveEffective(freshRows, weekKey).get(sablonRow.id) ?? null;
     if (!freshEffective) throw new HttpError(404, 'Bu etütte rezervasyon yok');
+
+    // YETKİ TX İÇİNDE freshEffective'e karşı — lock-öncesi okuma yarışa açık (review bulgusu).
+    // Öğretmen kendi-etüdü kontrolü satır-bağımsız (input.teacherId sabit) — yukarıdaki
+    // pre-tx kontrol zaten yeterli, burada tekrarlanmaz. Öğrenci sahipliği İSE freshEffective
+    // satırına bağlı (kim rezerve etmiş, tx öncesi/sonrası değişebilir) — bu yüzden burada
+    // TAZE veriyle, legacy'nin AYNI 'Yetkisiz' metniyle yeniden doğrulanır.
+    if (actorRole === 'student' && freshEffective.studentId !== actorId) throw new HttpError(403, 'Yetkisiz');
 
     if (scope === 'recurring') {
       await cancelRecurring(tx, orgSlug, branch, sablonRow.id, { role: actorRole, id: actorId, reason: input.reason });
