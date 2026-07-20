@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
-import { slotStartTime, getProgramTemplate, setProgramTemplate, type EtutSablonu } from '@/lib/slots';
-import { getWeekKey } from '@/lib/constants';
+import { getProgramTemplate, setProgramTemplate, type EtutSablonu } from '@/lib/slots';
+import { listSablonlar, saveSablon, toggleSablon, softDeleteSablon } from '@/lib/etut/sablon-service';
 
 // Etüt şablonları — öğretmenin haftadan bağımsız, serbest saatli etüt blokları.
-// program:<teacherId>.etutSablonlari = [ { id, dayIndex, start, end, aktif } ]
 // Ders slotlarından (w1-w12) BAĞIMSIZ; gerçek saat bazlı (calendar için).
-// Teacher.programTemplate.etutSablonlari olarak saklanır (SQL).
-
-import { newId as makeId } from '@/lib/id';
+// GET/POST/PUT/DELETE: EtutSablon tablosu (lib/etut/sablon-service — Faz 2b Task 1).
+// PATCH (öğrenci atama): HALA Teacher.programTemplate.etutSablonlari JSON'u — Faz 2b
+// Task 5'te bookEtut/cancelEtut orkestratörüne devredilecek (bilinçli, bu görevin kapsamı DIŞI).
 
 const zTime = z.string().regex(/^\d{2}:\d{2}$/, 'Saat HH:MM olmalı');
 const zDay = z.number().int().min(0).max(6);
@@ -46,12 +45,7 @@ const AssignSchema = z.object({
   }).nullable(),
 });
 
-function toMin(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
-
-// programTemplate'ten etutSablonlari oku, değiştir, geri yaz
+// programTemplate'ten etutSablonlari oku, değiştir, geri yaz — YALNIZ PATCH kullanır (Task 5'e kadar).
 async function updateSablonlar(teacherId: string, mutFn: (list: EtutSablonu[]) => EtutSablonu[]) {
   const fullTemplate = await getProgramTemplate(teacherId);
   const list: EtutSablonu[] = Array.isArray(fullTemplate.etutSablonlari) ? (fullTemplate.etutSablonlari as EtutSablonu[]) : [];
@@ -65,37 +59,17 @@ export const GET = withAuth('auth', 'etut', async (req) => {
   const teacherId = new URL(req.url).searchParams.get('teacherId');
   if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
 
-  const fullTemplate = await getProgramTemplate(teacherId);
-  return NextResponse.json({ sablonlar: (fullTemplate.etutSablonlari as EtutSablonu[] | undefined) || [] });
+  const sablonlar = await listSablonlar(teacherId);
+  return NextResponse.json({ sablonlar });
 });
 
 // POST /api/etut-sablon → şablon ekle (id yoksa) veya güncelle (id varsa)
 export const POST = withAuth('manage', 'etut', async (req) => {
   const parsed = await parseBody(req, SaveSchema);
   if (!parsed.ok) return parsed.response;
-  const { teacherId, sablon, weekKey: wk } = parsed.data;
-  const weekKey = wk || getWeekKey();
+  const { teacherId, sablon, weekKey } = parsed.data;
 
-  if (toMin(sablon.end) <= toMin(sablon.start)) {
-    return NextResponse.json({ error: 'Bitiş saati başlangıçtan sonra olmalı' }, { status: 400 });
-  }
-
-  const startAt = slotStartTime(weekKey, sablon.dayIndex, sablon.start);
-  if (startAt.getTime() <= Date.now()) {
-    return NextResponse.json({ error: 'Geçmiş bir gün/saate etüt eklenemez' }, { status: 400 });
-  }
-
-  const sablonlar = await updateSablonlar(teacherId, (list) => {
-    if (sablon.id) {
-      const idx = list.findIndex(s => s.id === sablon.id);
-      if (idx === -1) return list;
-      const updated = [...list];
-      updated[idx] = { ...updated[idx], ...sablon };
-      return updated;
-    } else {
-      return [...list, { id: makeId(), dayIndex: sablon.dayIndex, start: sablon.start, end: sablon.end, aktif: sablon.aktif ?? true }];
-    }
-  });
+  const sablonlar = await saveSablon(teacherId, sablon, weekKey);
   return NextResponse.json({ ok: true, sablonlar });
 });
 
@@ -108,22 +82,7 @@ export const PUT = withAuth('manage', 'etut', async (req) => {
     return NextResponse.json({ error: 'weekKey gerekli' }, { status: 400 });
   }
 
-  const sablonlar = await updateSablonlar(teacherId, (list) => {
-    const idx = list.findIndex(s => s.id === id);
-    if (idx === -1) return list;
-    const sb = { ...list[idx] };
-    if (scope === 'all') {
-      sb.aktif = aktif;
-      if (aktif) sb.pasifHaftalar = [];
-    } else {
-      const set = new Set(Array.isArray(sb.pasifHaftalar) ? sb.pasifHaftalar : []);
-      if (aktif) set.delete(weekKey as string); else set.add(weekKey as string);
-      sb.pasifHaftalar = Array.from(set);
-    }
-    const updated = [...list];
-    updated[idx] = sb;
-    return updated;
-  });
+  const sablonlar = await toggleSablon(teacherId, id, scope, weekKey, aktif);
   return NextResponse.json({ ok: true, sablonlar });
 });
 
@@ -152,12 +111,12 @@ export const PATCH = withAuth('manage', 'etut', async (req, ctx, session) => {
   return NextResponse.json({ ok: true, sablonlar });
 });
 
-// DELETE /api/etut-sablon → şablon sil
+// DELETE /api/etut-sablon → şablon sil (soft-delete: deletedAt=now, rezervasyonlar SİLİNMEZ)
 export const DELETE = withAuth('manage', 'etut', async (req) => {
   const parsed = await parseBody(req, DeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id } = parsed.data;
 
-  const sablonlar = await updateSablonlar(teacherId, (list) => list.filter(s => s.id !== id));
+  const sablonlar = await softDeleteSablon(teacherId, id);
   return NextResponse.json({ ok: true, sablonlar });
 });
