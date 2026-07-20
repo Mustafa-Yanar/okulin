@@ -34,9 +34,15 @@ export function resolveEffective(rows: EtutReservation[], weekKey: string): Map<
 
 // Bir haftanın TÜM ilgili satırları (o hafta + recurring) — tek sorgu (N+1 yok).
 // orgSlug/branch AÇIK — $extends findMany'e enjekte etse de çıplak tx ile sızıntıyı yapısal olarak engeller.
-export async function getWeekReservations(db: Db, orgSlug: string, branch: string, weekKey: string): Promise<EtutReservation[]> {
+// sablonIds (opsiyonel, Faz 3 audit-fix FIX-B): verilirse sorgu yalnız o şablonlara daraltılır —
+// çağıran (örn. listSablonlarWithRez) tek öğretmenin şablonlarını istiyorsa kurum-genelinde TÜM
+// haftanın satırlarını çekmek gereksiz; kurum büyüdükçe boşa satır aktarımı olurdu.
+export async function getWeekReservations(db: Db, orgSlug: string, branch: string, weekKey: string, sablonIds?: string[]): Promise<EtutReservation[]> {
   return (db as ReturnType<typeof tdb>).etutReservation.findMany({
-    where: { orgSlug, branch, OR: [{ weekKey }, { weekKey: RECURRING_WEEKKEY }] },
+    where: {
+      orgSlug, branch, OR: [{ weekKey }, { weekKey: RECURRING_WEEKKEY }],
+      ...(sablonIds ? { sablonId: { in: sablonIds } } : {}),
+    },
   });
 }
 

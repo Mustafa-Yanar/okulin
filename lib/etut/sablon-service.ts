@@ -88,10 +88,12 @@ export function mergeSablonRez(rows: EtutSablon[], effectiveMap: Map<string, Etu
 export async function listSablonlarWithRez(teacherLegacyId: string, weekKey: string): Promise<SablonRezDTO[]> {
   const orgSlug = currentOrg();
   const branch = currentBranch();
-  const [rows, allReservations] = await Promise.all([
-    tdb().etutSablon.findMany({ where: { teacherId: teacherLegacyId, deletedAt: null }, orderBy: { createdAt: 'asc' } }),
-    getWeekReservations(tdb(orgSlug, branch), orgSlug, branch, weekKey),
-  ]);
+  // Faz 3 audit-fix FIX-B: SIRALI (paralel değil) — önce bu öğretmenin şablon satırları
+  // alınır, sonra rezervasyon sorgusu yalnız o şablonların id'lerine (sablonId: in) daraltılır.
+  // Eskiden getWeekReservations tenant-genelinde TÜM haftanın satırlarını çekiyordu; kurum
+  // büyüdükçe (çok öğretmen) boşa satır aktarımı olurdu.
+  const rows = await tdb().etutSablon.findMany({ where: { teacherId: teacherLegacyId, deletedAt: null }, orderBy: { createdAt: 'asc' } });
+  const allReservations = await getWeekReservations(tdb(orgSlug, branch), orgSlug, branch, weekKey, rows.map((r) => r.id));
   return mergeSablonRez(rows, resolveEffective(allReservations, weekKey));
 }
 

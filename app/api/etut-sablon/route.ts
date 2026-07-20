@@ -57,6 +57,11 @@ export const GET = withAuth('auth', 'etut', async (req) => {
   const teacherId = url.searchParams.get('teacherId');
   if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
   const week = url.searchParams.get('week') || undefined;
+  // resolveEffective ISO-string sıralamasına dayanır; 'foo'/'2026-W99' gibi geçersiz
+  // değerler recurring'i yanlış efektif gösterebilir — sessiz düşüş yerine 400 (teşhis edilebilir).
+  if (week && !isValidWeekKey(week)) {
+    return NextResponse.json({ error: 'Geçersiz hafta formatı' }, { status: 400 });
+  }
   const wk = week || currentWeekKeyTSI();
 
   const sablonlar = await listSablonlarWithRez(teacherId, wk);
