@@ -62,6 +62,10 @@ export const ReserveEtutSchema = z.object({
 export const CancelEtutSchema = z.object({
   teacherId: z.string().min(1).max(100),
   etutId: z.string().min(1).max(100),
+  // Faz 2b Task 7: bir sonraki haftaya rezervasyon yapan öğrenci O haftayı iptal
+  // edebilmeli (T5'te uyuyan boşluk — yoksa cancelEtutV2 her zaman mevcut haftaya
+  // düşer). W01-W53 (ReserveEtutSchema ile AYNI biçim/aralık kısıtı).
+  weekKey: z.string().regex(/^\d{4}-W(0[1-9]|[1-4]\d|5[0-3])$/).optional(),
 });
 
 // Ödev teslim (mobil — yalnız öğrenci; id + opsiyonel not + done). studentId/cls

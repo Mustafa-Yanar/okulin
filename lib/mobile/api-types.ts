@@ -260,6 +260,9 @@ export interface ReserveEtutResponse {
 export interface CancelEtutRequest {
   teacherId: string;
   etutId: string;
+  // gelecek haftaya rezervasyon yapan öğrenci O haftayı iptal edebilsin diye (Faz 2b Task 7);
+  // yoksa sunucu mevcut haftaya düşer.
+  weekKey?: string;
 }
 
 // ── Haftalık program (screens/week — spec §5.1) ─────────────────────────────

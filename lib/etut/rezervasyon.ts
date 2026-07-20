@@ -1,12 +1,10 @@
-import { getAllTeachers, getAllStudents, type EtutSablonu } from '@/lib/slots';
+import { getAllTeachers, getAllStudents } from '@/lib/slots';
 import { allowedBranchesForClass, MATH_FAMILY } from '@/lib/constants';
 import { HttpError } from '@/lib/errors';
-import type { Session } from '@/lib/auth';
 import { tdb } from '@/lib/sqldb';
 import { currentOrg, currentBranch } from '@/lib/tenant';
 import { getWeekReservations, resolveEffective } from './reservations';
 import { levelPoolForStudent } from './level-pool';
-import { bookEtut, cancelEtutV2 } from './booking';
 
 // Etüt rezervasyon iş kuralları — Faz 2b'den itibaren gerçek iş mantığı lib/etut/booking.ts
 // (bookEtut/cancelEtutV2) + lib/etut/booking-rules.ts (decideBooking) içinde yaşıyor.
@@ -17,21 +15,15 @@ import { bookEtut, cancelEtutV2 } from './booking';
 //      kalıyor (rezervasyon.test.ts). decideBooking KENDİ eşdeğerini taşıyor (kopya değil —
 //      decideBooking SlotBooking tarafını da kapsıyor, buradakiler daha dar/eski JSON-döneminden
 //      kalma imza).
-//   2) reserveEtut/cancelEtut — ESKİ imza (EtutActor), İNCE ADAPTÖR: yalnız mobil route
-//      (app/api/mobile/v1/etut/reserve) hâlâ bunları çağırıyor (Task 7'de doğrudan
-//      bookEtut/cancelEtutV2'ye geçecek). Gövdeleri artık JSON'a DOKUNMUYOR — pseudo-Session
-//      kurup bookEtut/cancelEtutV2'ye delege ediyor, dönüş şeklini ESKİ EtutSablonu sözleşmesine
-//      geri çeviriyor (mobil route hâlâ etut.start/end/branch alanlarını okuyor).
-//   3) listBookableEtuts — mobil "rezerve edilebilir etütler" listesi, artık EtutSablon
+//   2) listBookableEtuts — mobil "rezerve edilebilir etütler" listesi, artık EtutSablon
 //      TABLOSUNDAN (JSON programTemplate DEĞİL) + EtutReservation efektif doluluğundan okur.
 //      Branş adayları artık sınıf-listesi DEĞİL öğrencinin DÜZEY havuzu (levelPoolForGroup,
 //      spec §4a — bookEtut'un autoPickBranch'iyle AYNI kaynak, tutarlılık için).
-
-export interface EtutActor {
-  role: string;
-  id: string;
-  isManager: boolean; // müdür/rehber (readOnly değil) — Kural 2/3 muafiyeti
-}
+//
+// NOT (Faz 2b Task 7): eski reserveEtut/cancelEtut EtutActor-adaptörleri (+precomputedFrom/
+// actorSession/toLegacyEtutShape yardımcıları) SİLİNDİ — tek çağıranları mobil route'du
+// (app/api/mobile/v1/etut/reserve), o artık MobileClaims'i (Session'ı genişletir) doğrudan
+// bookEtut/cancelEtutV2'ye geçiriyor; ara katman gereksizleşti.
 
 // ── Saf kural yardımcıları (birim testli) ──
 export function timeConflicts(booked: { dayIndex: number; start: string }[], dayIndex: number, start: string): boolean {
@@ -58,68 +50,6 @@ export function mathFamilyConflict(booked: { branch?: string }[], bookingBranch:
 export function pickAllowedBranches(registryDersler: string[] | null | undefined, cls: string | null | undefined): string[] {
   if (registryDersler && registryDersler.length) return registryDersler;
   return allowedBranchesForClass(cls);
-}
-
-// ── reserveEtut/cancelEtut — İNCE ADAPTÖR (eski imza, mobil route için) ──────
-//
-// EtutActor'da session'ın kendisi yok — yalnız role/id/isManager. bookEtut/cancelEtutV2
-// içindeki canManage(session)/isReadOnlyCounselor(session) çağrıları GERÇEK bir Session
-// (JWT payload) bekler; burada onu YENİDEN HESAPLAMAK yerine (actor.isManager zaten
-// canManage(session) ile üretilmişti — route'larda `isManager: await canManage(session)`)
-// bookEtut/cancelEtutV2'nin opsiyonel `precomputed` parametresiyle bypass ediyoruz.
-//
-// Formül: precomputed.isManager = actor.isManager (birebir). precomputed.readOnlyCounselor:
-// lib/auth.ts canManage, counselor için `!perms.counselor.readOnly` döner — yani counselor
-// rolünde isManager===false ⇔ readOnly===true (canManage'in TEK counselor dalı budur;
-// director için isManager DAİMA true, diğer roller için isManager DAİMA false — ikisinde de
-// readOnlyCounselor anlamsız/false). Bu yüzden `role==='counselor' && !isManager` GÜVENİLİR
-// bir türetmedir (bkz. lib/auth.ts:78-85 — tek okunan alan session.role).
-function precomputedFrom(actor: EtutActor): { isManager: boolean; readOnlyCounselor: boolean } {
-  return { isManager: actor.isManager, readOnlyCounselor: actor.role === 'counselor' && !actor.isManager };
-}
-
-// Pseudo-Session — bookEtut/cancelEtutV2 yalnız session.role/session.id okur (hedef öğrenci
-// çözümü) + audit'te session.name (actorFrom) — EtutActor'da isim YOK, audit'te 'bilinmiyor'
-// görünür (mobil route'un tek çağıranı olduğu bu ince adaptör için kabul edilebilir; Task 7
-// mobil route'u gerçek session'la doğrudan bookEtut'a bağlayınca isim de doğru akacak).
-function actorSession(actor: EtutActor): Session {
-  return { role: actor.role, id: actor.id };
-}
-
-// EtutReservation (tablo satırı) → EtutSablonu (eski JSON şekli) — mobil route'un
-// etut.id/dayIndex/start/end/branch/studentName okuduğu ESKİ sözleşmeyi korur. id = etutId
-// (legacyId, çağıranın zaten elinde olan değer — DB cuid'i asla sızmaz, sablon-service.ts'teki
-// AYNI kural).
-function toLegacyEtutShape(etutId: string, row: Awaited<ReturnType<typeof bookEtut>>): EtutSablonu {
-  return {
-    id: etutId,
-    dayIndex: row.dayIndex,
-    start: row.startsAt,
-    end: row.endsAt,
-    branch: row.dersBranch,
-    studentId: row.studentId,
-    studentName: row.studentName,
-    studentCls: row.studentCls,
-    bookedBy: row.bookedByRole,
-    bookedAt: row.bookedAt.toISOString(),
-  };
-}
-
-// Rezerve et — mobil route (app/api/mobile/v1/etut/reserve POST) çağırıyor. scope YOK →
-// bookEtut 'WEEK'e düşer (öğrenci zaten decideBooking kural 2 gereği RECURRING yapamaz —
-// bu adaptörün WEEK varsayımı isabetli, geçici bir kısıtlama DEĞİL).
-export async function reserveEtut(
-  actor: EtutActor,
-  input: { teacherId: string; etutId: string; branch?: string; studentId?: string; weekKey?: string },
-): Promise<EtutSablonu> {
-  const row = await bookEtut(actorSession(actor), input, precomputedFrom(actor));
-  return toLegacyEtutShape(input.etutId, row);
-}
-
-// İptal — mobil route (app/api/mobile/v1/etut/reserve DELETE) çağırıyor. weekKey/scope/reason
-// YOK → cancelEtutV2 mevcut haftaya + 'week' kapsamına düşer (reserveEtut'un yazdığı AYNI kapsam).
-export async function cancelEtut(actor: EtutActor, input: { teacherId: string; etutId: string }): Promise<void> {
-  await cancelEtutV2(actorSession(actor), input, precomputedFrom(actor));
 }
 
 // ── listBookableEtuts — tablo-tabanlı (Faz 2b Task 5) ─────────────────────────

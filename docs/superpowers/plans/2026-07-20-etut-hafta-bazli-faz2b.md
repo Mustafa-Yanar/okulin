@@ -236,9 +236,9 @@ Davranış BİREBİR korunur; değişen yalnız: (a) çakışma/limit artık `st
 **Files:**
 - Modify: `lib/mobile/contracts.ts` (`CancelEtutSchema` + weekKey optional; `ReserveEtutSchema` zaten weekKey'li — scope MOBİLDE YOK), `app/api/mobile/v1/etut/reserve/route.ts` (yeni servise), `app/api/mobile/v1/etut/route.ts` GET (listBookableEtuts zaten Task 5'te tablo-tabanlı — dokunma, doğrula).
 
-- [ ] **Step 1:** Mobil kablolama + `npm run mobile:types` (tip senkronu — script mevcut).
-- [ ] **Step 2: Canlı smoke (testkurs org — güvenli):** scratchpad'e tek seferlik script: testkurs'ta bir öğretmen+şablon+öğrenci seç → `bookEtut` (WEEK, current) → effective doğrula → `cancelEtut` → tombstone doğrula → recurring book (müdür aktörüyle) → tek-hafta tombstone → `cancelRecurring` → satırları `deleteMany` ile TEMİZLE (testkurs verisi kirlenmez). Çıktılar rapora. (Route üzerinden değil servis üzerinden — runWithTenant ile testkurs bağlamında.)
-- [ ] **Step 3:** Tam gate: build + tüm suite. Plan checkboxları + kapanış commit — `docs(etüt-faz2b): Faz 2b tamamlandı — tüm yazma yolları birleşik serviste`
+- [x] **Step 1:** Mobil kablolama + `npm run mobile:types` (tip senkronu — script mevcut).
+- [x] **Step 2: Canlı smoke (testkurs org — güvenli):** scratchpad'e tek seferlik script: testkurs'ta bir öğretmen+şablon+öğrenci seç → `bookEtut` (WEEK, current) → effective doğrula → `cancelEtut` → tombstone doğrula → recurring book (müdür aktörüyle) → tek-hafta tombstone → `cancelRecurring` → satırları `deleteMany` ile TEMİZLE (testkurs verisi kirlenmez). Çıktılar rapora. (Route üzerinden değil servis üzerinden — runWithTenant ile testkurs bağlamında.) — 6/6 senaryo + cleanup PASS (19/19 assertion), rapor: `.superpowers/sdd/task-7-report.md`.
+- [x] **Step 3:** Tam gate: build + tüm suite. Plan checkboxları + kapanış commit — `docs(etüt-faz2b): Faz 2b tamamlandı — tüm yazma yolları birleşik serviste`
 - [ ] **Step 4 (controller):** Faz 2 BÜTÜNÜ çok-model denetimi (Codex+Gemini: 2a+2b diff'i) — bulgular temizlenmeden Faz 3'e geçilmez.
 
 ## Faz 2b Bitiş Kriterleri
