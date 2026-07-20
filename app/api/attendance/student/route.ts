@@ -1,22 +1,17 @@
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { daySlots as buildDaySlots } from '@/lib/constants';
-import { getWeekKey, getDaySlotTimes, getProgramTemplate, type SlotCell } from '@/lib/slots';
+import { getWeekKey, getDaySlotTimes, type SlotCell } from '@/lib/slots';
 import { tdb } from '@/lib/sqldb';
+import { currentOrg, currentBranch } from '@/lib/tenant';
+import { resolveEffective, RECURRING_WEEKKEY } from '@/lib/etut/reservations';
+import { pickEtutLabel } from '@/lib/etut/attendance-label';
 
 // GET /api/attendance/student?studentId=...
 // Bir öğrencinin tüm devamsızlık ve geç kalma kayıtlarını döner.
 // Döndürür: { entries: [ { date, dayLabel, teacherId, teacherName, branch, cls, lessonNo, slotLabel, subBranch, status } ], summary: { yok, gec } }
 
 const DAY_NAMES_TR = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
-
-// Öğretmen etüt şablonu girişi (programTemplate.etutSablonlari Json listesi)
-interface EtutSablon {
-  id?: string;
-  branch?: string;
-  start?: string;
-  end?: string;
-}
 
 interface AttendanceEntry {
   date: string;
@@ -55,7 +50,23 @@ export const GET = withAuth(['director', 'counselor', 'teacher'], async (req) =>
     }
   }
 
-  const progCache: Record<string, Record<string, unknown>> = {};
+  // Etüt etiketleri: EtutSablon (deletedAt DAHİL — silinmiş şablonun tarihsel saati geçerli
+  // etiket; deletedAt-süzgeci istisnası BİLİNÇLİ) + o haftanın efektif rezervasyonu
+  // (weekKey-join: branch hafta-scoped, gap #5). JSON etutSablonlari OKUNMAZ (Faz 4 T1).
+  const etutMatches = matched.filter((m): m is Extract<Matched, { isEtut: true }> => m.isEtut);
+  const sablonRows = etutMatches.length
+    ? await tdb().etutSablon.findMany({ where: { legacyId: { in: [...new Set(etutMatches.map(m => m.etutId))] } } })
+    : [];
+  const sablonByLegacy = new Map(sablonRows.map(r => [r.legacyId, r]));
+  const weekKeys = [...new Set(etutMatches.map(m => getWeekKey(new Date(m.rec.date))))];
+  const orgSlug = currentOrg(); const branch = currentBranch();
+  const rezRows = etutMatches.length
+    ? await tdb(orgSlug, branch).etutReservation.findMany({
+        where: { orgSlug, branch, sablonId: { in: sablonRows.map(r => r.id) }, OR: [{ weekKey: { in: weekKeys } }, { weekKey: RECURRING_WEEKKEY }] },
+      })
+    : [];
+  const effByWeek = new Map(weekKeys.map(wk => [wk, resolveEffective(rezRows, wk)]));
+
   const entries: AttendanceEntry[] = [];
 
   for (const m of matched) {
@@ -63,17 +74,18 @@ export const GET = withAuth(['director', 'counselor', 'teacher'], async (req) =>
     const teacher = m.rec.teacher;
 
     if (m.isEtut) {
-      if (!progCache[teacher.legacyId]) {
-        progCache[teacher.legacyId] = await getProgramTemplate(teacher.legacyId);
-      }
-      const raw = progCache[teacher.legacyId]?.etutSablonlari;
-      const list: EtutSablon[] = Array.isArray(raw) ? raw : [];
-      const et = list.find(s => s.id === m.etutId) || {};
+      const sb = sablonByLegacy.get(m.etutId) ?? null;
+      const wk = getWeekKey(new Date(m.rec.date));
+      const eff = sb ? effByWeek.get(wk)?.get(sb.id) ?? null : null;
+      const label = pickEtutLabel({
+        sablon: sb ? { legacyId: sb.legacyId, start: sb.start, end: sb.end } : null,
+        reservation: eff ? { dersBranch: eff.dersBranch, startsAt: eff.startsAt, endsAt: eff.endsAt } : null,
+      });
       entries.push({
         date: m.rec.date, dayLabel: DAY_NAMES_TR[d.getDay()],
         teacherId: teacher.legacyId, teacherName: teacher.name,
-        branch: et.branch || '', cls: m.rec.cls,
-        lessonNo: null, slotLabel: et.start && et.end ? `${et.start}–${et.end}` : '',
+        branch: label.branch, cls: m.rec.cls,
+        lessonNo: null, slotLabel: label.slotLabel,
         subBranch: '', isEtut: true, status: m.status,
       });
     } else {
