@@ -32,5 +32,9 @@ export const GET = withAuth('auth', 'etut', async (req, _ctx, session) => {
     const mine = allowed ? etutler.filter(e => e.studentId === childId) : [];
     return NextResponse.json({ weekKey, etutler: mine, bookableWeeks });
   }
-  return NextResponse.json({ weekKey, etutler, bookableWeeks });
+
+  // Additive: opsiyonel studentId — tek öğrenciye daraltır (örn. StudentEtutTab).
+  const studentId = searchParams.get('studentId');
+  const scoped = studentId ? etutler.filter(e => e.studentId === studentId) : etutler;
+  return NextResponse.json({ weekKey, etutler: scoped, bookableWeeks });
 });

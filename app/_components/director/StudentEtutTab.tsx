@@ -26,7 +26,7 @@ export default function StudentEtutTab({ student, readOnly = false, showToast }:
   const load = useCallback(async (wk: string) => {
     setSlots(null);
     try {
-      const d = await api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${wk}`);
+      const d = await api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${wk}&studentId=${encodeURIComponent(student.id)}`);
       setSlots((d.etutler || []).filter(e => e.studentId === student.id).map(e => ({
         kind: 'etut', etutId: e.id, teacherId: e.teacherId, teacherName: e.teacherName,
         day: e.dayIndex, dayLabel: e.dayLabel, slotId: `etut:${e.id}`, slotLabel: `${e.start}–${e.end}`,

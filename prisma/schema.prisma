@@ -278,6 +278,8 @@ model SlotBooking {
   endsAt      String?
   @@unique([orgSlug, branch, weekKey, teacherId, dayIndex, slotId])
   @@index([orgSlug, branch, weekKey])
+  @@index([orgSlug, branch, teacherId, weekKey])
+  @@index([orgSlug, branch, studentId, weekKey])
 }
 
 model TenantConfig {
