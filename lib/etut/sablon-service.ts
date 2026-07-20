@@ -12,7 +12,9 @@ import { newId } from '@/lib/id';
 import { slotStartTime } from '@/lib/slots';
 import { getWeekKey } from '@/lib/constants';
 import { HttpError } from '@/lib/errors';
-import type { EtutSablon } from '@prisma/client';
+import { currentOrg, currentBranch } from '@/lib/tenant';
+import { getWeekReservations, resolveEffective } from './reservations';
+import type { EtutSablon, EtutReservation } from '@prisma/client';
 
 export interface SablonDTO {
   id: string; // legacyId — dış sözleşme
@@ -59,6 +61,38 @@ export async function listSablonlar(teacherLegacyId: string): Promise<SablonDTO[
     orderBy: { createdAt: 'asc' },
   });
   return rows.map(toSablonDTO);
+}
+
+// Faz 3: ProgramEditor için şablon + o haftanın EFEKTİF rezervasyonu (WEEK-ezer-RECURRING).
+// listSablonlar'ın rez'li üstkümesi; pasif/pasifHaftalar şablonlar da DÖNER (editör gösterir).
+// deletedAt:null süzgeci findMany where'inde (silinen şablon editörde de görünmez).
+export interface SablonRezDTO extends SablonDTO {
+  studentId: string | null; studentName: string | null; studentCls: string | null;
+  branch: string | null; bookedBy: string | null;
+  rezScope: 'WEEK' | 'RECURRING' | null; // 'scope' adı PUT ToggleSchema'nın scope'uyla karışmasın diye rezScope
+}
+
+export function mergeSablonRez(rows: EtutSablon[], effectiveMap: Map<string, EtutReservation>): SablonRezDTO[] {
+  return rows.map((r) => {
+    const eff = effectiveMap.get(r.id) ?? null;
+    return {
+      ...toSablonDTO(r),
+      studentId: eff?.studentId ?? null, studentName: eff?.studentName ?? null,
+      studentCls: eff?.studentCls ?? null, branch: eff?.dersBranch ?? null,
+      bookedBy: eff?.bookedByRole ?? null,
+      rezScope: eff ? (eff.scope as 'WEEK' | 'RECURRING') : null,
+    };
+  });
+}
+
+export async function listSablonlarWithRez(teacherLegacyId: string, weekKey: string): Promise<SablonRezDTO[]> {
+  const orgSlug = currentOrg();
+  const branch = currentBranch();
+  const [rows, allReservations] = await Promise.all([
+    tdb().etutSablon.findMany({ where: { teacherId: teacherLegacyId, deletedAt: null }, orderBy: { createdAt: 'asc' } }),
+    getWeekReservations(tdb(orgSlug, branch), orgSlug, branch, weekKey),
+  ]);
+  return mergeSablonRez(rows, resolveEffective(allReservations, weekKey));
 }
 
 function toMin(t: string): number {

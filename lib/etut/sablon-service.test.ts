@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { toSablonDTO, applyToggle } from './sablon-service';
-import type { EtutSablon } from '@prisma/client';
+import { toSablonDTO, applyToggle, mergeSablonRez } from './sablon-service';
+import type { EtutSablon, EtutReservation } from '@prisma/client';
 
 // Test satırı üreticisi — yalnız fonksiyonların okuduğu alanlar anlamlı.
 const row = (over: Partial<EtutSablon> = {}): EtutSablon => ({
@@ -43,5 +43,29 @@ describe('applyToggle — mevcut PUT /api/etut-sablon davranışıyla BİREBİR'
     const once = applyToggle({ aktif: true, pasifHaftalar: [] }, 'week', '2026-W30', false);
     const twice = applyToggle(once, 'week', '2026-W30', false);
     expect(twice).toEqual({ aktif: true, pasifHaftalar: ['2026-W30'] });
+  });
+});
+
+describe('mergeSablonRez', () => {
+  const row = (over: Partial<Record<string, unknown>> = {}) => ({
+    id: 'cuid1', legacyId: 'e1', teacherId: 't1', dayIndex: 2, start: '10:00', end: '11:00',
+    aktif: true, pasifHaftalar: [] as string[], deletedAt: null, ...over,
+  }) as unknown as EtutSablon;
+  const rez = (over: Partial<Record<string, unknown>> = {}) => ({
+    sablonId: 'cuid1', scope: 'RECURRING', status: 'ACTIVE',
+    studentId: 's1', studentName: 'Ahmet', studentCls: '8B', dersBranch: 'Matematik', bookedByRole: 'director',
+    ...over,
+  }) as unknown as EtutReservation;
+
+  it('rezervasyonsuz şablon → rez alanları null (SablonDTO alanları aynen)', () => {
+    const out = mergeSablonRez([row()], new Map());
+    expect(out[0]).toMatchObject({ id: 'e1', dayIndex: 2, aktif: true, studentId: null, rezScope: null });
+  });
+  it('efektif rezervasyon → alanlar dolu + rezScope', () => {
+    const out = mergeSablonRez([row()], new Map([['cuid1', rez()]]));
+    expect(out[0]).toMatchObject({ studentId: 's1', studentName: 'Ahmet', studentCls: '8B', branch: 'Matematik', bookedBy: 'director', rezScope: 'RECURRING' });
+  });
+  it('pasif şablon da LİSTELENİR (ProgramEditor pasifleri gösterir; süzme YOK)', () => {
+    expect(mergeSablonRez([row({ aktif: false })], new Map())).toHaveLength(1);
   });
 });

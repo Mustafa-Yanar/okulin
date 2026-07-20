@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
-import { listSablonlar, saveSablon, toggleSablon, softDeleteSablon } from '@/lib/etut/sablon-service';
+import { listSablonlarWithRez, saveSablon, toggleSablon, softDeleteSablon } from '@/lib/etut/sablon-service';
 import { bookEtut, cancelEtutV2 } from '@/lib/etut/booking';
+import { isValidWeekKey, currentWeekKeyTSI } from '@/lib/etut/weeks';
 
 // Etüt şablonları — öğretmenin haftadan bağımsız, serbest saatli etüt blokları.
 // Ders slotlarından (w1-w12) BAĞIMSIZ; gerçek saat bazlı (calendar için).
 // GET/POST/PUT/DELETE: EtutSablon tablosu (lib/etut/sablon-service — Faz 2b Task 1).
-// PATCH (öğrenci atama): bookEtut/cancelEtutV2 orkestratörüne devredildi (Faz 2b Task 5,
-// scope='RECURRING'/'recurring' — müdür/rehberin tekrarlayan atama yetkisiyle BİREBİR:
-// bu route zaten 'manage' guard'lı). Dönüş sözleşmesi DEĞİŞTİ: eski PATCH rezervasyon
-// alanlarını (studentName vb.) da taşıyan sablon listesi dönerdi; artık listSablonlar'ın
-// SAF EtutSablon DTO'su döner (rezervasyon alanları YOK) — ProgramEditor'ün bu alanları
-// okuyan kısımları Faz 3'te ele alınacak (bilinçli, bu görevin kapsamı DIŞI).
+// Faz 3: TÜM yanıtlar listSablonlarWithRez ile döner — şablon + o haftanın EFEKTİF
+// rezervasyon alanları (studentId/studentName/studentCls/branch/bookedBy/rezScope) birlikte.
+// PATCH (öğrenci atama): bookEtut/cancelEtutV2 orkestratörüne devredildi (Faz 2b Task 5),
+// artık scope (WEEK/RECURRING) + weekKey istemciden gelebilir (default RECURRING — geriye
+// uyum, eski istemci scope göndermez).
 
 const zTime = z.string().regex(/^\d{2}:\d{2}$/, 'Saat HH:MM olmalı');
 const zDay = z.number().int().min(0).max(6);
@@ -28,7 +28,7 @@ const SaveSchema = z.object({
     aktif: z.boolean().optional(),
   }),
 });
-const DeleteSchema = z.object({ teacherId: zId, id: zId });
+const DeleteSchema = z.object({ teacherId: zId, id: zId, weekKey: z.string().max(40).optional() });
 
 const ToggleSchema = z.object({
   teacherId: zId,
@@ -47,14 +47,19 @@ const AssignSchema = z.object({
     // cls = sınıf legacyId'si — yeni sınıflar 's_'+UUID (38 kr), classes route max(60) ile uyumlu
     cls: z.string().max(60).optional(),
   }).nullable(),
+  scope: z.enum(['WEEK', 'RECURRING']).optional(),   // default RECURRING (geriye uyum — eski istemci scope göndermez)
+  weekKey: z.string().max(40).optional().refine((wk) => wk === undefined || isValidWeekKey(wk), { message: 'Geçersiz hafta formatı' }),
 });
 
-// GET /api/etut-sablon?teacherId=...
+// GET /api/etut-sablon?teacherId=...&week=YYYY-Www
 export const GET = withAuth('auth', 'etut', async (req) => {
-  const teacherId = new URL(req.url).searchParams.get('teacherId');
+  const url = new URL(req.url);
+  const teacherId = url.searchParams.get('teacherId');
   if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
+  const week = url.searchParams.get('week') || undefined;
+  const wk = week || currentWeekKeyTSI();
 
-  const sablonlar = await listSablonlar(teacherId);
+  const sablonlar = await listSablonlarWithRez(teacherId, wk);
   return NextResponse.json({ sablonlar });
 });
 
@@ -64,7 +69,8 @@ export const POST = withAuth('manage', 'etut', async (req) => {
   if (!parsed.ok) return parsed.response;
   const { teacherId, sablon, weekKey } = parsed.data;
 
-  const sablonlar = await saveSablon(teacherId, sablon, weekKey);
+  await saveSablon(teacherId, sablon, weekKey);
+  const sablonlar = await listSablonlarWithRez(teacherId, weekKey || currentWeekKeyTSI());
   return NextResponse.json({ ok: true, sablonlar });
 });
 
@@ -77,25 +83,30 @@ export const PUT = withAuth('manage', 'etut', async (req) => {
     return NextResponse.json({ error: 'weekKey gerekli' }, { status: 400 });
   }
 
-  const sablonlar = await toggleSablon(teacherId, id, scope, weekKey, aktif);
+  await toggleSablon(teacherId, id, scope, weekKey, aktif);
+  const sablonlar = await listSablonlarWithRez(teacherId, weekKey || currentWeekKeyTSI());
   return NextResponse.json({ ok: true, sablonlar });
 });
 
-// PATCH /api/etut-sablon → şablona öğrenci ata / kaldır (TEKRARLAYAN atama — spec §9;
-// tek-hafta atama artık /api/etut-sablon/rezervasyon POST/DELETE'in işi). student.name/cls
+// PATCH /api/etut-sablon → şablona öğrenci ata / kaldır (spec §9). student.name/cls
 // gövdeden gelse de KULLANILMAZ — bookEtut hedefi kendi çözer (DB'den taze ad/sınıf);
 // AssignSchema yalnız geriye dönük istemci uyumluluğu için bu alanları kabul eder.
+// scope: WEEK (o hafta) veya RECURRING (tekrarlayan, varsayılan — eski istemci scope göndermez).
 export const PATCH = withAuth('manage', 'etut', async (req, ctx, session) => {
   const parsed = await parseBody(req, AssignSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id, student } = parsed.data;
+  const scope = parsed.data.scope ?? 'RECURRING';
+  const weekKey = parsed.data.weekKey;
 
   if (student) {
-    await bookEtut(session, { teacherId, etutId: id, studentId: student.id, scope: 'RECURRING' });
+    await bookEtut(session, { teacherId, etutId: id, studentId: student.id, scope, weekKey });
   } else {
-    await cancelEtutV2(session, { teacherId, etutId: id, scope: 'recurring' });
+    await cancelEtutV2(session, scope === 'WEEK'
+      ? { teacherId, etutId: id, scope: 'week', weekKey }
+      : { teacherId, etutId: id, scope: 'recurring' });
   }
-  const sablonlar = await listSablonlar(teacherId);
+  const sablonlar = await listSablonlarWithRez(teacherId, weekKey || currentWeekKeyTSI());
   return NextResponse.json({ ok: true, sablonlar });
 });
 
@@ -103,8 +114,9 @@ export const PATCH = withAuth('manage', 'etut', async (req, ctx, session) => {
 export const DELETE = withAuth('manage', 'etut', async (req) => {
   const parsed = await parseBody(req, DeleteSchema);
   if (!parsed.ok) return parsed.response;
-  const { teacherId, id } = parsed.data;
+  const { teacherId, id, weekKey } = parsed.data;
 
-  const sablonlar = await softDeleteSablon(teacherId, id);
+  await softDeleteSablon(teacherId, id);
+  const sablonlar = await listSablonlarWithRez(teacherId, weekKey || currentWeekKeyTSI());
   return NextResponse.json({ ok: true, sablonlar });
 });
