@@ -1,21 +1,20 @@
 'use client';
 
-// Öğrenci listesi (gruplu) + öğrenci detay görünümü (StudentExpandedView) +
-// sınıf ders programı modalı (ClassScheduleModal).
+// Öğrenci detay görünümü (StudentExpandedView) + sınıf ders programı modalı
+// (ClassScheduleModal). İkisi de SinifOgrenci tarafından kullanılır.
 import React, { useState, useEffect, useMemo } from 'react';
-import { BookOpen, ClipboardList, Clock, Calendar, ChevronRight, ChevronLeft, Edit3, GraduationCap, Trash2, Download } from 'lucide-react';
+import { BookOpen, ClipboardList, Clock, Calendar, Download } from 'lucide-react';
 import SchedulePrint, { type ScheduleDay, type ScheduleLesson } from '../program/SchedulePrint';
 import type { LucideIcon } from 'lucide-react';
-import { classLabel, ALL_DAYS } from '@/lib/constants';
-import { classLabelFrom, classShortUpper, groupStudentsByClass, type ClassEntry } from '@/lib/classCatalog';
+import { ALL_DAYS } from '@/lib/constants';
+import { classShortUpper } from '@/lib/classCatalog';
 import { useClasses } from '../ClassesContext';
-import { GROUPS, api, Modal } from './shared';
+import { api, Modal } from './shared';
 import { subjectsForClass } from '../student-logic';
 import { StudentAttendanceView } from './Attendance';
 import StudentEtutTab from './StudentEtutTab';
 import RehberlikAccordion from '../rehberlik/RehberlikAccordion';
 import StudentGuidanceView from '../rehberlik/StudentGuidanceView';
-import { useUrlParam } from '../useUrlParam';
 import type { ShowToast, StudentDTO } from '../types';
 
 // Panel öğrencisi: DTO + loadAll'un eklediği group alanı.
@@ -67,157 +66,6 @@ export function StudentExpandedView({ student, readOnly, showToast, onGuidanceRe
           studentId={student.id}
           solvedContent={<StudentGuidanceView studentId={student.id} onReviewed={onGuidanceReviewed} />}
         />
-      )}
-    </div>
-  );
-}
-
-interface StudentListProps {
-  students: ListStudent[];
-  classes?: ClassEntry[];
-  readOnly?: boolean;
-  showToast: ShowToast;
-  onEdit: (s: ListStudent) => void;
-  onDelete: (s: ListStudent) => void;
-  onDeleteClass?: (cls: string, students: ListStudent[]) => void;
-  onHistory?: (s: ListStudent) => void;
-  pendingGuidance?: Record<string, number>;
-  onGuidanceReviewed?: () => void;
-  onSelectChange?: (id: string | null) => void;
-}
-
-export function StudentList({ students, classes = [], readOnly, showToast, onEdit, onDelete, onDeleteClass, onHistory, pendingGuidance, onGuidanceReviewed, onSelectChange }: StudentListProps) {
-  const [searchQ, setSearchQ] = useState('');
-  const [filterGroup, setFilterGroup] = useState('');
-  const [openCls, setOpenCls] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useUrlParam('ogrenci'); // inline detay → URL'de görünür
-  const [scheduleCls, setScheduleCls] = useState<{ cls: string; label: string } | null>(null);
-
-  // Detay açık/kapalı durumunu dışarı bildir (DirectorPanel liste başlığını gizler).
-  useEffect(() => { onSelectChange?.(expandedId); }, [expandedId, onSelectChange]);
-
-  const grouped = useMemo(() => {
-    const q = searchQ.toLowerCase();
-    const filtered = students.filter(s =>
-      (s.name.toLowerCase().includes(q)||s.cls.toLowerCase().includes(q)||s.username?.toLowerCase().includes(q)) &&
-      (!filterGroup||s.group===filterGroup)
-    );
-    return groupStudentsByClass(filtered, classes, classLabel);
-  }, [students, classes, searchQ, filterGroup]);
-
-  const toggle = (cls: string) => setOpenCls(prev => prev === cls ? null : cls);
-
-  // İnline detay sayfası — bir öğrenci seçiliyse liste yerine bunu göster (URL'de ?ogrenci=ID).
-  const selected = expandedId ? students.find(x => x.id === expandedId) : null;
-  if (expandedId && selected) {
-    return (
-      <div>
-        <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-          <button onClick={() => setExpandedId(null)}
-            className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5">
-            <ChevronLeft size={16} /> Geri
-          </button>
-          <div className="flex gap-2 shrink-0">
-            <button className="btn-ghost !px-3 !py-2 text-sm flex items-center gap-1.5" onClick={() => onEdit(selected)}>
-              <Edit3 size={14} /> Düzenle
-            </button>
-            <button className="btn-ghost !px-3 !py-2 text-sm text-red-500 hover:bg-red-50 flex items-center gap-1.5"
-              onClick={() => { onDelete(selected); setExpandedId(null); }}>
-              <Trash2 size={14} /> Sil
-            </button>
-          </div>
-        </div>
-        <div className="card overflow-hidden">
-          <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-700"
-              style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))', fontWeight: 700 }}>
-              {selected.name.slice(0, 2).toUpperCase()}
-            </div>
-            <div>
-              <h3 className="font-700 text-base" style={{ fontWeight: 700 }}>{selected.name}</h3>
-              <p className="text-caption">{classLabelFrom(classes, selected.cls, classLabel)}</p>
-            </div>
-          </div>
-          <StudentExpandedView student={selected} readOnly={readOnly} showToast={showToast} onGuidanceReviewed={onGuidanceReviewed} />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="flex gap-2 mb-4">
-        <input className="input text-sm" placeholder="İsim, sınıf..." aria-label="Öğrenci ara" value={searchQ} onChange={e => setSearchQ(e.target.value)} />
-        <select className="input !w-auto text-sm" aria-label="Gruba göre filtrele" value={filterGroup} onChange={e => setFilterGroup(e.target.value)}>
-          <option value="">Tüm Gruplar</option>
-          {Object.entries(GROUPS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-      </div>
-      <div className="grid gap-2">
-        {grouped.length === 0 && <div className="card p-8 text-center text-gray-400"><GraduationCap size={32} className="mx-auto mb-2 opacity-30" /><p className="text-caption">Arama kriterinizle eşleşen öğrenci yok</p></div>}
-        {grouped.map(grp => {
-          const isOpen = openCls === grp.cls;
-          const dotColor = grp.group==='lise'
-            ? 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))'
-            : grp.group==='ortaokul'
-            ? 'linear-gradient(135deg,#22c55e,#16a34a)'
-            : 'linear-gradient(135deg,#f59e0b,#d97706)';
-          const colors = { dot: dotColor };
-          return (
-            <div key={grp.cls}>
-              <div className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-700 transition-colors hover:brightness-95" style={{ fontWeight:700, background:'var(--bg-muted)', border:'1px solid var(--border-light)', color:'var(--text-secondary)' }}>
-                <button onClick={() => toggle(grp.cls)} className="flex items-center gap-2 flex-1 text-left">
-                  <span>{grp.label} <span className="font-500 opacity-60" style={{ fontWeight:500 }}>({grp.students.length} öğrenci)</span></span>
-                  <ChevronRight size={14} className="transition-transform" style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
-                </button>
-                <div className="flex items-center gap-1 ml-2">
-                  <button onClick={() => setScheduleCls({ cls: grp.cls, label: grp.label })}
-                    className="flex items-center gap-1 px-2 py-1 rounded bg-brand-soft-hover text-slate-600 text-brand-hover transition-colors text-[11px] font-600"
-                    style={{ fontWeight:600 }}
-                    title="Sınıfın ders programı">
-                    <Calendar size={12} /> Ders Programı
-                  </button>
-                  {onDeleteClass && (
-                    <button onClick={() => onDeleteClass(grp.cls, grp.students)}
-                      className="btn-icon btn-icon-danger"
-                      title="Sınıfı sil">
-                      <Trash2 size={12} />
-                    </button>
-                  )}
-                </div>
-              </div>
-              {isOpen && (
-                <div className="grid gap-1.5 mt-1.5 ml-2">
-                  {grp.students.map(s => (
-                    <div key={s.id} className="card card-interactive overflow-hidden text-sm">
-                      <button className="w-full flex items-center gap-3 px-3 py-2.5 text-left" onClick={() => setExpandedId(s.id)}>
-                        <div className="relative shrink-0">
-                          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-700"
-                            style={{ background: colors.dot, fontWeight:700 }}>
-                            {s.name.slice(0,2).toUpperCase()}
-                          </div>
-                          {(pendingGuidance?.[s.id] ?? 0) > 0 && (
-                            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-700 flex items-center justify-center" style={{ fontWeight: 700 }}>
-                              {pendingGuidance![s.id]}
-                            </span>
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="font-600 truncate" style={{ fontWeight:600 }}>{s.name}</div>
-                          {s.username && <div className="text-caption truncate">@{s.username}</div>}
-                        </div>
-                        <ChevronRight size={14} className="text-gray-400 shrink-0" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {scheduleCls && (
-        <ClassScheduleModal cls={scheduleCls.cls} label={scheduleCls.label} onClose={() => setScheduleCls(null)} />
       )}
     </div>
   );

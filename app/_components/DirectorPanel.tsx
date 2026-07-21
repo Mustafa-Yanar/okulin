@@ -255,7 +255,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
         <SinifOgrenci
           students={students}
           classes={classes}
-          weekKey={weekKey}
           isCounselor={isCounselor}
           readOnly={readOnly}
           onAddStudent={() => { setEditStudent(null); setShowStudentForm(true); }}

@@ -38,10 +38,9 @@ export const GET = withAuth(async (req) => {
   const weekKey = searchParams.get('week') || getWeekKey();
   if (!legacyTeacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
 
-  // Şablonu oku (grid kısmı; etutSablonlari hariç)
-  const fullTemplate = await getProgramTemplate(legacyTeacherId);
-  // programTemplate Json — grid kısmı gün→slot→giriş şeklinde saklanır
-  const { etutSablonlari, ...template } = fullTemplate as { etutSablonlari?: unknown } & ProgramGrid;
+  // Şablonu oku — programTemplate Json artık yalnız grid (gün→slot→giriş);
+  // etüt EtutSablon/EtutReservation tablolarında (Faz 5 cutover, JSON temizlendi).
+  const template = (await getProgramTemplate(legacyTeacherId)) as ProgramGrid;
 
   // SlotBooking'den geçici (fixed:false) entry'leri topla
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
@@ -94,8 +93,7 @@ export const POST = withAuth('manage', async (req) => {
   // program uygulanınca bu haftanın geçmiş günlerine düşen dersler şablona hiç yazılmaz,
   // öğretmen/sınıf kartları boş görünür. Geçmiş koruması yalnız o haftaya özel geçici
   // girdiler (etüt/geçici ders rezervasyonu, fixed:false) ve slot silme (null) içindir.
-  const templateForGuard = await getProgramTemplate(legacyTeacherId);
-  const { etutSablonlari: _ets, ...gridTemplateForGuard } = templateForGuard as { etutSablonlari?: unknown } & ProgramGrid;
+  const gridTemplateForGuard = (await getProgramTemplate(legacyTeacherId)) as ProgramGrid;
   const postSlotTimes = await getDaySlotTimes();
   for (const dayIdx of Object.keys(program)) {
     const di = parseInt(dayIdx);
@@ -151,9 +149,8 @@ export const POST = withAuth('manage', async (req) => {
     }
   }
 
-  // 1) Şablonu güncelle: gelen program'da fixed: true entry'ler + etutSablonlari koru
-  const fullOldTemplate = await getProgramTemplate(legacyTeacherId);
-  const { etutSablonlari, ...oldGridTemplate } = fullOldTemplate as { etutSablonlari?: unknown } & ProgramGrid;
+  // 1) Şablonu güncelle: gelen program'da yalnız fixed: true (kalıcı) entry'ler saklanır
+  const oldGridTemplate = (await getProgramTemplate(legacyTeacherId)) as ProgramGrid;
   const newGridTemplate: ProgramGrid = JSON.parse(JSON.stringify(oldGridTemplate));
 
   for (const [dayIdx, daySlots] of Object.entries(program)) {
@@ -173,11 +170,7 @@ export const POST = withAuth('manage', async (req) => {
     }
   }
 
-  // etutSablonlari'nı koru
-  const newFullTemplate: Record<string, unknown> = { ...newGridTemplate };
-  if (etutSablonlari !== undefined) newFullTemplate.etutSablonlari = etutSablonlari;
-
-  await setProgramTemplate(legacyTeacherId, newFullTemplate);
+  await setProgramTemplate(legacyTeacherId, newGridTemplate);
 
   // 2) O haftayı şablona göre yeniden init et
   await initWeekForTeacher(legacyTeacherId, weekKey);
@@ -218,24 +211,22 @@ export const POST = withAuth('manage', async (req) => {
   return NextResponse.json({ ok: true });
 });
 
-// DELETE /api/program — öğretmenin şablonundaki DERS/ETÜT girdilerini siler.
-// 'available' (uygunluk) işaretleri ve etutSablonlari KORUNUR: uygunluk çözücünün
-// girdisidir, program yeniden oluşturulduğunda müdürün baştan işaretlemesi gerekmemeli.
+// DELETE /api/program — öğretmenin şablonundaki DERS girdilerini siler.
+// 'available' (uygunluk) işaretleri KORUNUR: uygunluk çözücünün girdisidir, program
+// yeniden oluşturulduğunda müdürün baştan işaretlemesi gerekmemeli.
 // (Tam sıfırlama gerekiyorsa: /api/admin/week reset-all)
 export const DELETE = withAuth('manage', async (req) => {
   const parsed = await parseBody(req, ProgramDeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId: legacyTeacherId } = parsed.data;
 
-  const full = await getProgramTemplate(legacyTeacherId);
-  const { etutSablonlari, ...grid } = full as { etutSablonlari?: unknown } & ProgramGrid;
+  const grid = (await getProgramTemplate(legacyTeacherId)) as ProgramGrid;
   const kept: Record<string, unknown> = {};
   for (const [dayIdx, daySlots] of Object.entries(grid)) {
     for (const [slotId, entry] of Object.entries(daySlots || {})) {
       if (entry?.type === 'available') ((kept[dayIdx] = (kept[dayIdx] as Record<string, unknown>) || {}) as Record<string, unknown>)[slotId] = entry;
     }
   }
-  if (etutSablonlari !== undefined) kept.etutSablonlari = etutSablonlari;
   if (Object.keys(kept).length) await setProgramTemplate(legacyTeacherId, kept);
   else await deleteProgramTemplate(legacyTeacherId);
   return NextResponse.json({ ok: true });

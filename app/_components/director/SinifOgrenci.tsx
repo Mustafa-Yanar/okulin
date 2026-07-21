@@ -23,14 +23,13 @@ import { useConfirm } from '../ConfirmProvider';
 import { useClasses } from '../ClassesContext';
 import type { ClassRecord } from '@/lib/classes';
 import type { CourseRecord } from '@/lib/courses';
-import type { ShowToast, SlotEntryDTO, StudentDTO } from '../types';
+import type { ShowToast, StudentDTO } from '../types';
 
 // Panel öğrencisi: DTO + loadAll'un eklediği group alanı.
 type PanelStudent = StudentDTO & { group?: string };
 
 interface SinifOgrenciProps {
   students?: PanelStudent[];
-  weekKey?: string;
   onEditStudent?: (s: PanelStudent) => void;
   onDeleteStudent?: (s: PanelStudent) => void;
   onHistory?: (s: PanelStudent) => void;
@@ -49,7 +48,7 @@ interface SinifOgrenciProps {
 }
 
 export default function SinifOgrenci({
-  students = [], weekKey,
+  students = [],
   onEditStudent, onDeleteStudent, onHistory,
   pendingGuidance = {}, onGuidanceReviewed, onSelectChange,
   onAddStudent, onAddCounselor, onAddAssistant, isCounselor = false, readOnly = false,

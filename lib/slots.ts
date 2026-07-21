@@ -49,30 +49,6 @@ export interface SlotCell {
   eventTitle?: string;
 }
 
-// Öğretmenin serbest etüt şablonu (programTemplate.etutSablonlari listesi elemanı).
-export interface EtutSablonu {
-  id: string;
-  dayIndex: number;
-  start: string;
-  end: string;
-  aktif?: boolean;
-  pasifHaftalar?: string[];
-  studentId?: string;
-  studentName?: string;
-  studentCls?: string;
-  branch?: string;
-  bookedBy?: string;
-  bookedAt?: string;
-}
-
-// Bir serbest etüt şablonu verilen haftada efektif aktif mi?
-// (kalıcı aktif + bu hafta pasif listesinde değil). etut-sablon/all + mobil today ortak.
-export function etutAktifThisWeek(sb: EtutSablonu, weekKey: string): boolean {
-  if (sb.aktif === false) return false;
-  if (Array.isArray(sb.pasifHaftalar) && sb.pasifHaftalar.includes(weekKey)) return false;
-  return true;
-}
-
 // Öğretmen program şablonundaki tek giriş (programTemplate Json).
 export interface ProgramEntry {
   type?: string;
@@ -423,17 +399,6 @@ export async function getWeekCellsAllTeachers(weekKey: string): Promise<Record<n
   return out;
 }
 
-// Tüm öğretmenlerin program şablonları TEK sorguda (etüt şablonu taraması için).
-export interface TeacherTemplateRow {
-  legacyId: string;
-  name: string;
-  template: Record<string, unknown>;
-}
-export async function getAllProgramTemplates(): Promise<TeacherTemplateRow[]> {
-  const rows = await tdb().teacher.findMany({ select: { legacyId: true, name: true, programTemplate: true } });
-  return rows.map((r) => ({ legacyId: r.legacyId, name: r.name, template: (r.programTemplate || {}) as Record<string, unknown> }));
-}
-
 export async function getAllStudents() {
   const rows = await tdb().student.findMany({ include: { class: true } });
   return rows.map(s => ({
@@ -442,13 +407,13 @@ export async function getAllStudents() {
   }));
 }
 
-// program:{legacyTeacherId} objesini oku (grid + etutSablonlari)
+// program:{legacyTeacherId} objesini oku (grid şablonu)
 export async function getProgramTemplate(legacyTeacherId: string) {
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
   return (teacher?.programTemplate || {}) as Record<string, unknown>;
 }
 
-// program:{legacyTeacherId} objesini yaz (grid + etutSablonlari)
+// program:{legacyTeacherId} objesini yaz (grid şablonu)
 export async function setProgramTemplate(legacyTeacherId: string, data: object): Promise<void> {
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: legacyTeacherId } });
   if (!teacher) return;
