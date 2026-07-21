@@ -79,14 +79,15 @@ test('senaryo: teacher + student aynı anda slot okur', async ({ playwright }) =
   const stuReq = await playwright.request.newContext({ storageState: STU_STATE });
   try {
     const TEA = await whoami(teaReq);
-    const [teaSlots, stuSlots] = await Promise.all([
+    // Öğrenci ayağı /api/etut-sablon/all (B3/dalga2: org-geneli /api/slots kaldırıldı).
+    const [teaSlots, stuEtut] = await Promise.all([
       teaReq.get(`${BASE}/api/slots?teacherId=${TEA.id}`),
-      stuReq.get(`${BASE}/api/slots`),
+      stuReq.get(`${BASE}/api/etut-sablon/all`),
     ]);
     expect(teaSlots.status()).toBe(200);
-    expect(stuSlots.status()).toBe(200);
+    expect(stuEtut.status()).toBe(200);
     expect(await teaSlots.json()).toHaveProperty('grid');
-    expect(await stuSlots.json()).toHaveProperty('slots');
+    expect(await stuEtut.json()).toHaveProperty('etutler');
   } finally {
     await Promise.all([teaReq.dispose(), stuReq.dispose()]);
   }

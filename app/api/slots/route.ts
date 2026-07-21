@@ -1,22 +1,25 @@
 import { NextResponse } from 'next/server';
-import { withAuth, canReadStudent } from '@/lib/auth';
-import { getWeekKey, getTeacherWeekSlots, getAllTeachers, getDaySlotTimes, getWeekEvents, findBlockingEvent, dateStrForWeekDay, type SlotCell } from '@/lib/slots';
+import { withAuth } from '@/lib/auth';
+import { getWeekKey, getTeacherWeekSlots, getWeekEvents, findBlockingEvent, dateStrForWeekDay, getDaySlotTimes, type SlotCell } from '@/lib/slots';
 import { ALL_DAYS, daySlots } from '@/lib/constants';
 
-// SALT-OKUNUR uç (2026-07-22 denetim B3): POST/DELETE (grid slot rezervasyonu) KALDIRILDI —
-// etüt rezervasyonunun tek yazım kapısı /api/etut-sablon/rezervasyon (+ mobil eşleniği) →
-// lib/etut/booking.ts bookEtut/cancelEtutV2. SlotBooking'in booked yüzeyi cutover sonrası
-// fiilen ölüydü (canlıda booked=0, yazılan kayıt yeni etüt görünümlerinde çıkmıyordu).
-// Export edilmeyen metodlara Next.js otomatik 405 döner (e2e nöbetçisi: int-slots-rules).
+// SALT-OKUNUR grid ucu (2026-07-22 denetim B3):
+// - POST/DELETE (grid slot rezervasyonu) dalga1'de KALDIRILDI — etüt rezervasyonunun tek
+//   yazım kapısı /api/etut-sablon/rezervasyon (+ mobil eşleniği) → lib/etut/booking.ts.
+//   Export edilmeyen metodlara Next.js otomatik 405 döner (e2e nöbetçisi: int-slots-rules).
+// - teacherId'siz org-geneli tarama + veli dalı dalga2'de KALDIRILDI — üretim tüketicisi
+//   kalmamıştı (paneller etüt verisini /api/etut-sablon/all'dan okur); tek meşru kullanım
+//   öğretmen haftalık grid görüntüleme (TeacherPanel).
 // Kanıt/harita: docs/superpowers/specs/2026-07-22-buyuk-temizlik-faz1-harita.md (B3).
 
-// GET /api/slots?week=2024-W20&teacherId=xxx
-// Bilinçli inline rol dallanması: veli yalnız kendi çocuğunun rezervasyonlarını görür.
-export const GET = withAuth(async (req, _ctx, session) => {
+// GET /api/slots?teacherId=xxx&week=2024-W20 — öğretmenin haftalık ders/açık-saat gridi.
+export const GET = withAuth(async (req) => {
 
   const { searchParams } = new URL(req.url);
   const weekKey = searchParams.get('week') || getWeekKey();
   const teacherId = searchParams.get('teacherId'); // legacyId
+  if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
+
   const slotTimes = await getDaySlotTimes();
   // Haftanın aktif (kurum geneli) etkinlikleri — tek sorgu, her hücreye tekrar tekrar sorgu atmadan uygulanır.
   const weekEvents = await getWeekEvents(weekKey);
@@ -37,48 +40,7 @@ export const GET = withAuth(async (req, _ctx, session) => {
     });
   }
 
-  if (teacherId) {
-    const grid = await getTeacherWeekSlots(teacherId, weekKey);
-    for (const day of ALL_DAYS) grid[day.index] = applyEventBlock(day.index, grid[day.index]);
-    return NextResponse.json({ weekKey, grid });
-  }
-
-  const teachers = await getAllTeachers(); // id=legacyId
-  const allSlots: ({ teacherId: string; teacherName: string; branches: string[]; allowedGroups: string[]; day: number; dayLabel: string; weekend: boolean; slotId: string; slotLabel: string } & SlotCell)[] = [];
-
-  for (const teacher of teachers) {
-    const grid = await getTeacherWeekSlots(teacher.id, weekKey);
-    for (const day of ALL_DAYS) {
-      const slots = daySlots(day.index, slotTimes.days[day.index]);
-      const cells = applyEventBlock(day.index, grid[day.index]);
-      for (let s = 0; s < slots.length; s++) {
-        const slotData = cells[s] || { booked: false, disabled: true };
-        allSlots.push({
-          teacherId: teacher.id,
-          teacherName: teacher.name,
-          branches: teacher.branches || [],
-          allowedGroups: teacher.allowedGroups || [],
-          day: day.index,
-          dayLabel: day.label,
-          weekend: day.weekend,
-          slotId: slots[s].id,
-          slotLabel: slots[s].label,
-          ...slotData,
-        });
-      }
-    }
-  }
-
-  // Veli: yalnız kendi çocuğunun rezervasyonlarını görür (diğer öğrencilerin adı sızmaz).
-  if (session.role === 'parent') {
-    const childId = searchParams.get('studentId');
-    if (!canReadStudent(session, childId)) {
-      return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
-    }
-    const mine = allSlots.filter(s => s.booked && s.studentId === childId);
-    return NextResponse.json({ weekKey, slots: mine });
-  }
-
-  return NextResponse.json({ weekKey, slots: allSlots });
+  const grid = await getTeacherWeekSlots(teacherId, weekKey);
+  for (const day of ALL_DAYS) grid[day.index] = applyEventBlock(day.index, grid[day.index]);
+  return NextResponse.json({ weekKey, grid });
 });
-

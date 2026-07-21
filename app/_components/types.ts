@@ -13,7 +13,6 @@ import type { Session } from '@/lib/auth';
 import type { Branding } from '@/lib/branding';
 import type { ConfigValue } from '@/lib/config';
 import type { PaymentEntry } from '@/lib/finance';
-import type { SlotCell } from '@/lib/slots';
 
 // AppContent.showToast imzası — tüm panellere prop olarak iner.
 // msg ReactNode: Toast bileşeni düğüm render eder (çoğu çağrı düz string geçer).
@@ -126,20 +125,6 @@ export interface KurumBilgi {
   taxNo: string;
   officialAddress: string;
 }
-
-// GET /api/slots düz satırı — öğretmen+gün+slot bilgisi + hücre durumu
-// (app/api/slots/route.ts GET mapper'ı ile birebir). Panellerin allSlots dizisi.
-export type SlotEntryDTO = {
-  teacherId: string;
-  teacherName: string;
-  branches: string[];
-  allowedGroups: string[];
-  day: number;
-  dayLabel: string;
-  weekend: boolean;
-  slotId: string;
-  slotLabel: string;
-} & SlotCell;
 
 // GET /api/auth — oturum + kurum durumu (whoami).
 export interface WhoamiResponse {

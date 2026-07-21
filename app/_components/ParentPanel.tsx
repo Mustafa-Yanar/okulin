@@ -21,7 +21,7 @@ import { classLabelFrom } from '@/lib/classCatalog';
 import { getWeekKey, weekRangeLabel, classLabel } from '@/lib/constants';
 import { api, getAdjacentWeek } from './shared';
 import type { Session } from '@/lib/auth';
-import type { ShowToast, FinanceDTO, InstallmentDTO, SlotEntryDTO } from './types';
+import type { ShowToast, FinanceDTO, InstallmentDTO } from './types';
 
 
 // Haftalık gezinme (StudentPanel ile aynı hesap).
@@ -65,12 +65,10 @@ function ProgramView({ child }: { child: Child }) {
     setLoadError(null);
     try {
       const sid = encodeURIComponent(child.id);
-      // Eski slot-etüt + yeni serbest etüt şablonları (yalnız kendi çocuğu)
-      const [data, etutData] = await Promise.all([
-        api<{ slots?: SlotEntryDTO[] }>(`/api/slots?week=${wk}&studentId=${sid}`),
-        api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${wk}&studentId=${sid}`),
-      ]);
-      const slotList: BookingSlotEntry[] = data.slots || [];
+      // Etüt rezervasyonları (yalnız kendi çocuğu) — tek kaynak: EtutSablon/EtutReservation.
+      // (Eski /api/slots çağrısı 2026-07-22 denetim B3/dalga2'de kaldırıldı: SlotBooking'de
+      // booked kayıt artık üretilmiyor, çağrı her zaman boş dönüyordu.)
+      const etutData = await api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${wk}&studentId=${sid}`);
       const etutList: BookingSlotEntry[] = (etutData.etutler || []).map(e => ({
         kind: 'etut',
         etutId: e.id,
@@ -87,7 +85,7 @@ function ProgramView({ child }: { child: Child }) {
         bookedBy: e.bookedBy || 'student',
         scope: e.scope,
       }));
-      setAllSlots([...slotList, ...etutList]);
+      setAllSlots(etutList);
     } catch (e) {
       setAllSlots([]);
       setLoadError((e as Error).message || 'Program yüklenemedi');

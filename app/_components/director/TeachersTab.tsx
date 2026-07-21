@@ -5,21 +5,18 @@ import {
   Users, Plus, Trash2, Edit3, Clock, User, ChevronRight, ChevronLeft, CalendarRange, CalendarDays, LayoutGrid, List, Calendar, X
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { ALL_DAYS, daySlots as buildDaySlots } from '@/lib/constants';
+import { ALL_DAYS } from '@/lib/constants';
 import { GROUPS, getAdjacentWeek, WeekNav, SectionHeader } from './shared';
 import HistoryModal from './HistoryModal';
 import ProgramEditor from './ProgramEditor';
 import LoadingBox from '../Loading';
 import EmptyState from '../EmptyState';
 import { api } from '../shared';
-import { useSlotTimes } from '../SlotTimesContext';
 import { useClasses } from '../ClassesContext';
 import { classShortUpper } from '@/lib/classCatalog';
-import type { SlotCell as SlotCellData } from '@/lib/slots';
 import type { ShowToast, StudentDTO, TeacherDTO } from '../types';
 
 // /api/slots öğretmen grid'i: gün → slotIdx → hücre.
-type TeacherGrid = Record<number, SlotCellData[]>;
 
 // GET /api/etut-sablon/all satırı (öğretmenin serbest/birebir etüt rezervasyonları).
 interface EtutRow {
@@ -120,8 +117,6 @@ interface TeachersTabProps {
   students: StudentDTO[];
   weekKey: string;
   readOnly: boolean;
-  teacherSlots: TeacherGrid | null | undefined;
-  selectedTeacherForSlots: TeacherDTO | null;
   expandedTeacherId: string | null;
   expandedTeacherTab: string;
   setExpandedTeacherTab: (k: string) => void;
@@ -138,12 +133,11 @@ interface TeachersTabProps {
 
 // ─── TEACHERS TAB — öğretmen listesi + inline detay sayfası (?ogretmen=ID) ──────
 export default function TeachersTab({
-  teachers, students, weekKey, readOnly, teacherSlots, selectedTeacherForSlots,
+  teachers, students, weekKey, readOnly,
   expandedTeacherId, expandedTeacherTab, setExpandedTeacherTab, teacherView, onChangeView,
   showToast, onBack, onSelectTeacher, onEditTeacher, onAddTeacher, onDeleteTeacher,
   onWeekChange,
 }: TeachersTabProps) {
-  const { slotTimes } = useSlotTimes();
   const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (liste görünümleri)
   const selT = expandedTeacherId ? teachers.find(x => x.id === expandedTeacherId) : null;
 
@@ -207,32 +201,13 @@ export default function TeachersTab({
               <TeacherEtutReservations teacherId={t.id} weekKey={weekKey} readOnly={readOnly} showToast={showToast} />
             )}
 
-            {/* Etüt Geçmişi sekmesi — inline */}
+            {/* Etüt Geçmişi sekmesi — inline (tek kaynak: /api/archive → EtutReservation) */}
             {expandedTeacherTab === 'gecmis' && (
               <HistoryModal
                 inline
                 target={{ type: 'teacher', id: t.id, name: t.name }}
                 onClose={() => setExpandedTeacherTab('etutler')}
                 currentWeekKey={weekKey}
-                currentEntries={(() => {
-                  if (selectedTeacherForSlots?.id !== t.id || !teacherSlots) return [];
-                  const items: {
-                    day: number; dayLabel: string; slotId: string; slotLabel: string;
-                    studentName?: string | null; studentCls?: string | null;
-                  }[] = [];
-                  ALL_DAYS.forEach(day => {
-                    buildDaySlots(day.index, slotTimes.days?.[day.index]).forEach((slot, slotIdx) => {
-                      const sd = teacherSlots[day.index]?.[slotIdx];
-                      if (sd?.booked) items.push({
-                        day: day.index, dayLabel: day.label,
-                        slotId: slot.id, slotLabel: slot.label,
-                        studentName: sd.studentName,
-                        studentCls: classShortUpper(classes, sd.studentCls||''),
-                      });
-                    });
-                  });
-                  return items;
-                })()}
               />
             )}
 

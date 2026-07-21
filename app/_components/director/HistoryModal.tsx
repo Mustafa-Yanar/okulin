@@ -7,8 +7,9 @@ import { api, Modal } from './shared';
 import { useClasses } from '../ClassesContext';
 import { classShortUpper } from '@/lib/classCatalog';
 
-// Arşiv satırı (GET /api/archive week.entries elemanı). "Bu hafta" satırları
-// canlı slot verisinden kurulur; oradan gelen ek alanlar da opsiyonel taşınır.
+// Arşiv satırı (GET /api/archive week.entries elemanı) — tek kaynak EtutReservation
+// (lib/etut/history; cari hafta dahil). SlotBooking/currentEntries beslemesi 2026-07-22
+// denetim B3/dalga2'de kaldırıldı.
 interface ArchiveEntry {
   day: number;
   dayLabel: string;
@@ -49,11 +50,10 @@ interface HistoryModalProps {
   target: { type: string; id: string; name: string };
   onClose?: () => void;
   currentWeekKey?: string;
-  currentEntries?: ArchiveEntry[];
   inline?: boolean;
 }
 
-export default function HistoryModal({ target, onClose, currentWeekKey, currentEntries, inline = false }: HistoryModalProps) {
+export default function HistoryModal({ target, onClose, currentWeekKey, inline = false }: HistoryModalProps) {
   const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad
   const isStudent = target.type === 'student';
   const [activeTab, setActiveTab] = useState('etut');
@@ -95,26 +95,12 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
     })();
   }, [activeTab, isStudent, target.id, attendance]);
 
-  const allWeeks = useMemo(() => {
-    const result: ArchiveWeek[] = [];
-    const archiveCurrent = currentWeekKey ? weeks.find(w => w.weekKey === currentWeekKey) : undefined;
-    const rest = currentWeekKey ? weeks.filter(w => w.weekKey !== currentWeekKey) : weeks;
-    // Cari haftanın ETÜT satırları (EtutReservation-kaynaklı, slotId 'etut:' prefix'li — Faz 4 T3)
-    // canlı currentEntries'te (SlotBooking-kaynaklı) OLAMAZ → "Bu Hafta" kartına eklenir.
-    // Arşivdeki cari-hafta SlotBooking satırları ise currentEntries'in kopyası olurdu → atlanır
-    // (çift-kart + çift-satır düzeltmesi; geçmiş haftalar etkilenmez).
-    const currentEtut = archiveCurrent?.entries.filter(e => e.slotId.startsWith('etut:')) ?? [];
-    // currentEntries (canlı SlotBooking) undefined/boşken arşivin cari-hafta DERS satırları
-    // düşmesin (Faz 4 audit-fix FIX-2 B, Gemini YÜKSEK-1 savunmacı bulgu) — çağıran (inline
-    // kullanım) currentEntries geçmezse arşivdeki cari-hafta ders satırlarına geri düş.
-    const currentSlots = (currentEntries && currentEntries.length > 0)
-      ? currentEntries
-      : (archiveCurrent?.entries.filter(e => !e.slotId.startsWith('etut:')) ?? []);
-    const current = [...currentSlots, ...currentEtut];
-    if (current.length > 0) result.push({ weekKey: currentWeekKey, entries: current, isCurrent: true });
-    result.push(...rest);
-    return result;
-  }, [weeks, currentEntries, currentWeekKey]);
+  // Arşiv tek kaynaktan (EtutReservation) hafta-sıralı gelir; cari hafta da içindedir —
+  // yalnız "Bu Hafta" rozetini işaretlemek kalır (B3/dalga2 sadeleştirmesi: eski
+  // currentEntries/SlotBooking birleştirme mantığı kaldırıldı).
+  const allWeeks = useMemo(() => (
+    weeks.map(w => (currentWeekKey && w.weekKey === currentWeekKey) ? { ...w, isCurrent: true } : w)
+  ), [weeks, currentWeekKey]);
 
   const handlePrint = () => {
     const s = {

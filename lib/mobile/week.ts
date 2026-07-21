@@ -78,27 +78,44 @@ export async function buildParentWeek(session: Session, weekKey: string, childId
 
 export async function buildTeacherWeek(session: Session, weekKey: string): Promise<TeacherWeek> {
   const me = String(session.id ?? '');
-  const [grid, slotTimes] = await Promise.all([getTeacherWeekSlots(me, weekKey), getDaySlotTimes()]);
+  const mods = await getOrgConfig('modules');
+  const [grid, slotTimes, etutRows] = await Promise.all([
+    getTeacherWeekSlots(me, weekKey),
+    getDaySlotTimes(),
+    mods.etut !== false ? listEtutlerForWeek(weekKey) : Promise.resolve([] as EtutAllRow[]),
+  ]);
+  // Öğretmenin bu haftaki DOLU etütleri (EtutReservation) — days[].slots içine type:'etut'
+  // satırı olarak eklenir (yanıt şekli değişmez; RN hafta ekranı 'etut' render'ını zaten
+  // içerir). Eski kaynak (SlotBooking booked hücresi) B3/dalga2'de kaldırıldı; bu besleme
+  // cutover'da unutulmuş öğretmen-hafta boşluğunu da kapatır (bugün ekranıyla parite).
+  const myEtuts = etutRows.filter((r) => r.teacherId === me && r.booked);
   const days: TeacherWeekDay[] = [];
   for (const day of ALL_DAYS) {
     const dayIndex = day.index;
     const slots = daySlots(dayIndex, slotTimes.days[dayIndex]);
     const dayCells: TeacherSlotView[] = [];
     (grid[dayIndex] || []).forEach((sd, i) => {
-      if (!sd) return;
-      const isDers = sd.lessonType === 'ders';
-      const isBookedEtut = !isDers && !!sd.booked; // boş/disabled gösterilmez
-      if (!isDers && !isBookedEtut) return;
+      if (!sd || sd.lessonType !== 'ders') return; // yalnız ders hücreleri; boş/disabled gösterilmez
       const slot = slots[i];
       dayCells.push({
         slotId: slot?.id ?? '',
         slotLabel: slot?.label ?? '',
-        type: isDers ? 'ders' : 'etut',
-        cls: sd.cls || sd.studentCls || null,
-        studentName: sd.studentName || null,
+        type: 'ders',
+        cls: sd.cls || null,
+        studentName: null,
         branch: sd.branch || sd.subBranch || '',
       });
     });
+    for (const r of myEtuts.filter((e) => e.dayIndex === dayIndex)) {
+      dayCells.push({
+        slotId: `etut:${r.id}`,
+        slotLabel: `${r.start}–${r.end}`,
+        type: 'etut',
+        cls: r.studentCls || null,
+        studentName: r.studentName || null,
+        branch: r.branch || '',
+      });
+    }
     days.push({ dayIndex, dayLabel: day.label, date: dateStrForWeekDay(weekKey, dayIndex), slots: dayCells });
   }
   return { role: 'teacher', weekKey, days };
