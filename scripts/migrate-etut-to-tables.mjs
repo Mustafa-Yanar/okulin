@@ -201,6 +201,35 @@ if (RECONCILE) {
   process.exitCode = 1;
 }
 
+// CLEANUP-SONRASI KOŞUM GUARD'I (2026-07-22 büyük temizlik B8, hard-guard):
+// cleanup-etut-json.mjs koştuktan sonra JSON'da hiçbir öğretmende etutSablonlari kalmaz.
+// Bu durumda reconcile koşmak, JSON-authoritative mantık gereği TÜM yaşayan tablo
+// şablonlarını "JSON'dan silinmiş" sayıp soft-delete etmeye kalkar (runbook yasağı:
+// "cleanup SONRASI reconcile ASLA" — şimdiye dek yalnız runbook disipliniyle korunuyordu).
+// Org×şube bazında: JSON tarafında SIFIR şablon varken tabloda YAŞAYAN şablon varsa
+// cutover tamamlanmış demektir → dry-run dahil HİÇBİR İŞ yapmadan çık (yanıltıcı
+// "her şey silinecek" raporu bile üretme).
+async function assertNotPostCleanup(p, teachers) {
+  const byOrg = new Map();
+  for (const t of teachers) {
+    const key = `${t.orgSlug}/${t.branch}`;
+    const g = byOrg.get(key) || { orgSlug: t.orgSlug, branch: t.branch, jsonSablon: 0 };
+    const list = Array.isArray(t.programTemplate?.etutSablonlari) ? t.programTemplate.etutSablonlari : [];
+    g.jsonSablon += list.length;
+    byOrg.set(key, g);
+  }
+  for (const g of byOrg.values()) {
+    if (g.jsonSablon > 0) continue;
+    const tableAlive = await p.etutSablon.count({ where: { orgSlug: g.orgSlug, branch: g.branch, deletedAt: null } });
+    if (tableAlive > 0) {
+      console.error(`\n⛔ GUARD (post-cleanup): ${g.orgSlug}/${g.branch} — JSON'da hiç etüt şablonu yok ama tabloda ${tableAlive} yaşayan şablon var.`);
+      console.error('Bu, cleanup-SONRASI reconcile koşumudur; devam edilseydi tüm tablo şablonları soft-delete edilirdi.');
+      console.error('Hiçbir okuma-ötesi işlem yapılmadı. Çıkılıyor (exit 1).');
+      process.exit(1);
+    }
+  }
+}
+
 // ---- Faz 5 Task 2: --reconcile akışı ----
 // JSON-authoritative senkron: reconcileSablonDeletes/reconcileReservationOps (Task 1, saf/test
 // edilmiş) karar mantığını taşır — bu fonksiyon yalnız veri çeker + kararı uygular + raporlar,
@@ -208,6 +237,7 @@ if (RECONCILE) {
 // olarak işaretle + iptal, (2) JSON şablonlarını upsert (+diriltme) ve rezervasyonlarını senkronla.
 // Sonda tek seferlik hayalet SlotBooking taraması (rapor-only).
 async function runReconcile(p, teachers, now, report, APPLY) {
+  await assertNotPostCleanup(p, teachers);
   const currentWeek = isoWeekKeyTSI(now);
 
   for (const t of teachers) {

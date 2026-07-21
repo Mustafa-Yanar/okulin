@@ -1,3 +1,11 @@
+// ═══ ARŞİVLENMİŞ SCRIPT (2026-07-22 büyük temizlik B8) — ÇALIŞTIRMA ═══
+// Görevi tamamlandı (7-gün slot id göçü 2026-07'de bitti, canlı veri yeni formatta).
+// DİKKAT: --dry bayrağı OPSİYONEL — bayraksız koşum doğrudan YAZAR; ikinci koşum
+// slotId'leri bozabilir. Bilinçli çalıştırmak için aşağıdaki iki satırı silin.
+// Gerekçe: docs/superpowers/specs/2026-07-22-buyuk-temizlik-faz1-harita.md (B8)
+console.error('⛔ ARŞİV script — çalıştırma engellendi (bkz dosya başı yorumu).');
+process.exit(1);
+
 // Slot id migrasyonu — eski (w{n}/e{n}) → yeni güne-özgü (d{gün}s{n}).
 //
 // 7-gün bağımsız slot modeline geçişte (2026-07) slot id'leri güne özgü oldu.

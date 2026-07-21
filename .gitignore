@@ -43,6 +43,7 @@ tmp/
 node_modules/.cache/ms-playwright
 *.md
 !solver-service/README.md
+!scripts/archive/README.md
 
 # TypeScript derleme onbellegi
 tsconfig.tsbuildinfo
