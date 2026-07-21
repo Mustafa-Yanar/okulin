@@ -134,7 +134,6 @@ interface TeachersTabProps {
   onAddTeacher: () => void;
   onDeleteTeacher: (t: TeacherDTO) => void;
   onWeekChange: (wk: string) => void;
-  onCancelBooking: (teacherId: string, dayIndex: number, slotId: string) => void;
 }
 
 // ─── TEACHERS TAB — öğretmen listesi + inline detay sayfası (?ogretmen=ID) ──────
@@ -142,7 +141,7 @@ export default function TeachersTab({
   teachers, students, weekKey, readOnly, teacherSlots, selectedTeacherForSlots,
   expandedTeacherId, expandedTeacherTab, setExpandedTeacherTab, teacherView, onChangeView,
   showToast, onBack, onSelectTeacher, onEditTeacher, onAddTeacher, onDeleteTeacher,
-  onWeekChange, onCancelBooking,
+  onWeekChange,
 }: TeachersTabProps) {
   const { slotTimes } = useSlotTimes();
   const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (liste görünümleri)

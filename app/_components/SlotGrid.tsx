@@ -1,110 +1,36 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { X } from 'lucide-react';
-import {
-  allowedBranchesForClass,
-  classLabel,
-  ALL_DAYS,
-  daySlots as buildDaySlots,
-} from '@/lib/constants';
+import React, { useMemo } from 'react';
+import { ALL_DAYS, daySlots as buildDaySlots } from '@/lib/constants';
 import type { DayInfo, Slot } from '@/lib/constants';
 import type { SlotCell as SlotCellData, ProgramEntry } from '@/lib/slots';
 import { useClasses } from './ClassesContext';
 import { useSlotTimes } from './SlotTimesContext';
-import { classLabelFrom, classShortUpper, coursesForClass } from '@/lib/classCatalog';
+import { classShortUpper } from '@/lib/classCatalog';
 import { isSlotPast } from './shared';
-import type { Session } from '@/lib/auth';
-import type { StudentDTO } from './types';
 
-// Grid'in ihtiyaç duyduğu asgari öğretmen görünümü — TeacherPanel oturumdan kurar,
-// DirectorPanel tam TeacherDTO geçirir (yapısal olarak uyumlu).
-export interface SlotTeacher {
-  id: string;
-  name?: string;
-  branches?: string[];
-  allowedGroups?: string[];
-}
+// SALT-GÖRÜNTÜLEME grid (2026-07-22 denetim B3): rezervasyon etkileşimi (öğrenci atama
+// modalı, iptal butonu, forceOpen) KALDIRILDI — etüt rezervasyonu tek kapıdan yürür
+// (öğretmen "Etütler" sekmesi → /api/etut-sablon/rezervasyon). Bu grid yalnız haftalık
+// DERS programını ve açık/kapalı saatleri gösterir. Tek tüketici: TeacherPanel.
 
 // /api/slots grid yanıtı: gün → slotIdx → hücre. Program: gün → slotId → giriş.
 type TeacherGrid = Record<number, SlotCellData[]>;
 type ProgramGrid = Record<string, Record<string, ProgramEntry | null>>;
-type PanelStudent = StudentDTO & { group?: string };
-
-// Rezervasyon onayı argümanları (DirectorPanel/TeacherPanel handleBook sözleşmesi).
-export interface BookArgs {
-  teacherId: string;
-  day: number;
-  slotId: string;
-  studentId: string;
-  weekKey: string;
-  forceOpen?: boolean;
-  fixed?: boolean;
-  branch: string;
-}
-export interface CancelArgs {
-  teacherId: string;
-  day: number;
-  slotId: string;
-  weekKey: string;
-}
-
-// Helper: Modal Component
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div role="dialog" aria-modal="true" aria-label="Slot detayı" className="modal w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h3 className="font-700 text-gray-900 text-base" style={{ fontWeight: 700 }}>{title}</h3>
-          <button onClick={onClose} aria-label="Kapat" className="btn-icon">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="p-6">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-// Helper: FormField
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-4">
-      <label className="block text-xs text-gray-500 font-600 mb-1.5" style={{ fontWeight: 600 }}>{label}</label>
-      {children}
-    </div>
-  );
-}
-
-// Helper: Label
-function Label({ children }: { children: React.ReactNode }) {
-  return (
-    <label className="block text-xs text-gray-500 font-600 mb-1.5" style={{ fontWeight: 600 }}>{children}</label>
-  );
-}
-
-// Helper: ders saati geçip geçmediğini denetleme
 
 interface SlotCellProps {
   slotData: SlotCellData;
   progEntry?: ProgramEntry | null;
   slot: Slot;
   dayIndex: number;
-  slotIdx: number;
-  session: Session;
-  teacher: SlotTeacher;
-  onCellClick: (dayIndex: number, slotIdx: number, slotData: SlotCellData, isForceOpen?: boolean) => void;
-  onCancel: (args: CancelArgs) => void;
   weekKey: string;
   asDiv?: boolean;
 }
 
 // SlotCell — desktop'ta <td>, mobile'da <div> olarak sarılır (asDiv prop'u).
-// İçindeki tüm <td className="py-1 px-1"> wrapper'ları Wrap ile parametrize edildi.
-function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teacher, onCellClick, onCancel, weekKey, asDiv = false }: SlotCellProps) {
+function SlotCell({ slotData, progEntry, slot, dayIndex, weekKey, asDiv = false }: SlotCellProps) {
   const { classes } = useClasses(); // s_ UUID şube kimliklerini kayıtlı ada çevirmek için
   const Wrap = asDiv ? 'div' : 'td';
-  const isDirector = session.role === 'director';
   const isPast = isSlotPast(weekKey, dayIndex, slot.label);
   const isLessonFromProg = progEntry?.type === 'ders';
   const isLessonFromGrid = slotData?.lessonType === 'ders';
@@ -113,35 +39,22 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
   const lessonSubBranch = isLessonFromProg ? progEntry?.subBranch : slotData?.subBranch;
   const lessonIsTemp = slotData?.lessonType === 'ders' && slotData.fixed === false;
 
+  if (isLesson) {
+    const cls = lessonCls ? classShortUpper(classes, lessonCls) : '—';
+    const subShort = lessonSubBranch === 'TYT Matematik' ? 'TYT' : lessonSubBranch === 'AYT Matematik' ? 'AYT' : lessonSubBranch === 'Geometri' ? 'Geo' : lessonSubBranch;
+    return (
+      <Wrap className="py-1 px-1">
+        <div className={`rounded-lg py-1.5 px-1 text-center bg-blue-50 border select-none ${lessonIsTemp ? 'border-dashed border-blue-300' : 'border-blue-100'}`}>
+          <div className="text-[10px] font-600 text-blue-700 truncate" style={{ fontWeight: 600 }}>{cls}</div>
+          {subShort && <div className="text-[9px] text-blue-500 truncate">{subShort}</div>}
+          <div className="text-[9px] text-blue-400">{lessonIsTemp ? 'Geçici ders' : 'Ders'}</div>
+        </div>
+      </Wrap>
+    );
+  }
+
   if (slotData.disabled) {
-    if (isLesson) {
-      const cls = lessonCls ? classShortUpper(classes, lessonCls) : '—';
-      const subShort = lessonSubBranch === 'TYT Matematik' ? 'TYT' : lessonSubBranch === 'AYT Matematik' ? 'AYT' : lessonSubBranch === 'Geometri' ? 'Geo' : lessonSubBranch;
-      return (
-        <Wrap className="py-1 px-1">
-          <div className={`rounded-lg py-1.5 px-1 text-center bg-blue-50 border select-none ${lessonIsTemp ? 'border-dashed border-blue-300' : 'border-blue-100'}`}>
-            <div className="text-[10px] font-600 text-blue-700 truncate" style={{ fontWeight: 600 }}>{cls}</div>
-            {subShort && <div className="text-[9px] text-blue-500 truncate">{subShort}</div>}
-            <div className="text-[9px] text-blue-400">{lessonIsTemp ? 'Geçici ders' : 'Ders'}</div>
-          </div>
-        </Wrap>
-      );
-    }
     if (slotData.eventBlocked) {
-      if (isDirector && !isPast) {
-        return (
-          <Wrap className="py-1 px-1">
-            <button
-              onClick={() => onCellClick(dayIndex, slotIdx, slotData, true)}
-              title={`"${slotData.eventTitle || 'Etkinlik'}" aktif — yine de aç ve rezervasyon yap`}
-              aria-label={`${slotData.eventTitle || 'Etkinlik'} aktif — yine de aç ve rezervasyon yap`}
-              className="w-full rounded-lg py-2 px-1 text-center border border-dashed border-rose-300 bg-rose-100 hover:border-rose-400 hover:bg-rose-200 transition-colors text-[10px] text-rose-700 truncate"
-            >
-              {slotData.eventTitle || 'Etkinlik'}
-            </button>
-          </Wrap>
-        );
-      }
       return (
         <Wrap className="py-1 px-1">
           <div className="rounded-lg py-2 px-1 text-center text-[10px] text-rose-700 bg-rose-100 border border-rose-200 select-none truncate" title={slotData.eventTitle || 'Etkinlik'}>
@@ -150,66 +63,9 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
         </Wrap>
       );
     }
-    if (isDirector) {
-      if (isPast) {
-        return (
-          <Wrap className="py-1 px-1">
-            <div className="rounded-lg py-2 px-1 text-center text-xs text-gray-200 bg-gray-50 border border-gray-100 select-none" title="Bu saat dilimi geçmiş">✕</div>
-          </Wrap>
-        );
-      }
-      return (
-        <Wrap className="py-1 px-1">
-          <button
-            onClick={() => onCellClick(dayIndex, slotIdx, slotData, true)}
-            title="Ek slot aç ve rezervasyon yap"
-            aria-label="Ek slot aç ve rezervasyon yap"
-            className="w-full rounded-lg py-2 px-1 text-center border border-dashed border-amber-400 bg-amber-50 hover:border-amber-500 hover:bg-amber-100 transition-colors text-xs text-amber-600 hover:text-amber-700"
-          >
-            +
-          </button>
-        </Wrap>
-      );
-    }
     return (
       <Wrap className="py-1 px-1">
         <div className="rounded-lg py-2 px-1 text-center text-xs text-gray-200 bg-gray-50 border border-gray-100 select-none">✕</div>
-      </Wrap>
-    );
-  }
-
-  if (slotData.booked) {
-    const bookedBy = slotData.bookedBy || 'student';
-    const canCancel = isDirector ||
-      (session.role === 'student' && slotData.studentId === session.id) ||
-      (session.role === 'teacher' && teacher.id === session.id && bookedBy === 'teacher');
-
-    const clsDisplay = classShortUpper(classes, slotData.studentCls || '');
-
-    const colorMap: Record<string, { bg: string; border: string; name: string; sub: string; label: string }> = {
-      student: { bg: 'bg-indigo-50', border: 'border-indigo-100', name: 'text-indigo-700', sub: 'text-indigo-400', label: 'Öğrenci' },
-      teacher: { bg: 'bg-emerald-50', border: 'border-emerald-100', name: 'text-emerald-700', sub: 'text-emerald-400', label: 'Öğretmen' },
-      director: { bg: 'bg-amber-50', border: 'border-amber-100', name: 'text-amber-700', sub: 'text-amber-600', label: 'Müdür' },
-    };
-    const c = colorMap[bookedBy] || colorMap.student;
-
-    return (
-      <Wrap className="py-1 px-1">
-        <div className={`rounded-lg py-1.5 px-1 text-center ${c.bg} border ${c.border} relative group overflow-hidden`}>
-          <div className={`text-xs font-600 ${c.name} truncate`} style={{ fontWeight: 600 }}>{slotData.studentName}</div>
-          <div className={`text-[10px] ${c.sub} truncate`}>{clsDisplay}</div>
-          <div className={`text-[9px] ${c.sub} opacity-70`}>{c.label}</div>
-          {slotData.fixed && (
-            <div className="text-[8px] px-1 py-0.5 rounded bg-violet-100 text-violet-600 font-600 leading-none mt-0.5 inline-block" style={{ fontWeight: 600 }}>SABİT</div>
-          )}
-          {canCancel && (
-            <button onClick={() => onCancel({ teacherId: teacher.id, day: dayIndex, slotId: slot.id, weekKey })}
-              aria-label="Rezervasyonu iptal et"
-              className={`absolute top-0.5 right-0.5 p-1 rounded hover:bg-red-100 transition-opacity focus-visible:opacity-100 ${isDirector ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
-              <X size={12} className="text-red-400" />
-            </button>
-          )}
-        </div>
       </Wrap>
     );
   }
@@ -224,12 +80,7 @@ function SlotCell({ slotData, progEntry, slot, dayIndex, slotIdx, session, teach
 
   return (
     <Wrap className="py-1 px-1">
-      <button
-        onClick={() => onCellClick(dayIndex, slotIdx, slotData)}
-        className="w-full rounded-lg py-2 px-1 text-center border border-dashed border-emerald-400 bg-emerald-50 hover:border-emerald-500 hover:bg-emerald-100 transition-colors text-xs text-emerald-500 hover:text-emerald-700"
-      >
-        +
-      </button>
+      <div className="rounded-lg py-2 px-1 text-center border border-dashed border-emerald-200 bg-emerald-50/50 text-[10px] text-emerald-500 select-none">Açık</div>
     </Wrap>
   );
 }
@@ -239,29 +90,20 @@ interface MobileDayCardProps {
   slots: Slot[];
   grid?: TeacherGrid | null;
   program?: ProgramGrid | null;
-  teacher: SlotTeacher;
   weekKey: string;
-  session: Session;
-  onCellClick: (dayIndex: number, slotIdx: number, slotData: SlotCellData, isForceOpen?: boolean) => void;
-  onCancel: (args: CancelArgs) => void;
 }
 
 // MobileDayCard — bir günün tüm slot'larını dikey kart olarak gösterir (mobile).
 // Boş, kapalı + geçmiş ve ders olmayan slot'ları gizler (kalabalığı azaltır).
-function MobileDayCard({ day, slots, grid, program, teacher, weekKey, session, onCellClick, onCancel }: MobileDayCardProps) {
+function MobileDayCard({ day, slots, grid, program, weekKey }: MobileDayCardProps) {
 
-  // Hangi slot'lar gösterilsin? Boş + disabled + geçmiş olanları atla.
+  // Hangi slot'lar gösterilsin? Kapalı/geçmiş olanları atla; ders veya açık saat göster.
   const visibleEntries = slots.map((slot, slotIdx) => {
     const slotData = (grid && grid[day.index] && grid[day.index][slotIdx]) || { booked: false, disabled: true };
     const progEntry = program?.[String(day.index)]?.[slot.id];
     const isLesson = progEntry?.type === 'ders' || slotData?.lessonType === 'ders';
-    const isPast = isSlotPast(weekKey, day.index, slot.label);
-    // Filtre: ders varsa göster; booked ise göster; açık (disabled değil) ise göster;
-    // müdür ise kapalı slot'ları da göster (geçmiş hariç).
-    const isDirector = session.role === 'director';
     const isAvailable = !slotData.disabled;
-    const showForDirector = isDirector && !isPast;
-    if (!isLesson && !slotData.booked && !isAvailable && !showForDirector) return null;
+    if (!isLesson && !isAvailable) return null;
     return { slot, slotIdx, slotData, progEntry };
   }).filter((x): x is NonNullable<typeof x> => Boolean(x));
 
@@ -288,11 +130,6 @@ function MobileDayCard({ day, slots, grid, program, teacher, weekKey, session, o
                 progEntry={progEntry}
                 slot={slot}
                 dayIndex={day.index}
-                slotIdx={slotIdx}
-                session={session}
-                teacher={teacher}
-                onCellClick={onCellClick}
-                onCancel={onCancel}
                 weekKey={weekKey}
                 asDiv
               />
@@ -307,17 +144,11 @@ function MobileDayCard({ day, slots, grid, program, teacher, weekKey, session, o
 interface SlotGridProps {
   grid?: TeacherGrid | null;
   program?: ProgramGrid | null;
-  teacher: SlotTeacher;
   weekKey: string;
-  session: Session;
-  students?: PanelStudent[] | null;
-  onBook: (args: BookArgs) => void | Promise<void>;
-  onCancel: (args: CancelArgs) => void;
   hideEmptyDays?: boolean;
 }
 
-export default function SlotGrid({ grid, program, teacher, weekKey, session, students, onBook, onCancel, hideEmptyDays }: SlotGridProps) {
-  const { classes } = useClasses();
+export default function SlotGrid({ grid, program, weekKey, hideEmptyDays }: SlotGridProps) {
   const { slotTimes } = useSlotTimes();
   // Her gün için slot listesi (7-gün model: gün-başına farklı sayı/saat).
   const daySlotsMap = useMemo(() => {
@@ -325,32 +156,6 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
     for (const day of ALL_DAYS) map[day.index] = buildDaySlots(day.index, slotTimes.days?.[day.index]);
     return map;
   }, [slotTimes]);
-  const [bookingSlot, setBookingSlot] = useState<{ dayIndex: number; slotIdx: number; slotId: string; slotLabel: string; dayLabel: string; forceOpen: boolean } | null>(null);
-  const [searchQ, setSearchQ] = useState('');
-  const [selectedStudent, setSelectedStudent] = useState<PanelStudent | null>(null);
-  const [fixedBooking, setFixedBooking] = useState(false);
-  const [bookingBranch, setBookingBranch] = useState('');
-
-  const teacherBranches = teacher.branches || [];
-  const bookCls = session.role === 'student' ? session.cls : selectedStudent?.cls;
-  const bookableBranches = useMemo(() => {
-    if (!bookCls) return teacherBranches;
-    const allowed = coursesForClass(classes, bookCls) ?? allowedBranchesForClass(bookCls);
-    return teacherBranches.filter(b => allowed.includes(b));
-  }, [bookCls, teacher.branches, classes]);
-
-  const filteredStudents = useMemo(() => {
-    if (!students) return [];
-    const q = searchQ.toLowerCase();
-    const allowedGroups = teacher.allowedGroups || [];
-    return students.filter(s => {
-      if (allowedGroups.length === 0 || !allowedGroups.includes(s.group || '')) return false;
-      if (!q) return true;
-      return s.name.toLowerCase().includes(q) ||
-        s.cls.toLowerCase().includes(q) ||
-        classLabelFrom(classes, s.cls, classLabel).toLowerCase().includes(q);
-    }).slice(0, 20);
-  }, [students, searchQ, teacher.allowedGroups, classes]);
 
   const visibleDays = useMemo(() => {
     if (!hideEmptyDays) return ALL_DAYS;
@@ -369,29 +174,6 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
       });
     });
   }, [grid, program, hideEmptyDays, daySlotsMap]);
-
-  const handleCellClick = (dayIndex: number, slotIdx: number, slotData: SlotCellData, isForceOpen = false) => {
-    if (slotData.booked) return;
-    if (slotData.disabled && !isForceOpen) return;
-    const slot = (daySlotsMap[dayIndex] || [])[slotIdx];
-    if (!slot) return;
-    const day = ALL_DAYS.find(d => d.index === dayIndex);
-    setBookingSlot({ dayIndex, slotIdx, slotId: slot.id, slotLabel: slot.label, dayLabel: day!.label, forceOpen: isForceOpen });
-    setSearchQ('');
-    setSelectedStudent(null);
-    setFixedBooking(false);
-  };
-
-  const confirmBook = async () => {
-    if (!bookingSlot) return;
-    let studentId = session.role === 'student' ? session.id : selectedStudent?.id;
-    if (!studentId) return;
-    const branch = bookingBranch || (bookableBranches.length === 1 ? bookableBranches[0] : '');
-    if (!branch) return;
-    await onBook({ teacherId: teacher.id, day: bookingSlot.dayIndex, slotId: bookingSlot.slotId, studentId, weekKey, forceOpen: bookingSlot.forceOpen, fixed: fixedBooking, branch });
-    setBookingSlot(null);
-    setBookingBranch('');
-  };
 
   const colCount = visibleDays.length;
 
@@ -429,7 +211,7 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
                       if (!slot) return <td key={day.index} className="py-1 px-1"><div className="rounded-lg py-2 bg-gray-50 border border-gray-100 text-center text-gray-200 text-xs">—</div></td>;
                       const slotData = (grid && grid[day.index] && grid[day.index][rowIdx]) || { booked: false, disabled: true };
                       const progEntry = program?.[String(day.index)]?.[slot.id];
-                      return <SlotCell key={day.index} slotData={slotData} progEntry={progEntry} slot={slot} dayIndex={day.index} slotIdx={rowIdx} session={session} teacher={teacher} onCellClick={handleCellClick} onCancel={onCancel} weekKey={weekKey} />;
+                      return <SlotCell key={day.index} slotData={slotData} progEntry={progEntry} slot={slot} dayIndex={day.index} weekKey={weekKey} />;
                     })}
                   </tr>
                 );
@@ -448,98 +230,10 @@ export default function SlotGrid({ grid, program, teacher, weekKey, session, stu
             slots={daySlotsMap[day.index] || []}
             grid={grid}
             program={program}
-            teacher={teacher}
             weekKey={weekKey}
-            session={session}
-            onCellClick={handleCellClick}
-            onCancel={onCancel}
           />
         ))}
       </div>
-
-      {bookingSlot && (
-        <Modal title={`Rezervasyon: ${bookingSlot.dayLabel} ${bookingSlot.slotLabel}`} onClose={() => setBookingSlot(null)}>
-          {bookingSlot.forceOpen && (
-            <div className="mb-4 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
-              Bu saat şablonda kapalıdır. Yalnızca bu hafta için açılıp rezerve edilecek — şablon değişmez.
-            </div>
-          )}
-          {session.role === 'student' ? (
-            <div>
-              <p className="text-sm text-gray-600 mb-3"><strong>{teacher.name}</strong> ile etüde kayıt oluyorsunuz.</p>
-              {bookableBranches.length > 1 && (
-                <div className="mb-4">
-                  <Label>Ders seç</Label>
-                  <div className="flex gap-2 flex-wrap mt-1">
-                    {bookableBranches.map(b => (
-                      <button key={b} type="button" onClick={() => setBookingBranch(b)}
-                        className={`px-3 py-1.5 rounded-lg text-sm border transition ${bookingBranch===b?'border-brand-soft bg-brand-soft text-brand':'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-                        {b}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {bookableBranches.length === 1 && (
-                <p className="text-sm text-gray-500 mb-4">Ders: <strong>{bookableBranches[0]}</strong></p>
-              )}
-              <div className="flex gap-3">
-                <button className="btn-primary flex-1" onClick={confirmBook}
-                  disabled={bookableBranches.length > 1 && !bookingBranch}>Onayla</button>
-                <button className="btn-ghost" onClick={() => setBookingSlot(null)}>İptal</button>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <FormField label="Öğrenci Ara">
-                <input className="input" placeholder="İsim, sınıf kodu (701) veya sınıf adı..." value={searchQ}
-                  onChange={e => { setSearchQ(e.target.value); setSelectedStudent(null); }} autoFocus />
-              </FormField>
-              <div className="max-h-52 overflow-y-auto space-y-1 mb-4">
-                {filteredStudents.map(s => (
-                  <button key={s.id} onClick={() => setSelectedStudent(s)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${selectedStudent?.id === s.id ? 'bg-brand-soft border border-brand-soft text-brand' : 'hover:bg-gray-50'}`}>
-                    <span className="font-600" style={{ fontWeight: 600 }}>{s.name}</span>
-                    <span className="text-gray-400 ml-2 text-xs">{classLabelFrom(classes, s.cls, classLabel)}</span>
-                  </button>
-                ))}
-                {filteredStudents.length === 0 && searchQ && <p className="text-sm text-gray-400 text-center py-4">Öğrenci bulunamadı</p>}
-              </div>
-              {selectedStudent && bookableBranches.length > 1 && (
-                <div className="mb-4">
-                  <Label>Ders seç</Label>
-                  <div className="flex gap-2 flex-wrap mt-1">
-                    {bookableBranches.map(b => (
-                      <button key={b} type="button" onClick={() => setBookingBranch(b)}
-                        className={`px-3 py-1.5 rounded-lg text-sm border transition ${bookingBranch===b?'border-brand-soft bg-brand-soft text-brand':'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-                        {b}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {selectedStudent && bookableBranches.length === 0 && (
-                <p className="text-xs text-amber-600 mb-3">Bu öğretmenin bu öğrenci sınıfına verebileceği ders yok.</p>
-              )}
-              {session.role === 'director' && (
-                <label className="flex items-center gap-2 mb-4 cursor-pointer select-none">
-                  <input type="checkbox" checked={fixedBooking} onChange={e => setFixedBooking(e.target.checked)}
-                    className="w-4 h-4 rounded accent-brand" />
-                  <span className="text-sm text-gray-700 font-500" style={{ fontWeight: 500 }}>Sabit rezervasyon</span>
-                  <span className="text-xs text-gray-400">(her hafta otomatik tekrarlanır)</span>
-                </label>
-              )}
-              <div className="flex gap-3">
-                <button className="btn-primary flex-1" onClick={confirmBook}
-                  disabled={!selectedStudent || bookableBranches.length === 0 || (bookableBranches.length > 1 && !bookingBranch)}>
-                  {selectedStudent ? `${selectedStudent.name} için Rezerve Et` : 'Öğrenci Seçin'}
-                </button>
-                <button className="btn-ghost" onClick={() => setBookingSlot(null)}>İptal</button>
-              </div>
-            </div>
-          )}
-        </Modal>
-      )}
     </div>
   );
 }

@@ -179,32 +179,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     if (selectedTeacherForSlots) await loadTeacherSlots(selectedTeacherForSlots, newWeek);
   };
 
-  const refreshSlots = async (teacher?: TeacherDTO) => {
-    const t = teacher || selectedTeacherForSlots;
-    if (t) {
-      const data = await api<{ weekKey?: string; grid?: TeacherGrid }>(`/api/slots?teacherId=${t.id}&week=${weekKey}`);
-      setTeacherSlots(data.grid);
-    }
-    const slotsData = await api<{ weekKey?: string; slots?: SlotEntryDTO[] }>(`/api/slots?week=${weekKey}`);
-    setAllSlots(slotsData.slots || []);
-  };
-
-  const handleBook = async (params: Record<string, unknown>) => {
-    try {
-      await api('/api/slots', { method: 'POST', body: JSON.stringify(params) });
-      showToast('Rezervasyon yapıldı');
-      await refreshSlots();
-    } catch (err) { showToast((err as Error).message, 'error'); }
-  };
-
-  const handleCancel = async (params: { teacherId: string; day: number; slotId: string }) => {
-    try {
-      await api('/api/slots', { method: 'DELETE', body: JSON.stringify({ ...params, weekKey }) });
-      showToast('Rezervasyon iptal edildi');
-      await refreshSlots();
-    } catch (err) { showToast((err as Error).message, 'error'); }
-  };
-
   if (loading) return <LoadingBox height="h-64" />;
 
   return (
@@ -246,7 +220,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
             try { await api('/api/teachers',{method:'DELETE',body:JSON.stringify({id:t.id})}); showToast('Öğretmen silindi'); setExpandedTeacherId(null); loadAll(weekKey); } catch(err){showToast((err as Error).message,'error');}
           }}
           onWeekChange={handleWeekChange}
-          onCancelBooking={(teacherId, day, slotId) => handleCancel({ teacherId, day, slotId })}
         />
       )}
 
