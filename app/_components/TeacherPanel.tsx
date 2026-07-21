@@ -937,7 +937,7 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
       {activeTab === 'rezervasyon' && (
         <>
           <PanelHero name={session.name} />
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <div className="pill-tabs shrink-0">
               <button
                 onClick={() => setViewMode('table')}
