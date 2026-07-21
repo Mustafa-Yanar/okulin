@@ -26,6 +26,7 @@ interface EtutRow {
   id: string; teacherId: string; dayIndex: number;
   start?: string; end?: string; branch?: string | null;
   studentId?: string | null; studentName?: string | null; studentCls?: string | null;
+  scope?: string | null;
 }
 
 // Müdür öğretmen-detay "Etütler" sekmesi — öğretmenin bu hafta EFEKTİF AKTİF etüt
@@ -40,7 +41,7 @@ function TeacherEtutReservations({ teacherId, weekKey, readOnly, showToast }: { 
   const load = useCallback(async () => {
     setRows(null);
     try {
-      const d = await api<{ etutler?: EtutRow[] }>(`/api/etut-sablon/all?week=${weekKey}`).catch(() => ({ etutler: [] as EtutRow[] }));
+      const d = await api<{ etutler?: EtutRow[] }>(`/api/etut-sablon/all?week=${weekKey}`);
       setRows((d.etutler || []).filter(e => e.teacherId === teacherId && e.studentId));
     } catch (err) {
       showToast((err as Error).message, 'error');
@@ -49,11 +50,11 @@ function TeacherEtutReservations({ teacherId, weekKey, readOnly, showToast }: { 
   }, [teacherId, weekKey, showToast]);
   useEffect(() => { load(); }, [load]);
 
-  async function cancel(etutId: string) {
+  async function cancel(etutId: string, scope?: string | null) {
     setBusy(etutId);
     try {
-      await api('/api/etut-sablon/rezervasyon', { method: 'DELETE', body: JSON.stringify({ teacherId, etutId }) });
-      showToast('Rezervasyon iptal edildi', 'success');
+      await api('/api/etut-sablon/rezervasyon', { method: 'DELETE', body: JSON.stringify({ teacherId, etutId, weekKey, scope: 'week' }) });
+      showToast(scope === 'RECURRING' ? 'Bu haftanın etüdü iptal edildi (seri devam eder)' : 'Rezervasyon iptal edildi', 'success');
       load();
     } catch (err) {
       showToast((err as Error).message, 'error');
@@ -94,10 +95,14 @@ function TeacherEtutReservations({ teacherId, weekKey, readOnly, showToast }: { 
                   <span className="text-sm text-gray-800 truncate">
                     {e.studentName}{e.studentCls ? ` · ${classShortUpper(classes, e.studentCls)}` : ''}
                   </span>
+                  {e.scope === 'RECURRING' && (
+                    <span className="badge badge-info shrink-0">Her hafta</span>
+                  )}
                 </div>
                 {!readOnly && (
-                  <button onClick={() => cancel(e.id)} disabled={busy === e.id}
-                    className="btn-icon btn-icon-danger shrink-0" title="Rezervasyonu iptal et">
+                  <button onClick={() => cancel(e.id, e.scope)} disabled={busy === e.id}
+                    className="btn-icon btn-icon-danger shrink-0"
+                    title={e.scope === 'RECURRING' ? "Bu haftanın etüdünü iptal et (seri devam eder — seriyi ProgramEditor'dan yönetin)" : 'Rezervasyonu iptal et'}>
                     <X size={13} />
                   </button>
                 )}

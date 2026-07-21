@@ -43,6 +43,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
   const { classes, courses } = useClasses();
   const [weekKey, setWeekKey] = useState(getWeekKey());
   const [allSlots, setAllSlots] = useState<BookingSlotEntry[]>([]);
+  const [bookableWeeks, setBookableWeeks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterBranch, setFilterBranch] = useState('');
   const [filterTeacher, setFilterTeacher] = useState('');
@@ -65,7 +66,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
       const resolvedWeek = wk || getWeekKey();
       if (!wk) setWeekKey(resolvedWeek);
       // Sadece yeni serbest etüt şablonları (eski slot-etüt /api/slots emekli edildi — Faz 7c-3).
-      const etutData = await api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${resolvedWeek}`);
+      const etutData = await api<{ etutler?: EtutAllDTO[]; bookableWeeks?: string[] }>(`/api/etut-sablon/all?week=${resolvedWeek}`);
       // Yeni etütleri slot-benzeri şekle çevir (AvailableTree/BookingsView aynı bileşeni kullanır).
       const etutList: BookingSlotEntry[] = (etutData.etutler || []).map(e => ({
         kind: 'etut',
@@ -86,8 +87,10 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
         studentName: e.studentName,
         branch: e.branch,
         bookedBy: e.bookedBy || (e.studentId ? 'student' : undefined),
+        scope: e.scope,
       }));
       setAllSlots(etutList);
+      setBookableWeeks(etutData.bookableWeeks || []);
     } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setLoading(false); }
   }, [showToast]);
@@ -101,6 +104,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
   }, [allSlots]);
 
   const myBookings = useMemo(() => allSlots.filter(s => s.booked && s.studentId === session.id), [allSlots, session.id]);
+  const canBookThisWeek = bookableWeeks.includes(weekKey);
   // Registry'de şubenin ders listesi varsa onu kullan (özel şube/özel ders), yoksa constants fallback.
   const studentAllowedBranches = useMemo(
     () => coursesForClass(classes, session.cls || '') ?? allowedBranchesForClass(session.cls),
@@ -144,7 +148,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
 
   const handleCancel = async ({ teacherId, etutId }: BookingCancelArgs) => {
     try {
-      await api('/api/etut-sablon/rezervasyon', { method: 'DELETE', body: JSON.stringify({ teacherId, etutId }) });
+      await api('/api/etut-sablon/rezervasyon', { method: 'DELETE', body: JSON.stringify({ teacherId, etutId, weekKey }) });
       showToast('Rezervasyon iptal edildi');
       loadData(weekKey);
     } catch (err) { showToast((err as Error).message, 'error'); }
@@ -192,6 +196,14 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
         </div>
       ) : (
         <div>
+          {!canBookThisWeek && weekKey > getWeekKey() && (
+            <div className="card p-3 mb-3 text-sm flex items-center gap-2" style={{ color: 'var(--text-secondary)' }}>
+              <span aria-hidden>🔒</span>
+              {weekKey === getAdjacentWeek(getWeekKey(), 1)
+                ? 'Gelecek haftanın rezervasyonu Pazar 11:00\'de açılır. Şimdilik sadece görüntüleyebilirsin.'
+                : 'Bu hafta yalnız görüntülenebilir — rezervasyon penceresi dışında.'}
+            </div>
+          )}
           {/* Filters Bar */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
             <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)} aria-label="Derse göre filtrele" className="w-full text-sm border rounded-xl px-3 py-2.5 bg-[var(--bg-surface)] border-[var(--border-light)] text-[var(--text-primary)]">
@@ -207,7 +219,7 @@ export default function StudentPanel({ session, showToast, externalTab, onExtern
               {ALL_DAYS.map(d => <option key={d.index} value={d.index}>{d.label}</option>)}
             </select>
           </div>
-          <AvailableTree available={available} onBook={handleBook} selectableBranchesFor={selectableBranchesFor} />
+          <AvailableTree available={available} onBook={handleBook} selectableBranchesFor={selectableBranchesFor} bookingDisabled={!canBookThisWeek} />
         </div>
       )}
     </div>

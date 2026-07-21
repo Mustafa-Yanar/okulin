@@ -237,13 +237,16 @@ export interface EtutSlotView {
   dayLabel: string; // "Salı"
   start: string; // "14:00"
   end: string;
-  branches: string[]; // seçilebilir ders adayları (öğrenci sınıfı ∩ öğretmen branşları)
+  branches: string[]; // seçilebilir ders adayları (öğretmen branşları ∩ öğrencinin düzey havuzu — sınıf değil)
   booked: boolean; // başkası dolu
   mine: boolean; // bu öğrencinin rezervasyonu
   branch: string | null; // mine ise rezerve edilen ders
 }
 export interface EtutScreenResponse {
-  weekKey: string;
+  weekKey: string; // gösterilen hafta
+  currentWeekKey: string; // TSİ bu hafta
+  nextWeekKey: string; // TSİ gelecek hafta
+  bookableWeeks: string[]; // öğrencinin YAZABİLECEĞİ haftalar (Pazar 11:00 kuralı sunucuda)
   slots: EtutSlotView[]; // gün+saat sıralı; UI güne göre gruplar
 }
 export interface ReserveEtutRequest {
@@ -260,6 +263,9 @@ export interface ReserveEtutResponse {
 export interface CancelEtutRequest {
   teacherId: string;
   etutId: string;
+  // gelecek haftaya rezervasyon yapan öğrenci O haftayı iptal edebilsin diye (Faz 2b Task 7);
+  // yoksa sunucu mevcut haftaya düşer.
+  weekKey?: string;
 }
 
 // ── Haftalık program (screens/week — spec §5.1) ─────────────────────────────

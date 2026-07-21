@@ -27,14 +27,14 @@
 
 **Files:** (yok — git)
 
-- [ ] **Step 1: Dalı oluştur**
+- [x] **Step 1: Dalı oluştur**
 
 ```bash
 cd /Users/mustafa/Workspace/active/okulin
 git checkout -b etut-hafta-bazli
 ```
 
-- [ ] **Step 2: Doğrula**
+- [x] **Step 2: Doğrula**
 
 Run: `git branch --show-current`
 Expected: `etut-hafta-bazli`
@@ -49,7 +49,7 @@ Expected: `etut-hafta-bazli`
 **Interfaces:**
 - Produces: Prisma client'ta `tdb().etutSablon`, `tdb().etutReservation` modelleri; `SlotBooking.startsAt/endsAt` nullable kolonları. Faz 2+ servis katmanı bunları kullanır. Göç scriptleri (Task 3) raw `PrismaClient` ile aynı modellere yazar.
 
-- [ ] **Step 1: Teacher modeline back-relation ekle**
+- [x] **Step 1: Teacher modeline back-relation ekle**
 
 `prisma/schema.prisma` içinde `model Teacher` bloğunda `slotBookings SlotBooking[]` satırının hemen altına ekle:
 
@@ -57,7 +57,7 @@ Expected: `etut-hafta-bazli`
   etutSablonlarRel   EtutSablon[]
 ```
 
-- [ ] **Step 2: SlotBooking'e snapshot kolonları ekle**
+- [x] **Step 2: SlotBooking'e snapshot kolonları ekle**
 
 `model SlotBooking` bloğunda `data Json` (veya son alan) satırının altına ekle:
 
@@ -68,7 +68,7 @@ Expected: `etut-hafta-bazli`
   endsAt    String?
 ```
 
-- [ ] **Step 3: Dosya sonuna iki yeni model ekle**
+- [x] **Step 3: Dosya sonuna iki yeni model ekle**
 
 ```prisma
 // ── Etüt şablonu (Faz 1 göçü: Teacher.programTemplate.etutSablonlari JSON → tablo) ──
@@ -78,7 +78,7 @@ model EtutSablon {
   id            String   @id @default(cuid())
   orgSlug       String
   branch        String   @default("main")
-  teacherId     String   // legacyId (SlotBooking konvansiyonu)
+  teacherId     String   // legacyId (etutSablonlari JSON konvansiyonu — DİKKAT: SlotBooking.teacherId bundan FARKLI, Teacher.id kullanır)
   teacher       Teacher  @relation(fields: [orgSlug, branch, teacherId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
   dayIndex      Int
   start         String   // "HH:MM"
@@ -131,22 +131,22 @@ model EtutReservation {
 }
 ```
 
-- [ ] **Step 4: Şemayı doğrula**
+- [x] **Step 4: Şemayı doğrula**
 
 Run: `npx prisma validate`
 Expected: `The schema at prisma/schema.prisma is valid 🚀` (bileşik FK — orgSlug+branch+legacyId — Teacher'daki `@@unique([orgSlug, branch, legacyId])` satır 175'e bağlanır; hata verirse relation fields/references sırasını kontrol et)
 
-- [ ] **Step 5: DB'ye uygula (additive — eski kod etkilenmez)**
+- [x] **Step 5: DB'ye uygula (additive — eski kod etkilenmez)**
 
 Run: `set -a; source .env.local; set +a; npm run db:push`
 Expected: `Your database is now in sync with your Prisma schema.` — yeni 2 tablo + 2 nullable kolon; mevcut veriye dokunmaz.
 
-- [ ] **Step 6: Build + mevcut testler yeşil**
+- [x] **Step 6: Build + mevcut testler yeşil**
 
 Run: `npm run build && npm test`
 Expected: build `✓ Compiled successfully`, vitest tümü PASS (mevcut 13 etüt testi dahil).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add prisma/schema.prisma
@@ -172,7 +172,7 @@ devam eder; cutover Faz 5'te."
   - `nearestFutureActiveWeek(sb, now: Date, horizon=8): string|null`
   - `classifyReservation(sb, now: Date): {action:'none'} | {action:'unresolved', reason:string} | {action:'migrate', weekKey:string}`
 
-- [ ] **Step 1: Failing testleri yaz**
+- [x] **Step 1: Failing testleri yaz**
 
 `scripts/etut-migration-lib.test.mjs`:
 
@@ -242,12 +242,12 @@ describe('classifyReservation', () => {
 });
 ```
 
-- [ ] **Step 2: Testlerin FAIL ettiğini doğrula**
+- [x] **Step 2: Testlerin FAIL ettiğini doğrula**
 
 Run: `npx vitest run scripts/etut-migration-lib.test.mjs`
 Expected: FAIL — `Cannot find module './etut-migration-lib.mjs'`
 
-- [ ] **Step 3: Kütüphaneyi yaz**
+- [x] **Step 3: Kütüphaneyi yaz**
 
 `scripts/etut-migration-lib.mjs`:
 
@@ -324,17 +324,17 @@ export function classifyReservation(sb, now) {
 }
 ```
 
-- [ ] **Step 4: Testlerin PASS ettiğini doğrula**
+- [x] **Step 4: Testlerin PASS ettiğini doğrula**
 
 Run: `npx vitest run scripts/etut-migration-lib.test.mjs`
 Expected: 13 test PASS.
 
-- [ ] **Step 5: Tüm test paketi hâlâ yeşil**
+- [x] **Step 5: Tüm test paketi hâlâ yeşil**
 
 Run: `npm test`
 Expected: tümü PASS (vitest scripts/*.test.mjs'i de toplar — toplamaya girmezse `npx vitest run scripts/` ile ayrıca koş; vitest config include'una `scripts/**/*.test.mjs` eklemek gerekirse ekle ve commit'e dahil et).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/etut-migration-lib.mjs scripts/etut-migration-lib.test.mjs
@@ -352,7 +352,7 @@ git commit -m "feat(etüt-faz1): göç saf yardımcıları (TSİ hafta/slot hesa
 - Consumes: Task 2'nin 5 fonksiyonu; Task 1 Prisma modelleri.
 - Produces: Çalıştırılabilir göç. `node scripts/migrate-etut-to-tables.mjs [--apply] [--org <slug>]`. Dry-run çıktısı: plan satırları + özet sayaçlar + unresolved listesi. Rapor JSON'u `scripts/backups/etut-migration-report-<ISO>.json`.
 
-- [ ] **Step 1: Scripti yaz**
+- [x] **Step 1: Scripti yaz**
 
 `scripts/migrate-etut-to-tables.mjs`:
 
@@ -446,12 +446,12 @@ console.log(`Rapor: ${reportPath}`);
 await p.$disconnect();
 ```
 
-- [ ] **Step 2: Dry-run çalıştır (canlı DB, salt-okuma)**
+- [x] **Step 2: Dry-run çalıştır (canlı DB, salt-okuma)**
 
 Run: `set -a; source .env.local; set +a; node scripts/migrate-etut-to-tables.mjs`
 Expected: `DRY-RUN` modu; akyazicozum için 57 şablon upsert planı (canlı sayım 2026-07-19: 13 öğretmen, 4+2+4+4+4+6+5+4+4+4+8+4+4); **2 rezervasyon** planı (İREM AĞIRMAN → MUSTAFA YANAR TYT Matematik; AHMET CEMAL BABİLOĞLU → NESLİHAN CEYLAN Biyoloji) — weekKey çalıştırma anına göre en yakın gelecek hafta; unresolved 0 beklenir. testkurs dahil diğer org'lar da listelenir.
 
-- [ ] **Step 3: Çıktıyı canlı DB gerçeğiyle karşılaştır**
+- [x] **Step 3: Çıktıyı canlı DB gerçeğiyle karşılaştır**
 
 Şu tek seferlik kontrol scriptiyle (scratchpad'e yaz, commit ETME) JSON'daki studentId'li şablon sayısını say ve dry-run rapor sayılarıyla karşılaştır:
 
@@ -471,7 +471,7 @@ await p.$disconnect();
 
 Expected: `sablonJSON` = rapor `sablonUpserted.length`; `rezervasyonJSON` = `reservationCreated + unresolved` toplamı.
 
-- [ ] **Step 4: Commit (rapor/backup dizini hariç)**
+- [x] **Step 4: Commit (rapor/backup dizini hariç)**
 
 ```bash
 echo "scripts/backups/" >> .gitignore
@@ -492,7 +492,7 @@ JSON'a dokunmaz (temizlik Faz 5). Dry-run canlıda doğrulandı: sayılar JSON i
 **Interfaces:**
 - Produces: Faz 5 cutover'da kullanılacak: `cleanup-etut-json.mjs --apply` (önce tam yedek dosyası yazar, sonra JSON'dan `etutSablonlari` anahtarını siler), `rollback-etut-json.mjs <backupPath> --apply` (yedeği geri yükler). Faz 1'de YALNIZ dry-run test edilir.
 
-- [ ] **Step 1: Temizlik scriptini yaz**
+- [x] **Step 1: Temizlik scriptini yaz**
 
 `scripts/cleanup-etut-json.mjs`:
 
@@ -534,7 +534,7 @@ for (const b of backup) {
 await p.$disconnect();
 ```
 
-- [ ] **Step 2: Rollback scriptini yaz**
+- [x] **Step 2: Rollback scriptini yaz**
 
 `scripts/rollback-etut-json.mjs`:
 
@@ -563,7 +563,7 @@ console.log(`${backup.length} öğretmen işlendi (${APPLY ? 'APPLY' : 'dry-run'
 await p.$disconnect();
 ```
 
-- [ ] **Step 3: İkisini de dry-run test et (canlıya yazmadan)**
+- [x] **Step 3: İkisini de dry-run test et (canlıya yazmadan)**
 
 Run:
 ```bash
@@ -573,7 +573,7 @@ node scripts/rollback-etut-json.mjs scripts/backups/etut-json-backup-*.json  # d
 ```
 Expected: cleanup → `Yedek: ... (N öğretmen)` + `DRY-RUN — JSON temizlenmedi`; rollback → her öğretmen için `DRY-RUN: ...` satırı, DB'ye yazma yok.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/cleanup-etut-json.mjs scripts/rollback-etut-json.mjs
@@ -589,12 +589,12 @@ git commit -m "feat(etüt-faz1): JSON temizlik + rollback scriptleri (Faz 5 cuto
 **Interfaces:**
 - Produces: EtutSablon + EtutReservation tabloları DOLU (Faz 2 servis geliştirmesi gerçek veriye karşı test edilebilir). JSON değişmedi → prod davranışı aynen sürüyor; tablo-JSON arası tazelik Faz 5 cutover'ında final göç tekrarıyla (idempotent) kapatılır.
 
-- [ ] **Step 1: Göçü uygula**
+- [x] **Step 1: Göçü uygula**
 
 Run: `set -a; source .env.local; set +a; node scripts/migrate-etut-to-tables.mjs --apply`
 Expected: dry-run'daki sayıların aynısı `APPLY` modunda; hata yok.
 
-- [ ] **Step 2: Tabloları canlı sorguyla doğrula**
+- [x] **Step 2: Tabloları canlı sorguyla doğrula**
 
 Scratchpad'e tek seferlik script (commit ETME):
 
@@ -611,17 +611,17 @@ await p.$disconnect();
 
 Expected: EtutSablon sayısı = dry-run raporu; EtutReservation = 2 (İrem + Ahmet, en yakın gelecek hafta); her rezervasyonun `sablon` ilişkisi çözülüyor (FK sağlam).
 
-- [ ] **Step 3: İdempotency provası — scripti İKİNCİ kez apply ile koş**
+- [x] **Step 3: İdempotency provası — scripti İKİNCİ kez apply ile koş**
 
 Run: `node scripts/migrate-etut-to-tables.mjs --apply`
 Expected: `Rezervasyon oluşturuldu: 0`, `Var olduğu için atlanan: 2` — çift kayıt YOK.
 
-- [ ] **Step 4: Build + tüm testler son kontrol**
+- [x] **Step 4: Build + tüm testler son kontrol**
 
 Run: `npm run build && npm test`
 Expected: yeşil.
 
-- [ ] **Step 5: Faz 1 kapanış commit'i (dokümantasyon)**
+- [x] **Step 5: Faz 1 kapanış commit'i (dokümantasyon)**
 
 `docs/superpowers/plans/2026-07-20-etut-hafta-bazli-faz1.md` içindeki tüm checkbox'ları işaretle, sonra:
 

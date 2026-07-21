@@ -1,15 +1,18 @@
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { parseBody, z, zId } from '@/lib/validate';
-import { slotStartTime, getProgramTemplate, setProgramTemplate, type EtutSablonu } from '@/lib/slots';
-import { getWeekKey } from '@/lib/constants';
+import { listSablonlarWithRez, saveSablon, toggleSablon, softDeleteSablon } from '@/lib/etut/sablon-service';
+import { bookEtut, cancelEtutV2 } from '@/lib/etut/booking';
+import { isValidWeekKey, currentWeekKeyTSI } from '@/lib/etut/weeks';
 
 // Etüt şablonları — öğretmenin haftadan bağımsız, serbest saatli etüt blokları.
-// program:<teacherId>.etutSablonlari = [ { id, dayIndex, start, end, aktif } ]
 // Ders slotlarından (w1-w12) BAĞIMSIZ; gerçek saat bazlı (calendar için).
-// Teacher.programTemplate.etutSablonlari olarak saklanır (SQL).
-
-import { newId as makeId } from '@/lib/id';
+// GET/POST/PUT/DELETE: EtutSablon tablosu (lib/etut/sablon-service — Faz 2b Task 1).
+// Faz 3: TÜM yanıtlar listSablonlarWithRez ile döner — şablon + o haftanın EFEKTİF
+// rezervasyon alanları (studentId/studentName/studentCls/branch/bookedBy/rezScope) birlikte.
+// PATCH (öğrenci atama): bookEtut/cancelEtutV2 orkestratörüne devredildi (Faz 2b Task 5),
+// artık scope (WEEK/RECURRING) + weekKey istemciden gelebilir (default RECURRING — geriye
+// uyum, eski istemci scope göndermez).
 
 const zTime = z.string().regex(/^\d{2}:\d{2}$/, 'Saat HH:MM olmalı');
 const zDay = z.number().int().min(0).max(6);
@@ -25,7 +28,7 @@ const SaveSchema = z.object({
     aktif: z.boolean().optional(),
   }),
 });
-const DeleteSchema = z.object({ teacherId: zId, id: zId });
+const DeleteSchema = z.object({ teacherId: zId, id: zId, weekKey: z.string().max(40).optional() });
 
 const ToggleSchema = z.object({
   teacherId: zId,
@@ -44,58 +47,35 @@ const AssignSchema = z.object({
     // cls = sınıf legacyId'si — yeni sınıflar 's_'+UUID (38 kr), classes route max(60) ile uyumlu
     cls: z.string().max(60).optional(),
   }).nullable(),
+  scope: z.enum(['WEEK', 'RECURRING']).optional(),   // default RECURRING (geriye uyum — eski istemci scope göndermez)
+  weekKey: z.string().max(40).optional().refine((wk) => wk === undefined || isValidWeekKey(wk), { message: 'Geçersiz hafta formatı' }),
 });
 
-function toMin(t: string): number {
-  const [h, m] = t.split(':').map(Number);
-  return h * 60 + m;
-}
-
-// programTemplate'ten etutSablonlari oku, değiştir, geri yaz
-async function updateSablonlar(teacherId: string, mutFn: (list: EtutSablonu[]) => EtutSablonu[]) {
-  const fullTemplate = await getProgramTemplate(teacherId);
-  const list: EtutSablonu[] = Array.isArray(fullTemplate.etutSablonlari) ? (fullTemplate.etutSablonlari as EtutSablonu[]) : [];
-  const newList = mutFn(list);
-  await setProgramTemplate(teacherId, { ...fullTemplate, etutSablonlari: newList });
-  return newList;
-}
-
-// GET /api/etut-sablon?teacherId=...
+// GET /api/etut-sablon?teacherId=...&week=YYYY-Www
 export const GET = withAuth('auth', 'etut', async (req) => {
-  const teacherId = new URL(req.url).searchParams.get('teacherId');
+  const url = new URL(req.url);
+  const teacherId = url.searchParams.get('teacherId');
   if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
+  const week = url.searchParams.get('week') || undefined;
+  // resolveEffective ISO-string sıralamasına dayanır; 'foo'/'2026-W99' gibi geçersiz
+  // değerler recurring'i yanlış efektif gösterebilir — sessiz düşüş yerine 400 (teşhis edilebilir).
+  if (week && !isValidWeekKey(week)) {
+    return NextResponse.json({ error: 'Geçersiz hafta formatı' }, { status: 400 });
+  }
+  const wk = week || currentWeekKeyTSI();
 
-  const fullTemplate = await getProgramTemplate(teacherId);
-  return NextResponse.json({ sablonlar: (fullTemplate.etutSablonlari as EtutSablonu[] | undefined) || [] });
+  const sablonlar = await listSablonlarWithRez(teacherId, wk);
+  return NextResponse.json({ sablonlar });
 });
 
 // POST /api/etut-sablon → şablon ekle (id yoksa) veya güncelle (id varsa)
 export const POST = withAuth('manage', 'etut', async (req) => {
   const parsed = await parseBody(req, SaveSchema);
   if (!parsed.ok) return parsed.response;
-  const { teacherId, sablon, weekKey: wk } = parsed.data;
-  const weekKey = wk || getWeekKey();
+  const { teacherId, sablon, weekKey } = parsed.data;
 
-  if (toMin(sablon.end) <= toMin(sablon.start)) {
-    return NextResponse.json({ error: 'Bitiş saati başlangıçtan sonra olmalı' }, { status: 400 });
-  }
-
-  const startAt = slotStartTime(weekKey, sablon.dayIndex, sablon.start);
-  if (startAt.getTime() <= Date.now()) {
-    return NextResponse.json({ error: 'Geçmiş bir gün/saate etüt eklenemez' }, { status: 400 });
-  }
-
-  const sablonlar = await updateSablonlar(teacherId, (list) => {
-    if (sablon.id) {
-      const idx = list.findIndex(s => s.id === sablon.id);
-      if (idx === -1) return list;
-      const updated = [...list];
-      updated[idx] = { ...updated[idx], ...sablon };
-      return updated;
-    } else {
-      return [...list, { id: makeId(), dayIndex: sablon.dayIndex, start: sablon.start, end: sablon.end, aktif: sablon.aktif ?? true }];
-    }
-  });
+  await saveSablon(teacherId, sablon, weekKey);
+  const sablonlar = await listSablonlarWithRez(teacherId, weekKey || currentWeekKeyTSI());
   return NextResponse.json({ ok: true, sablonlar });
 });
 
@@ -108,56 +88,40 @@ export const PUT = withAuth('manage', 'etut', async (req) => {
     return NextResponse.json({ error: 'weekKey gerekli' }, { status: 400 });
   }
 
-  const sablonlar = await updateSablonlar(teacherId, (list) => {
-    const idx = list.findIndex(s => s.id === id);
-    if (idx === -1) return list;
-    const sb = { ...list[idx] };
-    if (scope === 'all') {
-      sb.aktif = aktif;
-      if (aktif) sb.pasifHaftalar = [];
-    } else {
-      const set = new Set(Array.isArray(sb.pasifHaftalar) ? sb.pasifHaftalar : []);
-      if (aktif) set.delete(weekKey as string); else set.add(weekKey as string);
-      sb.pasifHaftalar = Array.from(set);
-    }
-    const updated = [...list];
-    updated[idx] = sb;
-    return updated;
-  });
+  await toggleSablon(teacherId, id, scope, weekKey, aktif);
+  const sablonlar = await listSablonlarWithRez(teacherId, weekKey || currentWeekKeyTSI());
   return NextResponse.json({ ok: true, sablonlar });
 });
 
-// PATCH /api/etut-sablon → şablona öğrenci ata / kaldır
+// PATCH /api/etut-sablon → şablona öğrenci ata / kaldır (spec §9). student.name/cls
+// gövdeden gelse de KULLANILMAZ — bookEtut hedefi kendi çözer (DB'den taze ad/sınıf);
+// AssignSchema yalnız geriye dönük istemci uyumluluğu için bu alanları kabul eder.
+// scope: WEEK (o hafta) veya RECURRING (tekrarlayan, varsayılan — eski istemci scope göndermez).
 export const PATCH = withAuth('manage', 'etut', async (req, ctx, session) => {
   const parsed = await parseBody(req, AssignSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id, student } = parsed.data;
+  const scope = parsed.data.scope ?? 'RECURRING';
+  const weekKey = parsed.data.weekKey;
 
-  const sablonlar = await updateSablonlar(teacherId, (list) => {
-    const idx = list.findIndex(s => s.id === id);
-    if (idx === -1) return list;
-    const sb = { ...list[idx] };
-    if (student) {
-      sb.studentId = student.id;
-      sb.studentName = student.name;
-      sb.studentCls = student.cls || '';
-      sb.bookedBy = session.role;
-    } else {
-      delete sb.studentId; delete sb.studentName; delete sb.studentCls; delete sb.bookedBy;
-    }
-    const updated = [...list];
-    updated[idx] = sb;
-    return updated;
-  });
+  if (student) {
+    await bookEtut(session, { teacherId, etutId: id, studentId: student.id, scope, weekKey });
+  } else {
+    await cancelEtutV2(session, scope === 'WEEK'
+      ? { teacherId, etutId: id, scope: 'week', weekKey }
+      : { teacherId, etutId: id, scope: 'recurring' });
+  }
+  const sablonlar = await listSablonlarWithRez(teacherId, weekKey || currentWeekKeyTSI());
   return NextResponse.json({ ok: true, sablonlar });
 });
 
-// DELETE /api/etut-sablon → şablon sil
+// DELETE /api/etut-sablon → şablon sil (soft-delete: deletedAt=now, rezervasyonlar SİLİNMEZ)
 export const DELETE = withAuth('manage', 'etut', async (req) => {
   const parsed = await parseBody(req, DeleteSchema);
   if (!parsed.ok) return parsed.response;
-  const { teacherId, id } = parsed.data;
+  const { teacherId, id, weekKey } = parsed.data;
 
-  const sablonlar = await updateSablonlar(teacherId, (list) => list.filter(s => s.id !== id));
+  await softDeleteSablon(teacherId, id);
+  const sablonlar = await listSablonlarWithRez(teacherId, weekKey || currentWeekKeyTSI());
   return NextResponse.json({ ok: true, sablonlar });
 });

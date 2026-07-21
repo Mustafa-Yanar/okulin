@@ -67,14 +67,9 @@ export const GET = withAuth(async (req) => {
         if (cell.subBranch) e.subBranch = cell.subBranch;
         effective[String(row.dayIndex)][row.slotId] = e;
       }
-      // Geçici etüt
-      if (row.booked && cell.fixed === false) {
-        if (!effective[String(row.dayIndex)]) effective[String(row.dayIndex)] = {};
-        effective[String(row.dayIndex)][row.slotId] = {
-          type: 'etut', studentId: row.studentId,
-          studentName: row.studentName || '', studentCls: row.studentCls || '', fixed: false,
-        };
-      }
+      // Faz 4 Y3: "Geçici etüt" dalı KALDIRILDI — etüt artık EtutReservation'da yaşıyor
+      // (bookEtut tek yol, GET /api/etut-sablon/all okur); SlotBooking'e etüt yazan yol
+      // kalmadığı için row.booked+fixed:false kombinasyonu bu route için artık ölü veriydi.
     }
   }
 
@@ -200,10 +195,9 @@ export const POST = withAuth('manage', async (req) => {
       } else if (entry.type === 'ders' && entry.cls) {
         cell = { booked: false, disabled: true, lessonType: 'ders', cls: entry.cls, fixed: false };
         if (entry.subBranch) cell.subBranch = entry.subBranch;
-      } else if (entry.type === 'etut' && entry.studentId) {
-        cell = { booked: true, disabled: false, studentId: entry.studentId, studentName: entry.studentName || '', studentCls: entry.studentCls || '', bookedBy: 'director', fixed: false };
       } else if (entry.type === 'etut') {
-        cell = { booked: false, disabled: false };
+        continue; // Faz 4 Y3: etüt SlotBooking'e YAZILMAZ (EtutReservation tek yol — bookEtut);
+                  // eski istemci kalıntısı 'etut' girdisi sessizce yok sayılır (UI artık göndermiyor).
       } else {
         continue;
       }

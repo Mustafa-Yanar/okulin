@@ -48,6 +48,7 @@ interface EtutAllDTO {
   studentName?: string | null;
   branch?: string;
   bookedBy?: string;
+  scope?: 'WEEK' | 'RECURRING' | null;
 }
 
 const tl = (n: number | undefined) => `${(Number(n) || 0).toLocaleString('tr-TR')} ₺`;
@@ -57,15 +58,17 @@ function ProgramView({ child }: { child: Child }) {
   const [weekKey, setWeekKey] = useState(getWeekKey());
   const [allSlots, setAllSlots] = useState<BookingSlotEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async (wk: string) => {
     setLoading(true);
+    setLoadError(null);
     try {
       const sid = encodeURIComponent(child.id);
       // Eski slot-etüt + yeni serbest etüt şablonları (yalnız kendi çocuğu)
       const [data, etutData] = await Promise.all([
         api<{ slots?: SlotEntryDTO[] }>(`/api/slots?week=${wk}&studentId=${sid}`),
-        api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${wk}&studentId=${sid}`).catch(() => ({ etutler: [] as EtutAllDTO[] })),
+        api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${wk}&studentId=${sid}`),
       ]);
       const slotList: BookingSlotEntry[] = data.slots || [];
       const etutList: BookingSlotEntry[] = (etutData.etutler || []).map(e => ({
@@ -82,10 +85,13 @@ function ProgramView({ child }: { child: Child }) {
         studentName: e.studentName,
         branch: e.branch,
         bookedBy: e.bookedBy || 'student',
+        scope: e.scope,
       }));
       setAllSlots([...slotList, ...etutList]);
-    } catch { setAllSlots([]); }
-    finally { setLoading(false); }
+    } catch (e) {
+      setAllSlots([]);
+      setLoadError((e as Error).message || 'Program yüklenemedi');
+    } finally { setLoading(false); }
   }, [child.id]);
 
   useEffect(() => { load(weekKey); }, [load, weekKey]);
@@ -99,6 +105,9 @@ function ProgramView({ child }: { child: Child }) {
           <button onClick={() => setWeekKey(w => getAdjacentWeek(w, 1))} className="btn-ghost !px-2 !py-1.5" aria-label="Sonraki hafta"><ChevronRight size={16} /></button>
         </div>
       </div>
+      {loadError && (
+        <div className="card p-3 mb-3 text-sm" style={{ color: 'var(--danger, #dc2626)' }}>{loadError}</div>
+      )}
       {loading ? (
         <div className="text-center py-8 text-caption">Yükleniyor...</div>
       ) : (

@@ -6,6 +6,8 @@ import {
 } from '@/lib/slots';
 import { ALL_DAYS, daySlots } from '@/lib/constants';
 import { listActiveTenants, runWithTenant, type TenantRef } from '@/lib/tenant';
+import { freezeRecurringWeek } from '@/lib/etut/history';
+import { shouldRollWeek, shiftWeekKey } from '@/lib/etut/weeks';
 
 // Pazar 11:00 UTC+3 = 08:00 UTC → "0 8 * * 0"
 // Bilinçli withAuth istisnası: cron ucu — oturum yok, CRON_SECRET Bearer doğrulanır.
@@ -24,12 +26,22 @@ async function resetTenant(): Promise<{ weekKey: string }> {
 
 // Bir kurumu bir sonraki haftaya taşır: bu haftayı arşivle + tüm öğretmenlerin yeni
 // haftasını init et + current_week'i ilerlet.
-async function rollTenant(): Promise<{ previousWeek: string; newWeek: string; teachers: number } | { message: string }> {
+async function rollTenant(): Promise<{ previousWeek: string; newWeek: string; teachers: number; frozenEtut: number } | { message: string }> {
   const teachers = await getAllTeachers(); // SQL-aware (legacyId + name)
   if (!teachers || teachers.length === 0) return { message: 'No teachers' };
 
   const stored = await getCurrentWeek();
   const currentWeek = stored || getWeekKey();
+
+  // Rollover idempotency guard (Faz 4 FIX-1, Codex kritik bulgusu): stored current_week
+  // takvimden İLERİDEyse devir bu koşuda ZATEN yapılmıştır (retry/manuel çifte tetik) →
+  // atla, hafta ATLAMASIN. Sınır: eşzamanlı (milisaniye-içi) çifte tetik hâlâ teorik bir
+  // yarış — cron tek kaynaklı (Vercel schedule) olduğundan pratik risk kabul edildi;
+  // gerekirse advisory-lock'lu bir weekly-roll marker tablosu Faz 5+'a bırakıldı.
+  const actual = getWeekKey();
+  if (!shouldRollWeek(currentWeek, actual)) {
+    return { message: `Devir zaten yapılmış (stored=${currentWeek}, takvim=${actual})` };
+  }
 
   const monday = getMondayOfWeek(currentWeek);
   const nextMonday = new Date(monday);
@@ -82,12 +94,31 @@ async function rollTenant(): Promise<{ previousWeek: string; newWeek: string; te
   }
   if (hasWriteOps) await writePipeline.exec();
 
-  // 3. Tüm öğretmenlerin yeni haftasını init et (SQL-aware)
-  await Promise.all(teachers.map(t => initWeekForTeacher(t.id, nextWeek)));
+  // 2b. Faz 4: biten haftanın efektif RECURRING etüt rezervasyonlarını somut WEEK satırlarına
+  // dondur (spec §3.3 freeze-on-rollover) — recurring sahibi sonradan değişse/iptal edilse
+  // bile geçmiş haftaların görünümü (arşiv/geçmiş listeleri) değişmez. Freeze hatası rollover'ı
+  // DURDURMAMALI (öğretmen init + hafta ilerletme daha kritik) — best-effort, -1 ile raporla.
+  // Freeze self-heal (Faz 4 FIX-1, Codex Y2): geçmiş koşularda freeze hata verdiyse boşluk
+  // kalmasın diye biten hafta + önceki 2 hafta idempotent dondurulur (donmuşta count=0).
+  let frozenEtut = 0;
+  try {
+    for (const wk of [shiftWeekKey(currentWeek, -2), shiftWeekKey(currentWeek, -1), currentWeek]) {
+      frozenEtut += await freezeRecurringWeek(wk);
+    }
+  } catch (e) {
+    console.warn('[cron/weekly] freezeRecurringWeek failed', currentWeek, e);
+    frozenEtut = -1;
+  }
+
+  // 3. Tüm öğretmenlerin yeni haftasını init et (SQL-aware).
+  // Faz 4 FIX-1 (3 denetim mutabık): her initWeekForTeacher artık interactive tx açıyor —
+  // sınırsız Promise.all havuzu tüketir (Neon pooler + Prisma pool). Per-teacher kilitler
+  // ayrık; sıralı koşum güvenli ve admin/week advanceWeek ile aynı desen.
+  for (const t of teachers) { await initWeekForTeacher(t.id, nextWeek); }
 
   await setCurrentWeek(nextWeek); // SQL-aware
 
-  return { previousWeek: currentWeek, newWeek: nextWeek, teachers: teachers.length };
+  return { previousWeek: currentWeek, newWeek: nextWeek, teachers: teachers.length, frozenEtut };
 }
 
 export async function GET(req: Request) {

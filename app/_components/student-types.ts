@@ -23,6 +23,7 @@ export interface BookingSlotEntry {
   studentName?: string | null;
   branch?: string;
   bookedBy?: string | null;
+  scope?: string | null;
 }
 
 // GET /api/etut-sablon/all etüt satırı.
@@ -39,8 +40,10 @@ export interface EtutAllDTO {
   booked?: boolean;
   studentId?: string | null;
   studentName?: string | null;
+  studentCls?: string | null;
   branch?: string;
   bookedBy?: string;
+  scope?: 'WEEK' | 'RECURRING' | null;
 }
 
 // Rezervasyon/iptal argümanları (AvailableTree onBook / BookingsView onCancel).

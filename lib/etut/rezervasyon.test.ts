@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { timeConflicts, branchConflicts, mathFamilyConflict, pickAllowedBranches } from './rezervasyon';
+import type { EtutSablon, EtutReservation } from '@prisma/client';
+import { timeConflicts, branchConflicts, mathFamilyConflict, pickAllowedBranches, buildEtutAllList } from './rezervasyon';
 
 const sb = (dayIndex: number, start: string, branch?: string) => ({ id: 'x', dayIndex, start, end: '00:00', branch });
 
@@ -57,5 +58,46 @@ describe('pickAllowedBranches — öğrencinin izinli dersleri (registry-önceli
   });
   it('registry de constants da yoksa boş', () => {
     expect(pickAllowedBranches(null, null)).toEqual([]);
+  });
+});
+
+describe('buildEtutAllList', () => {
+  const T = [{ id: 't1', name: 'Ali Hoca', branches: ['Fizik'], allowedGroups: ['lise'] }];
+  const sb = (over: Partial<Record<string, unknown>> = {}) => ({
+    id: 'cuid1', legacyId: 'e1', teacherId: 't1', dayIndex: 1, start: '14:00', end: '15:00',
+    aktif: true, pasifHaftalar: [] as string[], deletedAt: null, ...over,
+  }) as unknown as EtutSablon;
+  const rez = (over: Partial<Record<string, unknown>> = {}) => ({
+    sablonId: 'cuid1', scope: 'WEEK', status: 'ACTIVE', weekKey: '2026-W30',
+    studentId: 's1', studentName: 'İrem', studentCls: '11A', dersBranch: 'Fizik', bookedByRole: 'student',
+    ...over,
+  }) as unknown as EtutReservation;
+
+  it('boş rezervasyon → booked:false, studentName:null, scope:null', () => {
+    const out = buildEtutAllList([sb()], T, new Map(), '2026-W30');
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ id: 'e1', booked: false, studentId: null, scope: null, teacherName: 'Ali Hoca', dayLabel: 'Salı' });
+  });
+  it('efektif WEEK rezervasyon → alanlar dolu + scope:WEEK', () => {
+    const out = buildEtutAllList([sb()], T, new Map([['cuid1', rez()]]), '2026-W30');
+    expect(out[0]).toMatchObject({ booked: true, studentId: 's1', studentName: 'İrem', studentCls: '11A', branch: 'Fizik', bookedBy: 'student', scope: 'WEEK' });
+  });
+  it('RECURRING efektif → scope:RECURRING', () => {
+    const out = buildEtutAllList([sb()], T, new Map([['cuid1', rez({ scope: 'RECURRING', weekKey: '*', bookedByRole: 'director' })]]), '2026-W30');
+    expect(out[0]).toMatchObject({ scope: 'RECURRING', bookedBy: 'director' });
+  });
+  it('o hafta pasif şablon listelenmez (pasifHaftalar)', () => {
+    expect(buildEtutAllList([sb({ pasifHaftalar: ['2026-W30'] })], T, new Map(), '2026-W30')).toHaveLength(0);
+  });
+  it('kalıcı pasif şablon listelenmez (aktif:false)', () => {
+    expect(buildEtutAllList([sb({ aktif: false })], T, new Map(), '2026-W30')).toHaveLength(0);
+  });
+  it('öğretmeni silinmiş/yok şablon atlanır', () => {
+    expect(buildEtutAllList([sb({ teacherId: 'yok' })], T, new Map(), '2026-W30')).toHaveLength(0);
+  });
+  it('gün+saat sıralı döner', () => {
+    const rows = [sb({ id: 'c2', legacyId: 'e2', dayIndex: 0, start: '16:00' }), sb({ id: 'c3', legacyId: 'e3', dayIndex: 0, start: '09:00' }), sb()];
+    const out = buildEtutAllList(rows, T, new Map(), '2026-W30');
+    expect(out.map(r => r.id)).toEqual(['e3', 'e2', 'e1']);
   });
 });

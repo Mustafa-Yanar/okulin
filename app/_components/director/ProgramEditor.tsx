@@ -17,7 +17,8 @@ import { useClasses } from '../ClassesContext';
 import { api, Modal, getAdjacentWeek, isSlotPast } from './shared';
 import EtutCalendar, { timeToMin, minToTop, durationToHeight } from './EtutCalendar';
 import { useConfirm } from '../ConfirmProvider';
-import type { EtutSablonu, ProgramEntry } from '@/lib/slots';
+import type { ProgramEntry } from '@/lib/slots';
+import type { SablonRezDTO } from '@/lib/etut/sablon-service';
 import type { ShowToast, StudentDTO, TeacherDTO } from '../types';
 
 // /api/program ızgarası: gün → slotId → giriş.
@@ -55,11 +56,11 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
   const [slotModal, setSlotModal] = useState<{ dayIndex: number; slotId: string; slotStart: string } | null>(null);
   const [showPrint, setShowPrint] = useState(false);
 
-  // Etüt şablonları (calendar — serbest saatli, haftadan bağımsız)
-  const [etutSablonlar, setEtutSablonlar] = useState<EtutSablonu[]>([]);
+  // Etüt şablonları (calendar — serbest saatli, haftaya duyarlı rezervasyon verisiyle)
+  const [etutSablonlar, setEtutSablonlar] = useState<SablonRezDTO[]>([]);
   const [showEtutForm, setShowEtutForm] = useState(false);
   const [savingEtut, setSavingEtut] = useState(false);
-  const [selectedEtut, setSelectedEtut] = useState<EtutSablonu | null>(null); // tıklanan etüt (eylem menüsü)
+  const [selectedEtut, setSelectedEtut] = useState<SablonRezDTO | null>(null); // tıklanan etüt (eylem menüsü)
 
   const { slotTimes } = useSlotTimes();
   const { classes } = useClasses();
@@ -79,15 +80,15 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     })();
   }, [teacher.id, weekKey]);
 
-  // Etüt şablonlarını yükle (haftadan bağımsız — sadece öğretmen değişince)
+  // Etüt şablonlarını + o haftanın efektif rezervasyonlarını yükle (hafta değişince yeniden çeker).
   useEffect(() => {
     (async () => {
       try {
-        const d = await api<{ sablonlar?: EtutSablonu[] }>(`/api/etut-sablon?teacherId=${teacher.id}`);
+        const d = await api<{ sablonlar?: SablonRezDTO[] }>(`/api/etut-sablon?teacherId=${teacher.id}&week=${weekKey}`);
         setEtutSablonlar(d.sablonlar || []);
-      } catch { setEtutSablonlar([]); }
+      } catch (e) { showToast((e as Error).message, 'error'); setEtutSablonlar([]); }
     })();
-  }, [teacher.id]);
+  }, [teacher.id, weekKey, showToast]);
 
   async function saveEtutSablon(sablon: EtutDraft) {
     // Geçmiş gün/saate etüt eklenemez (server de reddeder; burada erken uyarı).
@@ -97,7 +98,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     }
     setSavingEtut(true);
     try {
-      const r = await api<{ sablonlar?: EtutSablonu[] }>('/api/etut-sablon', { method: 'POST', body: JSON.stringify({ teacherId: teacher.id, weekKey, sablon }) });
+      const r = await api<{ sablonlar?: SablonRezDTO[] }>('/api/etut-sablon', { method: 'POST', body: JSON.stringify({ teacherId: teacher.id, weekKey, sablon }) });
       setEtutSablonlar(r.sablonlar || []);
       setShowEtutForm(false);
       showToast('Etüt eklendi');
@@ -107,7 +108,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
 
   async function deleteEtutSablon(id: string) {
     try {
-      const r = await api<{ sablonlar?: EtutSablonu[] }>('/api/etut-sablon', { method: 'DELETE', body: JSON.stringify({ teacherId: teacher.id, id }) });
+      const r = await api<{ sablonlar?: SablonRezDTO[] }>('/api/etut-sablon', { method: 'DELETE', body: JSON.stringify({ teacherId: teacher.id, id, weekKey }) });
       setEtutSablonlar(r.sablonlar || []);
       setSelectedEtut(null);
       showToast('Etüt silindi');
@@ -116,7 +117,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
 
   async function toggleEtutSablon(id: string, scope: string, aktif: boolean) {
     try {
-      const r = await api<{ sablonlar?: EtutSablonu[] }>('/api/etut-sablon', {
+      const r = await api<{ sablonlar?: SablonRezDTO[] }>('/api/etut-sablon', {
         method: 'PUT',
         body: JSON.stringify({ teacherId: teacher.id, id, scope, weekKey, aktif }),
       });
@@ -126,21 +127,21 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     } catch (e) { showToast((e as Error).message, 'error'); }
   }
 
-  async function assignEtutSablon(id: string, student: { id: string; name: string; cls: string } | null) {
+  async function assignEtutSablon(id: string, student: { id: string; name: string; cls: string } | null, scope: 'WEEK' | 'RECURRING') {
     try {
-      const r = await api<{ sablonlar?: EtutSablonu[] }>('/api/etut-sablon', {
+      const r = await api<{ sablonlar?: SablonRezDTO[] }>('/api/etut-sablon', {
         method: 'PATCH',
-        body: JSON.stringify({ teacherId: teacher.id, id, student }),
+        body: JSON.stringify({ teacherId: teacher.id, id, student, scope, weekKey }),
       });
       const list = r.sablonlar || [];
       setEtutSablonlar(list);
       setSelectedEtut(list.find(s => s.id === id) || null);
-      showToast(student ? 'Öğrenci atandı' : 'Atama kaldırıldı');
+      showToast(student ? (scope === 'RECURRING' ? 'Öğrenci atandı (her hafta)' : 'Öğrenci atandı (bu hafta)') : 'Atama kaldırıldı');
     } catch (e) { showToast((e as Error).message, 'error'); }
   }
 
   // Bir etüt şablonu bu hafta efektif aktif mi? (kalıcı aktif + bu hafta pasif listesinde değil)
-  function etutAktifThisWeek(sb: EtutSablonu): boolean {
+  function etutAktifThisWeek(sb: SablonRezDTO): boolean {
     if (sb.aktif === false) return false;
     if (Array.isArray(sb.pasifHaftalar) && sb.pasifHaftalar.includes(weekKey)) return false;
     return true;
@@ -236,7 +237,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
 
   // O günün, [start,end) aralığıyla çakışan efektif AKTİF etüt şablonu var mı?
   // (mola payı hariç — ders slotuyla birebir saat çakışmasını engelliyoruz.)
-  function cakisanAktifEtut(dayIndex: number, slotStart: string, slotEnd: string): EtutSablonu | undefined {
+  function cakisanAktifEtut(dayIndex: number, slotStart: string, slotEnd: string): SablonRezDTO | undefined {
     const s = timeToMin(slotStart), e = timeToMin(slotEnd);
     return etutSablonlar.find(sb =>
       sb.dayIndex === dayIndex &&
@@ -411,7 +412,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
                 }}
                 title={`Etüt ${sb.start}–${sb.end}${aktif ? '' : ' (pasif)'} · tıkla: seçenekler`}>
                 <div className="text-[9px] leading-tight truncate" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {sb.studentName || 'Etüt'}{aktif ? '' : ' (pasif)'}
+                  {sb.studentName ? `${sb.studentName}${sb.rezScope === 'RECURRING' ? ' ↻' : ''}` : 'Etüt'}{aktif ? '' : ' (pasif)'}
                 </div>
                 {height >= 28 && <div className="text-[8px] leading-tight" style={{ color: 'var(--text-muted)' }}>{sb.start}–{sb.end}</div>}
               </button>
@@ -633,12 +634,12 @@ function EtutEkleForm({ defaultSure, molaSure = 10, busyRangesForDay, weekKey, s
 }
 
 interface EtutEylemModalProps {
-  sablon: EtutSablonu;
+  sablon: SablonRezDTO;
   aktif: boolean;
   allowedStudents?: PanelStudent[];
   onClose: () => void;
   onToggle: (id: string, scope: string, aktif: boolean) => void;
-  onAssign: (id: string, student: { id: string; name: string; cls: string } | null) => void;
+  onAssign: (id: string, student: { id: string; name: string; cls: string } | null, scope: 'WEEK' | 'RECURRING') => void;
   onDelete: (id: string) => void;
 }
 
@@ -650,12 +651,14 @@ function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle
   // Pasifleştirme onayı: "sadece bu hafta" varsayılan İŞARETLİ
   const [pasifMode, setPasifMode] = useState(false); // pasifleştirme onayı gösteriliyor mu
   const [sadeceBuHafta, setSadeceBuHafta] = useState(true);
+  // Yeni atama kapsamı: kalıcı (her hafta) DEFAULT.
+  const [assignScope, setAssignScope] = useState<'WEEK' | 'RECURRING'>('RECURRING');
 
   function handleStudentSelect(e: React.ChangeEvent<HTMLSelectElement>) {
     const sid = e.target.value;
-    if (!sid) { onAssign(sablon.id, null); return; }
+    if (!sid) return; // boş seçenek artık kaldırma yapmaz — select yalnız atama içindir
     const s = allowedStudents.find(x => x.id === sid);
-    if (s) onAssign(sablon.id, { id: s.id, name: s.name, cls: s.cls || '' });
+    if (s) onAssign(sablon.id, { id: s.id, name: s.name, cls: s.cls || '' }, assignScope);
   }
 
   return (
@@ -673,15 +676,41 @@ function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle
         {/* Öğrenci ataması (birebir) */}
         <div>
           <label className="text-xs block mb-1" style={{ color: 'var(--text-muted)' }}>Öğrenci (birebir)</label>
+          <div className="flex gap-3 text-sm mb-1.5" role="radiogroup" aria-label="Atama kapsamı">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" checked={assignScope === 'RECURRING'} onChange={() => setAssignScope('RECURRING')} />
+              Her hafta (kalıcı)
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" checked={assignScope === 'WEEK'} onChange={() => setAssignScope('WEEK')} />
+              Sadece bu hafta
+            </label>
+          </div>
           <select value={sablon.studentId || ''} onChange={handleStudentSelect}
             className="input !text-sm !py-1.5 w-full">
-            <option value="">— Boş (atama yok) —</option>
+            <option value="">— Öğrenci seç —</option>
             {allowedStudents.map(s => (
               <option key={s.id} value={s.id}>{s.name}{s.cls ? ` · ${classShort(classes, s.cls)}` : ''}</option>
             ))}
           </select>
           {sablon.studentName && (
-            <p className="text-xs mt-1" style={{ color: '#0f766e' }}>Atandı: {sablon.studentName}</p>
+            <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: '#0f766e' }}>
+              Atandı: {sablon.studentName}
+              <span className="px-1.5 py-0.5 rounded-full text-[10px]" style={{ fontWeight: 600,
+                background: 'color-mix(in srgb,#0f766e 14%,transparent)', color: '#0f766e' }}>
+                {sablon.rezScope === 'RECURRING' ? 'Her hafta' : 'Bu hafta'}
+              </span>
+            </p>
+          )}
+          {sablon.studentId && (
+            sablon.rezScope === 'RECURRING' ? (
+              <div className="flex gap-2 mt-2">
+                <button className="btn-ghost flex-1 justify-center" onClick={() => onAssign(sablon.id, null, 'WEEK')}>Bu haftayı iptal et</button>
+                <button className="btn-ghost flex-1 justify-center text-red-500 hover:bg-red-50" onClick={() => onAssign(sablon.id, null, 'RECURRING')}>Seriyi iptal et</button>
+              </div>
+            ) : (
+              <button className="btn-ghost w-full justify-center text-red-500 hover:bg-red-50 mt-2" onClick={() => onAssign(sablon.id, null, 'WEEK')}>Atamayı kaldır (bu hafta)</button>
+            )
           )}
         </div>
 

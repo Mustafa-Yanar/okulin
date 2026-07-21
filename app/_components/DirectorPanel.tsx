@@ -114,7 +114,10 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     try {
       const data = await api<Record<string, number>>('/api/guidance/pending');
       setPendingGuidance(data || {});
-    } catch {}
+    } catch (e) {
+      // Rozet boş kalır — davranış AYNI (sessizce yutuluyordu), artık teşhis edilebilir (Faz 4 T6).
+      console.warn('[director] rehberlik bekleyen sayısı yüklenemedi:', e);
+    }
   }, []);
 
   useEffect(() => { loadPendingGuidance(); }, [loadPendingGuidance]);
@@ -127,7 +130,10 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       setSlotDays(data.days || {});
       if (data.etutSuresi != null) setSlotEtutSuresi(data.etutSuresi);
       if (data.molaSuresi != null) setSlotMolaSuresi(data.molaSuresi);
-    }).catch(() => {}).finally(() => setSlotTimesLoading(false));
+    }).catch(e => {
+      console.warn('[director] slot-times yüklenemedi:', e);
+      showToast('Ders saatleri yüklenemedi', 'error');
+    }).finally(() => setSlotTimesLoading(false));
   }, [tab, slotDays]);
 
   const loadAll = useCallback(async (wk?: string) => {
@@ -250,7 +256,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           students={students}
           classes={classes}
           weekKey={weekKey}
-          allSlots={allSlots}
           isCounselor={isCounselor}
           readOnly={readOnly}
           onAddStudent={() => { setEditStudent(null); setShowStudentForm(true); }}
@@ -260,13 +265,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           onDeleteStudent={async s => {
             if (!(await confirm(`${s.name} silinsin mi?`))) return;
             try { await api('/api/students',{method:'DELETE',body:JSON.stringify({id:s.id})}); showToast('Öğrenci silindi'); loadAll(weekKey); } catch(err){showToast((err as Error).message,'error');}
-          }}
-          onCancelBooking={async ({ teacherId, day, slotId }) => {
-            try {
-              await api('/api/slots', { method: 'DELETE', body: JSON.stringify({ teacherId, day, slotId, weekKey }) });
-              showToast('Etüt iptal edildi');
-              loadAll(weekKey);
-            } catch(err) { showToast((err as Error).message, 'error'); }
           }}
           onHistory={s => setHistoryTarget({ type: 'student', id: s.id, name: s.name })}
           onClassesChanged={() => loadAll(weekKey)}

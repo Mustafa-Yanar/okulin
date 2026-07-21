@@ -1,8 +1,9 @@
 import { ALL_DAYS, daySlots } from '@/lib/constants';
 import {
-  getWeekCellsAllTeachers, getAllProgramTemplates, getDaySlotTimes,
-  getTeacherWeekSlots, dateStrForWeekDay, etutAktifThisWeek, type EtutSablonu,
+  getWeekCellsAllTeachers, getDaySlotTimes,
+  getTeacherWeekSlots, dateStrForWeekDay,
 } from '@/lib/slots';
+import { listEtutlerForWeek, type EtutAllRow } from '@/lib/etut/rezervasyon';
 import { getOrgConfig } from '@/lib/config';
 import { HttpError } from '@/lib/errors';
 import type { Session } from '@/lib/auth';
@@ -13,12 +14,12 @@ import type {
 
 // Haftalık program servis katmanı (spec §5.1) — today.ts collectClassDay mantığının
 // 7 güne genişlemesi. Öğretmen-başına sorgu YOK (getWeekCellsAllTeachers tüm hafta,
-// getAllProgramTemplates tek, getDaySlotTimes tek). Öğrenci yalnız KENDİ etütleri.
+// listEtutlerForWeek tek — Faz 3 tablo-tabanlı, getDaySlotTimes tek). Öğrenci yalnız KENDİ etütleri.
 
 async function collectClassWeek(cls: string, weekKey: string, etutStudentId: string | null): Promise<WeekDay[]> {
-  const [weekCells, templates, slotTimes] = await Promise.all([
+  const [weekCells, etutRows, slotTimes] = await Promise.all([
     getWeekCellsAllTeachers(weekKey),
-    etutStudentId ? getAllProgramTemplates() : Promise.resolve([]),
+    etutStudentId ? listEtutlerForWeek(weekKey) : Promise.resolve([] as EtutAllRow[]),
     getDaySlotTimes(),
   ]);
   const days: WeekDay[] = [];
@@ -45,17 +46,9 @@ async function collectClassWeek(cls: string, weekKey: string, etutStudentId: str
 
     let etuts: TodayEtut[] | null = null;
     if (etutStudentId) {
-      const collected: TodayEtut[] = [];
-      for (const t of templates) {
-        const list = Array.isArray(t.template.etutSablonlari) ? (t.template.etutSablonlari as EtutSablonu[]) : [];
-        for (const sb of list) {
-          if (sb.dayIndex !== dayIndex || !etutAktifThisWeek(sb, weekKey)) continue;
-          if (sb.studentId !== etutStudentId) continue; // yalnız KENDİ rezervasyonu (veri minimizasyonu)
-          collected.push({ id: sb.id, start: sb.start, end: sb.end, teacherName: t.name, branch: sb.branch || null, studentName: sb.studentName || null, booked: true });
-        }
-      }
-      collected.sort((a, b) => a.start.localeCompare(b.start));
-      etuts = collected;
+      etuts = etutRows
+        .filter((r) => r.dayIndex === dayIndex && r.studentId === etutStudentId) // yalnız KENDİ rezervasyonu (veri minimizasyonu)
+        .map((r) => ({ id: r.id, start: r.start, end: r.end, teacherName: r.teacherName, branch: r.branch, studentName: r.studentName, booked: true }));
     }
 
     days.push({ dayIndex, dayLabel: day.label, date: dateStrForWeekDay(weekKey, dayIndex), lessons, etuts });

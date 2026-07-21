@@ -71,7 +71,13 @@ export const POST = withAuth('manage', async (req) => {
       }
     }
     const del = await tdb().slotBooking.deleteMany({});
-    return NextResponse.json({ ok: true, deleted: { offDays, programs, slots: del.count }, teachers: teachers.length });
+    // Tam sıfırlama etüt şablon+rezervasyonlarını da siler (soft değil hard — reset-all
+    // bilinçli yıkıcı; EtutReservation onDelete:Cascade ile birlikte düşer — bkz.
+    // prisma/schema.prisma EtutSablon.deletedAt yorumu + spec §8 "admin/week (reset cascade)",
+    // Faz 4 audit-fix FIX-2 D, Explore F3 bulgusu). reinit dalı BİLİNÇLİ olarak etkilenmez —
+    // yalnız SlotBooking (ders gridi) sıfırlar, etüt şablonları ayrı bir yaşam döngüsüne sahip.
+    const delEtut = await tdb().etutSablon.deleteMany({});
+    return NextResponse.json({ ok: true, deleted: { offDays, programs, slots: del.count, etutSablon: delEtut.count }, teachers: teachers.length });
   }
 
   return NextResponse.json({ error: 'Geçersiz işlem' }, { status: 400 });

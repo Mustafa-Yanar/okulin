@@ -61,15 +61,19 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
   const [loading, setLoading] = useState(true);
   const [attendance, setAttendance] = useState<AttendanceData | null>(null);
   const [attLoading, setAttLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const printRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
+      setLoadError(null);
       try {
         const data = await api<{ weeks?: ArchiveWeek[] }>(`/api/archive?type=${target.type}&id=${target.id}`);
         setWeeks(data.weeks || []);
-      } catch {}
+      } catch (e) {
+        setLoadError('Arşiv yüklenemedi: ' + (e as Error).message);
+      }
       setLoading(false);
     })();
   }, [target.id, target.type]);
@@ -81,8 +85,11 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
       try {
         const data = await api<AttendanceData>(`/api/attendance/student?studentId=${target.id}`);
         setAttendance(data);
-      } catch {
+      } catch (e) {
+        // Boş-özet fallback davranışı KORUNUR (T6 öncesi davranışla aynı) — yalnız artık
+        // hata da loadError ile görünür olur (Faz 4 T6, sessiz-catch temizliği).
         setAttendance({ entries: [], summary: { yok: 0, gec: 0 } });
+        setLoadError('Devamsızlık verisi yüklenemedi: ' + (e as Error).message);
       }
       setAttLoading(false);
     })();
@@ -90,10 +97,22 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
 
   const allWeeks = useMemo(() => {
     const result: ArchiveWeek[] = [];
-    if (currentEntries && currentEntries.length > 0) {
-      result.push({ weekKey: currentWeekKey, entries: currentEntries, isCurrent: true });
-    }
-    result.push(...weeks);
+    const archiveCurrent = currentWeekKey ? weeks.find(w => w.weekKey === currentWeekKey) : undefined;
+    const rest = currentWeekKey ? weeks.filter(w => w.weekKey !== currentWeekKey) : weeks;
+    // Cari haftanın ETÜT satırları (EtutReservation-kaynaklı, slotId 'etut:' prefix'li — Faz 4 T3)
+    // canlı currentEntries'te (SlotBooking-kaynaklı) OLAMAZ → "Bu Hafta" kartına eklenir.
+    // Arşivdeki cari-hafta SlotBooking satırları ise currentEntries'in kopyası olurdu → atlanır
+    // (çift-kart + çift-satır düzeltmesi; geçmiş haftalar etkilenmez).
+    const currentEtut = archiveCurrent?.entries.filter(e => e.slotId.startsWith('etut:')) ?? [];
+    // currentEntries (canlı SlotBooking) undefined/boşken arşivin cari-hafta DERS satırları
+    // düşmesin (Faz 4 audit-fix FIX-2 B, Gemini YÜKSEK-1 savunmacı bulgu) — çağıran (inline
+    // kullanım) currentEntries geçmezse arşivdeki cari-hafta ders satırlarına geri düş.
+    const currentSlots = (currentEntries && currentEntries.length > 0)
+      ? currentEntries
+      : (archiveCurrent?.entries.filter(e => !e.slotId.startsWith('etut:')) ?? []);
+    const current = [...currentSlots, ...currentEtut];
+    if (current.length > 0) result.push({ weekKey: currentWeekKey, entries: current, isCurrent: true });
+    result.push(...rest);
     return result;
   }, [weeks, currentEntries, currentWeekKey]);
 
@@ -303,6 +322,9 @@ export default function HistoryModal({ target, onClose, currentWeekKey, currentE
             <ClipboardList size={13} /> <span>Devamsızlık Bilgisi</span>
           </button>
         </div>
+      )}
+      {loadError && (
+        <div className="card p-3 mb-3 text-sm" style={{ color: 'var(--danger, #dc2626)' }}>{loadError}</div>
       )}
       {(!isStudent || activeTab === 'etut') && etutContent}
       {isStudent && activeTab === 'devamsizlik' && devamsizlikContent}

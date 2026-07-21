@@ -9,10 +9,11 @@ interface AvailableTreeProps {
   available: BookingSlotEntry[];
   onBook: (args: BookEtutArgs) => void;
   selectableBranchesFor?: (s: BookingSlotEntry) => string[];
+  bookingDisabled?: boolean;
 }
 
 // ─── AVAILABLE TREE ────────────────────────────────────────────────────────────
-export default function AvailableTree({ available, onBook, selectableBranchesFor }: AvailableTreeProps) {
+export default function AvailableTree({ available, onBook, selectableBranchesFor, bookingDisabled }: AvailableTreeProps) {
   const [openTeachers, setOpenTeachers] = useState<Record<string, boolean>>({});
   const [openDays, setOpenDays] = useState<Record<string, boolean>>({});
 
@@ -94,14 +95,18 @@ export default function AvailableTree({ available, onBook, selectableBranchesFor
                                 </div>
                                 {sel.length === 1 ? (
                                   <button onClick={() => onBook({ teacherId: s.teacherId, day: s.day, slotId: s.slotId, branch: sel[0], kind: s.kind, etutId: s.etutId })}
-                                    className="btn-primary !px-3 !py-1 text-xs">
+                                    disabled={bookingDisabled}
+                                    title={bookingDisabled ? 'Bu hafta için rezervasyon henüz açık değil' : undefined}
+                                    className={`btn-primary !px-3 !py-1 text-xs ${bookingDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
                                     {sel[0]} · Al
                                   </button>
                                 ) : (
                                   <div className="flex gap-1 flex-wrap justify-end">
                                     {sel.map(b => (
                                       <button key={b} onClick={() => onBook({ teacherId: s.teacherId, day: s.day, slotId: s.slotId, branch: b, kind: s.kind, etutId: s.etutId })}
-                                        className="btn-primary !px-2.5 !py-1 text-[11px]">
+                                        disabled={bookingDisabled}
+                                        title={bookingDisabled ? 'Bu hafta için rezervasyon henüz açık değil' : undefined}
+                                        className={`btn-primary !px-2.5 !py-1 text-[11px] ${bookingDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}>
                                         {b}
                                       </button>
                                     ))}

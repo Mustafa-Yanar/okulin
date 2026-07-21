@@ -14,7 +14,6 @@ import { classLabelFrom } from '@/lib/classCatalog';
 import { api, Modal } from './shared';
 import { StudentExpandedView, ClassScheduleModal } from './StudentList';
 import StudentListPrint from './StudentListPrint';
-import type { BookingSlotEntry, BookingCancelArgs } from '../student-types';
 import ClassScheduleEditor from './ClassScheduleEditor';
 import { ClassFormModal, CourseCatalog, KADEME_LABEL, KADEME_ORDER, DAL_LABEL } from './ClassManager';
 import LoadingBox from '../Loading';
@@ -31,9 +30,7 @@ type PanelStudent = StudentDTO & { group?: string };
 
 interface SinifOgrenciProps {
   students?: PanelStudent[];
-  allSlots: BookingSlotEntry[];
   weekKey?: string;
-  onCancelBooking?: (args: BookingCancelArgs) => void;
   onEditStudent?: (s: PanelStudent) => void;
   onDeleteStudent?: (s: PanelStudent) => void;
   onHistory?: (s: PanelStudent) => void;
@@ -46,14 +43,14 @@ interface SinifOgrenciProps {
   isCounselor?: boolean;
   readOnly?: boolean;
   onClassesChanged?: () => void;
-  showToast?: ShowToast;
+  showToast: ShowToast;
   sektor?: string;
   classes?: ClassRecord[];
 }
 
 export default function SinifOgrenci({
-  students = [], allSlots, weekKey,
-  onCancelBooking, onEditStudent, onDeleteStudent, onHistory,
+  students = [], weekKey,
+  onEditStudent, onDeleteStudent, onHistory,
   pendingGuidance = {}, onGuidanceReviewed, onSelectChange,
   onAddStudent, onAddCounselor, onAddAssistant, isCounselor = false, readOnly = false,
   onClassesChanged, showToast, sektor = 'dershane', classes: classesProp = [],
@@ -201,7 +198,7 @@ export default function SinifOgrenci({
               <p className="text-caption">{classLabelFrom(classes, selected.cls, classLabel)}</p>
             </div>
           </div>
-          <StudentExpandedView student={selected} allSlots={allSlots} onCancelBooking={onCancelBooking} onGuidanceReviewed={onGuidanceReviewed} />
+          <StudentExpandedView student={selected} readOnly={readOnly} showToast={showToast} onGuidanceReviewed={onGuidanceReviewed} />
         </div>
       </div>
     );

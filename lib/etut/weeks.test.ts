@@ -1,0 +1,89 @@
+import { describe, it, expect } from 'vitest';
+import { currentWeekKeyTSI, shiftWeekKey, allowedBookingWeeks, isValidWeekKey, shouldRollWeek } from './weeks';
+
+// Referans: Pzt 20 Tem 2026 = 2026-W30 başlangıcı; Pazar 19 Tem = W29'un son günü.
+describe('currentWeekKeyTSI — sunucu-UTC bağımsız TSİ haftası', () => {
+  it('Çarşamba 22 Tem 10:00 TSİ → W30', () => {
+    expect(currentWeekKeyTSI(new Date('2026-07-22T10:00:00+03:00'))).toBe('2026-W30');
+  });
+  it('Pazar 19 Tem 16:00 TSİ → W29 (Pazar haftanın SON günü)', () => {
+    expect(currentWeekKeyTSI(new Date('2026-07-19T16:00:00+03:00'))).toBe('2026-W29');
+  });
+  it('KRİTİK sınır: Pzt 00:30 TSİ = Pazar 21:30 UTC → YENİ hafta W30 (sunucu-yerel getWeekKey burada yanılır)', () => {
+    expect(currentWeekKeyTSI(new Date('2026-07-20T00:30:00+03:00'))).toBe('2026-W30');
+  });
+});
+
+describe('shiftWeekKey', () => {
+  it('W30 +1 → W31; W30 -1 → W29', () => {
+    expect(shiftWeekKey('2026-W30', 1)).toBe('2026-W31');
+    expect(shiftWeekKey('2026-W30', -1)).toBe('2026-W29');
+  });
+  it('yıl sınırı: 2026-W53 +1 → 2027-W01', () => {
+    expect(shiftWeekKey('2026-W53', 1)).toBe('2027-W01');
+  });
+});
+
+describe('isValidWeekKey — ISO-8601 hafta biçimi (Faz 2 audit-fix FIX-C)', () => {
+  it('geçerli haftalar (W01, W30, W53) → true', () => {
+    expect(isValidWeekKey('2026-W01')).toBe(true);
+    expect(isValidWeekKey('2026-W30')).toBe(true);
+    expect(isValidWeekKey('2026-W53')).toBe(true);
+  });
+  it('W00 → false (ISO hafta 1den başlar)', () => {
+    expect(isValidWeekKey('2026-W00')).toBe(false);
+  });
+  it('W99 / W54 → false (ölü-seri riski — effectiveFromWeek asla erişilemez olurdu)', () => {
+    expect(isValidWeekKey('2026-W99')).toBe(false);
+    expect(isValidWeekKey('2026-W54')).toBe(false);
+  });
+  it('bozuk biçim (kısa yıl, harf, boş) → false', () => {
+    expect(isValidWeekKey('26-W01')).toBe(false);
+    expect(isValidWeekKey('2026-W3')).toBe(false);
+    expect(isValidWeekKey('abc')).toBe(false);
+    expect(isValidWeekKey('')).toBe(false);
+  });
+});
+
+describe('shouldRollWeek — rollover idempotency guard (Faz 4 FIX-1, Codex kritik)', () => {
+  it('stored === actual → true (normal devir)', () => {
+    expect(shouldRollWeek('2026-W30', '2026-W30')).toBe(true);
+  });
+  it('stored geride (< actual) → true (kaçırılmış hafta telafisi)', () => {
+    expect(shouldRollWeek('2026-W29', '2026-W30')).toBe(true);
+  });
+  it('stored 1 ileri (> actual) → false (devir zaten yapılmış, çifte tetik)', () => {
+    expect(shouldRollWeek('2026-W31', '2026-W30')).toBe(false);
+  });
+  it('yıl sınırı: stored 2027-W01, actual 2026-W53 → false (ileride, string kıyası doğru)', () => {
+    expect(shouldRollWeek('2027-W01', '2026-W53')).toBe(false);
+  });
+  it('yıl sınırı: stored 2026-W53, actual 2027-W01 → true (geride)', () => {
+    expect(shouldRollWeek('2026-W53', '2027-W01')).toBe(true);
+  });
+});
+
+describe('allowedBookingWeeks — Pazar 11:00 TSİ açılma kuralı', () => {
+  it('öğrenci, Çarşamba → sadece bu hafta', () => {
+    expect(allowedBookingWeeks('student', new Date('2026-07-22T10:00:00+03:00'))).toEqual(['2026-W30']);
+  });
+  it('öğrenci, Pazar 10:59 TSİ → sonraki hafta HENÜZ KAPALI', () => {
+    expect(allowedBookingWeeks('student', new Date('2026-07-19T10:59:00+03:00'))).toEqual(['2026-W29']);
+  });
+  it('öğrenci, Pazar 11:00 TSİ → sonraki hafta AÇILDI', () => {
+    expect(allowedBookingWeeks('student', new Date('2026-07-19T11:00:00+03:00'))).toEqual(['2026-W29', '2026-W30']);
+  });
+  it('öğrenci, Pazar 23:30 → hâlâ açık', () => {
+    expect(allowedBookingWeeks('student', new Date('2026-07-19T23:30:00+03:00'))).toEqual(['2026-W29', '2026-W30']);
+  });
+  it('öğrenci, Pzt 00:30 TSİ → pencere yeni haftaya SIFIRLANDI (tek hafta)', () => {
+    expect(allowedBookingWeeks('student', new Date('2026-07-20T00:30:00+03:00'))).toEqual(['2026-W30']);
+  });
+  it('öğretmen = öğrenciyle aynı pencere', () => {
+    expect(allowedBookingWeeks('teacher', new Date('2026-07-19T11:00:00+03:00'))).toEqual(['2026-W29', '2026-W30']);
+  });
+  it('müdür/rehber → cur..+2 (saatten bağımsız)', () => {
+    expect(allowedBookingWeeks('director', new Date('2026-07-22T10:00:00+03:00'))).toEqual(['2026-W30', '2026-W31', '2026-W32']);
+    expect(allowedBookingWeeks('counselor', new Date('2026-07-22T10:00:00+03:00'))).toEqual(['2026-W30', '2026-W31', '2026-W32']);
+  });
+});
