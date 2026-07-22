@@ -18,8 +18,9 @@ import { currentWeekKeyTSI, allowedBookingWeeks, isValidWeekKey, type BookingRol
 import { levelPoolForStudent } from './level-pool';
 import {
   getWeekReservations, resolveEffective, upsertWeekReservation, upsertRecurring,
-  cancelToTombstone, cancelRecurring, lockResource, lockStudentWeek, RECURRING_WEEKKEY, type ReservationWrite,
+  cancelToTombstone, cancelRecurring, RECURRING_WEEKKEY, type ReservationWrite,
 } from './reservations';
+import { lockResource, lockStudentWeek } from '@/lib/locks';
 import { normalizeEtutBookings } from './student-week';
 import { toMin } from './overlap';
 

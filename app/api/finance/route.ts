@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { withAuth, canReadStudent } from '@/lib/auth';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zId, zMoney } from '@/lib/validate';
-import { tdb, withScope } from '@/lib/sqldb';
-import type { Finance, Installment } from '@prisma/client';
-import type { PaymentEntry } from '@/lib/finance';
+import { tdb, tenant } from '@/lib/sqldb';
+import type { Finance, Installment, Prisma } from '@prisma/client';
+import { financeLockKey, type PaymentEntry } from '@/lib/finance';
+import { planHatasi } from '@/lib/finance-plan';
+import { lockResource } from '@/lib/locks';
+import { HttpError } from '@/lib/errors';
 
 type FinanceWithInst = Finance & { installments?: Installment[] };
 // financeOut'a giren öğrenci görünümü (tam Student veya POST'un kurduğu kısmi nesne).
@@ -92,19 +95,41 @@ export const POST = withAuth(['director', 'accountant'], 'finance', async (req, 
 
   const stu = await tdb().student.findFirst({ where: { legacyId: studentId } });
   if (!stu) return NextResponse.json({ error: 'Öğrenci bulunamadı' }, { status: 404 });
-  const existing = await tdb().finance.findFirst({ where: { studentId: stu.id }, include: { installments: { orderBy: { idx: 'asc' } } } });
-  const prevByIdx: Record<number, Installment> = {}; for (const i of (existing?.installments || [])) prevByIdx[i.idx] = i;
-  let instData: { idx: number; dueDate: string; amount: number; paid: boolean; paidDate: string | null; paidAmount: number | null; method: string | null; receiptNo: string | null }[] = [];
-  if (paymentPlan === 'taksitli' && installments && installments.length > 0) {
-    instData = installments.map((inst, idx) => { const prev = prevByIdx[idx]; return { idx, dueDate: inst.dueDate || '', amount: parseFloat(String(inst.amount)) || 0, paid: prev?.paid || false, paidDate: prev?.paidDate || null, paidAmount: prev?.paidAmount ?? null, method: prev?.method || null, receiptNo: prev?.receiptNo || null }; });
-  }
-  const data = { registrationDate: existing?.registrationDate || new Date().toISOString().slice(0, 10), totalFee: parseFloat(String(totalFee)) || 0, discount: parseFloat(String(discount)) || 0, netFee, paymentPlan: paymentPlan || 'pesin', payments: ((existing?.payments as unknown as PaymentEntry[] | null) || []) as unknown as object };
-  let finRow: Finance;
-  if (existing) { await tdb().installment.deleteMany({ where: { financeId: existing.id } }); finRow = await tdb().finance.update({ where: { id: existing.id }, data }); }
-  else finRow = await tdb().finance.create({ data: withScope({ ...data, studentId: stu.id }) });
-  for (const i of instData) await tdb().installment.create({ data: { financeId: finRow.id, ...i } });
-  await logAudit({ ...actorFrom(session), action: existing ? 'finance.update' : 'finance.create', target: { type: 'student', id: studentId, name: studentName || studentId }, detail: `Finansal kayıt ${existing ? 'güncellendi' : 'oluşturuldu'}: ${studentName || studentId} — net ücret ${netFee} TL, ${data.paymentPlan}${instData.length ? ` (${instData.length} taksit)` : ''}` });
-  const full = await tdb().finance.findFirst({ where: { id: finRow.id }, include: { installments: { orderBy: { idx: 'asc' } } } });
+
+  // Plan kurulumu da ödeme yoluyla AYNI kilit + tek transaction (denetim damar-3):
+  // deleteMany → update → create döngüsü kilitsiz/transaction'sızken araya giren çökme
+  // taksitleri TAMAMEN silinmiş halde bırakıyordu, eşzamanlı bir ödeme de yeni kurulan
+  // taksitlere değil silinmiş olanlara yazabiliyordu.
+  const { orgSlug, branch } = tenant();
+  let instCount = 0;
+  let created = false;
+  const full = await tdb().$transaction(async (rawTx) => {
+    const tx = rawTx as unknown as Prisma.TransactionClient;
+    await lockResource(tx, financeLockKey(orgSlug, branch, stu.id));
+
+    const existing = await tx.finance.findFirst({ where: { orgSlug, branch, studentId: stu.id }, include: { installments: { orderBy: { idx: 'asc' } } } });
+    created = !existing;
+    const prevByIdx: Record<number, Installment> = {}; for (const i of (existing?.installments || [])) prevByIdx[i.idx] = i;
+    let instData: { idx: number; dueDate: string; amount: number; paid: boolean; paidDate: string | null; paidAmount: number | null; method: string | null; receiptNo: string | null }[] = [];
+    if (paymentPlan === 'taksitli' && installments && installments.length > 0) {
+      instData = installments.map((inst, idx) => { const prev = prevByIdx[idx]; return { idx, dueDate: inst.dueDate || '', amount: parseFloat(String(inst.amount)) || 0, paid: prev?.paid || false, paidDate: prev?.paidDate || null, paidAmount: prev?.paidAmount ?? null, method: prev?.method || null, receiptNo: prev?.receiptNo || null }; });
+    }
+    // INVARIANT: taksit toplamı === netFee. İstemci tutarları serbestçe gönderiyordu ve
+    // hiç doğrulanmıyordu → plan toplamı net ücretten sapınca para sessizce buharlaşıyordu
+    // (bkz. lib/finance-plan.ts). İstemci de aynı dağıtımı kullanır → normal akışta tetiklenmez.
+    const planErr = planHatasi(instData, netFee);
+    if (planErr) throw new HttpError(400, planErr);
+    instCount = instData.length;
+
+    const data = { registrationDate: existing?.registrationDate || new Date().toISOString().slice(0, 10), totalFee: parseFloat(String(totalFee)) || 0, discount: parseFloat(String(discount)) || 0, netFee, paymentPlan: paymentPlan || 'pesin', payments: ((existing?.payments as unknown as PaymentEntry[] | null) || []) as unknown as object };
+    let finRow: Finance;
+    if (existing) { await tx.installment.deleteMany({ where: { financeId: existing.id } }); finRow = await tx.finance.update({ where: { id: existing.id }, data }); }
+    else finRow = await tx.finance.create({ data: { ...data, orgSlug, branch, studentId: stu.id } });
+    if (instData.length) await tx.installment.createMany({ data: instData.map((i) => ({ financeId: finRow.id, ...i })) });
+    return tx.finance.findFirst({ where: { id: finRow.id }, include: { installments: { orderBy: { idx: 'asc' } } } });
+  });
+
+  await logAudit({ ...actorFrom(session), action: created ? 'finance.create' : 'finance.update', target: { type: 'student', id: studentId, name: studentName || studentId }, detail: `Finansal kayıt ${created ? 'oluşturuldu' : 'güncellendi'}: ${studentName || studentId} — net ücret ${netFee} TL, ${paymentPlan || 'pesin'}${instCount ? ` (${instCount} taksit)` : ''}` });
   return NextResponse.json({ ok: true, record: financeOut(full, { legacyId: studentId, name: studentName, class: { legacyId: studentCls } }) });
 });
 

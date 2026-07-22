@@ -15,6 +15,7 @@ import { useClasses } from '../ClassesContext';
 import { classShortUpper } from '@/lib/classCatalog';
 import type { Session } from '@/lib/auth';
 import type { PaymentEntry } from '@/lib/finance';
+import { dagitTutar } from '@/lib/finance-plan';
 import type { ShowToast, FinanceDTO, FinanceListItemDTO, InstallmentDTO, KurumBilgi } from '../types';
 import type { Branding } from '@/lib/branding';
 import Makbuz from './belge/Makbuz';
@@ -237,23 +238,24 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
   const netFee = Math.max(0, (parseFloat(totalFee) || 0) - (parseFloat(discount) || 0));
 
   function buildInstallments(count: number, net: number): InstallmentDTO[] {
-    const perInst = net > 0 ? Math.round((net / count) * 100) / 100 : 0;
     // İlk taksit = seçilen başlangıç tarihi; sonrakiler birer ay artar.
     const start = firstDate ? new Date(firstDate + 'T00:00:00') : new Date();
-    return Array.from({ length: count }, (_, i) => {
+    const rows = Array.from({ length: count }, (_, i) => {
       const d = new Date(start);
       d.setMonth(d.getMonth() + i);
+      const prev = existing?.installments?.[i];
       return {
         idx: i,
         dueDate: localYMD(d),
-        amount: i === count - 1 ? Math.round((net - perInst * (count - 1)) * 100) / 100 : perInst,
-        paid: existing?.installments?.[i]?.paid || false,
-        paidDate: existing?.installments?.[i]?.paidDate || null,
-        paidAmount: existing?.installments?.[i]?.paidAmount || null,
-        method: existing?.installments?.[i]?.method || null,
-        receiptNo: existing?.installments?.[i]?.receiptNo || null,
+        amount: prev?.amount || 0, // dagitTutar dolduracak (ödenmişlerin tutarı korunur)
+        paid: prev?.paid || false,
+        paidDate: prev?.paidDate || null,
+        paidAmount: prev?.paidAmount || null,
+        method: prev?.method || null,
+        receiptNo: prev?.receiptNo || null,
       };
     });
+    return dagitTutar(rows, net);
   }
 
   // Taksit yapısını kur: plan/taksit sayısı/ilk tarih değişince tarihleri OTOMATİK dağıt
@@ -268,14 +270,12 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
 
   // Ücret/indirim değişince YALNIZ tutarları yeniden böl; taksit tarihlerini (kullanıcının
   // elle düzenlediği dahil) ve ödenmiş taksitleri koru — manuel tarih düzenlemesi silinmez.
+  // Dağıtım lib/finance-plan.dagitTutar'da: ödenmişlerin tutarı sabit, KALAN yalnız
+  // ödenmemişlere bölünür. Eskiden net ücret TÜM taksitlere bölünüp ödenmişler eski
+  // tutarında bırakılıyordu → plan toplamı net ücretten sapıyor, para kayboluyordu.
   useEffect(() => {
     if (plan !== 'taksitli' || !totalFee) return;
-    setInstallments(prev => {
-      if (!prev.length) return buildInstallments(installmentCount, netFee);
-      const count = prev.length;
-      const per = netFee > 0 ? Math.round((netFee / count) * 100) / 100 : 0;
-      return prev.map((x, i) => x.paid ? x : { ...x, amount: i === count - 1 ? Math.round((netFee - per * (count - 1)) * 100) / 100 : per });
-    });
+    setInstallments(prev => prev.length ? dagitTutar(prev, netFee) : buildInstallments(installmentCount, netFee));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalFee, discount]);
 

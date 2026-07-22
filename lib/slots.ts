@@ -6,7 +6,7 @@ export { getWeekKey };
 import { tdb } from './sqldb';
 import { Prisma, type SlotBooking } from '@prisma/client';
 import { currentOrg, currentBranch } from './tenant';
-import { lockResource } from './etut/reservations';
+import { lockResource } from './locks';
 
 // ── SLOT SAATLERİ (7-gün model) ───────────────────────────────────────────────
 // Depolama şekli (TenantConfig.slotTimes):
