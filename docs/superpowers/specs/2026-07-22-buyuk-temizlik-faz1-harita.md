@@ -1,6 +1,38 @@
 # Büyük Temizlik — Faz 1: Veri Otoritesi & Tek-Yazıcı HARİTASI
 
 > Tarih: 2026-07-22 · Dal: `audit/buyuk-temizlik` · Durum: Faz 1 tamamlandı, Faz 2 onay bekliyor.
+
+## UYGULAMA SONUCU EKİ (2026-07-22, aynı gün — B1/B2/B8 + B3/B4/B10 KAPANDI)
+
+Mustafa onayıyla uygulanan dalgalar (hepsi tsc+build+test yeşiliyle ayrı commit):
+- **B1** ✅ `scratch/wipe-etut-tables.mjs` silindi (git'te değildi, dosya kaldırıldı).
+- **B8** ✅ `0eb464d` — migrate-redis-to-sql + migrate-slot-ids → `scripts/archive/` (kill-switch'li,
+  çalıştırma exit 1 kanıtlı); migrate-etut-to-tables'a **post-cleanup hard-guard** (canlı dry-run'da
+  tetiklendi: "56 yaşayan şablon korundu, exit 1"). rollback-etut-json 2026-08-21'e kadar elde.
+- **B2** ✅ `a335870` — cron/weekly Redis arşiv yazımı söküldü (okuyucu sıfırdı; davranış değişmedi).
+- **B3** ✅ 3 dalga: `683c58d` (POST/DELETE /api/slots kaldırıldı, SlotGrid salt-görüntüleme,
+  Liste görünümü gitti; −1105 satır) + `6434340` (ParentPanel/archive/HistoryModal/DirectorPanel
+  eski-kaynak okumaları; GET teacherId-zorunlu; mobil grid-etüt dalları + **buildTeacherWeek'e
+  EtutReservation beslemesi** — cutover'da unutulmuş öğretmen-mobil-hafta boşluğu kapandı; −254) +
+  `c3a5200` (combineBookings→normalizeEtutBookings, studentWeekBookings silindi, bookEtut tx içi
+  SlotBooking sorgusu kalktı; −235).
+- **B4** ✅ `c3a5200` içinde — computeCellFromEntry etüt dalları silindi. Ön-kanıt (canlı): grid
+  JSON'larında type:'etut' 0, SlotBooking'de açık hücre 0, booked 0. `/api/program` şablona artık
+  yalnız `ders|available` saklar (etut vektörü kapalı).
+- **B10** ✅ testkurs 2 öğretmendeki boş `etutSablonlari: []` guard'lı scriptle silindi — canlıda
+  anahtar sayısı 0.
+- **Üçlü-model denetim ×2:** plan-öncesi (Codex 5 ek bulgu: booking.ts ikinci ayak, GET daraltma,
+  /api/program şeması, mobil-hafta boşluğu, DirectorPanel zinciri — hepsi kapsama alındı) +
+  diff-sonrası (`1ed69df` fix'leri: mobil slots kronolojik sıralama, GET rol guard'ı + hücre
+  whitelist DTO, ölü hook'lar, bayat yorumlar, e2e sıra assert'i). Gemini her iki turda 6/6
+  temiz raporladı; tsc+383 testi bağımsız koştu.
+- Testler: 386→383 (silinen SlotBooking-ayağı testleri kodla birlikte gitti; yeni normalize
+  testleri + e2e nöbetçileri eklendi). **e2e nöbetçi/int testleri canlıya karşı koşar — merge +
+  deploy SONRASI koşulacak** (eski kod canlıdayken 405 beklentisi tutmaz).
+
+KALAN (haritadan): B6 lib/userIndex.ts ölü dosya + B7 Redis fosilleri (dump→sil) + B9 dersBranch
+boş-string kuralı + B11 SlotBooking retention + damar 2 (raw SQL tenant) + damar 3 (finansal
+invariant) — sonraki dalgalar.
 > Yöntem: canlı DB reconcile diff (salt-okunur, 2 org) + Redis tam envanter (140 anahtar) +
 > 2 bağımsız Explore ajanı (yazıcı/okuyucu envanteri) + kritik iddiaların elle spot-check'i.
 > Konsey çerçevesi: bu bir bug listesi değil, OTORİTE + YAZICI + OKUYUCU + eski/yeni yol haritası.
