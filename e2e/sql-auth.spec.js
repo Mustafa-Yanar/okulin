@@ -9,9 +9,12 @@
  */
 const { test, expect } = require('@playwright/test');
 
-const BASE     = process.env.OKULIN_BASE_URL || 'https://testkurs.okulin.com';
-const DIR_USER = process.env.OKULIN_DIR_USER || 'testkurs_mudur';
-const DIR_PASS = process.env.OKULIN_DIR_PASS || 'testkursmudur';
+const BASE     = process.env.OKULIN_BASE_URL;
+const DIR_USER = process.env.OKULIN_DIR_USER;
+const DIR_PASS = process.env.OKULIN_DIR_PASS;
+if (!BASE || !DIR_USER || !DIR_PASS) {
+  throw new Error('GÜVENLİK KİLİDİ: sql-auth için hedef ve müdür bilgileri env üzerinden açıkça verilmelidir.');
+}
 
 async function login(request, username, password, role) {
   const res = await request.post(`${BASE}/api/auth`, {

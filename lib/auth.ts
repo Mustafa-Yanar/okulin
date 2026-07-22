@@ -125,7 +125,7 @@ export async function canIntake(session: Session | null | undefined): Promise<bo
 // çok-modüllü/temel route'lar (auth, program, yoklama) modülsüz kalır.
 export function withAuth(handler: AuthedHandler): (req: NextRequest, ctx: RouteContext) => Promise<Response>;
 export function withAuth(mode: AuthMode, handler: AuthedHandler): (req: NextRequest, ctx: RouteContext) => Promise<Response>;
-export function withAuth(mode: AuthMode, module: ModuleKey, handler: AuthedHandler): (req: NextRequest, ctx: RouteContext) => Promise<Response>;
+export function withAuth(mode: AuthMode, moduleKey: ModuleKey, handler: AuthedHandler): (req: NextRequest, ctx: RouteContext) => Promise<Response>;
 export function withAuth(
   modeOrHandler: AuthMode | AuthedHandler,
   moduleOrHandler?: ModuleKey | AuthedHandler,
@@ -133,11 +133,11 @@ export function withAuth(
 ) {
   // Argüman çözümü: (handler) | (mode, handler) | (mode, module, handler).
   let mode: AuthMode = 'auth';
-  let module: ModuleKey | undefined;
+  let moduleKey: ModuleKey | undefined;
   let handler: AuthedHandler;
   if (maybeHandler) {
     mode = modeOrHandler as AuthMode;
-    module = moduleOrHandler as ModuleKey;
+    moduleKey = moduleOrHandler as ModuleKey;
     handler = maybeHandler;
   } else if (typeof moduleOrHandler === 'function') {
     mode = modeOrHandler as AuthMode;
@@ -157,10 +157,10 @@ export function withAuth(
     if (!ok) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     // Modül geçidi: kurum bu modülü kapattıysa (config.modules[module]===false) reddet.
     // Rol yetkisinden SONRA — "modül kapalı" mesajı yalnız yetkili kullanıcıya görünür.
-    if (module) {
+    if (moduleKey) {
       const { getOrgConfig } = await import('./config');
       const mods = await getOrgConfig('modules');
-      if (mods[module] === false) {
+      if (mods[moduleKey] === false) {
         return NextResponse.json({ error: 'Bu modül kurumunuzda kapalı' }, { status: 403 });
       }
     }

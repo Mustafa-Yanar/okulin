@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   test: {
     include: ['**/*.{test,spec}.?(c|m)[jt]s?(x)', 'scripts/**/*.test.mjs'],
-    exclude: ['e2e/**', 'node_modules/**', '.next/**', 'out-render/**', 'mobile/**'],
+    exclude: ['e2e/**', 'tests/integration/**', 'node_modules/**', '.next/**', 'out-render/**', 'mobile/**'],
   },
   resolve: {
     alias: { '@': fileURLToPath(new URL('./', import.meta.url)) },

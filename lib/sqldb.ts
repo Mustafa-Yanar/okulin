@@ -2,9 +2,9 @@
 // tdb() istek bağlamındaki org+branch'i sorgulara OTOMATİK enjekte eder (kurumlar
 // birbirinin verisini göremez), tıpkı tenantRedis()'in prefix eklemesi gibi.
 //
-// Enjeksiyon: create.data + createMany.data + (findMany/findFirst/count/aggregate/
-// groupBy/updateMany/deleteMany).where → { orgSlug, branch }. findUnique/update/delete/
-// upsert (cuid id ile, global-benzersiz) DOKUNULMAZ; route gerekiyorsa explicit verir.
+// Enjeksiyon: tenant kolonu taşıyan TÜM okuma/yazma işlemlerinin where/data alanlarına
+// { orgSlug, branch } eklenir. Global-benzersiz cuid tek başına güvenlik sınırı değildir:
+// başka kurumun id'si yanlışlıkla/saldırıyla gelirse update/delete/findUnique de reddeder.
 // SKIP: global tablolar (Org/SuperAdmin) + orgSlug taşımayan çocuk tablolar (parent'tan
 // scope alır) — bunlara enjeksiyon HATA verir, o yüzden hariç.
 import { prisma } from './prisma';
@@ -18,7 +18,7 @@ const SKIP = new Set([
 ]);
 const SCOPE_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'count', 'aggregate', 'groupBy',
-  'updateMany', 'deleteMany',
+  'findUnique', 'findUniqueOrThrow', 'update', 'updateMany', 'delete', 'deleteMany',
 ]);
 
 export interface TenantScope {
@@ -43,15 +43,31 @@ function makeTenantDb(orgSlug: string, branch: string) {
           if (SKIP.has(model)) return query(args);
           // args şekli operasyona göre değişir (where/data) — Prisma'nın $allOperations
           // birleşimi bunu statik ifade edemediği için lokal geniş tip kullanılır.
-          const a = args as { where?: Record<string, unknown>; data?: unknown };
+          const a = args as {
+            where?: Record<string, unknown>;
+            data?: unknown;
+            create?: unknown;
+            update?: unknown;
+          };
           if (SCOPE_WHERE.has(operation)) {
-            args = { ...a, where: { ...(a?.where || {}), orgSlug, branch } } as typeof args;
+            const next: typeof a = { ...a, where: { ...(a?.where || {}), orgSlug, branch } };
+            if (operation === 'update' || operation === 'updateMany') {
+              next.data = { ...((a?.data as Record<string, unknown>) || {}), orgSlug, branch };
+            }
+            args = next as typeof args;
           } else if (operation === 'create') {
             args = { ...a, data: { ...((a?.data as Record<string, unknown>) || {}), orgSlug, branch } } as typeof args;
           } else if (operation === 'createMany') {
             const d = a?.data;
             const inj = (x: unknown) => ({ ...((x as Record<string, unknown>) || {}), orgSlug, branch });
             args = { ...a, data: Array.isArray(d) ? d.map(inj) : inj(d) } as typeof args;
+          } else if (operation === 'upsert') {
+            args = {
+              ...a,
+              where: { ...(a?.where || {}), orgSlug, branch },
+              create: { ...((a?.create as Record<string, unknown>) || {}), orgSlug, branch },
+              update: { ...((a?.update as Record<string, unknown>) || {}), orgSlug, branch },
+            } as typeof args;
           }
           return query(args);
         },

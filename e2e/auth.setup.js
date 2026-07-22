@@ -20,13 +20,14 @@ const { test: setup } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
 
-const BASE = process.env.OKULIN_BASE_URL || 'https://testkurs.okulin.com';
+const BASE = process.env.OKULIN_BASE_URL;
+if (!BASE) throw new Error('GÜVENLİK KİLİDİ: E2E için OKULIN_BASE_URL zorunlu.');
 
 // Öğretmen/öğrenci hesapları .env.local'den gelir (playwright.config @next/env yükler).
 // Eski sabit fikstür isimleri ('Matematik Öğretmeni1', 'Duha pirinç') canlı veriden
 // silindi — bayat fallback tutmuyoruz; env eksikse net hatayla düşülür.
-const DIR_USER = process.env.OKULIN_DIR_USER || 'testkurs_mudur';
-const DIR_PASS = process.env.OKULIN_DIR_PASS || 'testkursmudur';
+const DIR_USER = process.env.OKULIN_DIR_USER;
+const DIR_PASS = process.env.OKULIN_DIR_PASS;
 const TEA_USER = process.env.OKULIN_TEA_USER;
 const TEA_PASS = process.env.OKULIN_TEA_PASS;
 const STU_USER = process.env.OKULIN_STU_USER;
@@ -37,7 +38,7 @@ if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 
 async function loginAndSave(context, username, password, role, file) {
   if (!username || !password) {
-    throw new Error(`${role} giriş bilgileri eksik — .env.local'de OKULIN_TEA_USER/PASS ve OKULIN_STU_USER/PASS tanımlı olmalı.`);
+    throw new Error(`${role} giriş bilgileri eksik — E2E rol kullanıcı adı/şifresi env üzerinden açıkça verilmelidir.`);
   }
   const res = await context.request.post(`${BASE}/api/auth`, {
     headers: { 'Content-Type': 'application/json', Origin: BASE },

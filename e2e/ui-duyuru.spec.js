@@ -7,7 +7,8 @@ const { test, expect } = require('@playwright/test');
 
 const DIR_STATE = 'e2e/.auth/director.json';
 const STU_STATE = 'e2e/.auth/student.json';
-const BASE = process.env.OKULIN_BASE_URL || 'https://testkurs.okulin.com';
+const BASE = process.env.OKULIN_BASE_URL;
+if (!BASE) throw new Error('GÜVENLİK KİLİDİ: E2E için OKULIN_BASE_URL zorunlu.');
 
 const title = 'Otomatik Test Duyuru ' + Date.now();
 

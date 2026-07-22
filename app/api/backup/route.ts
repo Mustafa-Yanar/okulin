@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
 import { prisma } from '@/lib/prisma';
+import { isCronAuthorized } from '@/lib/cron-auth';
 import { Prisma } from '@prisma/client';
 import type { Redis } from '@upstash/redis';
 
@@ -169,23 +170,10 @@ async function deleteBackupFile(token: string, repo: string, file: BackupFile) {
   return res.ok;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function uploadBackup(token: string, repo: string, filename: string, contentB64: string) {
-  const res = await ghFetch(token, repo, `contents/${BACKUP_DIR}/${filename}`, {
-    method: 'PUT',
-    body: JSON.stringify({
-      message: `backup: ${filename}`,
-      content: contentB64,
-    }),
-  });
-  return res;
-}
-
 // Bilinçli withAuth istisnası: cron/manuel yedek ucu — oturum yok, CRON_SECRET Bearer doğrulanır.
 export async function GET(req: Request) {
   // Auth: CRON_SECRET header'ı zorunlu
-  const auth = req.headers.get('authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: 'Yetkisiz' }, { status: 401 });
   }
 

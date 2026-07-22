@@ -27,7 +27,7 @@ function fail(msg: string) {
 // PayOrder okuma — ortak şekle normalize eder.
 interface OrderView {
   org: string; branch: string; studentId: string; status: string;
-  installmentIdx?: number; studentName?: string; data: Record<string, unknown>;
+  amount: number; installmentIdx?: number; studentName?: string; data: Record<string, unknown>;
 }
 
 async function readOrder(oid: string): Promise<OrderView | null> {
@@ -35,7 +35,7 @@ async function readOrder(oid: string): Promise<OrderView | null> {
   if (!po) return null;
   const d = (po.data as Record<string, unknown> | null) || {}; // data: Json
   return {
-    org: po.orgSlug, branch: po.branch, studentId: po.studentId, status: po.status,
+    org: po.orgSlug, branch: po.branch, studentId: po.studentId, status: po.status, amount: po.amount,
     installmentIdx: d.installmentIdx as number | undefined, studentName: d.studentName as string | undefined, data: d,
   };
 }
@@ -75,8 +75,15 @@ export async function POST(req: Request) {
   }
 
   const provider = getProvider(cfg.provider || 'paytr');
-  const { valid, status } = provider.verifyCallback({ config: { key: key || '', salt: salt || '' }, form });
+  const { valid, status, amount } = provider.verifyCallback({ config: { key: key || '', salt: salt || '' }, form });
   if (!valid) return fail('hash uyuşmuyor'); // sahte/bozuk bildirim — kredilendirme yok
+
+  // HMAC, bildirimin PayTR'den geldiğini kanıtlar; tutarın BU siparişe ait beklenen
+  // tutar olduğunu ayrıca doğrulamak zorundayız. Kuruş cinsinden tam sayı karşılaştır.
+  const callbackAmount = Number(amount);
+  if (status === 'success' && (!Number.isSafeInteger(callbackAmount) || callbackAmount !== order.amount)) {
+    return fail('tutar uyuşmuyor');
+  }
 
   // Başarısız ödeme → işaretle, OK dön (tekrar deneme istemeyiz).
   if (status !== 'success') {
