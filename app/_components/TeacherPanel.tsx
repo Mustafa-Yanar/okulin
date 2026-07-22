@@ -29,7 +29,7 @@ import { subjectsForClass } from './student-logic';
 import { classShortUpper, groupStudentsByClass, coursesForClass } from '@/lib/classCatalog';
 import { useUrlTab } from './useUrlTab';
 import PanelHero from './PanelHero';
-import { api, getAdjacentWeek, WeekNav } from './shared';
+import { api, getAdjacentWeek, isSlotPast, WeekNav } from './shared';
 import type { Session } from '@/lib/auth';
 import type { SlotCell as SlotCellData, ProgramEntry } from '@/lib/slots';
 import type { ShowToast, StudentDTO } from './types';
@@ -648,8 +648,11 @@ function TeacherEtutPanel({ session, students, showToast }: TeacherEtutPanelProp
                   const isAssigning = assignFor === e.id;
                   const stu = students.find(s => s.id === selStudent);
                   const cands = stu ? candidatesFor(stu.cls) : [];
+                  // Slot-seviye geçmiş kontrolü: hafta yazılabilir olsa da başlamış slota
+                  // atama/kaldırma sunucuda kural 6 ile 400 döner — butonu hiç gösterme.
+                  const past = isSlotPast(weekKey, e.dayIndex, `${e.start}–${e.end}`);
                   return (
-                    <div key={e.id} className="time-block time-etut rounded-xl overflow-hidden">
+                    <div key={e.id} className={`time-block time-etut rounded-xl overflow-hidden${past ? ' opacity-60' : ''}`}>
                       <div className="flex items-center justify-between px-3 py-2.5 gap-2">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-[10px] px-2 py-0.5 rounded-full font-600 shrink-0" style={{ fontWeight: 600, background: 'color-mix(in srgb, var(--time-etut) 22%, transparent)', color: 'var(--time-etut)' }}>ETÜT</span>
@@ -671,6 +674,8 @@ function TeacherEtutPanel({ session, students, showToast }: TeacherEtutPanelProp
                         <div className="shrink-0">
                           {!canWrite ? (
                             <span className="text-caption">Salt görüntüleme</span>
+                          ) : past ? (
+                            <span className="text-caption">Geçti</span>
                           ) : assigned ? (
                             <button onClick={() => removeStudent(e.id)} disabled={busy}
                               className="btn-icon btn-icon-danger" title="Öğrenciyi kaldır">
@@ -686,7 +691,7 @@ function TeacherEtutPanel({ session, students, showToast }: TeacherEtutPanelProp
                         </div>
                       </div>
 
-                      {canWrite && isAssigning && !assigned && (
+                      {canWrite && !past && isAssigning && !assigned && (
                         <div className="bg-white px-3 py-2.5 border-t border-gray-100 space-y-2">
                           <select value={selStudent}
                             onChange={ev => { setSelStudent(ev.target.value); setSelBranch(''); }}
