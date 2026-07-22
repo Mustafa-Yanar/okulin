@@ -11,7 +11,7 @@
  * Superadmin girişi yalnız apex'ten (okulin.com) yapılabilir; bilgiler .env.local'den
  * (OKULIN_SA_USER/OKULIN_SA_PASS). Rate-limit düzeni: superadmin + geçici müdür
  * kendi kullanıcı-adı kovalarını kullanır (testkurs_mudur kovasına dokunulmaz);
- * login deneyen negatif test [401, 429] ikisini de kabul eder.
+ * geçici müdürün kovasına yalnız 1 negatif deneme biner → 429 imkânsız, tolere edilmez.
  */
 const { test, expect } = require('@playwright/test');
 const crypto = require('crypto');
@@ -174,7 +174,7 @@ test.describe('Kiracı izolasyonu (geçici kurum)', () => {
         headers: { 'Content-Type': 'application/json', Origin: BASE },
         data: { action: 'login', username: TMP_DIR_USER, password: TMP_DIR_PASS, role: 'management' },
       });
-      expect([401, 429]).toContain(res.status()); // kendi kullanıcı-adı kovası; 429 = rate-limit toleransı
+      expect(res.status()).toBe(401); // kendi kullanıcı-adı kovası; tek negatif deneme → 429 imkânsız
     } finally {
       await anon.dispose();
     }

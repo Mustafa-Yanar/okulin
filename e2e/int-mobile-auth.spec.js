@@ -5,8 +5,9 @@
  * devices → session-exchange (IP-bağlı, atomik) → çapraz-tenant reddi.
  *
  * Rate-limit bütçesi: mobil login web ile AYNI ip:username kovasını kullanır
- * (5 deneme/15dk). director 2, teacher 1, student 1 login → toplam 4 (+ setup'ın
- * director login'i AYRI kova değil; testleri 15 dk içinde tekrar koşarsan dikkat).
+ * (5 deneme/15dk) ama BAŞARILI her login kovayı sıfırlar (lib/ratelimit.ts).
+ * Bu dosyadaki tüm login'ler başarılı (director 3, teacher 1, student 1) →
+ * kalıcı yük 0; 429 görülmesi gerçek hatadır, tolere edilmez.
  *
  * DOĞRULAMA ASKIDA (2026-07-16): OTP akışı yok → login şifre doğruysa direkt token.
  */
@@ -157,8 +158,7 @@ test.describe('Mobil API çekirdeği (canlı)', () => {
     // Not: bu blok setup rate-limit'ini paylaşan 2. director login DEĞİL — yukarıdaki
     // iptal testinin token'ı iptal edildi; taze token için TEK login daha:
     const r = await login(api, DIR_USER, DIR_PASS, 'management');
-    // Rate-limit bütçesi dolduysa 429 kabul (canlı ortam gerçeği) — o durumda testi atla
-    test.skip(r.status() === 429, 'login rate-limit doldu (15 dk içinde tekrar koşuluyor)');
+    // 429 kabul EDİLMEZ: başarılı login'ler kovayı sıfırlar; 429 = bütçe invariant'ı bozuldu.
     expect(r.status(), await r.text()).toBe(200);
     const j = await r.json();
     const bearer = { Authorization: `Bearer ${j.accessToken}` };

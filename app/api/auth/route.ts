@@ -5,7 +5,7 @@ import { tenantRedis, currentOrg } from '@/lib/tenant';
 import { orgFromHost } from '@/lib/org';
 import { normalizeBranding } from '@/lib/branding';
 import { getSession, setSession, clearSession } from '@/lib/auth';
-import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait, safeLimit, isSuperadminIpAllowed } from '@/lib/ratelimit';
+import { loginRatelimit, passwordChangeRatelimit, getClientIp, formatResetWait, safeLimit, isSuperadminIpAllowed, resetLoginBudget } from '@/lib/ratelimit';
 import { logAudit, actorFrom } from '@/lib/audit';
 import { parseBody, z, zName, zPassword, zNewPassword, zId } from '@/lib/validate';
 import { sendOtp } from '@/lib/sms';
@@ -105,10 +105,13 @@ export async function POST(req: NextRequest) {
         if (ok) {
           const saName = (superadmin as { name?: string }).name || 'Süper Admin';
           // 2FA: telefon kayıtlıysa + cihaz tanınmıyorsa OTP iste (KORUNUR).
+          // needsOtp dalında reset YOK: şifreyi bilen ama OTP'yi bilmeyen saldırganın
+          // SMS tetiklemesi 5/15dk sınırında kalır (kova OTP onayında sıfırlanır).
           const otpRes = await maybeOtp('superadmin', superadmin.phone || null);
           if (otpRes) return otpRes;
           const res = NextResponse.json({ role: 'superadmin', name: saName });
           await setSession(res, { role: 'superadmin', id: 'superadmin', name: saName });
+          await resetLoginBudget(rlKey);
           return res;
         }
       }
@@ -129,6 +132,7 @@ export async function POST(req: NextRequest) {
     // OTP ASKIYA ALINDI — normal roller şifre doğruysa doğrudan giriş yapar.
     const res = NextResponse.json(result.payload);
     await setSession(res, result.payload);
+    await resetLoginBudget(rlKey);
     return res;
   }
 

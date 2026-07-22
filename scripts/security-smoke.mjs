@@ -95,7 +95,8 @@ async function run() {
   section('3. CSRF (mutasyonda origin doğrulaması)');
   check('POST /api/auth — Origin yok → 403', (await req('/api/auth', { method: 'POST', body: { action: 'login', username: 'x', password: 'y', role: 'management' } })).status, 403);
   check('POST /api/auth — yanlış Origin → 403', (await req('/api/auth', { method: 'POST', origin: 'https://evil.example', body: { action: 'login', username: 'x', password: 'y', role: 'management' } })).status, 403);
-  check('POST /api/auth — doğru Origin + yanlış şifre → 401 (CSRF değil)', (await login('__smoke_nobody__', 'nope', 'teacher')).status, [401, 429]);
+  // Kullanıcı adı koşu-başına benzersiz: kova taze → 429 imkânsız, kesin 401 beklenir.
+  check('POST /api/auth — doğru Origin + yanlış şifre → 401 (CSRF değil)', (await login(`__smoke_nobody_${Date.now()}__`, 'nope', 'teacher')).status, 401);
 
   section('4. JWT sahteciliği reddi (401)');
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { headers } from 'next/headers';
-import { loginRatelimit, getClientIp, formatResetWait, safeLimit } from '@/lib/ratelimit';
+import { loginRatelimit, getClientIp, formatResetWait, safeLimit, resetLoginBudget } from '@/lib/ratelimit';
 import { orgFromHost } from '@/lib/org';
 import { verifyLogin } from '@/lib/login';
 import { issueMobileSession } from '@/lib/mobile/sessions';
@@ -50,5 +50,6 @@ export async function POST(req: NextRequest) {
   const branch = result.role === 'org_admin' ? '__hq__' : currentBranch();
   const payload = { ...result.payload, org: currentOrg(), branch };
   const pair = await issueMobileSession(payload, { installationId, deviceName, platform, ip });
+  await resetLoginBudget(rlKey);
   return NextResponse.json({ ...pair, session: payload });
 }

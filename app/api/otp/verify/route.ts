@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyOtp } from '@/lib/sms';
+import { getClientIp, resetLoginBudget } from '@/lib/ratelimit';
 import { tenantRedis } from '@/lib/tenant';
 import { parseBody, z } from '@/lib/validate';
 import { notifyNewDeviceLogin } from '@/lib/notify';
@@ -37,6 +38,11 @@ export async function POST(req: Request) {
   if (!approved) {
     return NextResponse.json({ error: 'Kod yanlış veya süresi dolmuş' }, { status: 400 });
   }
+
+  // İkinci faktör kanıtlandı → login kovasını sıfırla. Aksi halde "4 yanlış + doğru şifre
+  // (needsOtp, reset yok) + OTP doğru → tekrar login" dizisi son adımda 429 yerdi.
+  // Saldırgan OTP onayını üretemez → SMS tetikleme sınırı (5/15dk) bozulmaz.
+  await resetLoginBudget(`${getClientIp(req)}:${username.toLowerCase()}`);
 
   // Güvenilir cihaz token'ı oluştur ve Redis'e kaydet (tenant-scoped)
   const deviceToken = makeId() + makeId();

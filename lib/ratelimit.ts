@@ -11,13 +11,18 @@ import { Ratelimit } from '@upstash/ratelimit';
 import redis from './redis';
 
 // Login: 5 deneme / 15 dakika (sliding window)
-// NOT: sayaç HER denemede artar (başarılı dahil) — route'lar safeLimit'i şifre
-// doğrulamadan ÖNCE çağırır. Sık başarılı giriş de pencereyi doldurabilir.
+// Sayaç HER denemede artar (route'lar safeLimit'i bcrypt'ten ÖNCE çağırır — DoS koruması),
+// ama BAŞARILI oturum kurulumu kovayı sıfırlar (resetLoginBudget). Net etki: kilit yalnız
+// aralarında başarı olmayan 5 denemede oluşur (OWASP failed-attempt lockout deseni).
+// ephemeralCache KAPALI: bellek-içi blok damgası, başarı sonrası Redis sıfırlansa bile
+// warm container'da pencere sonuna dek bayat 429 üretirdi; login düşük trafikli olduğundan
+// her kontrolün Redis'e gitmesi kabul edilebilir bedel.
 export const loginRatelimit = new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(5, '15 m'),
   analytics: false,
   prefix: 'rl:login',
+  ephemeralCache: false,
 });
 
 // Şifre değiştirme: 5 deneme / 1 dakika
@@ -103,6 +108,18 @@ export async function safeLimit(limiter: Ratelimit, key: string): Promise<LimitR
   } catch (e) {
     console.warn('[ratelimit] Redis erişilemedi, limit atlanıyor (fail-open):', e instanceof Error ? e.message : e);
     return { success: true, reset: 0, limit: 0, remaining: 0 };
+  }
+}
+
+// Başarılı oturum kurulumunda (setSession / issueMobileSession / OTP onayı) login
+// kovasını sıfırlar. Saldırgan başarı üretemediği için brute-force sınırı değişmez;
+// meşru kullanıcının art arda başarılı girişleri artık kilit biriktirmez.
+// Fail-open: Redis hatası başarılı girişi düşürmez (safeLimit ile aynı felsefe).
+export async function resetLoginBudget(key: string): Promise<void> {
+  try {
+    await loginRatelimit.resetUsedTokens(key);
+  } catch (e) {
+    console.warn('[ratelimit] login kovası sıfırlanamadı (fail-open):', e instanceof Error ? e.message : e);
   }
 }
 

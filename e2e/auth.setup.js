@@ -1,8 +1,20 @@
 /**
  * SQL GÖÇ TESTİ — Oturum kurulumu (storageState)
- * Her rol için BİR KEZ login olur, cookie'yi diske kaydeder.
- * Tüm test dosyaları bu kayıtlı oturumları paylaşır → toplam login sayısı = 3.
- * Bu, login rate-limit'ine (5/15dk) takılmayı önler.
+ * Her rol için BİR KEZ login olur, cookie'yi diske kaydeder; test dosyaları bu
+ * kayıtlı oturumları paylaşır.
+ *
+ * LOGIN BÜTÇESİ INVARIANT'I (yeni spec eklerken OKU):
+ * rl:login kovası ip:username, 5 deneme/15dk; BAŞARILI oturum kurulumu kovayı
+ * SIFIRLAR (lib/ratelimit.ts resetLoginBudget). Suite kuralları:
+ * 1) Başarısız-login testi paylaşılan hesapla YAZILMAZ — kendi (uydurma/geçici)
+ *    kullanıcı-adı kovasını kullanır (örn. sql-auth'un 2 negatifi tek istisna,
+ *    int-ratelimit mühürleri kendi kovalarında).
+ * 2) Aynı hesapla eşzamanlı başarılı login sayısı + o hesabın bekleyen başarısızlıkları
+ *    5'i aşmamalı (başarı reset'i yanıt dönerken işler; eşzamanlılık penceresinde
+ *    sayaç geçici birikir — bugünkü en kötü durum: müdür kovasında 2 negatif + 3
+ *    paralel başarı = 5, tam sınırda).
+ * 3) 429 hiçbir testte tolere edilmez/atlanmaz — görülürse bu invariant bozulmuştur,
+ *    testi maskeleme, bütçeyi düzelt.
  */
 const { test: setup } = require('@playwright/test');
 const fs = require('fs');

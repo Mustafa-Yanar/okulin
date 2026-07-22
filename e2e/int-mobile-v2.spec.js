@@ -26,7 +26,7 @@ test.beforeAll(async () => {
   webStu = await request.newContext({ storageState: STU_STATE, extraHTTPHeaders: { Origin: BASE } });
   for (const [role, c] of Object.entries(CREDS)) {
     const r = await api.post(`${BASE}/api/mobile/v1/auth/login`, { data: { username: c.user, password: c.pass, role } });
-    if (r.status() === 429) test.skip(true, 'login rate limit penceresi — sonra tekrar koş');
+    // 429 kabul EDİLMEZ: başarılı login kovayı sıfırlar; 429 = bütçe invariant'ı bozuldu.
     expect(r.status(), `${role} login`).toBe(200);
     tokens[role] = (await r.json()).accessToken;
   }
