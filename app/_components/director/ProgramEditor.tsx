@@ -3,7 +3,7 @@
 // Öğretmen ders programı editörü: Google Calendar tarzı tek takvim görünümü.
 // Ders slotları (sabit ID, saatleri sidebar'dan) tek-tık aktif/pasif yapılır;
 // etütler serbest saatli "+ Etüt Ekle" ile eklenir (etutSablonlari).
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import LoadingBox from '../Loading';
 import { Save, Plus, Download, AlertCircle, AlertTriangle } from 'lucide-react';
 import SchedulePrint, { type ScheduleDay, type ScheduleLesson } from '../program/SchedulePrint';
@@ -19,6 +19,8 @@ import EtutCalendar, { timeToMin, minToTop, durationToHeight } from './EtutCalen
 import { useConfirm } from '../ConfirmProvider';
 import type { ProgramEntry } from '@/lib/slots';
 import type { SablonRezDTO } from '@/lib/etut/sablon-service';
+// Ders adayları sunucuyla TEK kaynaktan (decideBooking kural 8 aynı fonksiyonları kullanır).
+import { levelPoolFrom, etutBranchCandidates } from '@/lib/etut/level-pool-core';
 import type { ShowToast, StudentDTO, TeacherDTO } from '../types';
 
 // /api/program ızgarası: gün → slotId → giriş.
@@ -127,11 +129,11 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
     } catch (e) { showToast((e as Error).message, 'error'); }
   }
 
-  async function assignEtutSablon(id: string, student: { id: string; name: string; cls: string } | null, scope: 'WEEK' | 'RECURRING') {
+  async function assignEtutSablon(id: string, student: { id: string; name: string; cls: string } | null, scope: 'WEEK' | 'RECURRING', branch?: string) {
     try {
       const r = await api<{ sablonlar?: SablonRezDTO[] }>('/api/etut-sablon', {
         method: 'PATCH',
-        body: JSON.stringify({ teacherId: teacher.id, id, student, scope, weekKey }),
+        body: JSON.stringify({ teacherId: teacher.id, id, student, branch, scope, weekKey }),
       });
       const list = r.sablonlar || [];
       setEtutSablonlar(list);
@@ -434,6 +436,7 @@ export default function ProgramEditor({ teacher, onClose, showToast, students, i
           sablon={selectedEtut}
           aktif={etutAktifThisWeek(selectedEtut)}
           allowedStudents={allowedStudents}
+          teacherBranches={teacher.branches || []}
           onClose={() => setSelectedEtut(null)}
           onToggle={toggleEtutSablon}
           onAssign={assignEtutSablon}
@@ -637,15 +640,16 @@ interface EtutEylemModalProps {
   sablon: SablonRezDTO;
   aktif: boolean;
   allowedStudents?: PanelStudent[];
+  teacherBranches?: string[];
   onClose: () => void;
   onToggle: (id: string, scope: string, aktif: boolean) => void;
-  onAssign: (id: string, student: { id: string; name: string; cls: string } | null, scope: 'WEEK' | 'RECURRING') => void;
+  onAssign: (id: string, student: { id: string; name: string; cls: string } | null, scope: 'WEEK' | 'RECURRING', branch?: string) => void;
   onDelete: (id: string) => void;
 }
 
 // ─── Etüt eylem modalı (tıklanan etüt: aktif/pasif/sil) ──────────────────────
-function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle, onAssign, onDelete }: EtutEylemModalProps) {
-  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (öğrenci seçici)
+function EtutEylemModal({ sablon, aktif, allowedStudents = [], teacherBranches = [], onClose, onToggle, onAssign, onDelete }: EtutEylemModalProps) {
+  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (öğrenci seçici) + düzey havuzu
   const confirm = useConfirm();
   const gun = ALL_DAYS.find(d => d.index === sablon.dayIndex)?.label || '';
   // Pasifleştirme onayı: "sadece bu hafta" varsayılan İŞARETLİ
@@ -653,12 +657,37 @@ function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle
   const [sadeceBuHafta, setSadeceBuHafta] = useState(true);
   // Yeni atama kapsamı: kalıcı (her hafta) DEFAULT.
   const [assignScope, setAssignScope] = useState<'WEEK' | 'RECURRING'>('RECURRING');
+  // Çok-branşlı öğretmende ders seçimi (denetim B9): tek aday varsa sorulmaz, seçimle
+  // birlikte anında atanır (eski tek-tık davranışı korunur); birden fazlaysa ders seçici
+  // açılır ve "Ata" ile gönderilir. Sunucu kuralı decideBooking kural 8 ile AYNI kaynaktan
+  // (etutBranchCandidates) hesaplanır — istemci sunucunun reddedeceği dersi teklif etmez.
+  const [selStudent, setSelStudent] = useState('');
+  const [selBranch, setSelBranch] = useState('');
+
+  const levelClasses = useMemo(() => classes.map(c => ({ group: c.group, dersler: c.dersler })), [classes]);
+  const candidatesFor = useCallback((s: PanelStudent) =>
+    etutBranchCandidates(teacherBranches, levelPoolFrom(levelClasses, s.group || '')),
+    [teacherBranches, levelClasses]);
+  // Atanabilir öğrenciler: en az bir ders adayı olanlar (grup süzmesi zaten allowedStudents'ta).
+  // Adayı olmayan öğrenci seçilseydi sunucu 400 verirdi — listede hiç göstermemek dürüst olan.
+  const eligibleStudents = useMemo(() => allowedStudents.filter(s => candidatesFor(s).length > 0),
+    [allowedStudents, candidatesFor]);
+  const secili = eligibleStudents.find(s => s.id === selStudent) || null;
+  const cands = secili ? candidatesFor(secili) : [];
+
+  function assign(s: PanelStudent, branch: string) {
+    onAssign(sablon.id, { id: s.id, name: s.name, cls: s.cls || '' }, assignScope, branch);
+  }
 
   function handleStudentSelect(e: React.ChangeEvent<HTMLSelectElement>) {
     const sid = e.target.value;
+    setSelStudent(sid);
+    setSelBranch('');
     if (!sid) return; // boş seçenek artık kaldırma yapmaz — select yalnız atama içindir
-    const s = allowedStudents.find(x => x.id === sid);
-    if (s) onAssign(sablon.id, { id: s.id, name: s.name, cls: s.cls || '' }, assignScope);
+    const s = eligibleStudents.find(x => x.id === sid);
+    if (!s) return;
+    const c = candidatesFor(s);
+    if (c.length === 1) assign(s, c[0]); // tek aday → anında ata (eski davranış)
   }
 
   return (
@@ -686,13 +715,24 @@ function EtutEylemModal({ sablon, aktif, allowedStudents = [], onClose, onToggle
               Sadece bu hafta
             </label>
           </div>
-          <select value={sablon.studentId || ''} onChange={handleStudentSelect}
+          <select value={selStudent || sablon.studentId || ''} onChange={handleStudentSelect}
             className="input !text-sm !py-1.5 w-full">
             <option value="">— Öğrenci seç —</option>
-            {allowedStudents.map(s => (
+            {eligibleStudents.map(s => (
               <option key={s.id} value={s.id}>{s.name}{s.cls ? ` · ${classShort(classes, s.cls)}` : ''}</option>
             ))}
           </select>
+          {secili && cands.length > 1 && (
+            <div className="mt-2 space-y-2">
+              <select value={selBranch} onChange={e => setSelBranch(e.target.value)}
+                className="input !text-sm !py-1.5 w-full">
+                <option value="">— Ders seç —</option>
+                {cands.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+              <button className="btn-primary w-full justify-center" disabled={!selBranch}
+                onClick={() => assign(secili, selBranch)}>Ata</button>
+            </div>
+          )}
           {sablon.studentName && (
             <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: '#0f766e' }}>
               Atandı: {sablon.studentName}

@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 // ile AYNI desen) — levelPoolFrom (saf fonksiyon) bu mock'tan etkilenmez, getClasses'ı çağırmaz.
 vi.mock('@/lib/classes', () => ({ getClasses: vi.fn(), getClass: vi.fn() }));
 
-import { levelPoolFrom, levelPoolForStudent } from './level-pool';
+import { levelPoolFrom, levelPoolForStudent, etutBranchCandidates } from './level-pool';
 import { getClasses, getClass } from '@/lib/classes';
 
 const REG = [
@@ -72,5 +72,32 @@ describe('levelPoolForStudent — boş-havuz fallback (Fix 2)', () => {
     vi.mocked(getClass).mockResolvedValue(null);
     const pool = await levelPoolForStudent('yok-boyle-bir-sube', 'ilkokul');
     expect(pool).toEqual([]);
+  });
+});
+
+// Denetim B9: müdür/rehber atama modalinde ders seçici YOKTU ve PATCH şeması branch
+// taşımıyordu → çok-branşlı öğretmene atama, UI'da olmayan bir seçiciyi işaret eden
+// 'Geçersiz veya seçilmemiş ders' 400'üyle reddediliyordu (canlı testkurs'ta doğrulandı).
+// Bu fonksiyon istemcinin sunduğu adayları decideBooking kural 8 ile AYNI kaynaktan üretir.
+describe('etutBranchCandidates — istemci ders adayları (= decideBooking kural 8)', () => {
+  const LISE = levelPoolFrom(REG, 'lise');
+
+  it('öğretmen branşı ∩ düzey havuzu', () => {
+    expect(etutBranchCandidates(['TYT Matematik', 'Geometri'], LISE)).toEqual(['TYT Matematik', 'Geometri']);
+  });
+  it('düzey havuzunda olmayan branş elenir (ortaokul öğrencisine Fizik yok)', () => {
+    expect(etutBranchCandidates(['Fizik', 'Matematik'], levelPoolFrom(REG, 'ortaokul'))).toEqual(['Matematik']);
+  });
+  it('tek aday → istemci sormaz, autoPickBranch sunucuda da aynı tekiyi seçer', () => {
+    expect(etutBranchCandidates(['AYT Matematik'], LISE)).toEqual(['AYT Matematik']);
+  });
+  it('kesişim boş → öğrenci hiç listelenmez (sunucu 400 yerine görünür-eksik)', () => {
+    expect(etutBranchCandidates(['İnkılap Tarihi'], LISE)).toEqual([]);
+  });
+  it('öğretmenin branşı yoksa aday da yok', () => {
+    expect(etutBranchCandidates([], LISE)).toEqual([]);
+  });
+  it('öğretmen branş SIRASINI korur (seçici listesi deterministik)', () => {
+    expect(etutBranchCandidates(['Geometri', 'TYT Matematik'], LISE)).toEqual(['Geometri', 'TYT Matematik']);
   });
 });

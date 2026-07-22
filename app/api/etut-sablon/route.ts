@@ -47,6 +47,11 @@ const AssignSchema = z.object({
     // cls = sınıf legacyId'si — yeni sınıflar 's_'+UUID (38 kr), classes route max(60) ile uyumlu
     cls: z.string().max(60).optional(),
   }).nullable(),
+  // Ders (branş) — çok-branşlı öğretmende ZORUNLU. Eskiden şemada hiç yoktu: müdür/rehber
+  // modalinde ders seçici de olmadığı için bookEtut autoPickBranch tek-aday bulamıyor ve
+  // atama 'Geçersiz veya seçilmemiş ders' ile 400 alıyordu (denetim B9, canlı doğrulandı).
+  // Tek adaylı öğretmende hâlâ opsiyonel — autoPickBranch otomatik seçer.
+  branch: z.string().max(60).optional(),
   scope: z.enum(['WEEK', 'RECURRING']).optional(),   // default RECURRING (geriye uyum — eski istemci scope göndermez)
   weekKey: z.string().max(40).optional().refine((wk) => wk === undefined || isValidWeekKey(wk), { message: 'Geçersiz hafta formatı' }),
 });
@@ -100,12 +105,12 @@ export const PUT = withAuth('manage', 'etut', async (req) => {
 export const PATCH = withAuth('manage', 'etut', async (req, ctx, session) => {
   const parsed = await parseBody(req, AssignSchema);
   if (!parsed.ok) return parsed.response;
-  const { teacherId, id, student } = parsed.data;
+  const { teacherId, id, student, branch } = parsed.data;
   const scope = parsed.data.scope ?? 'RECURRING';
   const weekKey = parsed.data.weekKey;
 
   if (student) {
-    await bookEtut(session, { teacherId, etutId: id, studentId: student.id, scope, weekKey });
+    await bookEtut(session, { teacherId, etutId: id, studentId: student.id, branch, scope, weekKey });
   } else {
     await cancelEtutV2(session, scope === 'WEEK'
       ? { teacherId, etutId: id, scope: 'week', weekKey }
