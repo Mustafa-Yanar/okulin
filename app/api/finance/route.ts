@@ -5,7 +5,7 @@ import { parseBody, z, zId, zMoney } from '@/lib/validate';
 import { tdb, tenant } from '@/lib/sqldb';
 import type { Finance, Installment, Prisma } from '@prisma/client';
 import { financeLockKey, type PaymentEntry } from '@/lib/finance';
-import { planHatasi } from '@/lib/finance-plan';
+import { planHatasi, odenmisTaksitHatasi } from '@/lib/finance-plan';
 import { lockResource } from '@/lib/locks';
 import { HttpError } from '@/lib/errors';
 
@@ -119,6 +119,11 @@ export const POST = withAuth(['director', 'accountant'], 'finance', async (req, 
     // (bkz. lib/finance-plan.ts). İstemci de aynı dağıtımı kullanır → normal akışta tetiklenmez.
     const planErr = planHatasi(instData, netFee);
     if (planErr) throw new HttpError(400, planErr);
+    // Ödenmiş taksit kilidi: makbuzu kesilmiş taksitin tutarı/vadesi değiştirilemez,
+    // taksit sayısı azaltılarak silinemez. İstemci girdileri zaten disabled + taksit
+    // sayısı seçeneği kısıtlı → normal akışta tetiklenmez, bu sunucu kapısıdır.
+    const odenmisErr = odenmisTaksitHatasi(existing?.installments || [], instData);
+    if (odenmisErr) throw new HttpError(400, odenmisErr);
     instCount = instData.length;
 
     const data = { registrationDate: existing?.registrationDate || new Date().toISOString().slice(0, 10), totalFee: parseFloat(String(totalFee)) || 0, discount: parseFloat(String(discount)) || 0, netFee, paymentPlan: paymentPlan || 'pesin', payments: ((existing?.payments as unknown as PaymentEntry[] | null) || []) as unknown as object };

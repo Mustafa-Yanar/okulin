@@ -10,6 +10,7 @@ import { tdb, tenant } from '@/lib/sqldb';
 import { newId } from '@/lib/id';
 import { HttpError } from '@/lib/errors';
 import { lockResource } from '@/lib/locks';
+import { kapanacakTaksitSayisi, kabulEdilenTutarlar } from '@/lib/finance-plan';
 
 // Finance.payments Json ledger'ındaki tek ödeme kaydı.
 export interface PaymentEntry {
@@ -104,6 +105,28 @@ export async function applyInstallmentPaymentSql(opts: ApplyPaymentOpts): Promis
     const payAmount = (explicit && targetInst) ? (parseFloat(String(targetInst.amount)) || 0) : parseFloat(String(amount));
     if (!payAmount || payAmount <= 0) throw new HttpError(400, 'Geçersiz ödeme tutarı');
 
+    // Kapatılacak taksitler. explicit: yalnız seçilen (tutar zaten tam tutara zorlandı).
+    // Genel ödeme: tutar açık taksitleri BAŞTAN tam sayıda kapatmalı (kısmi ödeme alınmaz,
+    // Mustafa kararı — bkz. finance-plan.kapanacakTaksitSayisi). Eskiden serbest tutar
+    // kabul ediliyordu: taksitten azsa hiçbir taksit kapanmıyor (sonsuza dek "gecikmiş",
+    // yanlış senet), birkaç taksiti karşılıyorsa yalnız İLKİ kapanıyordu.
+    let kapatilacak: typeof installments = [];
+    if (explicit) {
+      kapatilacak = targetInst ? [targetInst] : [];
+    } else {
+      const acik = installments.filter((i) => !i.paid);
+      if (acik.length) {
+        const n = kapanacakTaksitSayisi(acik, payAmount);
+        if (n === null) {
+          const kabul = kabulEdilenTutarlar(acik).map((x) => `${x} TL`).join(', ');
+          throw new HttpError(400, `Kısmi taksit ödemesi alınmaz. Tutar açık taksitleri baştan tam kapatmalı — kabul edilen tutarlar: ${kabul}.`);
+        }
+        kapatilacak = acik.slice(0, n);
+      }
+      // acik.length === 0 → peşin plan ya da tüm taksitler kapalı: serbest tutar geçerli
+      // (peşin planda hiç taksit yoktur, normal yol budur).
+    }
+
     const receiptNo = await nextReceiptNo(tx, orgSlug, branch);
     const paymentDate = date || new Date().toISOString().slice(0, 10);
     const payment: PaymentEntry = { id: newId(), date: paymentDate, amount: payAmount, method: method || 'Nakit', note: note || '', receiptNo, recordedBy: recordedBy || '' };
@@ -112,11 +135,9 @@ export async function applyInstallmentPaymentSql(opts: ApplyPaymentOpts): Promis
     const payments: PaymentEntry[] = [...((record.payments as unknown as PaymentEntry[] | null) || []), payment];
     const balance = record.netFee - payments.reduce((s, p) => s + (p.amount || 0), 0);
 
-    if (targetInst) {
-      const due = parseFloat(String(targetInst.amount)) || 0;
-      if (explicit || due <= 0 || payAmount + 0.01 >= due) {
-        await tx.installment.update({ where: { id: targetInst.id }, data: { paid: true, paidDate: paymentDate, paidAmount: payAmount, method: method || 'Nakit', receiptNo } });
-      }
+    // Kapatılan her taksite KENDİ tutarı yazılır (tek makbuz birden çok taksiti kapatabilir).
+    for (const inst of kapatilacak) {
+      await tx.installment.update({ where: { id: inst.id }, data: { paid: true, paidDate: paymentDate, paidAmount: parseFloat(String(inst.amount)) || 0, method: method || 'Nakit', receiptNo } });
     }
     await tx.finance.update({ where: { id: record.id }, data: { payments: payments as unknown as object } });
 

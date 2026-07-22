@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { dagitTutar, planHatasi, planToplami, kurus } from './finance-plan';
+import {
+  dagitTutar, planHatasi, planToplami, kurus,
+  kapanacakTaksitSayisi, kabulEdilenTutarlar, odenmisTaksitHatasi, sonOdenmisIdx,
+} from './finance-plan';
 
 const row = (amount: number, paid = false) => ({ amount, paid });
+const irow = (idx: number, amount: number, paid = false, dueDate = '2026-0' + (idx + 1) + '-01') => ({ idx, amount, paid, dueDate });
 
 describe('planToplami', () => {
   it('kuruş artığını toparlar', () => {
@@ -85,6 +89,80 @@ describe('dagitTutar', () => {
     const plan = [row(0), row(0)];
     dagitTutar(plan, 10000);
     expect(plan.map((r) => r.amount)).toEqual([0, 0]);
+  });
+});
+
+// Kural: dershanede kısmi taksit ödemesi alınmıyor (Mustafa kararı 2026-07-22).
+describe('kapanacakTaksitSayisi — genel ödeme tam taksit kapatmalı', () => {
+  const acik = [row(5000), row(5000), row(3000)];
+
+  it('tek taksit tutarı → 1 taksit kapanır', () => {
+    expect(kapanacakTaksitSayisi(acik, 5000)).toBe(1);
+  });
+  it('iki taksiti karşılayan tutar → İKİSİ birden kapanır', () => {
+    // Eski hata: tutar 10.000 olsa bile YALNIZ ilk taksit kapanıyordu.
+    expect(kapanacakTaksitSayisi(acik, 10000)).toBe(2);
+  });
+  it('tamamı → hepsi kapanır', () => {
+    expect(kapanacakTaksitSayisi(acik, 13000)).toBe(3);
+  });
+  it('kısmi tutar reddedilir', () => {
+    expect(kapanacakTaksitSayisi(acik, 600)).toBeNull();
+    expect(kapanacakTaksitSayisi(acik, 4999)).toBeNull();
+  });
+  it('taksit ortasında kalan tutar reddedilir', () => {
+    expect(kapanacakTaksitSayisi(acik, 7000)).toBeNull();
+  });
+  it('tüm taksitleri aşan tutar reddedilir', () => {
+    expect(kapanacakTaksitSayisi(acik, 20000)).toBeNull();
+  });
+  it('açık taksit yoksa eşleşme yok (çağıran serbest tutara izin verir — peşin plan)', () => {
+    expect(kapanacakTaksitSayisi([], 5000)).toBeNull();
+  });
+  it('kuruş artığı tolere edilir', () => {
+    expect(kapanacakTaksitSayisi([row(3333.33), row(3333.33)], 6666.66)).toBe(2);
+  });
+  it('kabul edilen tutarlar kümülatif listelenir', () => {
+    expect(kabulEdilenTutarlar(acik)).toEqual([5000, 10000, 13000]);
+  });
+});
+
+// Kural: makbuzu kesilmiş taksit geçmişe dönük değiştirilemez (Mustafa kararı 2026-07-22).
+describe('odenmisTaksitHatasi — ödenmiş taksit kilidi', () => {
+  const onceki = [irow(0, 10000, true), irow(1, 10000), irow(2, 10000)];
+
+  it('ödenmemişler serbestçe değişir', () => {
+    expect(odenmisTaksitHatasi(onceki, [irow(0, 10000, true), irow(1, 20000), irow(2, 5000)])).toBeNull();
+  });
+  it('ödenmiş taksitin tutarı değiştirilemez', () => {
+    // Kök bulgu: ödenmişlik İNDEKSLE taşındığı için 10.000'lik ödenmiş taksit
+    // 20.000 yapılınca paid=true/paidAmount=10000 kalıyordu.
+    const e = odenmisTaksitHatasi(onceki, [irow(0, 20000, true), irow(1, 10000), irow(2, 10000)]);
+    expect(e).toContain('1. taksit');
+    expect(e).toContain('10000');
+  });
+  it('ödenmiş taksitin vadesi değiştirilemez', () => {
+    const yeni = [{ ...irow(0, 10000, true), dueDate: '2027-01-01' }, irow(1, 10000), irow(2, 10000)];
+    expect(odenmisTaksitHatasi(onceki, yeni)).toContain('vade');
+  });
+  it('ödenmiş taksit taksit sayısı azaltılarak silinemez', () => {
+    const onceki2 = [irow(0, 10000), irow(1, 10000), irow(2, 10000, true)];
+    expect(odenmisTaksitHatasi(onceki2, [irow(0, 15000), irow(1, 15000)])).toContain('silinemez');
+  });
+  it('hiç ödenmiş yoksa her şey serbest', () => {
+    expect(odenmisTaksitHatasi([irow(0, 10000), irow(1, 10000)], [irow(0, 30000)])).toBeNull();
+  });
+  it('kuruş artığı tutar değişikliği sayılmaz', () => {
+    expect(odenmisTaksitHatasi([irow(0, 3333.33, true)], [irow(0, 3333.34, true)])).toBeNull();
+  });
+});
+
+describe('sonOdenmisIdx', () => {
+  it('hiç ödenmiş yoksa -1', () => {
+    expect(sonOdenmisIdx([irow(0, 100), irow(1, 100)])).toBe(-1);
+  });
+  it('en büyük ödenmiş indeksi döner (arada boşluk olsa da)', () => {
+    expect(sonOdenmisIdx([irow(0, 100, true), irow(1, 100), irow(2, 100, true), irow(3, 100)])).toBe(2);
   });
 });
 

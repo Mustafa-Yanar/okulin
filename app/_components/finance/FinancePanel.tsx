@@ -15,7 +15,7 @@ import { useClasses } from '../ClassesContext';
 import { classShortUpper } from '@/lib/classCatalog';
 import type { Session } from '@/lib/auth';
 import type { PaymentEntry } from '@/lib/finance';
-import { dagitTutar } from '@/lib/finance-plan';
+import { dagitTutar, sonOdenmisIdx } from '@/lib/finance-plan';
 import type { ShowToast, FinanceDTO, FinanceListItemDTO, InstallmentDTO, KurumBilgi } from '../types';
 import type { Branding } from '@/lib/branding';
 import Makbuz from './belge/Makbuz';
@@ -217,6 +217,8 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
   const [discount, setDiscount] = useState(existing?.discount ? String(existing.discount) : '0');
   const [plan, setPlan] = useState(existing?.paymentPlan || 'pesin');
   const [installmentCount, setInstallmentCount] = useState(existing?.installments?.length || 3);
+  // Ödenmiş taksit silinemez → taksit sayısı en az (son ödenmiş indeks + 1) olmalı.
+  const minTaksit = Math.max(2, sonOdenmisIdx((existing?.installments || []).map((x, i) => ({ ...x, idx: x.idx ?? i }))) + 1);
   // İlk taksit tarihi — varsayılan: mevcut ilk taksit ya da bir sonraki ayın bugünü.
   // Veli farklı bir güne (ör. her ayın 1'i / 15'i) sabitlenmek isteyebilir.
   const [firstDate, setFirstDate] = useState<string>(() => {
@@ -409,10 +411,13 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
                 <label className="text-label">Taksit Sayısı</label>
                 <select value={installmentCount} onChange={e => setInstallmentCount(parseInt(e.target.value))}
                   className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white focus:border-[var(--brand,#6366f1)] focus:outline-none">
-                  {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => <option key={n} value={n}>{n} Taksit</option>)}
+                  {/* Ödenmiş taksitin altına inilemez — makbuzu kesilmiş taksit silinemez
+                      (sunucu da reddeder: finance-plan.odenmisTaksitHatasi). */}
+                  {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(n => n >= minTaksit).map(n => <option key={n} value={n}>{n} Taksit</option>)}
                 </select>
               </div>
-              <p className="text-caption mb-2">Tarihler ilk taksitten itibaren aylık otomatik dağıtılır; her taksit tarihini ve tutarını elle düzenleyebilirsiniz.</p>
+              <p className="text-caption mb-2">Tarihler ilk taksitten itibaren aylık otomatik dağıtılır; her taksit tarihini ve tutarını elle düzenleyebilirsiniz.
+                {minTaksit > 2 && ` Ödenmiş taksit bulunduğu için taksit sayısı ${minTaksit}'in altına indirilemez.`}</p>
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                 {installments.map((inst, i) => (
                   <div key={i} className={`flex items-center gap-2 p-2 rounded-lg border ${inst.paid ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
