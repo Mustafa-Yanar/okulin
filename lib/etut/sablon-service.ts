@@ -13,7 +13,8 @@ import { slotStartTime } from '@/lib/slots';
 import { getWeekKey } from '@/lib/constants';
 import { HttpError } from '@/lib/errors';
 import { currentOrg, currentBranch } from '@/lib/tenant';
-import { getWeekReservations, resolveEffective } from './reservations';
+import { getWeekReservations, resolveEffective, RECURRING_WEEKKEY } from './reservations';
+import { currentWeekKeyTSI } from './weeks';
 import type { EtutSablon, EtutReservation } from '@prisma/client';
 
 export interface SablonDTO {
@@ -150,12 +151,39 @@ export async function toggleSablon(teacherLegacyId: string, legacyId: string, sc
   return listSablonlar(teacherLegacyId);
 }
 
-// DELETE /api/etut-sablon — SOFT delete (deletedAt=now). REZERVASYONLAR SİLİNMEZ
-// (EtutReservation cascade yalnız bilinçli hard-delete/reset-all yollarında).
-export async function softDeleteSablon(teacherLegacyId: string, legacyId: string): Promise<SablonDTO[]> {
+// DELETE /api/etut-sablon — SOFT delete (deletedAt=now). Rezervasyon satırları SİLİNMEZ
+// (EtutReservation hard-cascade yalnız bilinçli hard-delete/reset-all yollarında) ama
+// CARİ + GELECEK haftalar ile RECURRING serisi CANCELLED'a çekilir (2026-07-22 denetim):
+// silinen etüt artık yapılmayacağı için o kayıtlar canlı bir taahhüt değildir; ACTIVE
+// bırakılırlarsa öğrenci göremediği bir kayıt yüzünden o saate/derse kilitlenirdi.
+// GEÇMİŞ haftalara DOKUNULMAZ — onlar olmuş bir etüdün tarihsel kaydıdır (yoklama
+// etiketleri attendance-label üzerinden silinen şablonu bilerek okur).
+// weekKey ISO 'YYYY-Www' string kıyası kronolojiktir; RECURRING '*' ASCII'de rakamlardan
+// KÜÇÜK olduğu için gte'ye TAKILMAZ, ayrı OR ayağıyla açıkça yakalanır.
+export async function softDeleteSablon(
+  teacherLegacyId: string,
+  legacyId: string,
+  by: { role: string; id: string },
+): Promise<SablonDTO[]> {
   const row = await findRow(teacherLegacyId, legacyId);
   if (row) {
-    await tdb().etutSablon.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
+    const orgSlug = currentOrg(); const branch = currentBranch();
+    const cur = currentWeekKeyTSI();
+    await tdb(orgSlug, branch).$transaction(async (tx) => {
+      await tx.etutSablon.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
+      // orgSlug/branch AÇIKÇA — $extends updateMany.where'e zaten enjekte eder, ama
+      // reservations.ts:36 idiomu: tenant sınırı yazma yolunda yapısal olarak da durur.
+      await tx.etutReservation.updateMany({
+        where: {
+          orgSlug, branch, sablonId: row.id, status: 'ACTIVE',
+          OR: [{ weekKey: { gte: cur } }, { weekKey: RECURRING_WEEKKEY }],
+        },
+        data: {
+          status: 'CANCELLED', cancelledByRole: by.role, cancelledById: by.id,
+          cancelledAt: new Date(), cancelReason: 'sablon-silindi',
+        },
+      });
+    });
   }
   return listSablonlar(teacherLegacyId);
 }

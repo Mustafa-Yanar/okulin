@@ -37,10 +37,20 @@ export function resolveEffective(rows: EtutReservation[], weekKey: string): Map<
 // sablonIds (opsiyonel, Faz 3 audit-fix FIX-B): verilirse sorgu yalnız o şablonlara daraltılır —
 // çağıran (örn. listSablonlarWithRez) tek öğretmenin şablonlarını istiyorsa kurum-genelinde TÜM
 // haftanın satırlarını çekmek gereksiz; kurum büyüdükçe boşa satır aktarımı olurdu.
+// sablon.deletedAt:null ZORUNLU (2026-07-22 denetim, canlı kanıtlı hata): şablon soft-delete
+// edilince rezervasyon satırı DURUR (tarihsel kayıt — attendance-label silinen şablonu bilerek
+// okur). GÖRÜNTÜLEME yolu (rezervasyon.ts listEtutlerForWeek) bunu zaten süzüyordu, KARAR yolu
+// süzmüyordu → öksüz satır hiçbir ekranda görünmeden decideBooking kural 10 (saat çakışması),
+// 11 (aynı ders/mat ailesi) ve 12 (haftalık limit) üzerinden öğrenciyi sessizce kilitliyordu
+// (göremediği için iptal de edemiyordu). Süzgeç BURADA — tek okuma kapısı, kural tek yerde.
+// freezeRecurringWeek de buradan okur: silinen şablonun recurring'i artık her hafta yeni
+// somut satır DOĞURMAZ. GEÇMİŞ haftalar etkilenmez — onlar bu fonksiyondan geçmez
+// (history.ts listEtutHistory geçmiş için doğrudan sorgu kullanır).
 export async function getWeekReservations(db: Db, orgSlug: string, branch: string, weekKey: string, sablonIds?: string[]): Promise<EtutReservation[]> {
   return (db as ReturnType<typeof tdb>).etutReservation.findMany({
     where: {
       orgSlug, branch, OR: [{ weekKey }, { weekKey: RECURRING_WEEKKEY }],
+      sablon: { deletedAt: null },
       ...(sablonIds ? { sablonId: { in: sablonIds } } : {}),
     },
   });

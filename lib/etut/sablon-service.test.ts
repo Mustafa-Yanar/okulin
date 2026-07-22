@@ -1,5 +1,15 @@
-import { describe, it, expect } from 'vitest';
-import { toSablonDTO, applyToggle, mergeSablonRez } from './sablon-service';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// softDeleteSablon testleri tdb()/tenant bağlamını mock'lar (gerçek DB bağlantısı YOK).
+// vi.mock hoisted — aşağıdaki static import'lardan ÖNCE çalışır (level-pool.test.ts ile aynı desen).
+// Saf fonksiyonlar (toSablonDTO/applyToggle/mergeSablonRez) bu mock'lardan etkilenmez.
+vi.mock('@/lib/sqldb', () => ({ tdb: vi.fn(), withScope: (d: unknown) => d }));
+vi.mock('@/lib/tenant', () => ({ currentOrg: () => 'o', currentBranch: () => 'main' }));
+
+import { toSablonDTO, applyToggle, mergeSablonRez, softDeleteSablon } from './sablon-service';
+import { tdb } from '@/lib/sqldb';
+import { RECURRING_WEEKKEY } from './reservations';
+import { currentWeekKeyTSI } from './weeks';
 import type { EtutSablon, EtutReservation } from '@prisma/client';
 
 // Test satırı üreticisi — yalnız fonksiyonların okuduğu alanlar anlamlı.
@@ -67,5 +77,73 @@ describe('mergeSablonRez', () => {
   });
   it('pasif şablon da LİSTELENİR (ProgramEditor pasifleri gösterir; süzme YOK)', () => {
     expect(mergeSablonRez([row({ aktif: false })], new Map())).toHaveLength(1);
+  });
+});
+
+// 2026-07-22 denetim (canlı kanıtlı hata): şablon soft-delete edilince rezervasyon satırı
+// ACTIVE kalıyordu → hiçbir ekranda görünmeyen "öksüz" satır decideBooking kural 10/11/12
+// üzerinden öğrenciyi sessizce kilitliyordu. Karar yolu getWeekReservations'ta süzülüyor
+// (reservations.test.ts), TEMİZLİK de burada: cari+gelecek+recurring CANCELLED'a çekilir.
+describe('softDeleteSablon — silme, canlı taahhütleri de iptal eder (geçmişe dokunmaz)', () => {
+  const SABLON = row({ id: 'cuid-secret', legacyId: 'leg1' });
+
+  // Argüman tipleri AÇIKÇA yazılı — vi.fn(async () => ...) argüman tuple'ını boş ([]) çıkarır
+  // ve mock.calls[0][0] tsc'de "no element at index 0" verir.
+  type UpdateArg = { where: { id: string }; data: { deletedAt: Date } };
+  type UpdateManyArg = { where: Record<string, unknown>; data: Record<string, unknown> };
+
+  function fakeDb(found: EtutSablon | null) {
+    const tx = {
+      etutSablon: { update: vi.fn(async (_a: UpdateArg) => ({})) },
+      etutReservation: { updateMany: vi.fn(async (_a: UpdateManyArg) => ({ count: 1 })) },
+    };
+    const db = {
+      etutSablon: { findFirst: vi.fn(async () => found), findMany: vi.fn(async () => (found ? [found] : [])) },
+      $transaction: vi.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+    };
+    vi.mocked(tdb).mockImplementation(() => db as never);
+    return { db, tx };
+  }
+
+  beforeEach(() => { vi.mocked(tdb).mockReset(); });
+
+  it('şablon deletedAt=now ile işaretlenir', async () => {
+    const { tx } = fakeDb(SABLON);
+    await softDeleteSablon('t1', 'leg1', { role: 'director', id: 'd1' });
+    const arg = tx.etutSablon.update.mock.calls[0][0];
+    expect(arg.where).toEqual({ id: 'cuid-secret' });
+    expect(arg.data.deletedAt).toBeInstanceOf(Date);
+  });
+
+  it("CARİ+GELECEK haftalar (gte) ve RECURRING '*' ayrı OR ayaklarıyla hedeflenir; geçmiş DIŞARIDA", async () => {
+    const { tx } = fakeDb(SABLON);
+    await softDeleteSablon('t1', 'leg1', { role: 'director', id: 'd1' });
+    const where = tx.etutReservation.updateMany.mock.calls[0][0].where;
+    expect(where).toMatchObject({ orgSlug: 'o', branch: 'main', sablonId: 'cuid-secret', status: 'ACTIVE' });
+    expect(where.OR).toEqual([{ weekKey: { gte: currentWeekKeyTSI() } }, { weekKey: RECURRING_WEEKKEY }]);
+  });
+
+  it("RECURRING '*' ASCII'de rakamlardan KÜÇÜK — gte ayağına takılmaz, ayrı OR ayağı ZORUNLU", () => {
+    // Bu invariant bozulursa (weekKey formatı değişirse) yukarıdaki iki-ayaklı OR gereksizleşir
+    // ya da tersine recurring sessizce kaçar. String kıyası kronolojik: '2026-W29' < '2026-W30'.
+    expect(RECURRING_WEEKKEY >= '2026-W30').toBe(false);
+    expect('2026-W29' >= '2026-W30').toBe(false);
+    expect('2026-W31' >= '2026-W30').toBe(true);
+  });
+
+  it('iptal alanları aktörle birlikte yazılır (cancelReason=sablon-silindi)', async () => {
+    const { tx } = fakeDb(SABLON);
+    await softDeleteSablon('t1', 'leg1', { role: 'counselor', id: 'c9' });
+    const data = tx.etutReservation.updateMany.mock.calls[0][0].data;
+    expect(data).toMatchObject({
+      status: 'CANCELLED', cancelledByRole: 'counselor', cancelledById: 'c9', cancelReason: 'sablon-silindi',
+    });
+    expect(data.cancelledAt).toBeInstanceOf(Date);
+  });
+
+  it('şablon bulunamazsa SESSİZ no-op — transaction hiç açılmaz (toggleSablon ile aynı davranış)', async () => {
+    const { db } = fakeDb(null);
+    await softDeleteSablon('t1', 'yok', { role: 'director', id: 'd1' });
+    expect(db.$transaction).not.toHaveBeenCalled();
   });
 });

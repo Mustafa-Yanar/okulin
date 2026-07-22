@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveEffective, RECURRING_WEEKKEY, cancelToTombstone, type CancelInput } from './reservations';
+import { resolveEffective, RECURRING_WEEKKEY, cancelToTombstone, getWeekReservations, type CancelInput } from './reservations';
 import type { EtutReservation } from '@prisma/client';
 
 // Test satırı üreticisi — yalnız çözümleyicinin okuduğu alanlar anlamlı.
@@ -60,5 +60,35 @@ describe('cancelToTombstone — weekKey guard', () => {
       snapshot: { studentId: 'st1', studentName: 'Öğrenci', studentCls: 'c1', dersBranch: 'Fizik', dayIndex: 0, startsAt: '15:30', endsAt: '16:00' },
     };
     await expect(cancelToTombstone({} as never, validInput)).rejects.toThrow(/haftalık iptal|cancelRecurring/);
+  });
+});
+
+// 2026-07-22 denetim (canlı kanıtlı hata): silinen şablonun ACTIVE rezervasyon satırı
+// hiçbir ekranda GÖRÜNMÜYOR ama decideBooking kural 10/11/12'yi besleyip öğrenciyi
+// sessizce kilitliyordu. Süzgeç tek okuma kapısında (getWeekReservations) — sorgunun
+// SHAPE'i test edilir (gerçek DB yok): sahte db findMany argümanını yakalar.
+describe('getWeekReservations — silinen şablonun satırları KARAR yoluna GİRMEZ', () => {
+  const capture = async (weekKey: string, sablonIds?: string[]) => {
+    let args: { where: Record<string, unknown> } | undefined;
+    const db = { etutReservation: { findMany: async (a: { where: Record<string, unknown> }) => { args = a; return []; } } };
+    await getWeekReservations(db as never, 'o', 'main', weekKey, sablonIds);
+    return args!.where;
+  };
+
+  it('where.sablon.deletedAt = null (öksüz rezervasyon kilidinin kök düzeltmesi)', async () => {
+    expect((await capture('2026-W30')).sablon).toEqual({ deletedAt: null });
+  });
+
+  it('tenant sınırı + hafta/recurring OR ayakları KORUNUR (süzgeç onları ezmez)', async () => {
+    const where = await capture('2026-W30');
+    expect(where.orgSlug).toBe('o');
+    expect(where.branch).toBe('main');
+    expect(where.OR).toEqual([{ weekKey: '2026-W30' }, { weekKey: RECURRING_WEEKKEY }]);
+  });
+
+  it('sablonIds daraltması ile süzgeç BİRLİKTE uygulanır (FIX-B bozulmadı)', async () => {
+    const where = await capture('2026-W30', ['c1', 'c2']);
+    expect(where.sablonId).toEqual({ in: ['c1', 'c2'] });
+    expect(where.sablon).toEqual({ deletedAt: null });
   });
 });

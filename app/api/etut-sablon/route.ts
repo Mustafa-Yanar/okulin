@@ -115,13 +115,15 @@ export const PATCH = withAuth('manage', 'etut', async (req, ctx, session) => {
   return NextResponse.json({ ok: true, sablonlar });
 });
 
-// DELETE /api/etut-sablon → şablon sil (soft-delete: deletedAt=now, rezervasyonlar SİLİNMEZ)
-export const DELETE = withAuth('manage', 'etut', async (req) => {
+// DELETE /api/etut-sablon → şablon sil (soft-delete: deletedAt=now; rezervasyon satırları
+// silinmez ama cari+gelecek haftalar ve recurring serisi CANCELLED'a çekilir — sablon-service)
+export const DELETE = withAuth('manage', 'etut', async (req, _ctx, session) => {
   const parsed = await parseBody(req, DeleteSchema);
   if (!parsed.ok) return parsed.response;
   const { teacherId, id, weekKey } = parsed.data;
 
-  await softDeleteSablon(teacherId, id);
+  // String(session.id ?? '') — booking.ts:109 ile aynı idiom (Session.id opsiyonel).
+  await softDeleteSablon(teacherId, id, { role: session.role, id: String(session.id ?? '') });
   const sablonlar = await listSablonlarWithRez(teacherId, weekKey || currentWeekKeyTSI());
   return NextResponse.json({ ok: true, sablonlar });
 });
