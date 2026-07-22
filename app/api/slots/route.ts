@@ -12,13 +12,37 @@ import { ALL_DAYS, daySlots } from '@/lib/constants';
 //   öğretmen haftalık grid görüntüleme (TeacherPanel).
 // Kanıt/harita: docs/superpowers/specs/2026-07-22-buyuk-temizlik-faz1-harita.md (B3).
 
+// Hücre whitelist'i (diff-denetim bulgusu): grid ham SlotCell yerine yalnız görüntüleme
+// alanlarıyla döner — rezervasyon-dönemi alanları (studentId/studentName/studentCls/
+// bookedBy/bookedAt) tip üzerinde hâlâ var olduğundan, eski/bozuk bir satır sızıntı
+// üretemesin diye yapısal olarak DÜŞÜRÜLÜR (savunma derinliği; canlıda booked=0 zaten).
+function pickPublicCell(c: SlotCell): SlotCell {
+  const out: SlotCell = { booked: false, disabled: c.disabled ?? true };
+  if (c.lessonType) out.lessonType = c.lessonType;
+  if (c.cls) out.cls = c.cls;
+  if (c.subBranch) out.subBranch = c.subBranch;
+  if (c.branch) out.branch = c.branch;
+  if (c.fixed !== undefined) out.fixed = c.fixed;
+  if (c.eventBlocked) { out.eventBlocked = c.eventBlocked; out.eventTitle = c.eventTitle; }
+  return out;
+}
+
 // GET /api/slots?teacherId=xxx&week=2024-W20 — öğretmenin haftalık ders/açık-saat gridi.
-export const GET = withAuth(async (req) => {
+export const GET = withAuth(async (req, _ctx, session) => {
 
   const { searchParams } = new URL(req.url);
   const weekKey = searchParams.get('week') || getWeekKey();
   const teacherId = searchParams.get('teacherId'); // legacyId
   if (!teacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
+
+  // Yetki daraltması (diff-denetim bulgusu): tek üretim tüketicisi TeacherPanel (kendi
+  // gridi). Öğretmen yalnız KENDİ gridini, müdür/rehber her öğretmeni okuyabilir;
+  // öğrenci/veli için meşru kullanım kalmadı (etüt verisi /api/etut-sablon/all'dan).
+  if (session.role === 'teacher') {
+    if (teacherId !== session.id) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  } else if (session.role !== 'director' && session.role !== 'counselor') {
+    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  }
 
   const slotTimes = await getDaySlotTimes();
   // Haftanın aktif (kurum geneli) etkinlikleri — tek sorgu, her hücreye tekrar tekrar sorgu atmadan uygulanır.
@@ -41,6 +65,6 @@ export const GET = withAuth(async (req) => {
   }
 
   const grid = await getTeacherWeekSlots(teacherId, weekKey);
-  for (const day of ALL_DAYS) grid[day.index] = applyEventBlock(day.index, grid[day.index]);
+  for (const day of ALL_DAYS) grid[day.index] = applyEventBlock(day.index, grid[day.index]).map(pickPublicCell);
   return NextResponse.json({ weekKey, grid });
 });

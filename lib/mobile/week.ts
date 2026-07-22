@@ -4,6 +4,7 @@ import {
   getTeacherWeekSlots, dateStrForWeekDay,
 } from '@/lib/slots';
 import { listEtutlerForWeek, type EtutAllRow } from '@/lib/etut/rezervasyon';
+import { toMin } from '@/lib/etut/overlap';
 import { getOrgConfig } from '@/lib/config';
 import { HttpError } from '@/lib/errors';
 import type { Session } from '@/lib/auth';
@@ -93,30 +94,40 @@ export async function buildTeacherWeek(session: Session, weekKey: string): Promi
   for (const day of ALL_DAYS) {
     const dayIndex = day.index;
     const slots = daySlots(dayIndex, slotTimes.days[dayIndex]);
-    const dayCells: TeacherSlotView[] = [];
+    // Ders + etüt satırları startMin ile toplanır, KRONOLOJİK sıralanıp öyle döndürülür
+    // (api-types sözleşmesi: slots saat sıralı — diff-denetim bulgusu: sona push edilen
+    // etüt satırı 10:00'da olsa bile 16:00 dersinden sonra görünüyordu).
+    const cells: { startMin: number; view: TeacherSlotView }[] = [];
     (grid[dayIndex] || []).forEach((sd, i) => {
       if (!sd || sd.lessonType !== 'ders') return; // yalnız ders hücreleri; boş/disabled gösterilmez
       const slot = slots[i];
-      dayCells.push({
-        slotId: slot?.id ?? '',
-        slotLabel: slot?.label ?? '',
-        type: 'ders',
-        cls: sd.cls || null,
-        studentName: null,
-        branch: sd.branch || sd.subBranch || '',
+      cells.push({
+        startMin: slot ? toMin(slot.start) : 24 * 60,
+        view: {
+          slotId: slot?.id ?? '',
+          slotLabel: slot?.label ?? '',
+          type: 'ders',
+          cls: sd.cls || null,
+          studentName: null,
+          branch: sd.branch || sd.subBranch || '',
+        },
       });
     });
     for (const r of myEtuts.filter((e) => e.dayIndex === dayIndex)) {
-      dayCells.push({
-        slotId: `etut:${r.id}`,
-        slotLabel: `${r.start}–${r.end}`,
-        type: 'etut',
-        cls: r.studentCls || null,
-        studentName: r.studentName || null,
-        branch: r.branch || '',
+      cells.push({
+        startMin: toMin(r.start),
+        view: {
+          slotId: `etut:${r.id}`,
+          slotLabel: `${r.start}–${r.end}`,
+          type: 'etut',
+          cls: r.studentCls || null,
+          studentName: r.studentName || null,
+          branch: r.branch || '',
+        },
       });
     }
-    days.push({ dayIndex, dayLabel: day.label, date: dateStrForWeekDay(weekKey, dayIndex), slots: dayCells });
+    cells.sort((a, b) => a.startMin - b.startMin);
+    days.push({ dayIndex, dayLabel: day.label, date: dateStrForWeekDay(weekKey, dayIndex), slots: cells.map((c) => c.view) });
   }
   return { role: 'teacher', weekKey, days };
 }

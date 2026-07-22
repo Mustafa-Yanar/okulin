@@ -11,9 +11,9 @@ import { shouldRollWeek, shiftWeekKey } from '@/lib/etut/weeks';
 // Bilinçli withAuth istisnası: cron ucu — oturum yok, CRON_SECRET Bearer doğrulanır.
 // Öğretmen listesi / current_week / hafta init SQL'den.
 // NOT (2026-07-22 denetim B2): eski Redis haftalık arşiv yazımı SÖKÜLDÜ — okuyan tek kod
-// yolu yoktu; geçmiş görünümleri /api/archive → SQL (SlotBooking + EtutReservation) okur,
-// canlı Redis'te hiç arşiv anahtarı birikmemişti. Kanıt: docs/superpowers/specs/
-// 2026-07-22-buyuk-temizlik-faz1-harita.md (B2).
+// yolu yoktu; geçmiş görünümleri /api/archive → SQL (EtutReservation, lib/etut/history)
+// okur, canlı Redis'te hiç arşiv anahtarı birikmemişti. Kanıt: docs/superpowers/specs/
+// 2026-07-22-buyuk-temizlik-faz1-harita.md (B2/B5).
 // ÇOK-KURUM: aktif tüm kurum×şube üzerinde döner (runWithTenant); içindeki slots/tdb()
 // çağrıları o kurumun bağlamına otomatik yönlenir.
 

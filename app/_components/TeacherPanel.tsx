@@ -731,14 +731,12 @@ interface TeacherPanelProps {
 }
 
 export default function TeacherPanel({ session, showToast, externalTab, onExternalTabChange }: TeacherPanelProps) {
-  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (liste görünümü)
   const [weekKey, setWeekKey] = useState(getWeekKey());
   const [slots, setSlots] = useState<TeacherGrid | null | undefined>(null);
   const [program, setProgram] = useState<ProgramGrid>({});
   const [students, setStudents] = useState<StudentDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTabInternal] = useUrlTab('rezervasyon', ['rezervasyon', 'etutler', 'yoklama', 'odev', 'davranis', 'ogrenciler', 'kutuphane', 'duyurular', 'takvim', 'formlar']);
-  const { slotTimes } = useSlotTimes();
 
   useEffect(() => {
     if (externalTab && externalTab !== activeTab) setActiveTabInternal(externalTab);
