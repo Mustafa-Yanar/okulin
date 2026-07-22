@@ -237,17 +237,16 @@ export async function buildTeacherToday(session: Session, unread: number): Promi
   const slots = daySlots(t.dayIndex, slotTimes.days[t.dayIndex]);
   const lessons: TeacherSlotView[] = [];
   (grid[t.dayIndex] || []).forEach((sd, i) => {
-    if (!sd) return;
-    const isDers = sd.lessonType === 'ders';
-    const isBookedEtut = !isDers && !!sd.booked; // boş/disabled hücre gösterilmez
-    if (!isDers && !isBookedEtut) return;
+    // Yalnız ders hücreleri; boş/disabled gösterilmez. Etütler ayrı `etuts` dizisinden
+    // (EtutReservation) gelir — eski SlotBooking booked-hücre kaynağı B3/dalga2'de kaldırıldı.
+    if (!sd || sd.lessonType !== 'ders') return;
     const slot = slots[i];
     lessons.push({
       slotId: slot?.id ?? '',
       slotLabel: slot?.label ?? '',
-      type: isDers ? 'ders' : 'etut',
-      cls: sd.cls || sd.studentCls || null,
-      studentName: sd.studentName || null,
+      type: 'ders',
+      cls: sd.cls || null,
+      studentName: null,
       branch: sd.branch || sd.subBranch || '',
     });
   });

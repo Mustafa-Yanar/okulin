@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import LoadingBox from './Loading';
 import EmptyState from './EmptyState';
 import {
-  Calendar, ClipboardList, User, ChevronRight, Users, LayoutGrid, List, GraduationCap, Clock, X, BookOpen, Megaphone
+  Calendar, ClipboardList, User, ChevronRight, Users, GraduationCap, Clock, X, BookOpen, Megaphone
 } from 'lucide-react';
 import {
   ALL_DAYS,
@@ -15,7 +15,7 @@ import {
 } from '@/lib/constants';
 import { subjectMatchesBranch } from '@/lib/deneme/branch';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
-import SlotGrid, { type BookArgs } from './SlotGrid';
+import SlotGrid from './SlotGrid';
 import ResourceLibrary from './library/ResourceLibrary';
 import { AnnouncementInbox } from './announcements/Announcements';
 import { OdevManager } from './odev/Odev';
@@ -29,7 +29,7 @@ import { subjectsForClass } from './student-logic';
 import { classShortUpper, groupStudentsByClass, coursesForClass } from '@/lib/classCatalog';
 import { useUrlTab } from './useUrlTab';
 import PanelHero from './PanelHero';
-import { api, getAdjacentWeek, isSlotPast, WeekNav } from './shared';
+import { api, getAdjacentWeek, WeekNav } from './shared';
 import type { Session } from '@/lib/auth';
 import type { SlotCell as SlotCellData, ProgramEntry } from '@/lib/slots';
 import type { ShowToast, StudentDTO } from './types';
@@ -43,20 +43,6 @@ import type { ShowToast, StudentDTO } from './types';
 // /api/slots grid + /api/program ızgara şekilleri.
 type TeacherGrid = Record<number, SlotCellData[]>;
 type ProgramGrid = Record<string, Record<string, ProgramEntry | null>>;
-
-// Liste görünümündeki rezervasyon satırı (grid'den düzleştirilir).
-interface BookedItem {
-  dayIndex: number;
-  dayLabel: string;
-  slotId: string;
-  slotLabel: string;
-  slotIdx: number;
-  studentName?: string | null;
-  studentCls?: string;
-  studentId?: string | null;
-  bookedBy: string;
-  fixed: boolean;
-}
 
 // GET /api/etut-sablon/all satırı (yoklamaya giren birebir etütler).
 interface EtutAllDTO {
@@ -78,90 +64,6 @@ function ChevronLeft({ size, className }: { size: number; className?: string }) 
 }
 
 const GROUPS: Record<string, string> = { ortaokul: 'Ortaokul', lise: 'Lise', mezun: 'Mezun' };
-
-interface TeacherBookingsListProps {
-  bookedList: BookedItem[];
-  listColorMap: Record<string, { badge: string; label: string }>;
-  onCancel: (item: BookedItem) => void;
-  canCancelAll?: boolean;
-}
-
-export function TeacherBookingsList({ bookedList, listColorMap, onCancel, canCancelAll }: TeacherBookingsListProps) {
-  const [openDays, setOpenDays] = useState<Record<string | number, boolean>>({});
-  const { slotTimes } = useSlotTimes();
-  const toggleDay = (key: string | number) => setOpenDays(p => ({ ...p, [key]: !p[key] }));
-
-  const days = useMemo(() => {
-    const map: Record<number, { dayIndex: number; dayLabel: string; items: BookedItem[] }> = {};
-    for (const item of bookedList) {
-      if (!map[item.dayIndex]) map[item.dayIndex] = { dayIndex: item.dayIndex, dayLabel: item.dayLabel, items: [] };
-      map[item.dayIndex].items.push(item);
-    }
-    return Object.values(map).sort((a, b) => a.dayIndex - b.dayIndex);
-  }, [bookedList]);
-
-  if (days.length === 0) {
-    return (
-      <EmptyState card icon={Calendar} title="Bu hafta hiç rezervasyon yok" description="Öğrenciler etüt aldıkça burada görünür." />
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {days.map(day => {
-        const dOpen = !!openDays[day.dayIndex];
-        return (
-          <div key={day.dayIndex} className="card overflow-hidden">
-            <button onClick={() => toggleDay(day.dayIndex)}
-              className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0"
-                  style={{ background: 'linear-gradient(135deg, var(--brand,#6366f1), color-mix(in srgb, var(--brand,#6366f1) 70%, #000))' }}>
-                  <Calendar size={16} />
-                </div>
-                <div className="text-left">
-                  <div className="font-700 text-sm" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{day.dayLabel}</div>
-                  <div className="text-caption">{day.items.length} öğrenci</div>
-                </div>
-              </div>
-              <ChevronRight size={16} className="text-gray-400 shrink-0 transition-transform" style={{ transform: dOpen ? 'rotate(90deg)' : 'rotate(0deg)' }} />
-            </button>
-            {dOpen && (
-              <div className="border-t border-gray-100 px-4 py-2 space-y-1.5">
-                {day.items.map((item, i) => {
-                  const c = listColorMap[item.bookedBy] || listColorMap.student;
-                  const canCancel = canCancelAll || item.bookedBy === 'teacher';
-                  return (
-                    <div key={i} className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-100">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <Clock size={13} className="text-brand shrink-0" />
-                        <div className="min-w-0">
-                          <div className="text-xs font-600" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.slotLabel}</div>
-                          <div className="text-caption truncate">{item.studentName} · {item.studentCls}</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 ml-2">
-                        {item.fixed && (
-                          <span className="badge" style={{ background: 'color-mix(in srgb, #7c3aed 12%, transparent)', color: '#7c3aed' }}>Sabit</span>
-                        )}
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-500 ${c.badge}`} style={{ fontWeight: 500 }}>{c.label}</span>
-                        {canCancel && (
-                          <button onClick={() => onCancel(item)} className="btn-icon btn-icon-danger" title="İptal et">
-                            <X size={13} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 interface TeacherAttendancePanelProps {
   session: Session;
@@ -829,15 +731,12 @@ interface TeacherPanelProps {
 }
 
 export default function TeacherPanel({ session, showToast, externalTab, onExternalTabChange }: TeacherPanelProps) {
-  const { classes } = useClasses(); // s_ şube kimliği → kayıtlı ad (liste görünümü)
   const [weekKey, setWeekKey] = useState(getWeekKey());
   const [slots, setSlots] = useState<TeacherGrid | null | undefined>(null);
   const [program, setProgram] = useState<ProgramGrid>({});
   const [students, setStudents] = useState<StudentDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTabInternal] = useUrlTab('rezervasyon', ['rezervasyon', 'etutler', 'yoklama', 'odev', 'davranis', 'ogrenciler', 'kutuphane', 'duyurular', 'takvim', 'formlar']);
-  const [viewMode, setViewMode] = useState('table');
-  const { slotTimes } = useSlotTimes();
 
   useEffect(() => {
     if (externalTab && externalTab !== activeTab) setActiveTabInternal(externalTab);
@@ -881,55 +780,6 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
     setProgram(progData?.program || {});
   };
 
-  const handleBook = async (params: BookArgs) => {
-    try {
-      await api('/api/slots', { method: 'POST', body: JSON.stringify(params) });
-      showToast('Rezervasyon yapıldı');
-      handleWeekChange(params.weekKey || weekKey);
-    } catch (err) { showToast((err as Error).message, 'error'); }
-  };
-
-  const handleCancel = async (params: { teacherId: string; day: number; slotId: string }) => {
-    try {
-      await api('/api/slots', { method: 'DELETE', body: JSON.stringify({ ...params, weekKey }) });
-      showToast('Rezervasyon iptal edildi');
-      handleWeekChange(weekKey);
-    } catch (err) { showToast((err as Error).message, 'error'); }
-  };
-
-  // Yalnız badge + label render ediliyor (TeacherBookingsList); tema-uyumlu pill sınıfları.
-  const listColorMap: Record<string, { badge: string; label: string }> = {
-    student:  { badge: 'tag-student',  label: 'Öğrenci' },
-    teacher:  { badge: 'tag-teacher',  label: 'Öğretmen' },
-    director: { badge: 'tag-director', label: 'Müdür' },
-  };
-
-  const bookedList = useMemo(() => {
-    if (!slots) return [];
-    const items: BookedItem[] = [];
-    ALL_DAYS.forEach(day => {
-      const daySlots = buildDaySlots(day.index, slotTimes.days?.[day.index]);
-      daySlots.forEach((slot, slotIdx) => {
-        const slotData = slots[day.index]?.[slotIdx];
-        if (slotData?.booked) {
-          items.push({
-            dayIndex: day.index,
-            dayLabel: day.label,
-            slotId: slot.id,
-            slotLabel: slot.label,
-            slotIdx,
-            studentName: slotData.studentName,
-            studentCls: classShortUpper(classes, slotData.studentCls || ''),
-            studentId: slotData.studentId,
-            bookedBy: slotData.bookedBy || 'student',
-            fixed: !!slotData.fixed,
-          });
-        }
-      });
-    });
-    return items;
-  }, [slots, slotTimes]);
-
   if (loading) return <LoadingBox height="h-64" />;
 
   return (
@@ -937,19 +787,7 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
       {activeTab === 'rezervasyon' && (
         <>
           <PanelHero name={session.name} />
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-            <div className="pill-tabs shrink-0">
-              <button
-                onClick={() => setViewMode('table')}
-                className={`pill-tab${viewMode === 'table' ? ' is-active' : ''}`}>
-                <LayoutGrid size={13} /> <span>Tablo</span>
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`pill-tab${viewMode === 'list' ? ' is-active' : ''}`}>
-                <List size={13} /> <span>Liste</span>
-              </button>
-            </div>
+          <div className="flex flex-wrap items-center justify-end gap-2 mb-4">
             {(() => {
               const cw = getWeekKey();
               const maxW = getAdjacentWeek(getAdjacentWeek(cw, 1), 1);
@@ -962,17 +800,10 @@ export default function TeacherPanel({ session, showToast, externalTab, onExtern
               );
             })()}
           </div>
-          {viewMode === 'table' ? (
-            <>
-              <div className="card p-4">
-                <SlotGrid grid={slots} program={program} teacher={{ id: session.id!, name: session.name, branches: session.branches || [], allowedGroups: session.allowedGroups }} weekKey={weekKey} session={session} students={students} onBook={handleBook} onCancel={handleCancel} hideEmptyDays />
-              </div>
-              <p className="text-xs text-gray-400 mt-3 text-center">✕ = kapalı saat &nbsp;·&nbsp; + = rezervasyon yapılabilir</p>
-            </>
-          ) : (
-            <TeacherBookingsList bookedList={bookedList} listColorMap={listColorMap}
-              onCancel={item => handleCancel({ teacherId: session.id!, day: item.dayIndex, slotId: item.slotId })} />
-          )}
+          <div className="card p-4">
+            <SlotGrid grid={slots} program={program} weekKey={weekKey} hideEmptyDays />
+          </div>
+          <p className="text-xs text-gray-400 mt-3 text-center">✕ = kapalı saat &nbsp;·&nbsp; etüt rezervasyonları &quot;Etütler&quot; sekmesinde</p>
         </>
       )}
 

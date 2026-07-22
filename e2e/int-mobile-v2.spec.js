@@ -124,10 +124,19 @@ test('week: öğrenci 7 gün şekli', async () => {
   }
 });
 
-test('week: öğretmen 7 gün + hafta gezinme', async () => {
+test('week: öğretmen 7 gün + hafta gezinme + slots kronolojik (ders∪etüt)', async () => {
   const jt = await (await api.get(`${BASE}/api/mobile/v1/screens/week`, { headers: H(tokens.teacher) })).json();
   expect(jt.role).toBe('teacher');
   expect(jt.days.length).toBe(7);
+  // B3/dalga2 sonrası days[].slots ders + EtutReservation etütlerini KRONOLOJİK içerir
+  // (api-types sözleşmesi; diff-denetim bulgusu sıralamayı sabitledi).
+  const toMin = (label) => { const m = /^(\d{2}):(\d{2})/.exec(label || ''); return m ? (+m[1]) * 60 + +m[2] : -1; };
+  for (const d of jt.days) {
+    expect(Array.isArray(d.slots)).toBe(true);
+    const mins = d.slots.map((s) => toMin(s.slotLabel)).filter((x) => x >= 0);
+    expect([...mins].sort((a, b) => a - b)).toEqual(mins);
+    for (const s of d.slots) expect(['ders', 'etut']).toContain(s.type);
+  }
   const next = shiftWeek(getWeekKey(), 1);
   const jn = await (await api.get(`${BASE}/api/mobile/v1/screens/week?week=${next}`, { headers: H(tokens.teacher) })).json();
   expect(jn.weekKey).toBe(next);

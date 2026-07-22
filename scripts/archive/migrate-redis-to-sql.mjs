@@ -1,5 +1,14 @@
+// ═══ ARŞİVLENMİŞ SCRIPT (2026-07-22 büyük temizlik B8) — ÇALIŞTIRMA ═══
+// Görevi tamamlandı (Redis→SQL göçü 2026-06-27'de kanıtlandı, kod yolları temizlendi).
+// Yeniden koşulursa: çift teacher/slot kaydı üretir + programTemplate'e bayat
+// etutSablonlari JSON'unu GERİ getirir (etüt artık EtutSablon/EtutReservation tablolarında).
+// Bilinçli çalıştırmak için aşağıdaki iki satırı silin. Gerekçe:
+// docs/superpowers/specs/2026-07-22-buyuk-temizlik-faz1-harita.md (B8)
+console.error('⛔ ARŞİV script — çalıştırma engellendi (bkz dosya başı yorumu).');
+process.exit(1);
+
 // Redis (Upstash) → PostgreSQL (Neon/Prisma) veri göçü. TEK YÖNLÜ, idempotent.
-// Çalıştır:  node --env-file=.env scripts/migrate-redis-to-sql.mjs [org]
+// Çalıştır:  node --env-file=.env scripts/archive/migrate-redis-to-sql.mjs [org]
 // Varsayılan org = testkurs, branch = main. Route'lara DOKUNMAZ; sadece SQL'i doldurur.
 // legacyId→cuid eşlemesiyle ilişkiler (student.classId, finance.studentId, ...) kurulur.
 import { Redis } from '@upstash/redis';

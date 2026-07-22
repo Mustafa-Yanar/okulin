@@ -11,7 +11,7 @@ import { tdb } from '@/lib/sqldb';
 import { currentOrg, currentBranch } from '@/lib/tenant';
 import { getOrgConfig } from '@/lib/config';
 import { logAudit, actorFrom } from '@/lib/audit';
-import { getAllTeachers, getAllStudents, getDaySlotTimes, slotStartTime, type SlotCell } from '@/lib/slots';
+import { getAllTeachers, getAllStudents, slotStartTime } from '@/lib/slots';
 import { getSablonForBooking } from './sablon-service';
 import { decideBooking, type BookingContext } from './booking-rules';
 import { currentWeekKeyTSI, allowedBookingWeeks, isValidWeekKey, type BookingRole } from './weeks';
@@ -20,7 +20,7 @@ import {
   getWeekReservations, resolveEffective, upsertWeekReservation, upsertRecurring,
   cancelToTombstone, cancelRecurring, lockResource, lockStudentWeek, RECURRING_WEEKKEY, type ReservationWrite,
 } from './reservations';
-import { combineBookings, type SlotRowLike } from './student-week';
+import { normalizeEtutBookings } from './student-week';
 import { toMin } from './overlap';
 
 // weekKey doğrulama (Faz 2 audit-fix FIX-C, isValidWeekKey — W00/W54+ artık "biçimi tutuyor"
@@ -135,12 +135,11 @@ export async function bookEtut(session: Session, input: BookEtutInput): Promise<
     throw new HttpError(400, 'Bypass için gerekçe (reason) zorunlu');
   }
 
-  const [sablonRow, allTeachers, allStudents, etutConfig, slotTimes] = await Promise.all([
+  const [sablonRow, allTeachers, allStudents, etutConfig] = await Promise.all([
     getSablonForBooking(input.teacherId, input.etutId),
     getAllTeachers(),
     getAllStudents(),
     getOrgConfig('etut', orgSlug, branch),
-    getDaySlotTimes(),
   ]);
 
   const teacher = allTeachers.find((t) => t.id === input.teacherId) ?? null;
@@ -179,28 +178,21 @@ export async function bookEtut(session: Session, input: BookEtutInput): Promise<
     // aynı satıra eşzamanlı yazma/iptal yarışı KAPANMAZDI.
     const lockWeekKey = scope === 'RECURRING' ? RECURRING_WEEKKEY : weekKey;
     await lockResource(tx, `etut:${orgSlug}:${branch}:${sablonRow?.id ?? input.etutId}:${lockWeekKey}`);
-    // Öğrenci+hafta advisory lock — SlotBooking+EtutReservation çapraz-sistem yarışını kapatır.
+    // Öğrenci+hafta advisory lock — aynı öğrencinin eşzamanlı etüt işlemlerini serileştirir.
     // SIRA: HER ZAMAN lockResource'tan SONRA (deadlock-free, bkz. reservations.ts lockResource).
+    // (Eski SlotBooking çapraz-sistem ayağı 2026-07-22 denetim B3/dalga3'te kaldırıldı —
+    // grid rezervasyon yüzeyi emekli, booked satır üreticisi yok; kanıt: harita B3/B4.)
     await lockStudentWeek(tx, orgSlug, branch, targetStudentId, weekKey);
 
     // effective + otherBookings TX İÇİNDE yeniden okunur (lock alındıktan SONRA) — pre-tx
     // okuma yalnız DTO/ders otomatiği için, yarışa açık kararlar burada TAZE veriyle alınır.
-    const [allRows, slotRowsRaw] = await Promise.all([
-      getWeekReservations(tx, orgSlug, branch, weekKey),
-      // orgSlug/branch AÇIKÇA (review bulgusu) — bu, tx üzerinde $extends enjeksiyonuna
-      // dayanan TEK sorguydu; artık dosyadaki diğer tüm sorgularla aynı desende.
-      tx.slotBooking.findMany({ where: { orgSlug, branch, weekKey, booked: true, studentId: targetStudentId } }),
-    ]);
+    const allRows = await getWeekReservations(tx, orgSlug, branch, weekKey);
     const effectiveMap = resolveEffective(allRows, weekKey);
     const currentEffectiveRow = sablonRow ? effectiveMap.get(sablonRow.id) ?? null : null;
     const effectiveEtutRows = [...effectiveMap.values()].filter(
       (r) => r.studentId === targetStudentId && r.sablonId !== sablonRow?.id,
     );
-    const slotRows: SlotRowLike[] = slotRowsRaw.map((r) => ({
-      dayIndex: r.dayIndex, slotId: r.slotId, startsAt: r.startsAt, endsAt: r.endsAt,
-      dersBranch: r.dersBranch, data: r.data as SlotCell | null,
-    }));
-    const { list: otherBookings, weeklyCount } = combineBookings(effectiveEtutRows, slotRows, slotTimes);
+    const { list: otherBookings, weeklyCount } = normalizeEtutBookings(effectiveEtutRows);
 
     const ctx: BookingContext = {
       actor: { role: actorRole, id: actorId, isManager: isManagerActor, readOnlyCounselor },

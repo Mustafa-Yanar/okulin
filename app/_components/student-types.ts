@@ -2,7 +2,7 @@
 // ve dış tüketiciler (ParentPanel, director/StudentList, SinifOgrenci) paylaşır.
 
 // Etüt şablonundan türetilen slot-benzeri satır — AvailableTree/StudentBookingsView
-// ortak şekli (ParentPanel /api/slots satırlarını da bu şekle karıştırır).
+// ortak şekli (tek kaynak /api/etut-sablon/all; eski /api/slots karışımı B3/dalga2'de kalktı).
 export interface BookingSlotEntry {
   kind?: string;
   etutId?: string;

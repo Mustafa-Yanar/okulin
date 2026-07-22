@@ -29,14 +29,11 @@ import { useSlotTimes as useSlotTimesCtx } from './SlotTimesContext';
 import type { Session } from '@/lib/auth';
 import type { Branding } from '@/lib/branding';
 import type { ClassRecord } from '@/lib/classes';
-import type { DaySlotConfig, SlotCell as SlotCellData } from '@/lib/slots';
-import type { ShowToast, SlotEntryDTO, StudentDTO, TeacherDTO } from './types';
+import type { DaySlotConfig } from '@/lib/slots';
+import type { ShowToast, StudentDTO, TeacherDTO } from './types';
 // page.js bunu DirectorPanel'den import ediyor — yol değişmesin diye re-export.
 export { DirectorSettingsModal, DirectorSettingsInline } from './director/Settings';
 import { CounselorSection, AssistantDirectorSection } from './director/Settings';
-
-// /api/slots öğretmen grid'i: gün → slotIdx → hücre.
-type TeacherGrid = Record<number, SlotCellData[]>;
 
 interface DirectorPanelProps {
   session: Session;
@@ -81,7 +78,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [students, setStudents] = useState<StudentDTO[]>([]);
   const [classes, setClasses] = useState<ClassRecord[]>([]); // registry şubeler (/api/classes) — form+liste etiketleri
   const [weekKey, setWeekKey] = useState(getWeekKey());
-  const [allSlots, setAllSlots] = useState<SlotEntryDTO[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [showTeacherForm, setShowTeacherForm] = useState(false);
@@ -93,8 +89,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   const [editStudent, setEditStudent] = useState<StudentDTO | null>(null);
   // Ön Kayıt köprüsü: "kayıt oldu" adayından öğrenci formu önceden dolu açılır (id yok → yeni kayıt).
   const [studentPrefill, setStudentPrefill] = useState<Partial<StudentDTO> | null>(null);
-  const [selectedTeacherForSlots, setSelectedTeacherForSlots] = useState<TeacherDTO | null>(null);
-  const [teacherSlots, setTeacherSlots] = useState<TeacherGrid | null | undefined>(null);
   const [expandedTeacherId, setExpandedTeacherId] = useUrlParam('ogretmen'); // inline detay → URL'de görünür
   const [expandedTeacherTab, setExpandedTeacherTab] = useState('etutler');
   const [teacherView, setTeacherView] = useState('list'); // 'list' | 'grid' — öğretmen listesi görünüm modu
@@ -141,15 +135,13 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
     try {
       const resolvedWeek = wk || getWeekKey();
       if (!wk) setWeekKey(resolvedWeek);
-      const [teacherData, studentData, slotsData, classData] = await Promise.all([
+      const [teacherData, studentData, classData] = await Promise.all([
         api<TeacherDTO[]>('/api/teachers'),
         api<StudentDTO[]>('/api/students'),
-        api<{ weekKey?: string; slots?: SlotEntryDTO[] }>(`/api/slots?week=${resolvedWeek}`),
         api<{ classes?: ClassRecord[] }>('/api/classes'),
       ]);
       setTeachers([...teacherData].sort((a, b) => a.name.localeCompare(b.name, 'tr')));
       setStudents(studentData);
-      setAllSlots(slotsData.slots || []);
       setClasses(classData.classes || []);
     } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setLoading(false); }
@@ -157,53 +149,10 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
   useEffect(() => { loadAll(); }, []);
 
-  const loadTeacherSlots = async (teacher: TeacherDTO, wk?: string) => {
-    const data = await api<{ weekKey?: string; grid?: TeacherGrid }>(`/api/slots?teacherId=${teacher.id}&week=${wk || weekKey}`);
-    setTeacherSlots(data.grid);
-    setSelectedTeacherForSlots(teacher);
-  };
-
-  // URL'den (yenileme / geri-ileri) gelen öğretmen detayı için slotları yükle.
-  useEffect(() => {
-    if (!expandedTeacherId || !teachers.length) return;
-    if (selectedTeacherForSlots?.id === expandedTeacherId && teacherSlots) return;
-    const t = teachers.find(x => x.id === expandedTeacherId);
-    if (t) loadTeacherSlots(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expandedTeacherId, teachers]);
-
-  const handleWeekChange = async (newWeek: string) => {
-    setWeekKey(newWeek);
-    const slotsData = await api<{ weekKey?: string; slots?: SlotEntryDTO[] }>(`/api/slots?week=${newWeek}`);
-    setAllSlots(slotsData.slots || []);
-    if (selectedTeacherForSlots) await loadTeacherSlots(selectedTeacherForSlots, newWeek);
-  };
-
-  const refreshSlots = async (teacher?: TeacherDTO) => {
-    const t = teacher || selectedTeacherForSlots;
-    if (t) {
-      const data = await api<{ weekKey?: string; grid?: TeacherGrid }>(`/api/slots?teacherId=${t.id}&week=${weekKey}`);
-      setTeacherSlots(data.grid);
-    }
-    const slotsData = await api<{ weekKey?: string; slots?: SlotEntryDTO[] }>(`/api/slots?week=${weekKey}`);
-    setAllSlots(slotsData.slots || []);
-  };
-
-  const handleBook = async (params: Record<string, unknown>) => {
-    try {
-      await api('/api/slots', { method: 'POST', body: JSON.stringify(params) });
-      showToast('Rezervasyon yapıldı');
-      await refreshSlots();
-    } catch (err) { showToast((err as Error).message, 'error'); }
-  };
-
-  const handleCancel = async (params: { teacherId: string; day: number; slotId: string }) => {
-    try {
-      await api('/api/slots', { method: 'DELETE', body: JSON.stringify({ ...params, weekKey }) });
-      showToast('Rezervasyon iptal edildi');
-      await refreshSlots();
-    } catch (err) { showToast((err as Error).message, 'error'); }
-  };
+  // Hafta gezinme: yalnız weekKey state'i değişir — sekmeler (TeachersTab etüt listesi,
+  // HistoryModal) kendi verisini kendisi çeker. Eski /api/slots (SlotBooking) yüklemeleri
+  // 2026-07-22 denetim B3/dalga2'de kaldırıldı (okuyan görünüm kalmadı).
+  const handleWeekChange = (newWeek: string) => { setWeekKey(newWeek); };
 
   if (loading) return <LoadingBox height="h-64" />;
 
@@ -229,8 +178,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
           students={students}
           weekKey={weekKey}
           readOnly={readOnly}
-          teacherSlots={teacherSlots}
-          selectedTeacherForSlots={selectedTeacherForSlots}
           expandedTeacherId={expandedTeacherId}
           expandedTeacherTab={expandedTeacherTab}
           setExpandedTeacherTab={setExpandedTeacherTab}
@@ -246,7 +193,6 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
             try { await api('/api/teachers',{method:'DELETE',body:JSON.stringify({id:t.id})}); showToast('Öğretmen silindi'); setExpandedTeacherId(null); loadAll(weekKey); } catch(err){showToast((err as Error).message,'error');}
           }}
           onWeekChange={handleWeekChange}
-          onCancelBooking={(teacherId, day, slotId) => handleCancel({ teacherId, day, slotId })}
         />
       )}
 
@@ -282,15 +228,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
 
       {historyTarget && (
         <HistoryModal target={historyTarget} onClose={() => setHistoryTarget(null)}
-          currentWeekKey={weekKey}
-          currentEntries={allSlots.filter(s => s.booked && (
-            historyTarget.type === 'teacher' ? s.teacherId === historyTarget.id : s.studentId === historyTarget.id
-          )).map(s => ({
-            day: s.day, dayLabel: s.dayLabel, slotId: s.slotId, slotLabel: s.slotLabel,
-            studentId: s.studentId, studentName: s.studentName, studentCls: s.studentCls,
-            teacherId: s.teacherId, teacherName: s.teacherName, branch: s.branch,
-            bookedBy: s.bookedBy, fixed: !!s.fixed,
-          }))} />
+          currentWeekKey={weekKey} />
       )}
 
       {/* REHBERLİK TAB — yoklama/ödev/davranış/denemeler hub'ı */}

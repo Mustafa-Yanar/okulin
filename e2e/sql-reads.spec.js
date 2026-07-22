@@ -106,11 +106,18 @@ test.describe('Teacher okuma testleri', () => {
 test.describe('Student okuma testleri', () => {
   test.use({ storageState: 'e2e/.auth/student.json' });
 
-  test('student: slot listesini okur', async ({ request }) => {
+  // 2026-07-22 denetim B3/dalga2: teacherId'siz org-geneli /api/slots taraması kaldırıldı
+  // (üretim tüketicisi yoktu; öğrenci etüt verisini /api/etut-sablon/all'dan okur).
+  test('student: teacherId\'siz /api/slots → 400 (org-geneli tarama emekli)', async ({ request }) => {
     const res = await request.get(`${BASE}/api/slots`);
+    expect(res.status()).toBe(400);
+  });
+
+  test('student: etüt listesini okur (/api/etut-sablon/all)', async ({ request }) => {
+    const res = await request.get(`${BASE}/api/etut-sablon/all`);
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body).toHaveProperty('slots');
+    expect(body).toHaveProperty('etutler');
   });
 
   test('student: öğretmen listesini okuyabilir (etüt rezervasyonu için)', async ({ request }) => {
