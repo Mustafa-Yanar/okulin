@@ -49,6 +49,14 @@ export function shiftWeekKey(weekKey: string, delta: number): string {
   return currentWeekKeyTSI(new Date(mon.getTime() + 12 * 60 * 60 * 1000 - TSI_OFFSET_MS));
 }
 
+// Saklama (retention) sınırı: bu anahtardan ESKİ haftalar silinebilir; sınırın KENDİSİ
+// ve sonrası tutulur (yani tam `weeks` hafta geriye kadar veri kalır).
+// 'YYYY-Www' sıfır-dolgulu olduğundan string kıyası kronolojiktir (shouldRollWeek ile aynı ilke)
+// → çağıran `weekKey: { lt: cutoff }` ile silebilir, tarih sütununa ihtiyaç yoktur.
+export function retentionCutoffWeekKey(weeks: number, now: Date = new Date()): string {
+  return shiftWeekKey(currentWeekKeyTSI(now), -weeks);
+}
+
 // Rollover kararı (Faz 4 FIX-1, Codex kritik bulgusu): stored current_week takvimden İLERİDEyse
 // devir ZATEN yapılmıştır (çifte cron/retry) → atla. Geride/eşitse devret (kaçırılmış hafta
 // telafisi: her koşu 1 hafta ilerletir, arka arkaya koşular yetişir).

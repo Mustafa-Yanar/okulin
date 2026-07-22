@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { retentionCutoffWeekKey } from '@/lib/etut/weeks';
 
 // Günlük saklama (retention) temizliği cron'u.
 // Redis'te AuditLog/ErrLog kayıtlarının TTL'i vardı (audit 90g, errlog 30g); SQL'e
@@ -26,6 +27,18 @@ const NOTIF_EVENT_RETENTION_DAYS = 90;
 const NOTIF_DELIVERY_RETENTION_DAYS = 30;
 // Kapanmış (revoke/expired) mobil oturum kayıtları: 30 gün denetim penceresi, sonra sil.
 const MOBILE_SESSION_RETENTION_DAYS = 30;
+// Ders programı hücreleri (SlotBooking): haftalık rollover her hafta YENİ satırlar üretir
+// (~700 satır/hafta, tüm kurumlar) ama eskisini SİLMEZ → tablo sınırsız büyür (denetim B11).
+// Karar (Mustafa, 2026-07-12): 14 ay geriye tut — bir öğretim sezonu + pay; müdürün yıl sonu
+// öğretmen/ders raporu için tam bir sezonun hücreleri SQL'de kalmalı.
+// Zaman boyutu Date DEĞİL weekKey ('YYYY-Www') olduğundan cutoff() burada kullanılamaz;
+// anahtar sıfır-dolgulu olduğu için string `lt` kıyası kronolojiktir (bkz. retentionCutoffWeekKey).
+// Etki: Attendance'ın kendi retention'ı yok → 14 aydan eski devamsızlık kayıtları
+// /api/attendance/student'ta slotLabel/branch'ı boş görünür (matchedSlot null → '' fallback,
+// çökme yok). Kayıt+durum+tarih korunur, yalnız "kaçıncı ders" etiketi kaybolur — kabul edilen ödün.
+// DİKKAT: bu desen EtutReservation'a OLDUĞU GİBİ taşınamaz — orada RECURRING satırları
+// weekKey='*' taşır ve '*' < '2' olduğundan naif bir `lt` TÜM tekrarlayan rezervasyonları siler.
+const SLOT_BOOKING_RETENTION_WEEKS = 61; // 14 ay ≈ 60.9 hafta
 
 function cutoff(days: number): Date {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -70,5 +83,12 @@ export async function GET(req: Request) {
       },
     }));
 
-  return NextResponse.json({ ok: true, auditDeleted, errDeleted, notifDeleted, eventDeleted, deliveryDeleted, mobileSessionDeleted });
+  const slotBookingCutoff = retentionCutoffWeekKey(SLOT_BOOKING_RETENTION_WEEKS);
+  const slotBookingDeleted = await purge('slotBooking',
+    () => prisma.slotBooking.deleteMany({ where: { weekKey: { lt: slotBookingCutoff } } }));
+
+  return NextResponse.json({
+    ok: true, auditDeleted, errDeleted, notifDeleted, eventDeleted, deliveryDeleted,
+    mobileSessionDeleted, slotBookingDeleted, slotBookingCutoff,
+  });
 }

@@ -5,14 +5,24 @@ import {
   getAllTeachers, getCurrentWeek, setCurrentWeek,
 } from '@/lib/slots';
 import { parseBody, z } from '@/lib/validate';
+import { isValidWeekKey } from '@/lib/etut/weeks';
 import { tdb } from '@/lib/sqldb';
 
 const WeekActionSchema = z.object({
   action: z.enum(['advance', 'reset', 'reinit', 'reset-all']),
-  weekKey: z.string().max(40).optional(),
+  // Biçim doğrulaması ZORUNLU (denetim B11, Codex bulgusu): eskiden yalnız max(40) vardı.
+  // 'abc' gibi bir değer advanceWeek → getMondayOfWeek'ten Invalid Date olarak geçip
+  // getWeekKey'den 'NaN-WNaN' üretiyor, HER öğretmene o anahtarla SlotBooking satırı
+  // yazıyor ve current_week'i de bozuyordu ('9999-W53' ise 5 haneli '10000-W02').
+  // Bozuk anahtar ayrıca retention'ın string kıyasını ('YYYY-Www' kronolojik) geçersiz kılar.
+  // Aynı sertleştirme mobil etüt ucunda da var (mobile/v1/etut — İnceleme Codex #11).
+  weekKey: z.string().max(40).refine(isValidWeekKey, { message: 'Geçersiz hafta formatı' }).optional(),
 });
 
-async function advanceWeek(currentWeek: string): Promise<string> {
+// Yazmadan ÖNCE üretilen anahtarı da doğrular: girdi biçimi geçerli olsa bile aritmetik
+// taşabilir ('9999-W53' + 1 hafta → 5 haneli '10000-W02'), bu da retention'ın dayandığı
+// 'YYYY-Www' string sıralamasını bozar ('10000-...' < '2025-...'). Geçersizse null → 400.
+async function advanceWeek(currentWeek: string): Promise<string | null> {
   const teachers = await getAllTeachers(); // SQL-aware
   if (!teachers || teachers.length === 0) return getWeekKey();
 
@@ -20,6 +30,7 @@ async function advanceWeek(currentWeek: string): Promise<string> {
   const nextMonday = new Date(monday);
   nextMonday.setDate(monday.getDate() + 7);
   const nextWeek = getWeekKey(nextMonday);
+  if (!isValidWeekKey(nextWeek)) return null;
 
   for (const t of teachers) await initWeekForTeacher(t.id, nextWeek);
   await setCurrentWeek(nextWeek);
@@ -39,6 +50,7 @@ export const POST = withAuth('manage', async (req) => {
   if (action === 'advance') {
     const current = weekKey || getWeekKey();
     const next = await advanceWeek(current);
+    if (!next) return NextResponse.json({ error: 'Geçersiz hafta formatı' }, { status: 400 });
     return NextResponse.json({ ok: true, nextWeek: next });
   }
 

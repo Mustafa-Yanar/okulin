@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentWeekKeyTSI, shiftWeekKey, allowedBookingWeeks, isValidWeekKey, shouldRollWeek } from './weeks';
+import { currentWeekKeyTSI, shiftWeekKey, allowedBookingWeeks, isValidWeekKey, shouldRollWeek, retentionCutoffWeekKey } from './weeks';
 
 // Referans: Pzt 20 Tem 2026 = 2026-W30 başlangıcı; Pazar 19 Tem = W29'un son günü.
 describe('currentWeekKeyTSI — sunucu-UTC bağımsız TSİ haftası', () => {
@@ -60,6 +60,50 @@ describe('shouldRollWeek — rollover idempotency guard (Faz 4 FIX-1, Codex krit
   });
   it('yıl sınırı: stored 2026-W53, actual 2027-W01 → true (geride)', () => {
     expect(shouldRollWeek('2026-W53', '2027-W01')).toBe(true);
+  });
+});
+
+// Denetim B11: SlotBooking her hafta birikiyor, hiç silinmiyordu. Cleanup cron'u
+// `weekKey: { lt: retentionCutoffWeekKey(61) }` ile siler — zaman boyutu Date değil
+// hafta anahtarı olduğu için cutoff(days) kullanılamaz.
+describe('retentionCutoffWeekKey — hafta-anahtarı saklama sınırı (B11)', () => {
+  const NOW = new Date('2026-07-22T10:00:00+03:00'); // 2026-W30
+
+  it('14 ay (61 hafta) geriye → 2025-W21', () => {
+    expect(retentionCutoffWeekKey(61, NOW)).toBe('2025-W21');
+  });
+  it('52 hafta geriye tam bir yıl önceki aynı hafta → 2025-W30', () => {
+    expect(retentionCutoffWeekKey(52, NOW)).toBe('2025-W30');
+  });
+  it('sınır DAHİL tutulur: cutoff haftası `lt` kıyasında silinmez, bir öncesi silinir', () => {
+    const c = retentionCutoffWeekKey(61, NOW);
+    expect(c < c).toBe(false);                             // cutoff haftasının kendisi kalır
+    expect(retentionCutoffWeekKey(62, NOW) < c).toBe(true); // bir hafta eskisi silinir
+  });
+  it('güncel hafta ve cari veri ASLA silinmez (cutoff geçmişte kalır)', () => {
+    const c = retentionCutoffWeekKey(61, NOW);
+    expect(currentWeekKeyTSI(NOW) < c).toBe(false);
+    expect(shiftWeekKey(currentWeekKeyTSI(NOW), -60) < c).toBe(false);
+  });
+  it('yıl sınırını doğru aşar: 2027-W02 anından 61 hafta geriye → 2025-W46', () => {
+    expect(retentionCutoffWeekKey(61, new Date('2027-01-13T10:00:00+03:00'))).toBe('2025-W46');
+  });
+  it('yılın İLK haftasından (2026-W01) geriye iki yıl önceye taşar → 2024-W44', () => {
+    expect(retentionCutoffWeekKey(61, new Date('2026-01-01T10:00:00+03:00'))).toBe('2024-W44');
+  });
+  it('53 haftalı yılın SON haftasından (2026-W53) → 2025-W44', () => {
+    const end2026 = new Date('2026-12-31T10:00:00+03:00');
+    expect(currentWeekKeyTSI(end2026)).toBe('2026-W53'); // 2026 ISO'da 53 haftalı
+    expect(retentionCutoffWeekKey(61, end2026)).toBe('2025-W44');
+  });
+  it('üretilen anahtar geçerli ISO biçimde (string `lt` kıyası kronolojik kalsın)', () => {
+    expect(isValidWeekKey(retentionCutoffWeekKey(61, NOW))).toBe(true);
+  });
+  // 5 haneli yıl retention'ın sıralama invaryantını bozardı ('10000-W02' < '2025-W01').
+  // isValidWeekKey bunu reddeder; admin/week advanceWeek ürettiği anahtarı bu yüzden doğrular.
+  it('5 haneli yıl geçersiz — sıralama invaryantını koruyan kapı', () => {
+    expect(isValidWeekKey('10000-W02')).toBe(false);
+    expect('10000-W02' < '2025-W01').toBe(true); // biçim doğrulanmasaydı ASLA silinmezdi
   });
 });
 
