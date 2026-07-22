@@ -203,8 +203,6 @@ export const POST = withAuth('manage', async (req) => {
       }
       const rowData = {
         booked: cell.booked ?? false, disabled: cell.disabled ?? true, fixed: cell.fixed ?? false,
-        studentId: cell.studentId || null, studentName: cell.studentName || null,
-        studentCls: cell.studentCls || null, dersBranch: null, bookedBy: cell.bookedBy || null,
         data: cell as object,
       };
       if (existingRow) {

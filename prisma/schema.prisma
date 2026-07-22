@@ -266,12 +266,10 @@ model SlotBooking {
   booked      Boolean @default(false)
   disabled    Boolean @default(false)
   fixed       Boolean @default(false)
-  studentId   String?
-  studentName String?
-  studentCls  String?
-  dersBranch  String?
-  bookedBy    String?
-  data        Json?   // hücrenin tam içeriği (lessonType, cls, subBranch, branch, bookedAt dahil)
+  // Rezervasyon-dönemi kolonları (studentId/studentName/studentCls/dersBranch/bookedBy)
+  // 2026-07-23'te düşürüldü — grid rezervasyonu B3'te emekli, canlı tarama 1560 satırda
+  // hepsini boş/kopya kanıtladı. Etüt kimliği EtutReservation'da yaşar.
+  data        Json?   // hücrenin tam içeriği (lessonType, cls, subBranch, branch)
   // Saat snapshot'ı (spec §4): slot saat config'i sonradan değişirse eski kayıt kaymasın.
   // Nullable — mevcut satırlar için boş; Faz 2 birleşik servis yazarken doldurur.
   startsAt    String?
@@ -279,7 +277,6 @@ model SlotBooking {
   @@unique([orgSlug, branch, weekKey, teacherId, dayIndex, slotId])
   @@index([orgSlug, branch, weekKey])
   @@index([orgSlug, branch, teacherId, weekKey])
-  @@index([orgSlug, branch, studentId, weekKey])
 }
 
 model TenantConfig {

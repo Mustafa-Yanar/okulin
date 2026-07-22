@@ -31,6 +31,9 @@ interface StoredSlotTimes {
 }
 
 // Hücre içeriği — SlotBooking.data Json alanının şekli (grid hücresi).
+// Rezervasyon-dönemi alanları (studentId/studentName/studentCls/bookedBy/bookedAt)
+// 2026-07-23 şema temizliğinde SÖKÜLDÜ: grid rezervasyon yüzeyi B3'te emekli edilmişti,
+// canlı tarama 1560 satırda hepsini boş kanıtladı (etüt kimliği EtutReservation'da).
 export interface SlotCell {
   booked?: boolean;
   disabled?: boolean;
@@ -39,26 +42,20 @@ export interface SlotCell {
   cls?: string;
   subBranch?: string;
   branch?: string;
-  studentId?: string | null;
-  studentName?: string | null;
-  studentCls?: string | null;
-  bookedBy?: string | null;
-  bookedAt?: string;
   // Etkinlik takvimi entegrasyonu: aktif tatil/etkinlik yüzünden kapalı (route.ts /api/slots GET doldurur).
   eventBlocked?: boolean;
   eventTitle?: string;
 }
 
 // Öğretmen program şablonundaki tek giriş (programTemplate Json).
+// (studentId/studentName/studentCls rezervasyon-dönemi kalıntısıydı — hiçbir okuyucusu
+// kalmadığı kanıtlanıp söküldü; şablon yalnız ders|available taşır.)
 export interface ProgramEntry {
   type?: string;
   cls?: string;
   subBranch?: string;
   branch?: string; // program-solve yerleşiminde ders adı (course); şablonda saklanır
   fixed?: boolean;
-  studentId?: string;
-  studentName?: string;
-  studentCls?: string;
 }
 
 // Eski {weekday, weekend} veya null → normalize {days:{0..6:{count,times}}}.
@@ -173,16 +170,12 @@ export function isEditableWeek(weekKey: string): boolean {
 
 // SQL yardımcısı: hücre değerini SlotBooking satırından kur
 function cellFromRow(row: SlotBooking): SlotCell {
-  // data Json varsa kullan (tam hücre içeriği); yoksa scalar alanlara geri düş
+  // data Json varsa kullan (tam hücre içeriği). Scalar fallback teorik: canlı taramada
+  // (2026-07-23, 1560 satır) data'sı null TEK satır yok — yazıcılar data'yı hep doldurur.
   return (row.data as SlotCell | null) || {
     booked: row.booked,
     disabled: row.disabled,
     fixed: row.fixed,
-    studentId: row.studentId,
-    studentName: row.studentName,
-    studentCls: row.studentCls,
-    branch: row.dersBranch ?? undefined,
-    bookedBy: row.bookedBy,
   };
 }
 
@@ -215,16 +208,12 @@ function computeCellFromEntry(entry: ProgramEntry | undefined, existing: SlotCel
 }
 
 // SQL yardımcısı: SlotBooking satırı için scalar alanları hücre nesnesinden çıkar
+// (rezervasyon kolonları şemadan söküldü; hücrenin tam içeriği data Json'unda)
 function scalarFromCell(cell: SlotCell) {
   return {
     booked: cell.booked ?? false,
     disabled: cell.disabled ?? true,
     fixed: cell.fixed ?? false,
-    studentId: cell.studentId || null,
-    studentName: cell.studentName || null,
-    studentCls: cell.studentCls || null,
-    dersBranch: cell.branch || null,
-    bookedBy: cell.bookedBy || null,
     data: cell as object,
   };
 }

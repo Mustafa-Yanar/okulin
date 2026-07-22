@@ -13,9 +13,8 @@ import { ALL_DAYS, daySlots } from '@/lib/constants';
 // Kanıt/harita: docs/superpowers/specs/2026-07-22-buyuk-temizlik-faz1-harita.md (B3).
 
 // Hücre whitelist'i (diff-denetim bulgusu): grid ham SlotCell yerine yalnız görüntüleme
-// alanlarıyla döner — rezervasyon-dönemi alanları (studentId/studentName/studentCls/
-// bookedBy/bookedAt) tip üzerinde hâlâ var olduğundan, eski/bozuk bir satır sızıntı
-// üretemesin diye yapısal olarak DÜŞÜRÜLÜR (savunma derinliği; canlıda booked=0 zaten).
+// alanlarıyla döner. Rezervasyon-dönemi alanları 2026-07-23'te tip+şemadan da söküldü;
+// whitelist yine kalır (savunma derinliği — data Json'una sızan bilinmeyen alan geçemez).
 function pickPublicCell(c: SlotCell): SlotCell {
   const out: SlotCell = { booked: false, disabled: c.disabled ?? true };
   if (c.lessonType) out.lessonType = c.lessonType;
