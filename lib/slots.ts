@@ -202,24 +202,12 @@ function computeCellFromEntry(entry: ProgramEntry | undefined, existing: SlotCel
     if (dersAd) { gridEntry.subBranch = dersAd; gridEntry.branch = dersAd; }
     return gridEntry;
   }
-  // Şablondan gelen sabit ETÜT (rezervasyon)
-  if (entry && entry.type === 'etut') {
-    if (entry.studentId && entry.fixed) {
-      return {
-        booked: true, disabled: false, studentId: entry.studentId,
-        studentName: entry.studentName || '', studentCls: entry.studentCls || '',
-        bookedBy: 'director', fixed: true,
-      };
-    } else {
-      return { booked: false, disabled: false };
-    }
-  }
+  // (2026-07-22 denetim B4: şablondan sabit-ETÜT materyalizasyonu + "geçici etüt
+  // rezervasyonunu koru" dalları KALDIRILDI — etüt tek kaynağı EtutSablon/EtutReservation;
+  // canlı kanıt: grid JSON'larında type:'etut' girişi 0, SlotBooking'de booked satır 0 ve
+  // yazıcısı da kalmadı. Harita: docs/superpowers/specs/2026-07-22-buyuk-temizlik-faz1-harita.md)
   // Geçici dersi koru
   if (existing && existing.lessonType === 'ders' && existing.fixed === false) {
-    return existing;
-  }
-  // Geçici etüt rezervasyonunu koru
-  if (existing && existing.booked && existing.fixed === false) {
     return existing;
   }
   // Hiçbir şey → kapalı

@@ -160,6 +160,13 @@ export const POST = withAuth('manage', async (req) => {
         continue;
       }
       if (entry.fixed === true) {
+        // Şablona yalnız TANINAN tipler saklanır: 'ders' (sabit ders) ve 'available'
+        // (çözücü müsaitlik işareti) — UI da yalnız bunları üretir (ProgramEditor).
+        // 2026-07-22 denetim B3/dalga3: 'etut' dahil diğer her tip SESSİZCE ATLANIR —
+        // etüt şablonu artık EtutSablon tablosunda; ham istemcinin type:'etut' sokup
+        // şablonda hayalet girdi bırakma vektörü kapatıldı (üst-seviye Zod şeması derin
+        // hücreyi doğrulamıyor, savunma BURADA).
+        if (entry.type !== 'ders' && entry.type !== 'available') continue;
         if (!newGridTemplate[dayIdx]) newGridTemplate[dayIdx] = {};
         const toStore: GridEntry = { ...entry };
         delete toStore.fixed;

@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { combineBookings, type SlotRowLike } from './student-week';
-import type { NormalizedSlotTimes } from '@/lib/slots';
+import { describe, it, expect } from 'vitest';
+import { normalizeEtutBookings } from './student-week';
 import type { EtutReservation } from '@prisma/client';
 
-// Test satırı üreticileri — yalnız combineBookings'in okuduğu alanlar anlamlı.
+// Test satırı üreticisi — yalnız normalizeEtutBookings'in okuduğu alanlar anlamlı.
 const etutRow = (over: Partial<EtutReservation>): EtutReservation => ({
   id: 'r1', orgSlug: 'o', branch: 'main', sablonId: 's1', teacherId: 't1',
   scope: 'WEEK', status: 'ACTIVE', weekKey: '2026-W30', effectiveFromWeek: null,
@@ -14,111 +13,49 @@ const etutRow = (over: Partial<EtutReservation>): EtutReservation => ({
   ...over,
 } as EtutReservation);
 
-const slotRow = (over: Partial<SlotRowLike>): SlotRowLike => ({
-  dayIndex: 2, slotId: 'd2s2', startsAt: null, endsAt: null, dersBranch: null, data: null,
-  ...over,
-});
-
-// 2. gün (Çarşamba) için 3 slotluk config — daySlots(2, cfg) → d2s1/d2s2/d2s3.
-const slotTimes: NormalizedSlotTimes = {
-  days: {
-    2: {
-      count: 3,
-      times: [
-        { start: '09:00', end: '09:35' },
-        { start: '09:45', end: '10:20' },
-        { start: '10:30', end: '11:05' },
-      ],
-    },
-  },
-};
-
-describe('combineBookings — etüt+slot birleşimi', () => {
-  it('bir etüt + bir slot → iki kayıtlı liste, weeklyCount=2, source doğru', () => {
-    const { list, weeklyCount } = combineBookings(
-      [etutRow({})],
-      [slotRow({ startsAt: '11:00', endsAt: '11:35' })],
-      slotTimes,
-    );
-    expect(weeklyCount).toBe(2);
-    expect(list.map((b) => b.source).sort()).toEqual(['etut', 'slot']);
-  });
-
-  it('exclude: çağıran taraf sablonId hariç bırakmışsa (etutRows önceden filtrelenmiş) o kayıt listede YOK', () => {
-    // studentWeekBookings excludeSablonId'yi EFEKTİF HARİTADA filtreler — combineBookings'e
-    // zaten süzülmüş bir liste gelir; burada yalnızca pass-through doğru mu diye bakıyoruz.
-    const kept = etutRow({ id: 'r1', sablonId: 's1' });
-    // s2 çağıran tarafından dışlandığı için combineBookings'e HİÇ verilmiyor:
-    const { list, weeklyCount } = combineBookings([kept], [], slotTimes);
+describe('normalizeEtutBookings — etüt satırı normalizasyonu', () => {
+  it('tek etüt → 1 kayıt, weeklyCount=1, source=etut, dersBranch pass-through', () => {
+    const { list, weeklyCount } = normalizeEtutBookings([etutRow({})]);
+    expect(weeklyCount).toBe(1);
     expect(list).toHaveLength(1);
+    expect(list[0].source).toBe('etut');
     expect(list[0].dersBranch).toBe('Fizik');
-    expect(weeklyCount).toBe(1);
   });
 
-  it('snapshot-öncelik: startsAt/endsAt DOLU ise slot config yoksayılır', () => {
-    const { list } = combineBookings(
-      [],
-      [slotRow({ dayIndex: 2, slotId: 'd2s2', startsAt: '20:00', endsAt: '20:30' })],
-      slotTimes,
-    );
-    // d2s2'nin config saati 09:45-10:20 — snapshot (20:00-20:30) KAZANMALI.
-    expect(list[0].startMin).toBe(20 * 60);
-    expect(list[0].endMin).toBe(20 * 60 + 30);
-  });
-
-  it('snapshot yok → slot tanımından çözülür (route.ts:155/309 deseni)', () => {
-    const { list } = combineBookings([], [slotRow({ dayIndex: 2, slotId: 'd2s2' })], slotTimes);
-    expect(list[0].startMin).toBe(9 * 60 + 45);
-    expect(list[0].endMin).toBe(10 * 60 + 20);
-  });
-
-  it('saati bilinmeyen slot (snapshot yok + config’te yok) → listeden HARİÇ ama weeklyCount’a DAHİL + console.warn', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { list, weeklyCount } = combineBookings(
-      [],
-      [slotRow({ dayIndex: 2, slotId: 'd2s99' })], // config'te yalnız d2s1..d2s3 var
-      slotTimes,
-    );
+  it('boş liste → 0 kayıt, weeklyCount=0', () => {
+    const { list, weeklyCount } = normalizeEtutBookings([]);
     expect(list).toHaveLength(0);
+    expect(weeklyCount).toBe(0);
+  });
+
+  it('exclude: çağıran taraf sablonId hariç bırakmışsa (liste önceden filtrelenmiş) o kayıt YOK', () => {
+    // bookEtut excludeSablonId'yi EFEKTİF HARİTADA filtreler — buraya zaten süzülmüş bir
+    // liste gelir; burada yalnızca pass-through doğru mu diye bakıyoruz.
+    const kept = etutRow({ id: 'r1', sablonId: 's1' });
+    const { list, weeklyCount } = normalizeEtutBookings([kept]);
+    expect(list).toHaveLength(1);
     expect(weeklyCount).toBe(1);
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toMatch(/slot saati çözülemedi/);
-    warn.mockRestore();
   });
 
-  it('dakika dönüşümü: etüt "09:05"→545, slot config "10:30"→630 (toMin doğru uygulanıyor)', () => {
-    const { list } = combineBookings(
-      [etutRow({ dayIndex: 1, startsAt: '09:05', endsAt: '09:40' })],
-      [slotRow({ dayIndex: 2, slotId: 'd2s3' })],
-      slotTimes,
-    );
-    const etut = list.find((b) => b.source === 'etut')!;
-    const slot = list.find((b) => b.source === 'slot')!;
-    expect(etut.startMin).toBe(545);
-    expect(slot.startMin).toBe(630);
-    expect(slot.endMin).toBe(665);
+  it('dakika dönüşümü: "09:05"→545, "16:00"→960 (toMin doğru uygulanıyor)', () => {
+    const { list } = normalizeEtutBookings([
+      etutRow({ dayIndex: 1, startsAt: '09:05', endsAt: '09:40' }),
+      etutRow({ id: 'r2', sablonId: 's2', dayIndex: 2, startsAt: '15:30', endsAt: '16:00' }),
+    ]);
+    expect(list[0].startMin).toBe(545);
+    expect(list[0].endMin).toBe(9 * 60 + 40);
+    expect(list[1].endMin).toBe(960);
   });
 
-  it('dersBranch: slot data.branch VARSA dersBranch kolonunu EZER (route.ts:230 önceliği)', () => {
-    const { list } = combineBookings(
-      [],
-      [slotRow({ dersBranch: 'Fizik', data: { branch: 'Kimya' } })],
-      slotTimes,
-    );
-    expect(list[0].dersBranch).toBe('Kimya');
+  it('çoklu satır: weeklyCount = satır sayısı, dayIndex korunur', () => {
+    const rows = [0, 1, 2].map((d) => etutRow({ id: `r${d}`, sablonId: `s${d}`, dayIndex: d }));
+    const { list, weeklyCount } = normalizeEtutBookings(rows);
+    expect(weeklyCount).toBe(3);
+    expect(list.map((b) => b.dayIndex)).toEqual([0, 1, 2]);
   });
 
-  it('dersBranch: data yoksa/branch’siz ise dersBranch kolonuna düşer', () => {
-    const { list } = combineBookings(
-      [],
-      [slotRow({ dersBranch: 'Fizik', data: null }), slotRow({ dayIndex: 2, slotId: 'd2s3', dersBranch: 'Kimya', data: {} })],
-      slotTimes,
-    );
-    expect(list.map((b) => b.dersBranch).sort()).toEqual(['Fizik', 'Kimya']);
-  });
-
-  it('dersBranch: ikisi de yoksa null (etüt tarafında dersBranch her zaman dolu — şema NOT NULL)', () => {
-    const { list } = combineBookings([], [slotRow({ dersBranch: null, data: null })], slotTimes);
+  it('dersBranch boş string → null normalize edilir', () => {
+    const { list } = normalizeEtutBookings([etutRow({ dersBranch: '' })]);
     expect(list[0].dersBranch).toBeNull();
   });
 });
