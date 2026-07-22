@@ -37,11 +37,12 @@ interface StudentAttEntry {
   date: string;
   dayLabel?: string;
   status: string;
-  lessonNo?: number;
+  lessonNo?: number | null; // etüt kayıtlarında null (API isEtut:true + lessonNo:null gönderir)
   slotLabel?: string;
   teacherName?: string;
   branch?: string;
   subBranch?: string;
+  isEtut?: boolean;
 }
 interface StudentAttData {
   entries: StudentAttEntry[];
@@ -350,7 +351,7 @@ export function StudentAttendanceView({ studentId }: { studentId: string }) {
                         <span className={`text-[10px] px-1.5 py-0.5 rounded font-700 shrink-0 ${e.status === 'yok' ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`} style={{ fontWeight: 700 }}>
                           {e.status === 'yok' ? 'YOK' : 'GEÇ'}
                         </span>
-                        <span className="text-xs font-600 shrink-0" style={{ fontWeight: 600 }}>{e.lessonNo}. Ders</span>
+                        <span className="text-xs font-600 shrink-0" style={{ fontWeight: 600 }}>{e.isEtut ? 'Etüt' : `${e.lessonNo}. Ders`}</span>
                         {e.slotLabel && <span className="text-xs opacity-70 shrink-0">({e.slotLabel})</span>}
                       </div>
                       <span className="text-xs opacity-70 text-right truncate ml-2">
