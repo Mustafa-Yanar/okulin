@@ -27,6 +27,7 @@ const ITEMS_BY_ROLE: Record<string, SidebarItem[]> = {
   director: [
     { group: 'Akademik', key: 'teachers',    label: 'Öğretmen',          icon: Users },
     { group: 'Akademik', key: 'students',    label: 'Sınıf/Öğrenci',     icon: GraduationCap },
+    { group: 'Akademik', key: 'etutler',     label: 'Etütler',           icon: Clock },
     { group: 'Akademik', key: 'rehberlik',   label: 'Rehberlik',         icon: Compass },
     { group: 'Akademik', key: 'veliler',     label: 'Veli',              icon: Contact },
     { group: 'Akademik', key: 'onkayit',     label: 'Ön Kayıt',          icon: UserPlus },
@@ -41,6 +42,7 @@ const ITEMS_BY_ROLE: Record<string, SidebarItem[]> = {
   counselor: [
     { group: 'Akademik', key: 'teachers',    label: 'Öğretmen',          icon: Users },
     { group: 'Akademik', key: 'students',    label: 'Sınıf/Öğrenci',     icon: GraduationCap },
+    { group: 'Akademik', key: 'etutler',     label: 'Etütler',           icon: Clock },
     { group: 'Akademik', key: 'rehberlik',   label: 'Rehberlik',         icon: Compass },
     { group: 'Akademik', key: 'veliler',     label: 'Veli',              icon: Contact },
     { group: 'Akademik', key: 'onkayit',     label: 'Ön Kayıt',          icon: UserPlus },
@@ -104,8 +106,8 @@ const TAB_TO_MODULE: Record<string, string> = {
   duyurular: 'duyuru',
   odev: 'odev',
   davranis: 'davranis',
-  // etüt: öğrenci/veli rezervasyon sekmeleri
-  available: 'etut', myBookings: 'etut', rezervasyon: 'etut',
+  // etüt: öğrenci rezervasyon + öğretmen etüt sekmesi + müdür/rehber toplu görünüm
+  available: 'etut', myBookings: 'etut', rezervasyon: 'etut', etutler: 'etut',
 };
 
 // Salt-okunur rehberde gizlenen ÜRETİM sekmeleri (bunların salt-okunur hali anlamsız).

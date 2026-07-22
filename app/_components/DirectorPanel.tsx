@@ -11,6 +11,7 @@ import DirectorMuhasebeTab from './director/MuhasebeTab';
 import HistoryModal from './director/HistoryModal';
 import SinifOgrenci from './director/SinifOgrenci';
 import TeachersTab from './director/TeachersTab';
+import EtutOverviewTab from './director/EtutOverviewTab';
 import RehberlikHub from './rehberlik/RehberlikHub';
 import VeliPanel from './director/VeliPanel';
 import { useUrlTab } from './useUrlTab';
@@ -52,8 +53,8 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
   // ödev, duyuru, takvim, hedef, konu — bunların butonları readOnly'de DE görünür.
   const isCounselor = session?.role === 'counselor';
   const validTabs = isCounselor
-    ? ['teachers', 'students', 'rehberlik', 'veliler', 'onkayit', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'ders-programi']
-    : ['teachers', 'students', 'rehberlik', 'veliler', 'onkayit', 'muhasebe', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'ders-saatleri', 'ders-programi'];
+    ? ['teachers', 'students', 'etutler', 'rehberlik', 'veliler', 'onkayit', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'ders-programi']
+    : ['teachers', 'students', 'etutler', 'rehberlik', 'veliler', 'onkayit', 'muhasebe', 'kutuphane', 'duyurular', 'takvim', 'formlar', 'ders-saatleri', 'ders-programi'];
   const [tab, setTabInternal] = useUrlTab('teachers', validTabs);
 
   // Sidebar'dan gelen externalTab değişince iç state'i güncelle
@@ -234,6 +235,14 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       {/* REHBERLİK TAB — yoklama/ödev/davranış/denemeler hub'ı */}
       {tab === 'rehberlik' && (
         <RehberlikHub session={session} showToast={showToast} />
+      )}
+
+      {/* ETÜTLER TAB — haftanın tüm serbest etütleri, salt-okunur toplu görünüm */}
+      {tab === 'etutler' && (
+        <div>
+          <SectionHeader title="Etütler" />
+          <EtutOverviewTab showToast={showToast} />
+        </div>
       )}
 
       {tab === 'muhasebe' && (
