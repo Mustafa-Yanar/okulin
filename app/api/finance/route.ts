@@ -18,13 +18,15 @@ interface StudentLike {
 }
 
 // SQL Finance(+installments) + Student → mevcut sözleşme şekli (balance türetilir).
+// Number() sarmaları: Decimal kolonların statik tipini number'a indirger (runtime zaten
+// number — lib/prisma decimal-to-number katmanı); API JSON'u number sözleşmesini korur.
 const financeOut = (f: FinanceWithInst | null | undefined, stu: StudentLike | null) => f ? ({
   studentId: stu?.legacyId, studentName: stu?.name, studentCls: stu?.class?.legacyId || '',
-  registrationDate: f.registrationDate, totalFee: f.totalFee, discount: f.discount, netFee: f.netFee,
+  registrationDate: f.registrationDate, totalFee: Number(f.totalFee), discount: Number(f.discount), netFee: Number(f.netFee),
   paymentPlan: f.paymentPlan,
-  installments: (f.installments || []).map((i) => ({ idx: i.idx, dueDate: i.dueDate, amount: i.amount, paid: i.paid, paidDate: i.paidDate, paidAmount: i.paidAmount, method: i.method, receiptNo: i.receiptNo })),
+  installments: (f.installments || []).map((i) => ({ idx: i.idx, dueDate: i.dueDate, amount: Number(i.amount), paid: i.paid, paidDate: i.paidDate, paidAmount: i.paidAmount === null ? null : Number(i.paidAmount), method: i.method, receiptNo: i.receiptNo })),
   payments: ((f.payments as unknown as PaymentEntry[] | null) || []),
-  balance: f.netFee - ((f.payments as unknown as PaymentEntry[] | null) || []).reduce((s, p) => s + (p.amount || 0), 0),
+  balance: Number(f.netFee) - ((f.payments as unknown as PaymentEntry[] | null) || []).reduce((s, p) => s + (p.amount || 0), 0),
 }) : null;
 // Bir öğrencinin finans kaydını SQL'den çek (legacyId ile).
 async function financeByLegacySql(studentId: string | null) {
@@ -112,7 +114,7 @@ export const POST = withAuth(['director', 'accountant'], 'finance', async (req, 
     const prevByIdx: Record<number, Installment> = {}; for (const i of (existing?.installments || [])) prevByIdx[i.idx] = i;
     let instData: { idx: number; dueDate: string; amount: number; paid: boolean; paidDate: string | null; paidAmount: number | null; method: string | null; receiptNo: string | null }[] = [];
     if (paymentPlan === 'taksitli' && installments && installments.length > 0) {
-      instData = installments.map((inst, idx) => { const prev = prevByIdx[idx]; return { idx, dueDate: inst.dueDate || '', amount: parseFloat(String(inst.amount)) || 0, paid: prev?.paid || false, paidDate: prev?.paidDate || null, paidAmount: prev?.paidAmount ?? null, method: prev?.method || null, receiptNo: prev?.receiptNo || null }; });
+      instData = installments.map((inst, idx) => { const prev = prevByIdx[idx]; return { idx, dueDate: inst.dueDate || '', amount: parseFloat(String(inst.amount)) || 0, paid: prev?.paid || false, paidDate: prev?.paidDate || null, paidAmount: prev?.paidAmount == null ? null : Number(prev.paidAmount), method: prev?.method || null, receiptNo: prev?.receiptNo || null }; });
     }
     // INVARIANT: taksit toplamı === netFee. İstemci tutarları serbestçe gönderiyordu ve
     // hiç doğrulanmıyordu → plan toplamı net ücretten sapınca para sessizce buharlaşıyordu
@@ -122,7 +124,10 @@ export const POST = withAuth(['director', 'accountant'], 'finance', async (req, 
     // Ödenmiş taksit kilidi: makbuzu kesilmiş taksitin tutarı/vadesi değiştirilemez,
     // taksit sayısı azaltılarak silinemez. İstemci girdileri zaten disabled + taksit
     // sayısı seçeneği kısıtlı → normal akışta tetiklenmez, bu sunucu kapısıdır.
-    const odenmisErr = odenmisTaksitHatasi(existing?.installments || [], instData);
+    const odenmisErr = odenmisTaksitHatasi(
+      (existing?.installments || []).map((i) => ({ ...i, amount: Number(i.amount), paidAmount: i.paidAmount === null ? null : Number(i.paidAmount) })),
+      instData,
+    );
     if (odenmisErr) throw new HttpError(400, odenmisErr);
     instCount = instData.length;
 

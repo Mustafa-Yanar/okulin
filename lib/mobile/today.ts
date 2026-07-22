@@ -209,13 +209,15 @@ export async function buildParentToday(session: Session, unread: number, childId
     const f = stu?.finance;
     if (f) {
       const payments = (f.payments as unknown as PaymentEntry[] | null) || [];
-      const balance = f.netFee - payments.reduce((s, p) => s + (p.amount || 0), 0);
+      // Number() sarmaları: Decimal kolonların statik tipini number'a indirger (runtime zaten number)
+      const netFee = Number(f.netFee);
+      const balance = netFee - payments.reduce((s, p) => s + (p.amount || 0), 0);
       const unpaid = (f.installments || []).filter((i) => !i.paid);
       const next = unpaid[0] ?? null;
       finance = {
-        netFee: f.netFee,
+        netFee,
         balance,
-        nextInstallment: next ? { idx: next.idx, dueDate: next.dueDate ?? '', amount: next.amount } : null,
+        nextInstallment: next ? { idx: next.idx, dueDate: next.dueDate ?? '', amount: Number(next.amount) } : null,
         overdueCount: unpaid.filter((i) => isPastDue(i.dueDate, t.date)).length,
       };
     }

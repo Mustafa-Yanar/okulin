@@ -92,7 +92,12 @@ export async function applyInstallmentPaymentSql(opts: ApplyPaymentOpts): Promis
     const record = await tx.finance.findFirst({ where: { orgSlug, branch, studentId: stu.id }, include: { installments: { orderBy: { idx: 'asc' } } } });
     if (!record) throw new HttpError(404, 'Finansal kayıt bulunamadı');
 
-    const installments = record.installments;
+    // Decimal kolonlar: runtime katmanı number döndürür (lib/prisma decimal-to-number);
+    // Number() sarmaları Prisma'nın statik Decimal tipini number'a indirger (tip-gerçeği).
+    const netFee = Number(record.netFee);
+    const installments = record.installments.map((i) => ({
+      ...i, amount: Number(i.amount), paidAmount: i.paidAmount === null ? null : Number(i.paidAmount),
+    }));
     const explicit = installmentIdx !== null && installmentIdx !== undefined && installmentIdx >= 0;
     const targetInst = explicit
       ? installments.find((i) => i.idx === installmentIdx)
@@ -133,7 +138,7 @@ export async function applyInstallmentPaymentSql(opts: ApplyPaymentOpts): Promis
 
     // payments Json ledger — applyInstallmentPaymentSql/route'lar PaymentEntry[] yazar
     const payments: PaymentEntry[] = [...((record.payments as unknown as PaymentEntry[] | null) || []), payment];
-    const balance = record.netFee - payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const balance = netFee - payments.reduce((s, p) => s + (p.amount || 0), 0);
 
     // Kapatılan her taksite KENDİ tutarı yazılır (tek makbuz birden çok taksiti kapatabilir).
     for (const inst of kapatilacak) {
@@ -141,7 +146,7 @@ export async function applyInstallmentPaymentSql(opts: ApplyPaymentOpts): Promis
     }
     await tx.finance.update({ where: { id: record.id }, data: { payments: payments as unknown as object } });
 
-    const recOut = { studentId, studentName: stu.name, studentCls: stu.class?.legacyId || '', netFee: record.netFee, payments, balance };
+    const recOut = { studentId, studentName: stu.name, studentCls: stu.class?.legacyId || '', netFee, payments, balance };
     return { record: recOut, payment, balance, receiptNo };
   });
 }

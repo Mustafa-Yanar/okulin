@@ -316,9 +316,10 @@ model Finance {
   student          Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
   studentId        String        @unique
   registrationDate String?
-  totalFee         Float
-  discount         Float         @default(0)
-  netFee           Float
+  // Para: Decimal(12,2) (Float→Decimal göçü 2026-07-23; okuma katmanı number'a çevirir — lib/prisma)
+  totalFee         Decimal       @db.Decimal(12, 2)
+  discount         Decimal       @default(0) @db.Decimal(12, 2)
+  netFee           Decimal       @db.Decimal(12, 2)
   paymentPlan      String
   payments         Json?         // ödeme ledger'ı [{id,date,amount,method,note,receiptNo,recordedBy}]; balance türetilir
   installments     Installment[]
@@ -331,10 +332,10 @@ model Installment {
   financeId  String
   idx        Int
   dueDate    String
-  amount     Float
+  amount     Decimal @db.Decimal(12, 2)
   paid       Boolean @default(false)
   paidDate   String?
-  paidAmount Float?
+  paidAmount Decimal? @db.Decimal(12, 2)
   method     String?
   receiptNo  String?
 }
@@ -345,7 +346,7 @@ model Expense {
   branch   String @default("main")
   legacyId String
   type     String
-  amount   Float
+  amount   Decimal @db.Decimal(12, 2)
   date     String
   data     Json?
   @@unique([orgSlug, branch, legacyId])

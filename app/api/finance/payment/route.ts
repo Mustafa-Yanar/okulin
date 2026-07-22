@@ -62,7 +62,7 @@ export const DELETE = withAuth(['director', 'accountant'], 'finance', async (req
       }
     }
     const payments = ledger.filter((p) => p.id !== paymentId);
-    const balance = record.netFee - payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const balance = Number(record.netFee) - payments.reduce((s, p) => s + (p.amount || 0), 0);
     await tx.finance.update({ where: { id: record.id }, data: { payments: payments as unknown as object } });
     return { payment, balance };
   });
