@@ -1,8 +1,9 @@
-import { getAllTeachers, getAllStudents } from '@/lib/slots';
+import { getAllTeachers, getAllStudents, dateStrForWeekDay } from '@/lib/slots';
 import { allowedBranchesForClass, MATH_FAMILY, ALL_DAYS } from '@/lib/constants';
 import { HttpError } from '@/lib/errors';
 import { tdb } from '@/lib/sqldb';
 import { currentOrg, currentBranch } from '@/lib/tenant';
+import { buildEtutYoklamaMap, type EtutYoklamaDurum } from './attendance-status';
 import { getWeekReservations, resolveEffective } from './reservations';
 import { levelPoolForStudent } from './level-pool';
 import type { EtutSablon, EtutReservation } from '@prisma/client';
@@ -178,4 +179,23 @@ export async function listEtutlerForWeek(weekKey: string): Promise<EtutAllRow[]>
     getWeekReservations(tdb(orgSlug, branch), orgSlug, branch, weekKey),
   ]);
   return buildEtutAllList(sablonRows, teachers, resolveEffective(allReservations, weekKey), weekKey);
+}
+
+// Toplu görünüm yoklama rozeti (müdür/rehber): atanmış satırlara o haftanın etüt
+// yoklama durumunu iliştirir. Kayıt anahtarı date+lessonNo ('e'+legacyId) — eşleme
+// mantığı SAF modülde (attendance-status.ts). "Geçmiş slot mu" kararı İSTEMCİDE
+// (isSlotPast); sunucu tüm atanmış satırlar için durum döner.
+export async function attachEtutYoklama<T extends { id: string; dayIndex: number; studentId?: string | null }>(
+  rows: T[],
+  weekKey: string,
+): Promise<(T & { yoklama?: EtutYoklamaDurum })[]> {
+  const assigned = rows.filter((r) => r.studentId);
+  if (assigned.length === 0) return rows;
+  const dates = Array.from({ length: 7 }, (_, i) => dateStrForWeekDay(weekKey, i));
+  const recs = await tdb().attendance.findMany({
+    where: { date: { in: dates }, lessonNo: { in: assigned.map((r) => `e${r.id}`) } },
+    select: { date: true, lessonNo: true, records: true },
+  });
+  const map = buildEtutYoklamaMap(assigned, recs, (i) => dates[i]);
+  return rows.map((r) => (map[r.id] ? { ...r, yoklama: map[r.id] } : r));
 }

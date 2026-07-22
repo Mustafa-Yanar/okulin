@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Clock, Users, GraduationCap, Calendar } from 'lucide-react';
 import { getWeekKey } from '@/lib/constants';
-import { api, getAdjacentWeek, WeekNav } from '../shared';
+import { api, getAdjacentWeek, isSlotPast, WeekNav } from '../shared';
 import { classShortUpper } from '@/lib/classCatalog';
 import { useClasses } from '../ClassesContext';
 import LoadingBox from '../Loading';
@@ -32,7 +32,7 @@ export default function EtutOverviewTab({ showToast }: EtutOverviewTabProps) {
   const load = useCallback(async (wk: string) => {
     setRows(null);
     try {
-      const d = await api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${wk}`);
+      const d = await api<{ etutler?: EtutAllDTO[] }>(`/api/etut-sablon/all?week=${wk}&att=1`);
       setRows(d.etutler || []);
     } catch (err) {
       showToast((err as Error).message, 'error');
@@ -87,6 +87,25 @@ export default function EtutOverviewTab({ showToast }: EtutOverviewTabProps) {
     </button>
   );
 
+  // Geçmiş slot + atanmış öğrenci → yoklama rozeti ('alinmadi' uyarı, alınmışsa sonuç).
+  // Gelecek/boş slotta rozet yok — henüz alınmamış olması doğal.
+  const YOKLAMA_BADGE: Record<string, { label: string; color: string }> = {
+    var: { label: 'Yoklama: Var', color: '#10b981' },
+    gec: { label: 'Yoklama: Geç', color: '#f59e0b' },
+    yok: { label: 'Yoklama: Yok', color: '#ef4444' },
+    alinmadi: { label: 'Yoklama alınmadı', color: '#f59e0b' },
+  };
+  const yoklamaBadge = (e: EtutAllDTO) => {
+    if (!e.studentId || !isSlotPast(weekKey, e.dayIndex, `${e.start}–${e.end}`)) return null;
+    const b = YOKLAMA_BADGE[e.yoklama || 'alinmadi'];
+    return (
+      <span className="text-[10px] px-2 py-0.5 rounded-full shrink-0"
+        style={{ fontWeight: 600, background: `color-mix(in srgb, ${b.color} 15%, transparent)`, color: b.color }}>
+        {b.label}
+      </span>
+    );
+  };
+
   // Tek etüt satırı — iki görünümde de aynı gövde, sol etiket değişir (gün+saat sabit).
   const rowLine = (e: EtutAllDTO, showTeacher: boolean) => (
     <div key={`${e.id}:${e.studentId || 'bos'}`} className="time-block time-etut rounded-xl overflow-hidden">
@@ -102,7 +121,10 @@ export default function EtutOverviewTab({ showToast }: EtutOverviewTabProps) {
                 {e.studentName}{e.studentCls ? ` · ${classShortUpper(classes, e.studentCls)}` : ''}
               </span>
             )}
-            {e.scope === 'RECURRING' && <span className="badge badge-info shrink-0 ml-auto">Her hafta</span>}
+            <span className="ml-auto flex items-center gap-1.5 shrink-0">
+              {yoklamaBadge(e)}
+              {e.scope === 'RECURRING' && <span className="badge badge-info shrink-0">Her hafta</span>}
+            </span>
           </>
         ) : (
           <span className="text-sm text-gray-400">Boş</span>

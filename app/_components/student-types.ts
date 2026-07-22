@@ -44,6 +44,7 @@ export interface EtutAllDTO {
   branch?: string;
   bookedBy?: string;
   scope?: 'WEEK' | 'RECURRING' | null;
+  yoklama?: 'var' | 'gec' | 'yok' | 'alinmadi'; // yalnız ?att=1 (müdür/rehber toplu görünüm)
 }
 
 // Rezervasyon/iptal argümanları (AvailableTree onBook / BookingsView onCancel).

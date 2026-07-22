@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withAuth, canReadStudent } from '@/lib/auth';
-import { listEtutlerForWeek } from '@/lib/etut/rezervasyon';
+import { listEtutlerForWeek, attachEtutYoklama } from '@/lib/etut/rezervasyon';
 import { allowedBookingWeeks, isValidWeekKey, type BookingRole } from '@/lib/etut/weeks';
 import { getWeekKey } from '@/lib/constants';
 
@@ -36,5 +36,11 @@ export const GET = withAuth('auth', 'etut', async (req, _ctx, session) => {
   // Additive: opsiyonel studentId — tek öğrenciye daraltır (örn. StudentEtutTab).
   const studentId = searchParams.get('studentId');
   const scoped = studentId ? etutler.filter(e => e.studentId === studentId) : etutler;
+
+  // Additive: ?att=1 (yalnız müdür/rehber) — atanmış satırlara etüt yoklama durumu
+  // iliştirir (toplu görünüm rozeti). Diğer tüketiciler için maliyet eklemez.
+  if (searchParams.get('att') === '1' && (session.role === 'director' || session.role === 'counselor')) {
+    return NextResponse.json({ weekKey, etutler: await attachEtutYoklama(scoped, weekKey), bookableWeeks });
+  }
   return NextResponse.json({ weekKey, etutler: scoped, bookableWeeks });
 });
