@@ -163,7 +163,13 @@ test('yoklama: öğretmen girer → müdür özetinde görür', async ({ browser
 
     // Sınıf kartı "N yok" rozetiyle görünmeli → tıkla
     await expect(dir.getByText(/\d+ yok/).first()).toBeVisible({ timeout: 8000 });
-    await dir.getByRole('button', { name: new RegExp(TEST_CLS.toUpperCase()) }).first().click();
+    // TEST_CLS dinamik keşfedilir (sınıf legacyId'si) — UI onu kendi biçimiyle basar
+    // ('m8' vs 'M8'). toUpperCase() ile ARAMAK yanlıştı: eşleşmeyince click sonsuz bekleyip
+    // testi 150sn timeout'a düşürüyordu. Case-insensitive + reEscape (id özel karakter
+    // içerebilir: 's_'+UUID) + açık görünürlük beklemesi → eşleşmezse HIZLI ve okunur düşer.
+    const clsBtn = dir.getByRole('button', { name: new RegExp(reEscape(TEST_CLS), 'i') }).first();
+    await expect(clsBtn).toBeVisible({ timeout: 8000 });
+    await clsBtn.click();
     await dir.waitForTimeout(1000);
     await dir.screenshot({ path: 'e2e/shots/yoklama-05-mudur-modal.png', fullPage: true });
     // Modalda test öğrencisi "Yok" listesinde
