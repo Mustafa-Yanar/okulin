@@ -33,6 +33,39 @@ Mustafa onayıyla uygulanan dalgalar (hepsi tsc+build+test yeşiliyle ayrı comm
 KALAN (haritadan): B6 lib/userIndex.ts ölü dosya + B7 Redis fosilleri (dump→sil) + B9 dersBranch
 boş-string kuralı + B11 SlotBooking retention + damar 2 (raw SQL tenant) + damar 3 (finansal
 invariant) — sonraki dalgalar.
+
+### EK-2 (2026-07-22 akşam): B9 + B11 KAPANDI — haritanın son iki maddesi
+
+**B9 (0567879) — "3 kayıtlık veri notu" sandığımız madde CANLI BİR BUG çıktı.** Fosil satırlar
+(`bookedById:"migration"`) gerçekten zararsız; ama "müdür bunları nasıl üretti" izi sürülünce
+asıl kusur göründü: `AssignSchema`'da `branch` alanı YOKTU ve müdür/rehber atama modalinde ders
+seçici de yoktu. `autoPickBranch` yalnız tek-aday durumunu kurtardığından, branşları öğrencinin
+düzey havuzuyla 2+ derste kesişen HER öğretmende atama tamamen bloklanıyordu — hata mesajı da
+("Uygun bir ders seçin") var olmayan bir kontrolü işaret ediyordu. Ölçek canlı veriden: 29
+öğretmenin 10'u çok-branşlı (akyazicozum'da 5). Canlı testkurs'ta uçtan uca yeniden üretildi.
+Düzeltme finans işindeki desenin aynısı: kural istemciye KOPYALANMADI, saf çekirdek
+`lib/etut/level-pool-core.ts`'e çıkarıldı (`etutBranchCandidates`) — istemci adayları, sunucu
+(kural 8) doğrulamayı aynı kaynaktan alıyor. Adayı olmayan öğrenci listede hiç görünmüyor;
+tek adayda eski tek-tık davranışı korundu. Deploy sonrası doğrulandı (branch'siz → 400,
+branch'li → 200 + doğru ders). Fosil 3 satır backfill EDİLMEDİ.
+
+**B11 (2ff5f7f) — retention + yanında bir ön-varolan yazma açığı.** `weekKey: { lt:
+retentionCutoffWeekKey(61) }` (61 hafta ≈ 14 ay, sınır dahil). Cron'un `cutoff(days)` deseni
+kullanılamadı: zaman boyutu Date değil `weekKey` string'i → `lib/etut/weeks.ts`'e
+`retentionCutoffWeekKey` eklendi (shiftWeekKey üzerinden ISO-doğru; sıfır-dolgulu anahtarda
+string `lt` kronolojik). **Codex+Gemini bağımsız denetimi** çekirdeği temiz buldu, Codex bir
+ön-varolan açık yakaladı: `POST /api/admin/week` 'advance' dalında weekKey yalnız `max(40)` ile
+doğrulanıyordu → `'abc'` girdisi `NaN-WNaN` üretip HER öğretmene o anahtarla satır yazıyor ve
+current_week'i bozuyordu (node probe ile kanıtlandı). `isValidWeekKey` şema doğrulaması +
+advanceWeek'in ÜRETTİĞİ anahtarın doğrulanması eklendi (`'9999-W53'`+1 → `'10000-W02'`,
+5 haneli yıl string sıralamasını bozar). Kodda iki uyarı bırakıldı: (1) Attendance'ın retention'ı
+yok → 14 aydan eski devamsızlıkta slotLabel/branch boş döner (çökme yok, kabul edilen ödün);
+(2) desen EtutReservation'a taşınamaz — RECURRING satırları `weekKey='*'` taşır, `'*' < '2'`
+olduğundan naif `lt` tüm tekrarlayan rezervasyonları silerdi. Testler 429→438.
+
+Haritadaki B1-B12'nin tamamı kapandı. Kalan işler artık haritada değil, yol haritasında:
+Float→Decimal göçü, SlotCell/ProgramEntry ölü rezervasyon alanları (şema-temizlik dalgası),
+iki kozmetik UI ucu (Program>Liste boş görünüm, TeacherEtutPanel slot-seviye isSlotPast).
 > Yöntem: canlı DB reconcile diff (salt-okunur, 2 org) + Redis tam envanter (140 anahtar) +
 > 2 bağımsız Explore ajanı (yazıcı/okuyucu envanteri) + kritik iddiaların elle spot-check'i.
 > Konsey çerçevesi: bu bir bug listesi değil, OTORİTE + YAZICI + OKUYUCU + eski/yeni yol haritası.
