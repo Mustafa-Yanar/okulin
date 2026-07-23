@@ -1,7 +1,7 @@
 'use client';
 import LoadingBox from '../Loading';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BookOpen, Check } from 'lucide-react';
 import { api } from '../shared';
 
@@ -30,7 +30,7 @@ export default function StudentGuidanceView({ studentId, onReviewed, readOnly, b
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const d = await api<{ weeks?: GuidanceWeek[] }>(`/api/guidance?listAll=1&studentId=${studentId}`);
       setWeeks(d.weeks || []);
@@ -38,11 +38,11 @@ export default function StudentGuidanceView({ studentId, onReviewed, readOnly, b
       setWeeks([]);
     }
     setLoading(false);
-  }
+  }, [studentId]);
 
   useEffect(() => {
     load();
-  }, [studentId]);
+  }, [load]);
 
   async function approve(weekKey: string) {
     setApproving(weekKey);

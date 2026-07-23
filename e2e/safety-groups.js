@@ -14,6 +14,7 @@ const LOCAL_SAFE = [
   'ui-etut-overview.spec.js',
   'ui-etut.spec.js',
   'ui-odev.spec.js',
+  'ui-role-chunks.spec.js',
   'ui-yoklama.spec.js',
 ];
 

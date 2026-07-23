@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Plus, Trash2, ChevronLeft, KeyRound, Upload, BarChart3, GitMerge, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import AnswerKeyForm from './AnswerKeyForm';
@@ -204,7 +204,7 @@ function ExamDetail({ examId, showToast, onBack }: ExamDetailProps) {
   const [step, setStep] = useState('cevap'); // 'cevap' | 'veri' | 'sonuc'
   const [rows, setRows] = useState<ExamRowDTO[]>([]);
 
-  async function load() {
+  const load = useCallback(async () => {
     const res = await fetch(`/api/deneme/exams/${examId}`, { credentials: 'same-origin' });
     if (res.ok) {
       const d = (await res.json()) as { exam?: DenemeExam };
@@ -212,8 +212,8 @@ function ExamDetail({ examId, showToast, onBack }: ExamDetailProps) {
       // store her satıra id yazar; DenemeRow sözleşmesi id'yi index imzasında taşır.
       setRows((d.exam?.rows || []) as ExamRowDTO[]);
     }
-  }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [examId]);
+  }, [examId]);
+  useEffect(() => { load(); }, [load]);
 
   if (!exam) return <div className="card p-10 text-center text-gray-400">Yükleniyor…</div>;
 

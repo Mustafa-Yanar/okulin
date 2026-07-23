@@ -23,7 +23,7 @@ olduğunu sürekli sınayan bir düzene taşıma çalışmasının ilk kontrol n
 - Merkezi `withAuth` ve mobil yetki katmanlarının dışında kalan 20 bilinçli/açık API kapısı
 - Doğrudan Prisma kullanan 9 özel route
 - Standart `parseBody` doğrulamasından farklı çalışan 15 mutasyon kapısı
-- 106 mevcut Playwright E2E senaryosu
+- 22 spec dosyasında 114 Playwright E2E senaryosu
 
 Bu sayılar mimari sözleşme testine bağlandı. Yeni route, özel yetki kapısı, doğrudan Prisma
 erişimi veya standart dışı gövde işleme eklendiğinde test bilinçli allowlist güncellemesi ister.
@@ -39,11 +39,12 @@ erişimi veya standart dışı gövde işleme eklendiğinde test bilinçli allow
 | Mobil testler | 45 / 45 geçti |
 | Yerel PostgreSQL entegrasyon testleri | 15 / 15 geçti |
 | Üretim derlemesi | Geçti |
-| ESLint | 0 hata, 37 uyarı |
+| ESLint | 0 hata, 0 uyarı |
 | Yerel tarayıcı rol testi | 8 / 8 rol geçti |
 | Rol erişim matrisi | 34 / 34 karar geçti |
-| Güvenli yerel Playwright E2E paketi | 100 / 100 geçti |
+| Güvenli yerel Playwright E2E paketi | 108 / 108 geçti |
 | CP-SAT yerel çözücü senaryoları | 13 senaryoda kural ihlali yok |
+| Canlı testkurs → Cloud Run çözücü proxy'si | 5 / 5 geçti |
 
 Yerel tarayıcı testinde müdür, müdür yardımcısı, rehber, muhasebe, kurum yöneticisi,
 öğretmen, öğrenci ve veli ayrı oturumlarda sınandı. Dış ağ isteği, HTTP 5xx veya tarayıcı
@@ -140,6 +141,21 @@ Bu şema değişikliği yalnız yerel `okulin_test` üzerinde uygulandı; ortak 
 ve Akyazı verisine dokunulmadı. Canlıya güvenli uygulama ve RLS önkoşulları ayrı
 [`tenant FK/RLS geçiş planında`](./2026-07-23-tenant-fk-rls-gecis-plani.md) belgelendi.
 
+### 10. React bağımlılık uyarıları ve bilinçsiz yeniden yükleme riski
+
+19 hook/memo uyarısı ekran ekran incelendi. Veri yükleme fonksiyonlarının eksik
+bağımlılıkları tamamlandı; varsayılan boş diziler kararlı `useMemo` değerlerine alındı.
+Kurum logoları, kullanıcı fotoğrafları, yerel object URL önizlemeleri ve yazdırma portallarında
+native resim kullanımının nedeni açıklandı; görünür fotoğraflara boyut ve lazy yükleme eklendi.
+ESLint artık 0 hata ve 0 uyarıyla geçiyor.
+
+### 11. Tüm rol panelleri ilk JavaScript paketinde birlikte taşınıyordu
+
+Müdür, rehber, muhasebeci, kurum yöneticisi, öğretmen, öğrenci ve veli panelleri rol seçildikten
+sonra yüklenen ayrı parçalara bölündü. Ana sayfanın üretim ilk yük JavaScript'i 516 kB'den
+111 kB'ye düştü (yaklaşık %78 azalma). Sekiz rolün her biri ayrı tarayıcı oturumunda kendi
+panel parçasını yükledi; chunk isteği, tarayıcı konsolu ve çalışma zamanı hatası görülmedi.
+
 ## Açık kalan yapısal riskler
 
 ### A. Composite kurum foreign key'leri canlıya henüz uygulanmadı
@@ -167,30 +183,23 @@ toparlanıyor. Ancak 10 dakikadan uzun kalan işlem veya terminal `error` kaydı
 uyaran periyodik tarama/panel henüz yok. Bu artık çift ödeme riski değil, olayın insan
 tarafından ne kadar çabuk fark edileceğiyle ilgili gözlemlenebilirlik eksiğidir.
 
-### D. Arayüz uyarıları
+### D. Bir altyapı mutasyon senaryosu çalıştırılmadı
 
-Kalan 37 lint uyarısının 19'u React hook/memo bağımlılığıdır; bayat veri veya gereksiz yeniden
-çalışma riski taşıyabilir. 18'i görsel optimizasyon/erişilebilirlik uyarısıdır. Körlemesine
-değiştirilmemeli; ilgili ekranın davranış testiyle birlikte ele alınmalıdır.
-
-### E. Ön yüz yükü
-
-Ana sayfanın ilk yük JavaScript'i üretim derlemesinde yaklaşık 516 kB'dir. İşlevsel hata
-değildir; düşük donanımlı telefonlarda açılış süresi için ölçüm ve parça yükleme çalışması ister.
-
-### F. E2E paketinin iki dış altyapı senaryosu yerel pakete dahil değil
-
-21 E2E spec dosyasının tamamı makine-denetimli güvenlik sınıfına ayrıldı. Bunların 19'u,
-yerel PostgreSQL ve bellekte çalışan yerel Redis taklidi üzerinde setup dahil 100/100 geçti.
+22 E2E spec dosyasının tamamı makine-denetimli güvenlik sınıfına ayrıldı. Bunların 20'si,
+yerel PostgreSQL ve bellekte çalışan yerel Redis taklidi üzerinde setup dahil 108/108 geçti.
 Paket; gerçek tarayıcı panel turu, duyuru/etüt/ödev/yoklama çapraz-rol akışları, SQL
 okuma-yazma, kurum kodu, mobil oturum yenileme/iptal, cihaz devri, rate-limit, IDOR, CSRF,
 para türleri ve ödeme callback zincirini kapsıyor.
 
-Kalan 2 dosyanın biri Cloud Run çözücüsünü, diğeri Vercel geçici alan adı işlemini istiyor.
-Bunlar dış sisteme temas ettikleri için varsayılan yerel pakete giremez. Vercel altyapı
-mutasyonu ayrıca `OKULIN_ALLOW_INFRA_E2E=YES` açık onayı olmadan canlı E2E'de de çalışmaz.
+Cloud Run dosyasındaki 5 senaryo, yalnız sentetik modelle testkurs'un canlı proxy'si üzerinden
+ayrıca geçti. Yerel `.env` içindeki solver secret Cloud Run ile güncel olmadığı için bu testin
+yerel proxy denemesi 403 verdi; Vercel production secret ile gerçek zincir 5/5 çalıştı.
 
-### G. Güncel bağımlılık açıkları taraması bekliyor
+Kalan tek dosya superadmin ile geçici kurum ve Vercel domain'i oluşturup sonra kalıcı siler.
+Bu, testkurs sınırını aşan altyapı mutasyonu olduğu için çalıştırılmadı ve
+`OKULIN_ALLOW_INFRA_E2E=YES` açık onayı olmadan zaten başlayamaz.
+
+### E. Güncel bağımlılık açıkları taraması bekliyor
 
 `npm audit`, bağımlılık envanterini npm hizmetine göndereceği için dışa aktarım onayı olmadan
 çalıştırılmadı. Bu kontrol için açık kullanıcı onayı gerekir.
@@ -203,8 +212,9 @@ mutasyonu ayrıca `OKULIN_ALLOW_INFRA_E2E=YES` açık onayı olmadan canlı E2E'
 3. Online ödeme için stale/error alarmı ve yönetici gözlem yüzeyi tasarla.
 4. Composite tenant foreign key canlı migration'ı ile RLS transaction/rol dönüşümünü ayrı
    çalışma olarak yürüt; Akyazı'yı etkileyen hiçbir adımı açık kapsam değişikliği olmadan uygulama.
-5. React hook uyarılarını ekran ekran davranış testiyle azalt.
-6. Yerel test paketleri yeşil olduktan sonra yalnız testkurs için preview/canlı smoke katmanı kur.
+5. Bağımlılık güvenlik taramasını npm'e envanter gönderme onayı verildikten sonra çalıştır.
+6. Geçici kurum/domain izolasyon testini ancak testkurs dışı altyapı mutasyonu için ayrıca açık
+   yetki verilirse çalıştır.
 
 ## Tekrarlanabilir komutlar
 
@@ -212,7 +222,8 @@ mutasyonu ayrıca `OKULIN_ALLOW_INFRA_E2E=YES` açık onayı olmadan canlı E2E'
 - `npm run test:db:push` — yalnız güvenlik kilitli `okulin_test` şemasını eşitler
 - `npm run test:db:seed` — yalnız yerel DB'yi iki sentetik kurumla sıfırlar
 - `npm run test:integration` — kurum izolasyonu, ilişkiler, finans ve callback yarış testleri
-- `npm run test:e2e:local` — seed + yerel PostgreSQL/Redis taklidi + sınıflandırılmış 100 E2E testi
+- `npm run test:e2e:local` — seed + yerel PostgreSQL/Redis taklidi + sınıflandırılmış 108 E2E testi
+- `OKULIN_ALLOW_EXTERNAL_E2E=YES ... --project=external-service` — sentetik Cloud Run proxy testi
 - `npm run lint` — kalite kapısı
 - `npm run build` — üretim derlemesi
 

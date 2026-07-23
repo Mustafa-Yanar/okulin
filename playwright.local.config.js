@@ -8,6 +8,10 @@ process.env.OKULIN_APEX_BASE_URL = 'http://localhost:43128';
 process.env.OKULIN_FAKE_REDIS_URL = 'http://127.0.0.1:43129';
 process.env.OKULIN_DIR_USER = 'testkurs_mudur';
 process.env.OKULIN_DIR_PASS = 'Test1234!';
+process.env.OKULIN_AST_USER = 'testkurs_mudury';
+process.env.OKULIN_COU_USER = 'testkurs_rehber';
+process.env.OKULIN_ACC_USER = 'testkurs_muhasebe';
+process.env.OKULIN_HQ_USER = 'testkurs_hq';
 process.env.OKULIN_TEA_USER = 'testkurs_ogretmen';
 process.env.OKULIN_TEA_PASS = 'Test1234!';
 process.env.OKULIN_STU_USER = 'testkurs_ogrenci';
@@ -19,7 +23,8 @@ process.env.OKULIN_RELATION_FIXTURE = 'YES';
 
 const { defineConfig } = require('@playwright/test');
 const base = require('./playwright.config.js');
-const { LOCAL_SAFE, REDIS_REQUIRED } = require('./e2e/safety-groups.js');
+const { LOCAL_SAFE, REDIS_REQUIRED, EXTERNAL_SERVICE } = require('./e2e/safety-groups.js');
+const allowExternalService = process.env.OKULIN_ALLOW_EXTERNAL_E2E === 'YES';
 
 module.exports = defineConfig({
   ...base,
@@ -45,5 +50,10 @@ module.exports = defineConfig({
       testMatch: [...LOCAL_SAFE, ...REDIS_REQUIRED].map((name) => new RegExp(name.replaceAll('.', '\\.'))),
       dependencies: ['setup'],
     },
+    ...(allowExternalService ? [{
+      name: 'external-service',
+      testMatch: EXTERNAL_SERVICE.map((name) => new RegExp(name.replaceAll('.', '\\.'))),
+      dependencies: ['setup'],
+    }] : []),
   ],
 });

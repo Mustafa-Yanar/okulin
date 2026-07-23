@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- Yükleme önizlemesi blob/harici kullanıcı URL'sidir. */
 
 // Müdür paneli modal formları: öğretmen, öğrenci, Excel import, şifre sıfırlama.
 import React, { useState, useEffect, useMemo } from 'react';
@@ -115,7 +116,7 @@ export function TeacherForm({ initial, onClose, onSave }: TeacherFormProps) {
       <form onSubmit={submit} className="space-y-4">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center shrink-0">
-            {photoUrl ? <img src={photoUrl} alt="" className="w-full h-full object-cover" /> : <User size={28} className="text-gray-400" />}
+            {photoUrl ? <img src={photoUrl} alt="" width={64} height={64} className="w-full h-full object-cover" /> : <User size={28} className="text-gray-400" />}
           </div>
           <div>
             <label className="btn-ghost !px-3 !py-2 text-sm cursor-pointer inline-block">

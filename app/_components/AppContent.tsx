@@ -1,19 +1,14 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- Kurum logosu kullanıcı tanımlı/harici URL olabilir; native onError fallback'i gerekir. */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { LogOut, User, BookMarked, GraduationCap, Shield, Settings, Wallet, Users, Compass, Menu } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import StudentPanel from './StudentPanel';
-import TeacherPanel from './TeacherPanel';
-import AccountantPanel from './AccountantPanel';
-import ParentPanel from './ParentPanel';
-import OrgAdminPanel from './OrgAdminPanel';
-import DirectorPanel, { DirectorSettingsInline } from './DirectorPanel';
 import ChangePasswordModal from './ChangePasswordModal';
 import ForcedPasswordChange from './ForcedPasswordChange';
 import Sidebar from './Sidebar';
 import BackgroundScene from './BackgroundScene';
-import Landing from './Landing';
 import PullToRefreshIndicator from './PullToRefreshIndicator';
 import { usePullToRefresh } from './usePullToRefresh';
 import { isPushSupported, subscribeToPush } from '@/lib/push-client';
@@ -25,6 +20,24 @@ import { Toast } from './ui-components';
 import { api } from './client-api';
 import type { Session } from '@/lib/auth';
 import type { WhoamiResponse } from './types';
+
+function PanelLoading() {
+  return <div className="min-h-[12rem] flex items-center justify-center text-sm text-gray-400">Yükleniyor...</div>;
+}
+
+// Roller birbirini dışlar. Her kullanıcının yalnız kendi panel kodunu indirmesi,
+// ana pakette müdür+öğretmen+öğrenci+veli+muhasebe ekranlarının birlikte taşınmasını önler.
+const Landing = dynamic(() => import('./Landing'), { loading: PanelLoading });
+const OrgAdminPanel = dynamic(() => import('./OrgAdminPanel'), { loading: PanelLoading });
+const DirectorPanel = dynamic(() => import('./DirectorPanel'), { loading: PanelLoading });
+const DirectorSettingsInline = dynamic(
+  () => import('./DirectorPanel').then((module) => module.DirectorSettingsInline),
+  { loading: PanelLoading },
+);
+const AccountantPanel = dynamic(() => import('./AccountantPanel'), { loading: PanelLoading });
+const TeacherPanel = dynamic(() => import('./TeacherPanel'), { loading: PanelLoading });
+const StudentPanel = dynamic(() => import('./StudentPanel'), { loading: PanelLoading });
+const ParentPanel = dynamic(() => import('./ParentPanel'), { loading: PanelLoading });
 
 const SIDEBAR_ROLES = ['director', 'counselor', 'accountant', 'teacher', 'student', 'parent'];
 const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || 'okulin.com';
@@ -232,7 +245,7 @@ export default function AppContent() {
               {branding.name}
             </span>
             {branding.logoUrl ? (
-              <img src={branding.logoUrl} alt={branding.name}
+              <img src={branding.logoUrl} alt={branding.name} width={128} height={32} fetchPriority="high"
                 className="md:hidden h-8 w-auto object-contain"
                 onError={e => { e.currentTarget.style.display = 'none'; }} />
             ) : (

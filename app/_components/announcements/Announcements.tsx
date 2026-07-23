@@ -116,7 +116,7 @@ function Composer({ showToast, onSent }: ComposerProps) {
 
   // Öğretmen 'selected'/'branch' için liste — yalnız role==='teacher' iken çek (koşullu SWR anahtarı).
   const { data: teachersData } = useSWR<TeacherDTO[]>(role === 'teacher' ? '/api/teachers' : null);
-  const teachers = Array.isArray(teachersData) ? teachersData : [];
+  const teachers = useMemo(() => (Array.isArray(teachersData) ? teachersData : []), [teachersData]);
 
   // Branş seçici — kurumdaki öğretmenlerin fiilen sahip olduğu branşların birleşimi (sıra korunur).
   const availableBranches = useMemo(() => {

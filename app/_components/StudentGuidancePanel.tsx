@@ -37,7 +37,7 @@ export default function StudentGuidancePanel({ session, showToast }: StudentGuid
       } catch (e) { showToast((e as Error).message, 'error'); }
       setLoading(false);
     })();
-  }, []);
+  }, [showToast]);
 
   function setVal(subject: string, field: 'correct' | 'wrong' | 'empty', value: string) {
     const v = value === '' ? '' : Math.max(0, parseInt(value) || 0);
