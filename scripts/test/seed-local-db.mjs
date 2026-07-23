@@ -26,7 +26,11 @@ async function seedTenant({ slug, label, suffix }) {
   const weekKey = isoWeekKey();
 
   await prisma.org.create({
-    data: { slug, name: `${label} Yapay Kurum`, active: true, code: `9000${suffix}`, kademeler: ['ortaokul', 'lise', 'mezun'] },
+    data: {
+      slug, name: `${label} Yapay Kurum`, active: true,
+      code: slug === 'testkurs' ? 'ABC234' : 'DEF567',
+      kademeler: ['ortaokul', 'lise', 'mezun'],
+    },
   });
   await prisma.branch.create({
     data: { id: `branch_${slug}`, orgSlug: slug, slug: 'main', name: 'Ana Şube', active: true },
@@ -123,13 +127,24 @@ async function seedTenant({ slug, label, suffix }) {
   await prisma.etutSablon.create({
     data: {
       id: `etut_${slug}_1`, orgSlug: slug, branch: 'main', legacyId: `etut_${suffix}_1`,
-      teacherId: teacher.legacyId, dayIndex: 2, start: '16:00', end: '16:40', aktif: true,
+      teacherId: teacher.legacyId, dayIndex: 6, start: '16:00', end: '16:40', aktif: true,
     },
   });
   await prisma.attendance.create({
     data: {
       id: `attendance_${slug}_1`, orgSlug: slug, branch: 'main', date: '2026-07-20',
       teacherId: teacher.id, cls: class701.legacyId, lessonNo: '1', records: { [student.legacyId]: 'var' },
+    },
+  });
+  await prisma.odev.create({
+    data: {
+      id: `odev_${slug}_1`, orgSlug: slug, branch: 'main', legacyId: `odev_${suffix}_1`,
+      data: {
+        id: `odev_${suffix}_1`, title: `${label} Sentetik Ödev`, desc: 'Yerel E2E teslim döngüsü',
+        branch: 'Matematik', dueDate: '2027-12-31', classes: [class701.legacyId],
+        createdBy: teacher.legacyId, createdByName: teacher.name, createdByRole: 'teacher',
+        createdAt: new Date().toISOString(), submissions: {},
+      },
     },
   });
 

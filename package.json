@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:local": "node scripts/test/run-with-test-db.mjs npx playwright test --config playwright.local.config.js",
     "test:db:push": "node scripts/test/run-with-test-db.mjs npx prisma db push --skip-generate",
     "test:db:seed": "node scripts/test/run-with-test-db.mjs node scripts/test/seed-local-db.mjs",
     "test:integration": "node scripts/test/run-with-test-db.mjs npx vitest run --config vitest.integration.config.ts",

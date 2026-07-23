@@ -63,13 +63,14 @@ test('ödev: öğretmen verir → öğrenci teslim → öğretmen kontrol', asyn
     await stu.waitForLoadState('networkidle').catch(() => {});
     await stu.getByRole('button', { name: 'Ödevlerim' }).click();
     await stu.waitForTimeout(1200);
-    await expect(stu.getByText(title).first()).toBeVisible({ timeout: 10000 });
-    await stu.getByRole('button', { name: /Teslim Ettim/ }).click();
+    const stuCard = stu.getByText(title).first().locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " rounded-xl ")][1]');
+    await expect(stuCard).toBeVisible({ timeout: 10000 });
+    await stuCard.getByRole('button', { name: /Teslim Ettim/ }).click();
     await stu.waitForTimeout(500);
-    await stu.getByPlaceholder(/Not/).fill('Tamamladım.');
-    await stu.getByRole('button', { name: /^Teslim Et$/ }).click();
+    await stuCard.getByPlaceholder(/Not/).fill('Tamamladım.');
+    await stuCard.getByRole('button', { name: /^Teslim Et$/ }).click();
     await stu.waitForTimeout(1500);
-    await expect(stu.getByText(/Teslim edildi/).first()).toBeVisible({ timeout: 8000 });
+    await expect(stuCard.getByText(/Teslim edildi/)).toBeVisible({ timeout: 8000 });
     await stu.screenshot({ path: 'e2e/shots/odev-03-ogrenci-teslim.png', fullPage: true });
 
     // ---- 3) ÖĞRETMEN: teslimi kontrol eder ----
@@ -93,8 +94,9 @@ test('ödev: öğretmen verir → öğrenci teslim → öğretmen kontrol', asyn
     await stu.getByRole('button', { name: 'Ödevlerim' }).click();
     await stu.waitForTimeout(1500);
     await stu.screenshot({ path: 'e2e/shots/odev-06-ogrenci-puan.png', fullPage: true });
-    await expect(stu.getByText(/Kontrol edildi/).first()).toBeVisible({ timeout: 8000 });
-    await expect(stu.getByText(/Puan: 100/).first()).toBeVisible({ timeout: 8000 });
+    const checkedCard = stu.getByText(title).first().locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " rounded-xl ")][1]');
+    await expect(checkedCard.getByText(/Kontrol edildi/)).toBeVisible({ timeout: 8000 });
+    await expect(checkedCard.getByText(/Puan: 100/)).toBeVisible({ timeout: 8000 });
   } finally {
     // Veri temizliği afterAll'da — burada yalnız context'ler kapatılır
     await teaCtx.close();

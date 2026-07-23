@@ -16,7 +16,7 @@ const fs = require('fs');
 const { BASE, DIR_STATE } = require('./helpers');
 
 const baseHost = new URL(BASE).hostname;                          // testkurs.okulin.com
-const APEX = `https://${baseHost.split('.').slice(1).join('.')}`; // https://okulin.com
+const APEX = process.env.OKULIN_APEX_BASE_URL || `https://${baseHost.split('.').slice(1).join('.')}`; // local: digerkurs.localhost
 const DIR_USER = process.env.OKULIN_DIR_USER || 'testkurs_mudur';
 const DIR_PASS = process.env.OKULIN_DIR_PASS;
 const TEA_USER = process.env.OKULIN_TEA_USER;

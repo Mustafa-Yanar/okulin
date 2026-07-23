@@ -10,12 +10,12 @@ const { BASE, TEA_STATE, whoami } = require('./helpers');
 test.describe('Director okuma testleri', () => {
   test.use({ storageState: 'e2e/.auth/director.json' });
 
-  test('teachers: en az 10 öğretmen gelir', async ({ request }) => {
+  test('teachers: en az 1 geçerli öğretmen gelir', async ({ request }) => {
     const res = await request.get(`${BASE}/api/teachers`);
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body)).toBe(true);
-    expect(body.length).toBeGreaterThanOrEqual(10);
+    expect(body.length).toBeGreaterThanOrEqual(1);
     expect(body[0]).toHaveProperty('id');
     expect(body[0]).toHaveProperty('name');
     expect(body[0]).toHaveProperty('branches');
@@ -55,7 +55,7 @@ test.describe('Director okuma testleri', () => {
     const res = await request.get(`${BASE}/api/stats`);
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.teacherCount).toBeGreaterThanOrEqual(10);
+    expect(body.teacherCount).toBeGreaterThanOrEqual(1);
     expect(body.studentCount).toBeGreaterThanOrEqual(1);
   });
 

@@ -10,8 +10,9 @@ olduğunu sürekli sınayan bir düzene taşıma çalışmasının ilk kontrol n
 - `akyazicozum.okulin.com` gerçek kurumdur. Bu denetimde bu alan adına hiçbir HTTP isteği
   gönderilmedi; veritabanı ve Redis verisi okunmadı veya değiştirilmedi.
 - Dinamik testler yalnız bilgisayardaki `okulin_test` PostgreSQL veritabanında çalıştı.
-- Yerel test sarmalayıcısı veritabanı adını `okulin_test*` ile sınırlar ve Redis'i erişilemeyen
-  yerel bir adrese sabitler. Böylece `.env` içindeki canlı bağlantılara sessizce düşemez.
+- Yerel test sarmalayıcısı veritabanı adını `okulin_test*` ile sınırlar ve Redis isteklerini
+  yalnız bellekte çalışan yerel taklide sabitler. Böylece `.env` içindeki canlı bağlantılara
+  sessizce düşemez.
 - Playwright hedefi açıkça verilmezse test başlamaz. Akyazı hedefi verilse bile kesin olarak
   reddedilir. Canlı `testkurs` hedefi ayrıca açık onay değişkeni ister.
 
@@ -33,7 +34,7 @@ erişimi veya standart dışı gövde işleme eklendiğinde test bilinçli allow
 |---|---:|
 | Prisma şema doğrulaması | Geçti |
 | TypeScript strict kontrolü | Geçti |
-| Ana uygulama birim/sözleşme testleri | 455 / 455 geçti |
+| Ana uygulama birim/sözleşme testleri | 457 / 457 geçti |
 | Mobil tip kontrolü | Geçti |
 | Mobil testler | 45 / 45 geçti |
 | Yerel PostgreSQL entegrasyon testleri | 10 / 10 geçti |
@@ -41,6 +42,7 @@ erişimi veya standart dışı gövde işleme eklendiğinde test bilinçli allow
 | ESLint | 0 hata, 37 uyarı |
 | Yerel tarayıcı rol testi | 8 / 8 rol geçti |
 | Rol erişim matrisi | 34 / 34 karar geçti |
+| Güvenli yerel Playwright E2E paketi | 95 / 95 geçti |
 | CP-SAT yerel çözücü senaryoları | 13 senaryoda kural ihlali yok |
 
 Yerel tarayıcı testinde müdür, müdür yardımcısı, rehber, muhasebe, kurum yöneticisi,
@@ -134,12 +136,17 @@ değiştirilmemeli; ilgili ekranın davranış testiyle birlikte ele alınmalıd
 Ana sayfanın ilk yük JavaScript'i üretim derlemesinde yaklaşık 516 kB'dir. İşlevsel hata
 değildir; düşük donanımlı telefonlarda açılış süresi için ölçüm ve parça yükleme çalışması ister.
 
-### G. Mevcut E2E paketinin tamamı yerelde henüz çalışmıyor
+### G. E2E paketinin iki dış altyapı senaryosu yerel pakete dahil değil
 
-101 senaryonun bir bölümü canlı testkurs varsayımlarına, daha zengin fikstüre, Cloud Run
-çözücüsüne veya Vercel alan adı işlemlerine dayanıyor. Güvenlik kilitleri eklendi; fakat tüm
-paketi körlemesine çalıştırmak doğru değildir. Senaryolar yerel/izole/harici-servis olarak
-sınıflandırılıp sentetik seed genişletilmelidir.
+20 E2E spec dosyasının tamamı makine-denetimli güvenlik sınıfına ayrıldı. Bunların 18'i,
+yerel PostgreSQL ve bellekte çalışan yerel Redis taklidi üzerinde setup dahil 95/95 geçti.
+Paket; gerçek tarayıcı panel turu, duyuru/etüt/ödev/yoklama çapraz-rol akışları, SQL
+okuma-yazma, kurum kodu, mobil oturum yenileme/iptal, cihaz devri, rate-limit, IDOR, CSRF,
+para türleri ve ödeme callback zincirini kapsıyor.
+
+Kalan 2 dosyanın biri Cloud Run çözücüsünü, diğeri Vercel geçici alan adı işlemini istiyor.
+Bunlar dış sisteme temas ettikleri için varsayılan yerel pakete giremez. Vercel altyapı
+mutasyonu ayrıca `OKULIN_ALLOW_INFRA_E2E=YES` açık onayı olmadan canlı E2E'de de çalışmaz.
 
 ### H. Güncel bağımlılık açıkları taraması bekliyor
 
@@ -148,17 +155,15 @@ sınıflandırılıp sentetik seed genişletilmelidir.
 
 ## Sonraki güvenli sıra
 
-1. Mevcut 101 E2E senaryosunu “tam yerel”, “harici servis taklitli”, “yalnız testkurs canlı”
-   olarak sınıflandır; ilk iki grubu CI'a taşı.
-2. Öğrenci/veli/öğretmen IDOR ve rol bazlı tüm mutasyonlar için negatif test matrisi kur.
-3. Etüt, yoklama, program, ödev, duyuru, rehberlik ve finans için oluştur→oku→güncelle→sil
+1. Öğrenci/veli/öğretmen IDOR ve rol bazlı tüm mutasyonlar için negatif test matrisi kur.
+2. Etüt, yoklama, program, ödev, duyuru, rehberlik ve finans için oluştur→oku→güncelle→sil
    iş akışlarını zengin sentetik seed üzerinde tamamla.
-4. Backup→boş DB restore→checksum ve fault-injection testini kur.
-5. `processing` ödeme kurtarma ve callback gözlemlenebilirliğini ekle.
-6. Composite tenant foreign key/RLS tasarımını ayrı migration planı yap; Akyazı'yı etkileyen
+3. Backup→boş DB restore→checksum ve fault-injection testini kur.
+4. `processing` ödeme kurtarma ve callback gözlemlenebilirliğini ekle.
+5. Composite tenant foreign key/RLS tasarımını ayrı migration planı yap; Akyazı'yı etkileyen
    hiçbir adımı açık kapsam değişikliği olmadan uygulama.
-7. React hook uyarılarını ekran ekran davranış testiyle azalt.
-8. Yerel test paketleri yeşil olduktan sonra yalnız testkurs için preview/canlı smoke katmanı kur.
+6. React hook uyarılarını ekran ekran davranış testiyle azalt.
+7. Yerel test paketleri yeşil olduktan sonra yalnız testkurs için preview/canlı smoke katmanı kur.
 
 ## Tekrarlanabilir komutlar
 
@@ -166,6 +171,7 @@ sınıflandırılıp sentetik seed genişletilmelidir.
 - `npm run test:db:push` — yalnız güvenlik kilitli `okulin_test` şemasını eşitler
 - `npm run test:db:seed` — yalnız yerel DB'yi iki sentetik kurumla sıfırlar
 - `npm run test:integration` — kurum izolasyonu, ilişkiler, finans ve callback yarış testleri
+- `npm run test:e2e:local` — seed + yerel PostgreSQL/Redis taklidi + sınıflandırılmış 95 E2E testi
 - `npm run lint` — kalite kapısı
 - `npm run build` — üretim derlemesi
 

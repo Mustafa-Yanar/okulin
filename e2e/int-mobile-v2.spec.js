@@ -17,6 +17,22 @@ let webStu; // cookie'li öğrenci (web etüt/şifre regresyonu)
 const tokens = {};
 const H = (t) => ({ Authorization: 'Bearer ' + t });
 
+async function findFutureBookableSlot() {
+  const first = await (await api.get(`${BASE}/api/mobile/v1/etut`, { headers: H(tokens.student) })).json();
+  const weeks = [...new Set(first.bookableWeeks || [])];
+  for (const weekKey of weeks) {
+    const list = weekKey === first.weekKey
+      ? first
+      : await (await api.get(`${BASE}/api/mobile/v1/etut?week=${weekKey}`, { headers: H(tokens.student) })).json();
+    const slot = (list.slots || []).find(
+      (s) => !s.booked && !s.mine && s.branches.length >= 1
+        && slotStartTime(weekKey, s.dayIndex, s.start).getTime() > Date.now(),
+    );
+    if (slot) return { weekKey, slot };
+  }
+  return null;
+}
+
 test.beforeAll(async () => {
   for (const [role, c] of Object.entries(CREDS)) {
     expect(c.user, `OKULIN_${role} creds .env.local'de olmalı`).toBeTruthy();
@@ -60,11 +76,9 @@ test('etüt: GET rol guard (öğretmen/yönetim 403)', async () => {
 });
 
 test('etüt: reserve → mine → cancel round-trip (uygun slot varsa)', async () => {
-  const wk = getWeekKey();
-  const list = await (await api.get(`${BASE}/api/mobile/v1/etut?week=${wk}`, { headers: H(tokens.student) })).json();
-  // Uygun: dolu değil + benim değil + en az 1 branş + GELECEKTE (geçmiş slot reddedilir)
-  const slot = (list.slots || []).find((s) => !s.booked && !s.mine && s.branches.length >= 1 && slotStartTime(wk, s.dayIndex, s.start).getTime() > Date.now());
-  test.skip(!slot, 'bu hafta rezerve edilebilir gelecek etüt yok — cihaz turu (Task 15) kapsar');
+  const candidate = await findFutureBookableSlot();
+  test.skip(!candidate, 'bu/gelecek hafta rezerve edilebilir etüt yok — cihaz turu (Task 15) kapsar');
+  const { weekKey: wk, slot } = candidate;
   const body = { teacherId: slot.teacherId, etutId: slot.etutId, branch: slot.branches[0], weekKey: wk };
   const res = await api.post(`${BASE}/api/mobile/v1/etut/reserve`, { data: body, headers: H(tokens.student) });
   expect(res.status(), await res.text()).toBe(200);
@@ -238,10 +252,9 @@ test('web regresyon: change_password yanlış şifre → 400 (servis çıkarım�
 });
 
 test('web regresyon: etüt reserve/cancel (cookie yolu — servis çıkarımı sağlam)', async () => {
-  const wk = getWeekKey();
-  const list = await (await api.get(`${BASE}/api/mobile/v1/etut?week=${wk}`, { headers: H(tokens.student) })).json();
-  const slot = (list.slots || []).find((s) => !s.booked && !s.mine && s.branches.length >= 1 && slotStartTime(wk, s.dayIndex, s.start).getTime() > Date.now());
-  test.skip(!slot, 'web etüt regresyonu için uygun slot yok — cihaz turu kapsar');
+  const candidate = await findFutureBookableSlot();
+  test.skip(!candidate, 'web etüt regresyonu için bu/gelecek hafta uygun slot yok — cihaz turu kapsar');
+  const { weekKey: wk, slot } = candidate;
   const body = { teacherId: slot.teacherId, etutId: slot.etutId, branch: slot.branches[0], weekKey: wk };
   const res = await webStu.post(`${BASE}/api/etut-sablon/rezervasyon`, { data: body });
   expect(res.status(), await res.text()).toBe(200);

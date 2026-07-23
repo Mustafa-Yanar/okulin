@@ -50,12 +50,14 @@ export function configureTestDatabase() {
   // Yerel web testinin .env'deki paylaşılan Upstash hesabına düşmesini engelle.
   // Rate-limit/reset yolları Redis kesintisinde bilinçli fail-open çalışır; bu adres
   // bağlantıyı anında reddeden yerel bir uçtur ve hiçbir dış veriye dokunmaz.
-  process.env.UPSTASH_REDIS_REST_URL = 'http://127.0.0.1:1';
+  const localRedisUrl = process.env.OKULIN_FAKE_REDIS_URL || 'http://127.0.0.1:1';
+  process.env.UPSTASH_REDIS_REST_URL = localRedisUrl;
   process.env.UPSTASH_REDIS_REST_TOKEN = 'local-test-redis-token';
-  process.env.KV_REST_API_URL = 'http://127.0.0.1:1';
+  process.env.KV_REST_API_URL = localRedisUrl;
   process.env.KV_REST_API_TOKEN = 'local-test-redis-token';
   process.env.NODE_ENV = 'test';
   process.env.OKULIN_TEST_MODE = '1';
+  process.env.OKULIN_TEST_DB_GUARDED = 'YES';
   return info;
 }
 
