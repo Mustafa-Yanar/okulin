@@ -25,7 +25,8 @@
 //   --flush      : yüklemeden önce hedef tabloları TEMİZLE (idempotent restore; FK sırasıyla ters siler)
 //   --only=A,B   : yalnız bu modelleri geri yükle (FK sırası korunur)
 //
-// Güvenlik: --write olmadan ASLA yazmaz. --flush olmadan mevcut satırlar P2002 ile çakışabilir.
+// Güvenlik: --write olmadan ASLA yazmaz. Yazma ayrıca hedefe göre açık onay değişkeni ister.
+// Yerel otomatik tatbikat yalnız okulin_test* DB + okulin_restore_* şemasında çalışır.
 
 import { PrismaClient, Prisma } from '@prisma/client';
 import { readFileSync } from 'node:fs';
@@ -40,6 +41,30 @@ const FLUSH = !!args.flush;
 const ONLY = typeof args.only === 'string' ? new Set(args.only.split(',').map((s) => s.trim())) : null;
 
 if (typeof args.file !== 'string') { console.error('HATA: --file=PATH gerekli.'); process.exit(1); }
+
+function assertWriteTarget() {
+  const raw = process.env.DATABASE_POSTGRES_PRISMA_URL || process.env.DATABASE_URL;
+  if (!raw) throw new Error('Yazma hedefi veritabanı adresi tanımlı değil.');
+  let url;
+  try { url = new URL(raw); } catch { throw new Error('Yazma hedefi geçerli bir PostgreSQL adresi değil.'); }
+  const database = decodeURIComponent(url.pathname.replace(/^\//, ''));
+  const schema = url.searchParams.get('schema') || 'public';
+  const local = ['127.0.0.1', 'localhost', '::1'].includes(url.hostname);
+  const localDrill = local && database.startsWith('okulin_test') && schema.startsWith('okulin_restore_')
+    && process.env.OKULIN_TEST_DB_GUARDED === 'YES'
+    && process.env.OKULIN_SQL_RESTORE_CONFIRMED === 'LOCAL_RESTORE_DRILL_CONFIRMED';
+  const manualConfirmed = process.env.OKULIN_SQL_RESTORE_CONFIRMED === 'I_UNDERSTAND_RESTORE_OVERWRITES_DATA';
+  if (!localDrill && !manualConfirmed) {
+    throw new Error('GÜVENLİK KİLİDİ: SQL restore yazması için hedefe uygun açık onay değişkeni gerekli.');
+  }
+  return { host: url.hostname, database, schema, localDrill };
+}
+
+let writeTarget = null;
+if (WRITE) {
+  try { writeTarget = assertWriteTarget(); }
+  catch (e) { console.error(`HATA: ${e.message}`); process.exit(1); }
+}
 
 // ── Yedeği oku ───────────────────────────────────────────────────────────────
 let parsed;
@@ -103,46 +128,54 @@ const prisma = new PrismaClient();
 
 console.error(`Yedek: ${parsed.snapshotAt} | ${parsed.rowCount} satır | ${allNames.length} tablo${ONLY ? ' (--only)' : ''}`);
 console.error(`Mod: ${WRITE ? 'YAZMA' : 'dry-run (yazma yok)'}${FLUSH ? ' +flush (önce SİLER)' : ''}`);
+if (writeTarget) console.error(`Hedef: ${writeTarget.host}/${writeTarget.database}?schema=${writeTarget.schema}${writeTarget.localDrill ? ' (izole yerel tatbikat)' : ''}`);
 console.error(`Yükleme sırası: ${loadOrder.join(' → ')}`);
 console.error('');
 
 let totalWritten = 0, totalDeleted = 0, errors = 0;
 
 try {
-  // 1) Flush (FK-güvenli ters sıra)
-  if (FLUSH) {
-    for (const name of deleteOrder) {
-      const prop = name.charAt(0).toLowerCase() + name.slice(1);
-      if (WRITE) {
-        const r = await prisma[prop].deleteMany({});
-        totalDeleted += r.count;
-        console.error(`  flush ${name}: ${r.count} silindi`);
-      } else {
-        const c = await prisma[prop].count();
-        console.error(`  [dry] flush ${name}: ${c} silinecek`);
+  if (WRITE) {
+    // Flush + tüm yükleme TEK transaction: bir tablo bile başarısızsa hedef yarım kalmaz.
+    await prisma.$transaction(async (tx) => {
+      if (FLUSH) {
+        for (const name of deleteOrder) {
+          const prop = name.charAt(0).toLowerCase() + name.slice(1);
+          const r = await tx[prop].deleteMany({});
+          totalDeleted += r.count;
+          console.error(`  flush ${name}: ${r.count} silindi`);
+        }
+        console.error('');
       }
-    }
-    console.error('');
-  }
-
-  // 2) Yükle (FK-güvenli sıra)
-  for (const name of loadOrder) {
-    const prop = name.charAt(0).toLowerCase() + name.slice(1);
-    const rows = (tables[name] || []).map((r) => scalarOnly(name, r));
-    if (!rows.length) { console.error(`  ${name}: 0 satır (atlandı)`); continue; }
-    if (WRITE) {
-      try {
-        const r = await prisma[prop].createMany({ data: rows, skipDuplicates: !FLUSH });
+      for (const name of loadOrder) {
+        const prop = name.charAt(0).toLowerCase() + name.slice(1);
+        const rows = (tables[name] || []).map((r) => scalarOnly(name, r));
+        if (!rows.length) { console.error(`  ${name}: 0 satır (atlandı)`); continue; }
+        const r = await tx[prop].createMany({ data: rows, skipDuplicates: !FLUSH });
         totalWritten += r.count;
         console.error(`  ${name}: ${r.count}/${rows.length} yüklendi`);
-      } catch (e) {
-        errors++;
-        console.error(`  ${name}: HATA ${e.message.split('\n')[0]}`);
       }
-    } else {
-      console.error(`  [dry] ${name}: ${rows.length} yüklenecek`);
+    }, { maxWait: 10_000, timeout: 120_000 });
+  } else {
+    // Dry-run: mevcut hedef sayıları ve yedekteki yük miktarı; hiçbir yazma yok.
+    if (FLUSH) {
+      for (const name of deleteOrder) {
+        const prop = name.charAt(0).toLowerCase() + name.slice(1);
+        const count = await prisma[prop].count();
+        console.error(`  [dry] flush ${name}: ${count} silinecek`);
+      }
+      console.error('');
+    }
+    for (const name of loadOrder) {
+      const rows = tables[name] || [];
+      console.error(rows.length ? `  [dry] ${name}: ${rows.length} yüklenecek` : `  ${name}: 0 satır (atlandı)`);
     }
   }
+} catch (e) {
+  errors = 1;
+  totalWritten = 0;
+  totalDeleted = 0;
+  console.error(`RESTORE GERİ ALINDI: ${e.message.split('\n')[0]}`);
 } finally {
   await prisma.$disconnect();
 }

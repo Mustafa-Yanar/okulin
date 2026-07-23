@@ -77,7 +77,6 @@ const CUSTOM_HANDLER_ALLOWLIST: Record<string, string> = {
 };
 
 const DIRECT_PRISMA_ROUTE_ALLOWLIST = [
-  'app/api/backup/route.ts',
   'app/api/cron/cleanup/route.ts',
   'app/api/demo-request/route.ts',
   'app/api/mobile/v1/bootstrap/route.ts',

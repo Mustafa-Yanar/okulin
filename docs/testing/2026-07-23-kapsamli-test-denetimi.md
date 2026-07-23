@@ -37,7 +37,7 @@ erişimi veya standart dışı gövde işleme eklendiğinde test bilinçli allow
 | Ana uygulama birim/sözleşme testleri | 457 / 457 geçti |
 | Mobil tip kontrolü | Geçti |
 | Mobil testler | 45 / 45 geçti |
-| Yerel PostgreSQL entegrasyon testleri | 10 / 10 geçti |
+| Yerel PostgreSQL entegrasyon testleri | 11 / 11 geçti |
 | Üretim derlemesi | Geçti |
 | ESLint | 0 hata, 37 uyarı |
 | Yerel tarayıcı rol testi | 8 / 8 rol geçti |
@@ -99,6 +99,19 @@ dersi ve atama kaynağı maskeleniyor; öğretmene de yalnız kendi etüt şablo
 Aynı kurum içindeki ikinci sentetik öğrenciyle veli için finans, rehberlik, konu, hedef,
 deneme, davranış ve etüt olmak üzere yedi ayrı yabancı-kimlik isteğinin 403 döndüğü kanıtlandı.
 
+### 7. Yedek tutarlılığı ve yarım geri-yükleme riski
+
+SQL yedeği tabloları ayrı ayrı okuduğu için işlem sürerken değişen bağlı kayıtlar farklı anları
+temsil edebiliyordu. Artık 50 tablonun tamamı tek `repeatable-read` veritabanı görüntüsünden
+alınıyor. Geri-yükleme de flush ve bütün tablo yüklemelerini tek transaction içinde yapıyor;
+bir tablo hata verirse tüm işlem geri alınıyor. Gerçek yazma ayrıca hedefe uygun açık onay
+değişkeni olmadan başlamıyor.
+
+Tatbikatta tam yedek ayrı `okulin_restore_drill` şemasına yüklendi; tüm tabloların satır
+sayıları ve SHA-256 içerik özetleri kaynakla birebir eşleşti. Ardından bozuk sınıf foreign
+key'i enjekte edilen yedek çalıştırıldı; işlem hata verdi ve önceki sağlam hedefin bütün
+özetleri değişmeden kaldı.
+
 ## Açık kalan yapısal riskler
 
 ### A. Kurum tutarlılığı her ilişkide veritabanı tarafından zorlanmıyor
@@ -131,24 +144,18 @@ Normal altyapı hatasında kod siparişi `pending` durumuna geri alıyor. Fakat 
 claim'inden hemen sonra tamamen kapanırsa catch çalışmaz ve sipariş kalıcı `processing`
 kalabilir. Zaman damgalı stale-claim kurtarma tasarımı eklenmeli.
 
-### D. Yedek geri-yükleme ve snapshot tutarlılığı kanıtlanmadı
-
-Yedek tüm modelleri sırayla okuyor; tek transaction snapshot'ı değil. Yük altında tabloların
-farklı anlarını yakalayabilir. “Yedek alındı” testi tek başına yeterli değildir; boş yerel DB'ye
-geri yükleyip satır/ilişki checksum karşılaştırması yapılmalıdır.
-
-### E. Arayüz uyarıları
+### D. Arayüz uyarıları
 
 Kalan 37 lint uyarısının 19'u React hook/memo bağımlılığıdır; bayat veri veya gereksiz yeniden
 çalışma riski taşıyabilir. 18'i görsel optimizasyon/erişilebilirlik uyarısıdır. Körlemesine
 değiştirilmemeli; ilgili ekranın davranış testiyle birlikte ele alınmalıdır.
 
-### F. Ön yüz yükü
+### E. Ön yüz yükü
 
 Ana sayfanın ilk yük JavaScript'i üretim derlemesinde yaklaşık 516 kB'dir. İşlevsel hata
 değildir; düşük donanımlı telefonlarda açılış süresi için ölçüm ve parça yükleme çalışması ister.
 
-### G. E2E paketinin iki dış altyapı senaryosu yerel pakete dahil değil
+### F. E2E paketinin iki dış altyapı senaryosu yerel pakete dahil değil
 
 21 E2E spec dosyasının tamamı makine-denetimli güvenlik sınıfına ayrıldı. Bunların 19'u,
 yerel PostgreSQL ve bellekte çalışan yerel Redis taklidi üzerinde setup dahil 100/100 geçti.
@@ -160,7 +167,7 @@ Kalan 2 dosyanın biri Cloud Run çözücüsünü, diğeri Vercel geçici alan a
 Bunlar dış sisteme temas ettikleri için varsayılan yerel pakete giremez. Vercel altyapı
 mutasyonu ayrıca `OKULIN_ALLOW_INFRA_E2E=YES` açık onayı olmadan canlı E2E'de de çalışmaz.
 
-### H. Güncel bağımlılık açıkları taraması bekliyor
+### G. Güncel bağımlılık açıkları taraması bekliyor
 
 `npm audit`, bağımlılık envanterini npm hizmetine göndereceği için dışa aktarım onayı olmadan
 çalıştırılmadı. Bu kontrol için açık kullanıcı onayı gerekir.
@@ -170,12 +177,11 @@ mutasyonu ayrıca `OKULIN_ALLOW_INFRA_E2E=YES` açık onayı olmadan canlı E2E'
 1. Öğrenci/veli/öğretmen IDOR ve rol bazlı tüm mutasyonlar için negatif test matrisi kur.
 2. Etüt, yoklama, program, ödev, duyuru, rehberlik ve finans için oluştur→oku→güncelle→sil
    iş akışlarını zengin sentetik seed üzerinde tamamla.
-3. Backup→boş DB restore→checksum ve fault-injection testini kur.
-4. `processing` ödeme kurtarma ve callback gözlemlenebilirliğini ekle.
-5. Composite tenant foreign key/RLS tasarımını ayrı migration planı yap; Akyazı'yı etkileyen
+3. `processing` ödeme kurtarma ve callback gözlemlenebilirliğini ekle.
+4. Composite tenant foreign key/RLS tasarımını ayrı migration planı yap; Akyazı'yı etkileyen
    hiçbir adımı açık kapsam değişikliği olmadan uygulama.
-6. React hook uyarılarını ekran ekran davranış testiyle azalt.
-7. Yerel test paketleri yeşil olduktan sonra yalnız testkurs için preview/canlı smoke katmanı kur.
+5. React hook uyarılarını ekran ekran davranış testiyle azalt.
+6. Yerel test paketleri yeşil olduktan sonra yalnız testkurs için preview/canlı smoke katmanı kur.
 
 ## Tekrarlanabilir komutlar
 

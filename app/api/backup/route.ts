@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import redis from '@/lib/redis';
-import { prisma } from '@/lib/prisma';
 import { isCronAuthorized } from '@/lib/cron-auth';
-import { Prisma } from '@prisma/client';
+import { snapshotSql } from '@/lib/backup/sql-snapshot';
 import type { Redis } from '@upstash/redis';
 
 // GET /api/backup
@@ -23,25 +22,7 @@ import type { Redis } from '@upstash/redis';
 const BACKUP_DIR = 'backups';        // Redis snapshot'ları (typed-v1)
 const SQL_BACKUP_DIR = 'backups-sql'; // PostgreSQL tablo dökümleri (sql-v1)
 
-// Tüm tabloları ham (tenant-scope'suz) Prisma ile dök. dmmf'ten model listesi alınır
-// → yeni model eklenince backup otomatik kapsar. Tüm kurumların verisi dahildir.
-async function snapshotSql() {
-  const models = Prisma.dmmf.datamodel.models.map((m) => m.name);
-  const tables: Record<string, unknown[]> = {};
-  let total = 0;
-  // Dinamik model erişimi: dmmf'ten gelen model listesi statik tiple ifade edilemez (cast gerekçeli).
-  const rawDb = prisma as unknown as Record<string, { findMany?: () => Promise<unknown[]> } | undefined>;
-  for (const name of models) {
-    const prop = name.charAt(0).toLowerCase() + name.slice(1);
-    if (typeof rawDb[prop]?.findMany !== 'function') continue;
-    const rows = await rawDb[prop]!.findMany!();
-    tables[name] = rows;
-    total += rows.length;
-  }
-  return { tables, total };
-}
-
-// Redis type sorguları + SQL 39 tablo dökümü + GitHub upload'lar için süre güvenliği.
+// Redis type sorguları + SQL 50 tablo dökümü + GitHub upload'lar için süre güvenliği.
 export const maxDuration = 120;
 
 // Tek anahtarı tipine uygun komutla pipeline'a ekle (set/list'e get çağırmayız → WRONGTYPE yok).
