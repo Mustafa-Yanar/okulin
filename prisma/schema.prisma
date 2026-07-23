@@ -73,15 +73,17 @@ model DemoRequest {
 }
 
 model PayOrder {
-  oid       String   @id
-  orgSlug   String
-  branch    String   @default("main")
-  studentId String
-  amount    Int
-  status    String   @default("pending")
-  data      Json?
-  createdAt DateTime @default(now())
-  student   Student? @relation(fields: [orgSlug, branch, studentId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
+  oid                 String    @id
+  orgSlug             String
+  branch              String    @default("main")
+  studentId           String
+  amount              Int
+  status              String    @default("pending")
+  processingToken     String?
+  processingStartedAt DateTime?
+  data                Json?
+  createdAt           DateTime  @default(now())
+  student             Student?  @relation(fields: [orgSlug, branch, studentId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
   @@index([orgSlug, branch])
 }
 

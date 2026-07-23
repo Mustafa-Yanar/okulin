@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { logAudit } from '@/lib/audit';
 import type { PaymentConfigData } from '@/lib/payment';
 import { decryptSecret } from '@/lib/payment/crypto';
@@ -8,6 +9,7 @@ import { tdb } from '@/lib/sqldb';
 import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs'; // HMAC + crypto
+const PAYMENT_PROCESSING_LEASE_MS = 10 * 60 * 1000;
 
 // PayTR Bildirim (callback) URL'i. Server-to-server, form-urlencoded POST.
 // Bilinçli withAuth istisnası + düz metin yanıt: PayTR sözleşmesi HMAC doğrulama
@@ -39,10 +41,36 @@ async function readOrder(oid: string): Promise<OrderView | null> {
     installmentIdx: d.installmentIdx as number | undefined, studentName: d.studentName as string | undefined, data: d,
   };
 }
-// PayOrder durum güncelle (idempotency kaydı).
-async function patchOrder(oid: string, order: OrderView, patch: { status: string; [key: string]: unknown }) {
+// Henüz sahiplenilmemiş siparişe terminal başarısızlık yaz. Devam eden/ödenmiş
+// bir success işlemini geç gelen failure bildirimiyle ezmez.
+async function markPendingOrderFailed(oid: string, order: OrderView) {
+  const failedAt = new Date().toISOString();
+  await prisma.payOrder.updateMany({
+    where: { oid, status: 'pending' },
+    data: {
+      status: 'failed', processingToken: null, processingStartedAt: null,
+      data: { ...(order.data || {}), failedAt } as object,
+    },
+  });
+}
+
+// Yalnız bu callback'in sahip olduğu lease'i terminal duruma geçirir. Süresi dolan
+// lease başka bir callback tarafından devralındıysa eski süreç yeni sahibin kaydını ezemez.
+async function settleClaim(
+  oid: string,
+  token: string,
+  order: OrderView,
+  patch: { status: 'paid' | 'error'; [key: string]: unknown },
+): Promise<boolean> {
   const { status, ...rest } = patch;
-  await prisma.payOrder.update({ where: { oid }, data: { status, data: { ...(order.data || {}), ...rest } as object } });
+  const settled = await prisma.payOrder.updateMany({
+    where: { oid, status: 'processing', processingToken: token },
+    data: {
+      status, processingToken: null, processingStartedAt: null,
+      data: { ...(order.data || {}), ...rest } as object,
+    },
+  });
+  return settled.count === 1;
 }
 
 export async function POST(req: Request) {
@@ -87,30 +115,42 @@ export async function POST(req: Request) {
 
   // Başarısız ödeme → işaretle, OK dön (tekrar deneme istemeyiz).
   if (status !== 'success') {
-    await patchOrder(merchantOid, order, { status: 'failed', failedAt: new Date().toISOString() });
+    await markPendingOrderFailed(merchantOid, order);
     return ok();
   }
 
-  // Çift işlemeye karşı ATOMİK claim: updateMany WHERE status≠paid/processing →
-  // count:1 ise bu çağrı sahiplendi, count:0 ise başka callback zaten işliyor/işledi.
-  // PostgreSQL UPDATE atomik → tek satırlık NX lock'un birebir eşdeğeri.
+  // Çift işlemeye karşı süreli ve sahiplik-korumalı ATOMİK claim. Normalde yalnız
+  // pending sipariş alınır. İşlem yarıda kalmışsa 10 dakika sonra yeni token ile
+  // devralınabilir; eski süreç token eşleşmediği için yeni sahibin durumunu ezemez.
+  const claimToken = randomUUID();
+  const claimStartedAt = new Date();
+  const staleBefore = new Date(claimStartedAt.getTime() - PAYMENT_PROCESSING_LEASE_MS);
   const claim = await prisma.payOrder.updateMany({
-    where: { oid: merchantOid, status: { notIn: ['paid', 'processing'] } },
-    data: { status: 'processing' },
+    where: {
+      oid: merchantOid,
+      OR: [
+        { status: 'pending' },
+        {
+          status: 'processing',
+          OR: [
+            { processingStartedAt: { lt: staleBefore } },
+            { processingStartedAt: null },
+          ],
+        },
+      ],
+    },
+    data: { status: 'processing', processingToken: claimToken, processingStartedAt: claimStartedAt },
   });
   if (claim.count === 0) return ok(); // başka çağrı sahiplendi/işledi → idempotent çık
 
   try {
-    // Son kontrol: kilidi aldıktan sonra order durumunu yeniden oku.
-    const fresh = await readOrder(merchantOid);
-    if (fresh?.status === 'paid') return ok();
-
     const paymentOpts = {
       studentId: order.studentId,
       installmentIdx: order.installmentIdx,
       method: 'PayTR (online)',
       date: new Date().toISOString().slice(0, 10),
       recordedBy: 'Online ödeme',
+      idempotencyKey: `paytr:${merchantOid}`,
       orgOverride: order.org,
       branchOverride: order.branch,
     };
@@ -122,13 +162,16 @@ export async function POST(req: Request) {
       // terminal 'error' işaretle + OK dön (tekrar deneme istemeyiz). Altyapı hataları
       // (HttpError DEĞİL) yeniden fırlar → dıştaki catch claim'i geri alır (pending → PayTR tekrar dener).
       if (e instanceof HttpError) {
-        await patchOrder(merchantOid, order, { status: 'error', error: e.message, at: new Date().toISOString() });
+        await settleClaim(merchantOid, claimToken, order, { status: 'error', error: e.message, at: new Date().toISOString() });
         return ok();
       }
       throw e;
     }
 
-    await patchOrder(merchantOid, order, { status: 'paid', paidAt: new Date().toISOString(), receiptNo: result.receiptNo });
+    const settled = await settleClaim(merchantOid, claimToken, order, {
+      status: 'paid', paidAt: new Date().toISOString(), receiptNo: result.receiptNo,
+    });
+    if (!settled) return ok(); // lease devredildi; yeni sahip mevcut ledger kaydını tamamlar
 
     await logAudit({
       actorRole: 'system', actorName: 'Online Ödeme (PayTR)', actorId: 'paytr',
@@ -142,8 +185,8 @@ export async function POST(req: Request) {
     // Claim'i geri al (yoksa sipariş kalıcı kilitlenir), tekrar deneme işleyebilsin.
     try {
       await prisma.payOrder.updateMany({
-        where: { oid: merchantOid, status: 'processing' },
-        data: { status: 'pending' },
+        where: { oid: merchantOid, status: 'processing', processingToken: claimToken },
+        data: { status: 'pending', processingToken: null, processingStartedAt: null },
       });
     } catch { /* en iyi çaba */ }
     return fail('işleme hatası');

@@ -37,7 +37,7 @@ erişimi veya standart dışı gövde işleme eklendiğinde test bilinçli allow
 | Ana uygulama birim/sözleşme testleri | 457 / 457 geçti |
 | Mobil tip kontrolü | Geçti |
 | Mobil testler | 45 / 45 geçti |
-| Yerel PostgreSQL entegrasyon testleri | 11 / 11 geçti |
+| Yerel PostgreSQL entegrasyon testleri | 14 / 14 geçti |
 | Üretim derlemesi | Geçti |
 | ESLint | 0 hata, 37 uyarı |
 | Yerel tarayıcı rol testi | 8 / 8 rol geçti |
@@ -112,6 +112,21 @@ sayıları ve SHA-256 içerik özetleri kaynakla birebir eşleşti. Ardından bo
 key'i enjekte edilen yedek çalıştırıldı; işlem hata verdi ve önceki sağlam hedefin bütün
 özetleri değişmeden kaldı.
 
+### 8. Ödeme işlemi yarıda kalınca kalıcı kilit ve çift ödeme riski
+
+PayTR siparişi atomik olarak `processing` durumuna alınıyordu; fakat sunucu bu adımdan hemen
+sonra tamamen kapanırsa catch çalışmadığı için sipariş kalıcı olarak bu durumda kalabiliyordu.
+Siparişlere artık 10 dakikalık işlem süresi ve her denemeye özel sahiplik anahtarı yazılıyor.
+Süresi dolan işlem yeni callback tarafından devralınabiliyor; eski süreç sonradan dönse bile
+yeni sahibin durumunu ezemiyor.
+
+Ayrıca PayTR sipariş numarası finans ledger'ına kalıcı dış referans olarak yazılıyor. Para
+ve makbuz transaction'ı tamamlandıktan hemen sonra süreç kapanırsa yeni deneme mevcut finans
+kaydını tanıyor, ikinci ödeme veya makbuz üretmeden siparişi `paid` durumuna tamamlıyor.
+Entegrasyon testlerinde taze işlemin korunması, süresi dolanın devralınması ve finans yazımı
+sonrası kapanma ayrı ayrı çalıştırıldı; mevcut eşzamanlı callback testiyle birlikte beş ödeme
+senaryosunun tamamı geçti.
+
 ## Açık kalan yapısal riskler
 
 ### A. Kurum tutarlılığı her ilişkide veritabanı tarafından zorlanmıyor
@@ -138,11 +153,12 @@ kontrol/migration yapmak bu çalışmanın yetki alanı dışındadır; bu neden
 Kurum izolasyonu uygulama katmanındaki `tdb()` ile sağlanıyor. Merkezi katman sertleştirildi,
 fakat veritabanı seviyesinde ikinci savunma hattı (RLS) bulunmuyor.
 
-### C. Ödeme siparişi `processing` durumunda kalabilir
+### C. Online ödeme için operasyon alarmı henüz yok
 
-Normal altyapı hatasında kod siparişi `pending` durumuna geri alıyor. Fakat sunucu işlem
-claim'inden hemen sonra tamamen kapanırsa catch çalışmaz ve sipariş kalıcı `processing`
-kalabilir. Zaman damgalı stale-claim kurtarma tasarımı eklenmeli.
+Yarım kalan `processing` siparişi sağlayıcının yeniden bildirimiyle güvenli biçimde
+toparlanıyor. Ancak 10 dakikadan uzun kalan işlem veya terminal `error` kaydı için yöneticiyi
+uyaran periyodik tarama/panel henüz yok. Bu artık çift ödeme riski değil, olayın insan
+tarafından ne kadar çabuk fark edileceğiyle ilgili gözlemlenebilirlik eksiğidir.
 
 ### D. Arayüz uyarıları
 
@@ -177,7 +193,7 @@ mutasyonu ayrıca `OKULIN_ALLOW_INFRA_E2E=YES` açık onayı olmadan canlı E2E'
 1. Öğrenci/veli/öğretmen IDOR ve rol bazlı tüm mutasyonlar için negatif test matrisi kur.
 2. Etüt, yoklama, program, ödev, duyuru, rehberlik ve finans için oluştur→oku→güncelle→sil
    iş akışlarını zengin sentetik seed üzerinde tamamla.
-3. `processing` ödeme kurtarma ve callback gözlemlenebilirliğini ekle.
+3. Online ödeme için stale/error alarmı ve yönetici gözlem yüzeyi tasarla.
 4. Composite tenant foreign key/RLS tasarımını ayrı migration planı yap; Akyazı'yı etkileyen
    hiçbir adımı açık kapsam değişikliği olmadan uygulama.
 5. React hook uyarılarını ekran ekran davranış testiyle azalt.
