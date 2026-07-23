@@ -21,6 +21,9 @@ export interface PaymentEntry {
   note: string;
   receiptNo: string;
   recordedBy: string;
+  // Dış ödeme sağlayıcısının aynı işlemi yeniden bildirmesi halinde finans
+  // defterine ikinci kez yazılmasını önleyen kalıcı anahtar (örn. paytr:<oid>).
+  externalRef?: string;
 }
 
 export interface ApplyPaymentOpts {
@@ -31,6 +34,7 @@ export interface ApplyPaymentOpts {
   note?: string;
   date?: string;
   recordedBy?: string;
+  idempotencyKey?: string;
   orgOverride?: string;
   branchOverride?: string;
 }
@@ -77,7 +81,7 @@ async function nextReceiptNo(tx: Prisma.TransactionClient, orgSlug: string, bran
 // görüp "zaten ödenmiş" kontrolünü geçiyordu. Kilit OKUMADAN ÖNCE alınır — aksi halde
 // yarış penceresi kapanmaz.
 export async function applyInstallmentPaymentSql(opts: ApplyPaymentOpts): Promise<ApplyPaymentResult> {
-  const { studentId, amount, installmentIdx, method, note, date, recordedBy, orgOverride, branchOverride } = opts;
+  const { studentId, amount, installmentIdx, method, note, date, recordedBy, idempotencyKey, orgOverride, branchOverride } = opts;
   const { orgSlug, branch } = tenant(orgOverride, branchOverride);
   const t = tdb(orgOverride, branchOverride);
   const stu = await t.student.findFirst({ where: { legacyId: studentId }, include: { class: true } });
@@ -98,6 +102,23 @@ export async function applyInstallmentPaymentSql(opts: ApplyPaymentOpts): Promis
     const installments = record.installments.map((i) => ({
       ...i, amount: Number(i.amount), paidAmount: i.paidAmount === null ? null : Number(i.paidAmount),
     }));
+    const currentPayments = ((record.payments as unknown as PaymentEntry[] | null) || []);
+
+    // Online sağlayıcı çağrısı finans transaction'ını tamamladıktan hemen sonra süreç
+    // kapanabilir. PayOrder henüz "paid" olmasa bile aynı dış referans ledger'da varsa
+    // ödeme zaten tamamlanmıştır; mevcut sonucu döndür ve ikinci makbuz/ödeme üretme.
+    if (idempotencyKey) {
+      const existing = currentPayments.find((p) => p.externalRef === idempotencyKey);
+      if (existing) {
+        const balance = netFee - currentPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+        const recOut = {
+          studentId, studentName: stu.name, studentCls: stu.class?.legacyId || '',
+          netFee, payments: currentPayments, balance,
+        };
+        return { record: recOut, payment: existing, balance, receiptNo: existing.receiptNo };
+      }
+    }
+
     const explicit = installmentIdx !== null && installmentIdx !== undefined && installmentIdx >= 0;
     const targetInst = explicit
       ? installments.find((i) => i.idx === installmentIdx)
@@ -134,10 +155,14 @@ export async function applyInstallmentPaymentSql(opts: ApplyPaymentOpts): Promis
 
     const receiptNo = await nextReceiptNo(tx, orgSlug, branch);
     const paymentDate = date || new Date().toISOString().slice(0, 10);
-    const payment: PaymentEntry = { id: newId(), date: paymentDate, amount: payAmount, method: method || 'Nakit', note: note || '', receiptNo, recordedBy: recordedBy || '' };
+    const payment: PaymentEntry = {
+      id: newId(), date: paymentDate, amount: payAmount, method: method || 'Nakit',
+      note: note || '', receiptNo, recordedBy: recordedBy || '',
+      ...(idempotencyKey ? { externalRef: idempotencyKey } : {}),
+    };
 
     // payments Json ledger — applyInstallmentPaymentSql/route'lar PaymentEntry[] yazar
-    const payments: PaymentEntry[] = [...((record.payments as unknown as PaymentEntry[] | null) || []), payment];
+    const payments: PaymentEntry[] = [...currentPayments, payment];
     const balance = netFee - payments.reduce((s, p) => s + (p.amount || 0), 0);
 
     // Kapatılan her taksite KENDİ tutarı yazılır (tek makbuz birden çok taksiti kapatabilir).

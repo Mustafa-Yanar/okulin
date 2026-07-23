@@ -55,7 +55,7 @@ export default function ResourceLibrary({ canManage, branches = [], userRole, us
   const confirm = useConfirm();
   const { classes: regClasses } = useClasses();
   const { data, isLoading: loading, mutate } = useSWR<{ resources?: ResourceDTO[] }>('/api/resources');
-  const resources = data?.resources || [];
+  const resources = useMemo(() => data?.resources || [], [data?.resources]);
   const [filterBranch, setFilterBranch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [showForm, setShowForm] = useState(false);

@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- Kurum logosu kullanıcı tanımlı/harici URL olabilir; native onError fallback'i gerekir. */
 
 import React, { useEffect } from 'react';
 import {
@@ -247,6 +248,9 @@ export default function Sidebar({
           <img
             src={branding.logoUrl}
             alt={branding.name}
+            width={100}
+            height={36}
+            fetchPriority="high"
             className={`object-contain shrink-0 ${collapsed ? 'h-8 w-8' : 'h-9 w-auto max-w-[100px]'}`}
             onError={e => { e.currentTarget.style.display = 'none'; }}
           />

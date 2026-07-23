@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { retentionCutoffWeekKey } from '@/lib/etut/weeks';
+import { isCronAuthorized } from '@/lib/cron-auth';
 
 // Günlük saklama (retention) temizliği cron'u.
 // Redis'te AuditLog/ErrLog kayıtlarının TTL'i vardı (audit 90g, errlog 30g); SQL'e
@@ -56,8 +57,7 @@ async function purge(label: string, fn: () => Promise<{ count: number }>): Promi
 }
 
 export async function GET(req: Request) {
-  const auth = req.headers.get('authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

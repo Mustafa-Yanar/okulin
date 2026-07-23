@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { sendPushToUser } from '@/lib/push';
 import { tdb } from '@/lib/sqldb';
 import { listActiveTenants, runWithTenant } from '@/lib/tenant';
+import { isCronAuthorized } from '@/lib/cron-auth';
 
 // Günlük ödeme hatırlatması cron'u.
 // Vadesi gelmiş (dueDate <= bugün) ÖDENMEMİŞ taksiti olan öğrencilerin velilerine push.
@@ -57,8 +58,7 @@ async function remindTenant(): Promise<{ parents: number; devices: number }> {
 
 // Bilinçli withAuth istisnası: cron ucu — oturum yok, CRON_SECRET Bearer doğrulanır.
 export async function GET(req: Request) {
-  const auth = req.headers.get('authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

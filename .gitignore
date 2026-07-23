@@ -40,9 +40,11 @@ tmp/
 /e2e/shots/
 /e2e/.auth/
 /.playwright/
+.test-runtime/
 node_modules/.cache/ms-playwright
 *.md
 !solver-service/README.md
+!docs/testing/*.md
 !scripts/archive/README.md
 
 # TypeScript derleme onbellegi

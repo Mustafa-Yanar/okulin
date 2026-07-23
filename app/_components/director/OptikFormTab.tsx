@@ -1,7 +1,8 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- Yerel object URL tarama önizlemesi Next Image optimizer'a gönderilmemeli. */
 import { useState, useRef } from 'react';
 import { upload } from '@vercel/blob/client';
-import { Upload, ScanLine, Copy, Check, FileText, Image } from 'lucide-react';
+import { Upload, ScanLine, Copy, Check, FileText, Image as ImageIcon } from 'lucide-react';
 import type { ShowToast } from '../types';
 
 const CHOICES = ['A', 'B', 'C', 'D', 'E'];
@@ -157,7 +158,7 @@ export default function OptikFormTab({ showToast }: OptikFormTabProps) {
             <p className="text-sm">Optik form yükle</p>
             <p className="text-xs flex items-center gap-3">
               <span className="flex items-center gap-1"><FileText size={12} /> PDF (tarayıcı/MFP)</span>
-              <span className="flex items-center gap-1"><Image size={12} /> JPG/PNG (fotoğraf)</span>
+              <span className="flex items-center gap-1"><ImageIcon size={12} /> JPG/PNG (fotoğraf)</span>
             </p>
             <p className="text-xs text-slate-300">Maks 50 MB</p>
           </div>

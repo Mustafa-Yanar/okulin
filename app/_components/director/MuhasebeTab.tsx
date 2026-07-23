@@ -1,7 +1,7 @@
 'use client';
 
 // Müdür muhasebe sekmesi: öğrenci ödemeleri (FinancePanel) + muhasebeci CRUD.
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Wallet, Edit3, Trash2, X } from 'lucide-react';
 import FinancePanel from '../finance/FinancePanel';
 import ExpensePanel from '../finance/ExpensePanel';
@@ -32,7 +32,7 @@ export default function DirectorMuhasebeTab({ session, showToast }: DirectorMuha
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function loadAccountants() {
+  const loadAccountants = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/accountants', { credentials: 'same-origin' });
@@ -40,9 +40,9 @@ export default function DirectorMuhasebeTab({ session, showToast }: DirectorMuha
       setAccountants(Array.isArray(data) ? data : []);
     } catch { showToast('Muhasebeciler yüklenemedi', 'error'); }
     finally { setLoading(false); }
-  }
+  }, [showToast]);
 
-  useEffect(() => { if (subTab === 'accountants') loadAccountants(); }, [subTab]);
+  useEffect(() => { if (subTab === 'accountants') loadAccountants(); }, [subTab, loadAccountants]);
 
   function openNew() { setEditAcc(null); setForm({ name: '', password: '', phone: '' }); setShowForm(true); }
   function openEdit(a: AccountantDTO) { setEditAcc(a); setForm({ name: a.name, password: '', phone: a.phone || '' }); setShowForm(true); }

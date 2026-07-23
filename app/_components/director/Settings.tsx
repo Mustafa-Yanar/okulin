@@ -1,7 +1,8 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- Yönetici önizlemesi henüz kaydedilmemiş keyfi bir logo URL'sini gösterebilir. */
 
 // Müdür ayarlar modalı (isim + özelleştirme + ödeme) ve içindeki bölümler.
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, Palette, Compass, Plus, Trash2, KeyRound, CreditCard, Settings as SettingsIcon, SlidersHorizontal, Tag, CalendarClock, ShieldCheck } from 'lucide-react';
 import { api, Modal } from './shared';
 import { brandGradient, type Branding } from '@/lib/branding';
@@ -306,7 +307,7 @@ function PaymentSection({ showToast }: { showToast: ShowToast }) {
   const [active, setActive] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const d = await api<PaymentConfigDTO>('/api/payment/config');
       setCfg(d);
@@ -315,8 +316,8 @@ function PaymentSection({ showToast }: { showToast: ShowToast }) {
       setActive(!!d.active);
     } catch (e) { showToast((e as Error).message, 'error'); }
     setLoaded(true);
-  };
-  useEffect(() => { load(); }, []);
+  }, [showToast]);
+  useEffect(() => { load(); }, [load]);
 
   const save = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -419,7 +420,7 @@ function ConfigurationSection({ showToast }: { showToast: ShowToast }) {
       catch (e) { showToast((e as Error).message, 'error'); }
       setLoaded(true);
     })();
-  }, []);
+  }, [showToast]);
 
   // Tek key'i kaydet (optimistik: önce state, sonra sunucu; hata olursa geri al).
   async function saveKey(key: string, value: unknown, prev?: unknown) {
@@ -671,7 +672,7 @@ function BrandingSection({ showToast, onBranding }: { showToast: ShowToast; onBr
       } catch (e) { showToast((e as Error).message, 'error'); }
       setLoaded(true);
     })();
-  }, []);
+  }, [showToast]);
 
   const save = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

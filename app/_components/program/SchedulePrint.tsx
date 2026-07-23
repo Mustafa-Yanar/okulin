@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- Program yazdırma portalında logo native ve anında yüklenmeli. */
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';

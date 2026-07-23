@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- Yerel object URL optik-form önizlemesi Next Image optimizer'a gönderilmemeli. */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { upload } from '@vercel/blob/client';

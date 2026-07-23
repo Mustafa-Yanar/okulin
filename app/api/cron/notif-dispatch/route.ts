@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { dispatchDue } from '@/lib/push/outbox';
+import { isCronAuthorized } from '@/lib/cron-auth';
 
 // Bildirim outbox retry cron'u — 15 dakikada bir vadesi gelmiş pending
 // teslimatları backoff'la yeniden dener. Anında gönderim (enqueue içi hızlı
@@ -11,8 +12,7 @@ import { dispatchDue } from '@/lib/push/outbox';
 export const runtime = 'nodejs'; // Prisma + web-push Node gerektirir
 
 export async function GET(req: Request) {
-  const auth = req.headers.get('authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const result = await dispatchDue();

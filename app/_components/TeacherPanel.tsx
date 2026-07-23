@@ -118,7 +118,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
         setLoading(false);
       }
     })();
-  }, [session.id, weekKey]);
+  }, [session.id, weekKey, showToast]);
 
   const days = useMemo(() => {
     if (!program) return [];

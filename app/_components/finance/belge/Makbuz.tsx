@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- Makbuz yazdırılırken kurum logosu optimizer/lazy-load olmadan hazır olmalı. */
 
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';

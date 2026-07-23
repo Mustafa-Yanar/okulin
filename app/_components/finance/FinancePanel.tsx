@@ -945,7 +945,7 @@ interface FinancePanelProps {
 // önceden yazılır (mount'ta bir kez okunur; kullanıcı serbestçe değiştirir).
 export default function FinancePanel({ session, showToast, initialSearch }: FinancePanelProps) {
   const { data: financeData, isLoading: loading, mutate: load } = useSWR<FinanceListItemDTO[]>('/api/finance');
-  const list = Array.isArray(financeData) ? financeData : [];
+  const list = useMemo(() => (Array.isArray(financeData) ? financeData : []), [financeData]);
   // Kurum bilgisi (marka + resmi bilgi) — makbuz/senet belgelerinde kullanılır.
   const { data: orgData } = useSWR<{ branding: Branding; legal?: KurumBilgi }>('/api/org');
   const kurum: KurumBilgi = {

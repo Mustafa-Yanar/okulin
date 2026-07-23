@@ -19,7 +19,7 @@ const { test, expect } = require('@playwright/test');
 const crypto = require('crypto');
 const { BASE, JSON_HEADERS, DIR_STATE } = require('./helpers');
 
-const ORG = new URL(BASE).hostname.split('.')[0]; // testkurs
+const ORG = process.env.DEFAULT_ORG || new URL(BASE).hostname.split('.')[0]; // local wrapper: testkurs
 const KEY = 'e2ekey_' + crypto.randomBytes(12).toString('hex');
 const SALT = 'e2esalt_' + crypto.randomBytes(12).toString('hex');
 const OID = 'e2epay' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex');

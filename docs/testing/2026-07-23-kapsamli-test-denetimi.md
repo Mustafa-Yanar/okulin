@@ -1,0 +1,231 @@
+# Okulin kapsamlı test denetimi — ilk güvenli temel
+
+Tarih: 23 Temmuz 2026
+
+Bu belge, sistemi “çalışıyor mu?” düzeyinden çıkarıp ilişkilerin doğru, tutarlı ve güvenli
+olduğunu sürekli sınayan bir düzene taşıma çalışmasının ilk kontrol noktasıdır.
+
+## Değişmez güvenlik sınırı
+
+- `akyazicozum.okulin.com` gerçek kurumdur. Bu denetimde bu alan adına hiçbir HTTP isteği
+  gönderilmedi; veritabanı ve Redis verisi okunmadı veya değiştirilmedi.
+- Dinamik testler yalnız bilgisayardaki `okulin_test` PostgreSQL veritabanında çalıştı.
+- Yerel test sarmalayıcısı veritabanı adını `okulin_test*` ile sınırlar ve Redis isteklerini
+  yalnız bellekte çalışan yerel taklide sabitler. Böylece `.env` içindeki canlı bağlantılara
+  sessizce düşemez.
+- Playwright hedefi açıkça verilmezse test başlamaz. Akyazı hedefi verilse bile kesin olarak
+  reddedilir. Canlı `testkurs` hedefi ayrıca açık onay değişkeni ister.
+
+## Sistemin ölçülen büyüklüğü
+
+- 50 Prisma veri modeli
+- 92 API route dosyası, 169 HTTP handler
+- Merkezi `withAuth` ve mobil yetki katmanlarının dışında kalan 20 bilinçli/açık API kapısı
+- Doğrudan Prisma kullanan 9 özel route
+- Standart `parseBody` doğrulamasından farklı çalışan 15 mutasyon kapısı
+- 22 spec dosyasında 114 Playwright E2E senaryosu
+
+Bu sayılar mimari sözleşme testine bağlandı. Yeni route, özel yetki kapısı, doğrudan Prisma
+erişimi veya standart dışı gövde işleme eklendiğinde test bilinçli allowlist güncellemesi ister.
+
+## Tamamlanan kontroller
+
+| Katman | Sonuç |
+|---|---:|
+| Prisma şema doğrulaması | Geçti |
+| TypeScript strict kontrolü | Geçti |
+| Ana uygulama birim/sözleşme testleri | 457 / 457 geçti |
+| Mobil tip kontrolü | Geçti |
+| Mobil testler | 45 / 45 geçti |
+| Yerel PostgreSQL entegrasyon testleri | 15 / 15 geçti |
+| Üretim derlemesi | Geçti |
+| ESLint | 0 hata, 0 uyarı |
+| Yerel tarayıcı rol testi | 8 / 8 rol geçti |
+| Rol erişim matrisi | 34 / 34 karar geçti |
+| Güvenli yerel Playwright E2E paketi | 108 / 108 geçti |
+| CP-SAT yerel çözücü senaryoları | 13 senaryoda kural ihlali yok |
+| Canlı testkurs → Cloud Run çözücü proxy'si | 5 / 5 geçti |
+
+Yerel tarayıcı testinde müdür, müdür yardımcısı, rehber, muhasebe, kurum yöneticisi,
+öğretmen, öğrenci ve veli ayrı oturumlarda sınandı. Dış ağ isteği, HTTP 5xx veya tarayıcı
+çalışma zamanı hatası görülmedi. Veli kendi çocuğunun finansını okuyabildi, başka kuruma ait
+öğrenci kimliğiyle okuyamadı.
+
+## Bulunan ve bu dalda düzeltilen önemli sorunlar
+
+### 1. Tekil kimlikle kurum sınırının aşılabilmesi
+
+`tdb()` listeleme ve toplu işlemlerde kurum/şube filtresi ekliyordu; fakat `findUnique`,
+`update`, `delete` ve `upsert` işlemleri yalnız global kimliğe güveniyordu. Başka kurumun
+kimliği bir route'a sızarsa merkezi katman bunu kendi başına durdurmuyordu.
+
+Merkezi veri erişim katmanı tüm bu işlemlerde kurum ve şubeyi zorunlu kılacak şekilde
+sertleştirildi. Entegrasyon testi başka kurumun kimliğiyle okuma, güncelleme ve silmenin
+reddedildiğini; aynı kurumda normal işlemlerin bozulmadığını kanıtlıyor.
+
+### 2. PayTR callback tutar eşleşmesi yoktu
+
+Callback HMAC imzası doğrulanıyordu; fakat PayTR'nin bildirdiği kuruş tutarı, `PayOrder`
+kaydındaki beklenen tutarla karşılaştırılmıyordu. Artık imza doğru olsa bile tutar uyuşmazsa
+kredilendirme yapılmıyor.
+
+Ayrıca aynı geçerli callback'in eşzamanlı iki kez gelmesi test edildi: yalnız bir ödeme
+ledger kaydı oluştu, yalnız bir taksit kapandı ve sipariş bir kez `paid` oldu.
+
+### 3. CRON_SECRET tanımsızken yanlış yetkilendirme ihtimali
+
+Eski karşılaştırmada ortam değişkeni tanımsızsa `Authorization: Bearer undefined` değeri
+teorik olarak kabul edilebilirdi. Beş cron/yedek route'u ortak, fail-closed yardımcıya alındı.
+Secret yoksa hiçbir değer yetkili sayılmıyor.
+
+### 4. Testlerin sessizce canlı hedefe gitmesi
+
+Eski Playwright yapılandırması hedef verilmezse canlı `testkurs.okulin.com` adresini seçiyordu.
+Bu varsayılan ve E2E dosyalarındaki gömülü hedef/kullanıcı şifresi fallback'leri kaldırıldı.
+
+### 5. Kalite kapısındaki iki gerçek hata
+
+Kullanılmayan yedekleme fonksiyonu ve Next.js'in özel `module` adıyla çakışan değişken
+temizlendi. ESLint artık hata koduyla düşmüyor.
+
+### 6. Gereğinden geniş üç okuma yüzeyi
+
+Ham yoklama sözlüğünü ve öğretmen program gridini oturum açmış her rol okuyabiliyordu.
+Ayrıca öğrenci etüt ekranı, dolu slotla birlikte başka öğrencilerin adını ve sınıfını da
+alıyordu. Bu alanlar arayüzde gizlense bile ağ yanıtında bulunmaları gereksiz veri ifşasıydı.
+
+Artık öğretmen yalnız kendi ham program/yoklamasını, müdür ve rehber denetim amacıyla tümünü
+okuyabiliyor. Öğrenci dolu etüt saatini görmeye devam ediyor fakat başka öğrencinin kimliği,
+dersi ve atama kaynağı maskeleniyor; öğretmene de yalnız kendi etüt şablonları dönüyor.
+Aynı kurum içindeki ikinci sentetik öğrenciyle veli için finans, rehberlik, konu, hedef,
+deneme, davranış ve etüt olmak üzere yedi ayrı yabancı-kimlik isteğinin 403 döndüğü kanıtlandı.
+
+### 7. Yedek tutarlılığı ve yarım geri-yükleme riski
+
+SQL yedeği tabloları ayrı ayrı okuduğu için işlem sürerken değişen bağlı kayıtlar farklı anları
+temsil edebiliyordu. Artık 50 tablonun tamamı tek `repeatable-read` veritabanı görüntüsünden
+alınıyor. Geri-yükleme de flush ve bütün tablo yüklemelerini tek transaction içinde yapıyor;
+bir tablo hata verirse tüm işlem geri alınıyor. Gerçek yazma ayrıca hedefe uygun açık onay
+değişkeni olmadan başlamıyor.
+
+Tatbikatta tam yedek ayrı `okulin_restore_drill` şemasına yüklendi; tüm tabloların satır
+sayıları ve SHA-256 içerik özetleri kaynakla birebir eşleşti. Ardından bozuk sınıf foreign
+key'i enjekte edilen yedek çalıştırıldı; işlem hata verdi ve önceki sağlam hedefin bütün
+özetleri değişmeden kaldı.
+
+### 8. Ödeme işlemi yarıda kalınca kalıcı kilit ve çift ödeme riski
+
+PayTR siparişi atomik olarak `processing` durumuna alınıyordu; fakat sunucu bu adımdan hemen
+sonra tamamen kapanırsa catch çalışmadığı için sipariş kalıcı olarak bu durumda kalabiliyordu.
+Siparişlere artık 10 dakikalık işlem süresi ve her denemeye özel sahiplik anahtarı yazılıyor.
+Süresi dolan işlem yeni callback tarafından devralınabiliyor; eski süreç sonradan dönse bile
+yeni sahibin durumunu ezemiyor.
+
+Ayrıca PayTR sipariş numarası finans ledger'ına kalıcı dış referans olarak yazılıyor. Para
+ve makbuz transaction'ı tamamlandıktan hemen sonra süreç kapanırsa yeni deneme mevcut finans
+kaydını tanıyor, ikinci ödeme veya makbuz üretmeden siparişi `paid` durumuna tamamlıyor.
+Entegrasyon testlerinde taze işlemin korunması, süresi dolanın devralınması ve finans yazımı
+sonrası kapanma ayrı ayrı çalıştırıldı; mevcut eşzamanlı callback testiyle birlikte beş ödeme
+senaryosunun tamamı geçti.
+
+### 9. Yedi kritik ilişkide kurum bağı yalnız uygulamaya bırakılmıştı
+
+Student→Class, Finance→Student, Behavior→Student, SlotBooking→Teacher,
+Attendance→Teacher, AnnouncementRecipient→Announcement ve
+EtutReservation→EtutSablon ilişkileri Prisma şemasında `kurum + şube + kimlik` composite
+foreign key'ine çevrildi. Yerel testte her çocuk kaydı kasıtlı olarak başka kuruma bağlanmaya
+çalışıldı; PostgreSQL yedi işlemin tamamını reddetti. Mevcut doğru veri akışları ve tam yedek
+geri-yükleme testi de geçmeye devam etti.
+
+Bu şema değişikliği yalnız yerel `okulin_test` üzerinde uygulandı; ortak canlı veritabanına
+ve Akyazı verisine dokunulmadı. Canlıya güvenli uygulama ve RLS önkoşulları ayrı
+[`tenant FK/RLS geçiş planında`](./2026-07-23-tenant-fk-rls-gecis-plani.md) belgelendi.
+
+### 10. React bağımlılık uyarıları ve bilinçsiz yeniden yükleme riski
+
+19 hook/memo uyarısı ekran ekran incelendi. Veri yükleme fonksiyonlarının eksik
+bağımlılıkları tamamlandı; varsayılan boş diziler kararlı `useMemo` değerlerine alındı.
+Kurum logoları, kullanıcı fotoğrafları, yerel object URL önizlemeleri ve yazdırma portallarında
+native resim kullanımının nedeni açıklandı; görünür fotoğraflara boyut ve lazy yükleme eklendi.
+ESLint artık 0 hata ve 0 uyarıyla geçiyor.
+
+### 11. Tüm rol panelleri ilk JavaScript paketinde birlikte taşınıyordu
+
+Müdür, rehber, muhasebeci, kurum yöneticisi, öğretmen, öğrenci ve veli panelleri rol seçildikten
+sonra yüklenen ayrı parçalara bölündü. Ana sayfanın üretim ilk yük JavaScript'i 516 kB'den
+111 kB'ye düştü (yaklaşık %78 azalma). Sekiz rolün her biri ayrı tarayıcı oturumunda kendi
+panel parçasını yükledi; chunk isteği, tarayıcı konsolu ve çalışma zamanı hatası görülmedi.
+
+## Açık kalan yapısal riskler
+
+### A. Composite kurum foreign key'leri canlıya henüz uygulanmadı
+
+Prisma şeması ve yerel test veritabanı yedi kritik ilişkide composite foreign key kullanıyor;
+çapraz kurum yazımlarının reddedildiği kanıtlandı. Ancak testkurs ve Akyazı aynı canlı
+tabloları kullandığı için constraint'ler yalnız testkurs'a uygulanamaz.
+
+Canlı geçişten önce bütün ortak veride salt-okunur uyuşmazlık taraması, yedek geri-yükleme
+tatbikatı ve aşamalı `NOT VALID → VALIDATE` migration gerekir. Akyazı verisine dokunmama
+sınırı nedeniyle bu adımlar çalıştırılmadı; dolayısıyla canlı risk kapandı sayılmıyor.
+
+### B. PostgreSQL Row Level Security yok
+
+Kurum izolasyonu uygulama katmanındaki `tdb()` ile sağlanıyor. Merkezi katman sertleştirildi,
+fakat veritabanı seviyesinde ikinci savunma hattı (RLS) bulunmuyor. Ortak Vercel/Neon
+bağlantı havuzunda güvenli tenant bağlamı transaction içinde kurulmalı ve uygulama rolü
+tablo sahibinden ayrılmalı. Bu önkoşullar olmadan RLS açmak güvenli değildir; geçiş mimarisi
+ayrı planda tanımlandı.
+
+### C. Online ödeme için operasyon alarmı henüz yok
+
+Yarım kalan `processing` siparişi sağlayıcının yeniden bildirimiyle güvenli biçimde
+toparlanıyor. Ancak 10 dakikadan uzun kalan işlem veya terminal `error` kaydı için yöneticiyi
+uyaran periyodik tarama/panel henüz yok. Bu artık çift ödeme riski değil, olayın insan
+tarafından ne kadar çabuk fark edileceğiyle ilgili gözlemlenebilirlik eksiğidir.
+
+### D. Bir altyapı mutasyon senaryosu çalıştırılmadı
+
+22 E2E spec dosyasının tamamı makine-denetimli güvenlik sınıfına ayrıldı. Bunların 20'si,
+yerel PostgreSQL ve bellekte çalışan yerel Redis taklidi üzerinde setup dahil 108/108 geçti.
+Paket; gerçek tarayıcı panel turu, duyuru/etüt/ödev/yoklama çapraz-rol akışları, SQL
+okuma-yazma, kurum kodu, mobil oturum yenileme/iptal, cihaz devri, rate-limit, IDOR, CSRF,
+para türleri ve ödeme callback zincirini kapsıyor.
+
+Cloud Run dosyasındaki 5 senaryo, yalnız sentetik modelle testkurs'un canlı proxy'si üzerinden
+ayrıca geçti. Yerel `.env` içindeki solver secret Cloud Run ile güncel olmadığı için bu testin
+yerel proxy denemesi 403 verdi; Vercel production secret ile gerçek zincir 5/5 çalıştı.
+
+Kalan tek dosya superadmin ile geçici kurum ve Vercel domain'i oluşturup sonra kalıcı siler.
+Bu, testkurs sınırını aşan altyapı mutasyonu olduğu için çalıştırılmadı ve
+`OKULIN_ALLOW_INFRA_E2E=YES` açık onayı olmadan zaten başlayamaz.
+
+### E. Güncel bağımlılık açıkları taraması bekliyor
+
+`npm audit`, bağımlılık envanterini npm hizmetine göndereceği için dışa aktarım onayı olmadan
+çalıştırılmadı. Bu kontrol için açık kullanıcı onayı gerekir.
+
+## Sonraki güvenli sıra
+
+1. Öğrenci/veli/öğretmen IDOR ve rol bazlı tüm mutasyonlar için negatif test matrisi kur.
+2. Etüt, yoklama, program, ödev, duyuru, rehberlik ve finans için oluştur→oku→güncelle→sil
+   iş akışlarını zengin sentetik seed üzerinde tamamla.
+3. Online ödeme için stale/error alarmı ve yönetici gözlem yüzeyi tasarla.
+4. Composite tenant foreign key canlı migration'ı ile RLS transaction/rol dönüşümünü ayrı
+   çalışma olarak yürüt; Akyazı'yı etkileyen hiçbir adımı açık kapsam değişikliği olmadan uygulama.
+5. Bağımlılık güvenlik taramasını npm'e envanter gönderme onayı verildikten sonra çalıştır.
+6. Geçici kurum/domain izolasyon testini ancak testkurs dışı altyapı mutasyonu için ayrıca açık
+   yetki verilirse çalıştır.
+
+## Tekrarlanabilir komutlar
+
+- `npm run verify:static` — şema, TypeScript, ana ve mobil testler
+- `npm run test:db:push` — yalnız güvenlik kilitli `okulin_test` şemasını eşitler
+- `npm run test:db:seed` — yalnız yerel DB'yi iki sentetik kurumla sıfırlar
+- `npm run test:integration` — kurum izolasyonu, ilişkiler, finans ve callback yarış testleri
+- `npm run test:e2e:local` — seed + yerel PostgreSQL/Redis taklidi + sınıflandırılmış 108 E2E testi
+- `OKULIN_ALLOW_EXTERNAL_E2E=YES ... --project=external-service` — sentetik Cloud Run proxy testi
+- `npm run lint` — kalite kapısı
+- `npm run build` — üretim derlemesi
+
+Bu belge bir “sistem tamamen temiz” sertifikası değildir. İlk amaç, hangi sonucun gerçekten
+kanıtlandığını ve hangi riskin hâlâ açık olduğunu birbirinden ayıran güvenilir zemini kurmaktır.

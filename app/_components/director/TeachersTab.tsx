@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- Öğretmen fotoğrafları kullanıcı yüklemesi/harici URL; sabit image host garantisi yok. */
 
 import { useState, useEffect, useCallback } from 'react';
 import {
@@ -167,7 +168,7 @@ export default function TeachersTab({
           <div className="flex items-center gap-3 px-5 py-4 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
             <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
               {t.photoUrl
-                ? <img src={t.photoUrl} alt={t.name} className="w-full h-full object-cover" />
+                ? <img src={t.photoUrl} alt={t.name} width={48} height={48} className="w-full h-full object-cover" />
                 : <User size={24} className="text-gray-400" />}
             </div>
             <div className="min-w-0 flex-1">
@@ -270,7 +271,7 @@ export default function TeachersTab({
             >
               <div className="w-16 h-16 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
                 {t.photoUrl
-                  ? <img src={t.photoUrl} alt={t.name} className="w-full h-full object-cover" />
+                  ? <img src={t.photoUrl} alt={t.name} width={64} height={64} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   : <User size={30} className="text-gray-400" />}
               </div>
               <div className="min-w-0 w-full">
@@ -291,7 +292,7 @@ export default function TeachersTab({
               <button className="w-full flex items-center gap-3 px-4 py-3.5 text-left" onClick={() => onSelectTeacher(t.id)}>
                 <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-gray-100 flex items-center justify-center">
                   {t.photoUrl
-                    ? <img src={t.photoUrl} alt={t.name} className="w-full h-full object-cover" />
+                    ? <img src={t.photoUrl} alt={t.name} width={40} height={40} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     : <User size={22} className="text-gray-400" />}
                 </div>
                 <div className="min-w-0 flex-1">

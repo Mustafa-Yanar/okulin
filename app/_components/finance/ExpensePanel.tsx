@@ -57,7 +57,7 @@ export default function ExpensePanel({ session, showToast }: ExpensePanelProps) 
 
   // Giderler (ana veri) — SWR. mutateExpenses ile silme/ekleme sonrası iyimser güncellenir.
   const { data: expData, isLoading: loading, mutate: mutateExpenses } = useSWR<ExpenseDTO[]>('/api/finance/expense');
-  const expenses = Array.isArray(expData) ? expData : [];
+  const expenses = useMemo(() => (Array.isArray(expData) ? expData : []), [expData]);
 
   // Gider kategorileri kurum konfigürasyonundan (yoksa sabit liste). "Diğer" daima sonda.
   const { data: cfgData } = useSWR<{ expenseCategories?: string[] }>('/api/config');

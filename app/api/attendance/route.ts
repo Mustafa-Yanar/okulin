@@ -17,7 +17,7 @@ const AttendancePostSchema = z.object({
 
 // Attendance.records: { [studentId]: 'var' | 'gec' | 'yok' }
 
-export const GET = withAuth(async (req) => {
+export const GET = withAuth(async (req, _ctx, session) => {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get('date');
   const teacherId = searchParams.get('teacherId');
@@ -26,6 +26,15 @@ export const GET = withAuth(async (req) => {
 
   if (!date || !teacherId || !cls || !lessonNo) {
     return NextResponse.json({ error: 'date, teacherId, cls ve lessonNo gerekli' }, { status: 400 });
+  }
+
+  // Ham yoklama sözlüğü öğrenci kimliklerini ve durumlarını taşır. Tek üretim tüketicisi
+  // TeacherPanel'dir; öğretmen yalnız kendi kaydını, müdür/rehber denetim amacıyla tümünü
+  // okuyabilir. Öğrenci/veli/muhasebe için özetlenmiş ayrı yüzeyler kullanılır.
+  if (session.role === 'teacher') {
+    if (teacherId !== session.id) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  } else if (session.role !== 'director' && session.role !== 'counselor') {
+    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: teacherId } });

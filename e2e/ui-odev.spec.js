@@ -63,13 +63,14 @@ test('ödev: öğretmen verir → öğrenci teslim → öğretmen kontrol', asyn
     await stu.waitForLoadState('networkidle').catch(() => {});
     await stu.getByRole('button', { name: 'Ödevlerim' }).click();
     await stu.waitForTimeout(1200);
-    await expect(stu.getByText(title).first()).toBeVisible({ timeout: 10000 });
-    await stu.getByRole('button', { name: /Teslim Ettim/ }).click();
+    const stuCard = stu.getByText(title).first().locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " rounded-xl ")][1]');
+    await expect(stuCard).toBeVisible({ timeout: 10000 });
+    await stuCard.getByRole('button', { name: /Teslim Ettim/ }).click();
     await stu.waitForTimeout(500);
-    await stu.getByPlaceholder(/Not/).fill('Tamamladım.');
-    await stu.getByRole('button', { name: /^Teslim Et$/ }).click();
+    await stuCard.getByPlaceholder(/Not/).fill('Tamamladım.');
+    await stuCard.getByRole('button', { name: /^Teslim Et$/ }).click();
     await stu.waitForTimeout(1500);
-    await expect(stu.getByText(/Teslim edildi/).first()).toBeVisible({ timeout: 8000 });
+    await expect(stuCard.getByText(/Teslim edildi/)).toBeVisible({ timeout: 8000 });
     await stu.screenshot({ path: 'e2e/shots/odev-03-ogrenci-teslim.png', fullPage: true });
 
     // ---- 3) ÖĞRETMEN: teslimi kontrol eder ----
@@ -78,11 +79,13 @@ test('ödev: öğretmen verir → öğrenci teslim → öğretmen kontrol', asyn
     await tea.waitForTimeout(1500);
     await tea.screenshot({ path: 'e2e/shots/odev-04-ogretmen-modal.png', fullPage: true });
     // Öğrenci teslim etti → adının yanında "Kontrol et" görünmeli
-    await expect(tea.getByText(new RegExp(reEscape(STU.name))).first()).toBeVisible({ timeout: 8000 });
-    await tea.getByRole('button', { name: /Kontrol et/ }).click();
+    const studentRow = tea.getByRole('dialog').getByText(new RegExp(reEscape(STU.name))).first()
+      .locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " rounded-lg ")][1]');
+    await expect(studentRow).toBeVisible({ timeout: 8000 });
+    await studentRow.getByRole('button', { name: /Kontrol et/ }).click();
     await tea.waitForTimeout(500);
-    await tea.getByPlaceholder(/Puan/).fill('100');
-    await tea.getByRole('button', { name: /^Kontrol Et$/ }).click();
+    await studentRow.getByPlaceholder(/Puan/).fill('100');
+    await studentRow.getByRole('button', { name: /^Kontrol Et$/ }).click();
     // Kontrol başarısı toast ile doğrulanır (modal mutate sonrası yeniden yüklenir)
     await expect(tea.getByText('Kontrol edildi').first()).toBeVisible({ timeout: 8000 });
     await tea.screenshot({ path: 'e2e/shots/odev-05-ogretmen-kontrol.png', fullPage: true });
@@ -93,8 +96,9 @@ test('ödev: öğretmen verir → öğrenci teslim → öğretmen kontrol', asyn
     await stu.getByRole('button', { name: 'Ödevlerim' }).click();
     await stu.waitForTimeout(1500);
     await stu.screenshot({ path: 'e2e/shots/odev-06-ogrenci-puan.png', fullPage: true });
-    await expect(stu.getByText(/Kontrol edildi/).first()).toBeVisible({ timeout: 8000 });
-    await expect(stu.getByText(/Puan: 100/).first()).toBeVisible({ timeout: 8000 });
+    const checkedCard = stu.getByText(title).first().locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " rounded-xl ")][1]');
+    await expect(checkedCard.getByText(/Kontrol edildi/)).toBeVisible({ timeout: 8000 });
+    await expect(checkedCard.getByText(/Puan: 100/)).toBeVisible({ timeout: 8000 });
   } finally {
     // Veri temizliği afterAll'da — burada yalnız context'ler kapatılır
     await teaCtx.close();

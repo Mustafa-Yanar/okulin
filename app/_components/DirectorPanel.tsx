@@ -129,7 +129,7 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       console.warn('[director] slot-times yüklenemedi:', e);
       showToast('Ders saatleri yüklenemedi', 'error');
     }).finally(() => setSlotTimesLoading(false));
-  }, [tab, slotDays]);
+  }, [tab, slotDays, showToast]);
 
   const loadAll = useCallback(async (wk?: string) => {
     setLoading(true);
@@ -146,9 +146,9 @@ export default function DirectorPanel({ session, showToast, externalTab, onExter
       setClasses(classData.classes || []);
     } catch (err) { showToast((err as Error).message, 'error'); }
     finally { setLoading(false); }
-  }, []);
+  }, [showToast]);
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => { loadAll(); }, [loadAll]);
 
   // Hafta gezinme: yalnız weekKey state'i değişir — sekmeler (TeachersTab etüt listesi,
   // HistoryModal) kendi verisini kendisi çeker. Eski /api/slots (SlotBooking) yüklemeleri

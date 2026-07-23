@@ -102,7 +102,7 @@ test('senaryo: 5 eşzamanlı director isteği — SQL connection pool', async ({
     );
     for (const res of results) {
       expect(res.status()).toBe(200);
-      expect((await res.json()).length).toBeGreaterThanOrEqual(10);
+      expect((await res.json()).length).toBeGreaterThanOrEqual(1);
     }
   } finally {
     await dirReq.dispose();

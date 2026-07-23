@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element -- Kurum giriş logosu kullanıcı tanımlı/harici URL olabilir; native onError fallback'i gerekir. */
 import React from 'react';
 import { BookOpen } from 'lucide-react';
 import { brandGradient } from '@/lib/branding';
@@ -67,7 +68,7 @@ export function BrandHeader({ branding, subtitle }: BrandHeaderProps) {
   return (
     <div className="text-center mb-8">
       {branding?.logoUrl ? (
-        <img src={branding.logoUrl} alt={branding.name}
+        <img src={branding.logoUrl} alt={branding.name} width={160} height={56} fetchPriority="high"
           className="h-14 w-auto object-contain mx-auto mb-5"
           onError={(e) => { e.currentTarget.style.display = 'none'; }} />
       ) : (

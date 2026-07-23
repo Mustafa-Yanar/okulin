@@ -6,7 +6,8 @@
  * çalışılır (GET /api/auth → session). Oturumlar auth.setup.js'in kaydettiği
  * storageState dosyalarından gelir — bu modül login YAPMAZ.
  */
-const BASE = process.env.OKULIN_BASE_URL || 'https://testkurs.okulin.com';
+const BASE = process.env.OKULIN_BASE_URL;
+if (!BASE) throw new Error('GÜVENLİK KİLİDİ: E2E için OKULIN_BASE_URL zorunlu.');
 
 const DIR_STATE = 'e2e/.auth/director.json';
 const TEA_STATE = 'e2e/.auth/teacher.json';

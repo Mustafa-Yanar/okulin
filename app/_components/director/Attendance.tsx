@@ -3,7 +3,7 @@
 // Müdür yoklama bileşenleri: günlük sınıf özeti (DirectorAttendanceView),
 // sınıf-gün detay modalı (AttendanceSummaryModal) ve öğrenci devamsızlık
 // geçmişi (StudentAttendanceView).
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Phone, ClipboardList, GraduationCap } from 'lucide-react';
 import { getWeekKey, ALL_DAYS } from '@/lib/constants';
 import { api, Modal } from './shared';
@@ -177,15 +177,15 @@ export function DirectorAttendanceView({ showToast }: { showToast?: ShowToast })
     return mon;
   }, []);
 
-  const dayDate = (idx: number) => {
+  const dayDate = useCallback((idx: number) => {
     const d = new Date(weekMonday);
     d.setUTCDate(weekMonday.getUTCDate() + idx);
     return d;
-  };
+  }, [weekMonday]);
 
   const dateForSelectedDay = useMemo(
     () => dayDate(selectedDay).toISOString().slice(0, 10),
-    [selectedDay, weekMonday]
+    [selectedDay, dayDate]
   );
 
   useEffect(() => {
@@ -201,7 +201,7 @@ export function DirectorAttendanceView({ showToast }: { showToast?: ShowToast })
         setLoading(false);
       }
     })();
-  }, [dateForSelectedDay]);
+  }, [dateForSelectedDay, showToast]);
 
   const clsList = summary ? Object.keys(summary).sort() : [];
 

@@ -6,6 +6,7 @@ import {
 import { listActiveTenants, runWithTenant, type TenantRef } from '@/lib/tenant';
 import { freezeRecurringWeek } from '@/lib/etut/history';
 import { shouldRollWeek, shiftWeekKey } from '@/lib/etut/weeks';
+import { isCronAuthorized } from '@/lib/cron-auth';
 
 // Pazar 11:00 UTC+3 = 08:00 UTC → "0 8 * * 0"
 // Bilinçli withAuth istisnası: cron ucu — oturum yok, CRON_SECRET Bearer doğrulanır.
@@ -76,8 +77,7 @@ async function rollTenant(): Promise<{ previousWeek: string; newWeek: string; te
 }
 
 export async function GET(req: Request) {
-  const authHeader = req.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isCronAuthorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
