@@ -32,11 +32,20 @@ const ProgramDeleteSchema = z.object({ teacherId: zId });
 // Geçici (fixed: false) ders/etüt'ler burada yaşar, sadece o haftaya özel.
 
 // GET /api/program?teacherId=...&week=...
-export const GET = withAuth(async (req) => {
+export const GET = withAuth(async (req, _ctx, session) => {
   const { searchParams } = new URL(req.url);
   const legacyTeacherId = searchParams.get('teacherId');
   const weekKey = searchParams.get('week') || getWeekKey();
   if (!legacyTeacherId) return NextResponse.json({ error: 'teacherId gerekli' }, { status: 400 });
+
+  // Öğretmen yalnız kendi gridini; müdür/rehber planlama için tüm öğretmenleri okur.
+  // Öğrenci/veli kendi ders programını /api/class-schedule üzerinden, oturum sınıfına
+  // sabitlenmiş biçimde alır. Muhasebe ve kurum yöneticisinin bu ham gride ihtiyacı yoktur.
+  if (session.role === 'teacher') {
+    if (legacyTeacherId !== session.id) return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  } else if (session.role !== 'director' && session.role !== 'counselor') {
+    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+  }
 
   // Şablonu oku — programTemplate Json artık yalnız grid (gün→slot→giriş);
   // etüt EtutSablon/EtutReservation tablolarında (Faz 5 cutover, JSON temizlendi).

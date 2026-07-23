@@ -23,7 +23,7 @@ olduğunu sürekli sınayan bir düzene taşıma çalışmasının ilk kontrol n
 - Merkezi `withAuth` ve mobil yetki katmanlarının dışında kalan 20 bilinçli/açık API kapısı
 - Doğrudan Prisma kullanan 9 özel route
 - Standart `parseBody` doğrulamasından farklı çalışan 15 mutasyon kapısı
-- 101 mevcut Playwright E2E senaryosu
+- 106 mevcut Playwright E2E senaryosu
 
 Bu sayılar mimari sözleşme testine bağlandı. Yeni route, özel yetki kapısı, doğrudan Prisma
 erişimi veya standart dışı gövde işleme eklendiğinde test bilinçli allowlist güncellemesi ister.
@@ -42,7 +42,7 @@ erişimi veya standart dışı gövde işleme eklendiğinde test bilinçli allow
 | ESLint | 0 hata, 37 uyarı |
 | Yerel tarayıcı rol testi | 8 / 8 rol geçti |
 | Rol erişim matrisi | 34 / 34 karar geçti |
-| Güvenli yerel Playwright E2E paketi | 95 / 95 geçti |
+| Güvenli yerel Playwright E2E paketi | 100 / 100 geçti |
 | CP-SAT yerel çözücü senaryoları | 13 senaryoda kural ihlali yok |
 
 Yerel tarayıcı testinde müdür, müdür yardımcısı, rehber, muhasebe, kurum yöneticisi,
@@ -86,6 +86,18 @@ Bu varsayılan ve E2E dosyalarındaki gömülü hedef/kullanıcı şifresi fallb
 
 Kullanılmayan yedekleme fonksiyonu ve Next.js'in özel `module` adıyla çakışan değişken
 temizlendi. ESLint artık hata koduyla düşmüyor.
+
+### 6. Gereğinden geniş üç okuma yüzeyi
+
+Ham yoklama sözlüğünü ve öğretmen program gridini oturum açmış her rol okuyabiliyordu.
+Ayrıca öğrenci etüt ekranı, dolu slotla birlikte başka öğrencilerin adını ve sınıfını da
+alıyordu. Bu alanlar arayüzde gizlense bile ağ yanıtında bulunmaları gereksiz veri ifşasıydı.
+
+Artık öğretmen yalnız kendi ham program/yoklamasını, müdür ve rehber denetim amacıyla tümünü
+okuyabiliyor. Öğrenci dolu etüt saatini görmeye devam ediyor fakat başka öğrencinin kimliği,
+dersi ve atama kaynağı maskeleniyor; öğretmene de yalnız kendi etüt şablonları dönüyor.
+Aynı kurum içindeki ikinci sentetik öğrenciyle veli için finans, rehberlik, konu, hedef,
+deneme, davranış ve etüt olmak üzere yedi ayrı yabancı-kimlik isteğinin 403 döndüğü kanıtlandı.
 
 ## Açık kalan yapısal riskler
 
@@ -138,8 +150,8 @@ değildir; düşük donanımlı telefonlarda açılış süresi için ölçüm v
 
 ### G. E2E paketinin iki dış altyapı senaryosu yerel pakete dahil değil
 
-20 E2E spec dosyasının tamamı makine-denetimli güvenlik sınıfına ayrıldı. Bunların 18'i,
-yerel PostgreSQL ve bellekte çalışan yerel Redis taklidi üzerinde setup dahil 95/95 geçti.
+21 E2E spec dosyasının tamamı makine-denetimli güvenlik sınıfına ayrıldı. Bunların 19'u,
+yerel PostgreSQL ve bellekte çalışan yerel Redis taklidi üzerinde setup dahil 100/100 geçti.
 Paket; gerçek tarayıcı panel turu, duyuru/etüt/ödev/yoklama çapraz-rol akışları, SQL
 okuma-yazma, kurum kodu, mobil oturum yenileme/iptal, cihaz devri, rate-limit, IDOR, CSRF,
 para türleri ve ödeme callback zincirini kapsıyor.
@@ -171,7 +183,7 @@ mutasyonu ayrıca `OKULIN_ALLOW_INFRA_E2E=YES` açık onayı olmadan canlı E2E'
 - `npm run test:db:push` — yalnız güvenlik kilitli `okulin_test` şemasını eşitler
 - `npm run test:db:seed` — yalnız yerel DB'yi iki sentetik kurumla sıfırlar
 - `npm run test:integration` — kurum izolasyonu, ilişkiler, finans ve callback yarış testleri
-- `npm run test:e2e:local` — seed + yerel PostgreSQL/Redis taklidi + sınıflandırılmış 95 E2E testi
+- `npm run test:e2e:local` — seed + yerel PostgreSQL/Redis taklidi + sınıflandırılmış 100 E2E testi
 - `npm run lint` — kalite kapısı
 - `npm run build` — üretim derlemesi
 

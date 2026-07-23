@@ -15,6 +15,7 @@ process.env.OKULIN_STU_PASS = 'Test1234!';
 process.env.OKULIN_PAR_USER = '905310000101';
 process.env.OKULIN_PAR_PASS = 'Test1234!';
 process.env.OKULIN_ORG_CODE = 'ABC234';
+process.env.OKULIN_RELATION_FIXTURE = 'YES';
 
 const { defineConfig } = require('@playwright/test');
 const base = require('./playwright.config.js');

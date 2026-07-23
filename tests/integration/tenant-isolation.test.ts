@@ -17,8 +17,10 @@ describe('kurumlar arası veri izolasyonu', () => {
     const testkurs = await runWithTenant('testkurs', 'main', () => tdb().student.findMany());
     const digerkurs = await runWithTenant('digerkurs', 'main', () => tdb().student.findMany());
 
-    expect(testkurs.map((row) => row.orgSlug)).toEqual(['testkurs']);
-    expect(digerkurs.map((row) => row.orgSlug)).toEqual(['digerkurs']);
+    expect(testkurs.length).toBeGreaterThanOrEqual(2);
+    expect(digerkurs.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(testkurs.map((row) => row.orgSlug))).toEqual(new Set(['testkurs']));
+    expect(new Set(digerkurs.map((row) => row.orgSlug))).toEqual(new Set(['digerkurs']));
   });
 
   it('create içindeki sahte kurum alanlarını aktif kapsamla ezer', async () => {

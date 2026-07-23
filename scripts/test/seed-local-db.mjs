@@ -99,6 +99,15 @@ async function seedTenant({ slug, label, suffix }) {
       mustChangePassword: false,
     },
   });
+  const secondStudent = await prisma.student.create({
+    data: {
+      id: `student_${slug}_2`, orgSlug: slug, branch: 'main', legacyId: `s_${suffix}_2`,
+      name: `${label} İkinci Öğrenci`, username: `${slug}_ogrenci2`, passwordHash,
+      classId: class701.id, group: 'ortaokul', phone: `905320000${suffix.padStart(3, '0')}`,
+      parentName: `${label} İkinci Veli`, parentPhone: `905330000${suffix.padStart(3, '0')}`,
+      mustChangePassword: false,
+    },
+  });
   await prisma.parent.create({
     data: {
       id: `parent_${slug}`, orgSlug: slug, branch: 'main', phone: student.parentPhone,
@@ -130,6 +139,21 @@ async function seedTenant({ slug, label, suffix }) {
       teacherId: teacher.legacyId, dayIndex: 6, start: '16:00', end: '16:40', aktif: true,
     },
   });
+  const occupiedEtut = await prisma.etutSablon.create({
+    data: {
+      id: `etut_${slug}_2`, orgSlug: slug, branch: 'main', legacyId: `etut_${suffix}_2`,
+      teacherId: teacher.legacyId, dayIndex: 6, start: '17:00', end: '17:40', aktif: true,
+    },
+  });
+  await prisma.etutReservation.create({
+    data: {
+      id: `etut_res_${slug}_2`, orgSlug: slug, branch: 'main', sablonId: occupiedEtut.id,
+      teacherId: teacher.legacyId, scope: 'WEEK', weekKey, studentId: secondStudent.legacyId,
+      studentName: secondStudent.name, studentCls: class701.legacyId, dersBranch: 'Matematik',
+      bookedByRole: 'director', bookedById: 'director', status: 'ACTIVE',
+      dayIndex: occupiedEtut.dayIndex, startsAt: occupiedEtut.start, endsAt: occupiedEtut.end,
+    },
+  });
   await prisma.attendance.create({
     data: {
       id: `attendance_${slug}_1`, orgSlug: slug, branch: 'main', date: '2026-07-20',
@@ -148,7 +172,7 @@ async function seedTenant({ slug, label, suffix }) {
     },
   });
 
-  return { class701, classM1, teacher, student };
+  return { class701, classM1, teacher, student, secondStudent };
 }
 
 try {

@@ -1,6 +1,7 @@
 // E2E dosyalarının güvenlik sınıfları. Yeni *.spec.js eklendiğinde mimari sözleşme
 // testi bu listelerden birine bilinçli yerleştirilmesini zorunlu kılar.
 const LOCAL_SAFE = [
+  'int-access-boundaries.spec.js',
   'int-money-types.spec.js',
   'int-payment-callback.spec.js',
   'int-slots-rules.spec.js',

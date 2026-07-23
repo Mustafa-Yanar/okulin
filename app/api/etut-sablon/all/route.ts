@@ -28,9 +28,30 @@ export const GET = withAuth('auth', 'etut', async (req, _ctx, session) => {
 
   if (session.role === 'parent') {
     const childId = searchParams.get('studentId');
-    const allowed = childId && canReadStudent(session, childId);
-    const mine = allowed ? etutler.filter(e => e.studentId === childId) : [];
+    if (!childId || !canReadStudent(session, childId)) {
+      return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
+    }
+    const mine = etutler.filter(e => e.studentId === childId);
     return NextResponse.json({ weekKey, etutler: mine, bookableWeeks });
+  }
+
+  // Öğrenci boş/dolu slotları görür; fakat başka öğrencinin kimliği, dersi ve atama
+  // kaynağı rezerve edilebilirlik için gerekli değildir. Kendi rezervasyonu tam kalır.
+  if (session.role === 'student') {
+    const safe = etutler.map((e) => {
+      if (!e.studentId || e.studentId === session.id) return e;
+      return { ...e, studentId: null, studentName: null, studentCls: null, branch: null, bookedBy: null, scope: null };
+    });
+    return NextResponse.json({ weekKey, etutler: safe, bookableWeeks });
+  }
+
+  // Öğretmenin meşru tüketicileri yalnız kendi yoklama/atama ekranlarıdır.
+  if (session.role === 'teacher') {
+    return NextResponse.json({ weekKey, etutler: etutler.filter(e => e.teacherId === session.id), bookableWeeks });
+  }
+
+  if (session.role !== 'director' && session.role !== 'counselor') {
+    return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
   }
 
   // Additive: opsiyonel studentId — tek öğrenciye daraltır (örn. StudentEtutTab).

@@ -79,11 +79,13 @@ test('ödev: öğretmen verir → öğrenci teslim → öğretmen kontrol', asyn
     await tea.waitForTimeout(1500);
     await tea.screenshot({ path: 'e2e/shots/odev-04-ogretmen-modal.png', fullPage: true });
     // Öğrenci teslim etti → adının yanında "Kontrol et" görünmeli
-    await expect(tea.getByText(new RegExp(reEscape(STU.name))).first()).toBeVisible({ timeout: 8000 });
-    await tea.getByRole('button', { name: /Kontrol et/ }).click();
+    const studentRow = tea.getByRole('dialog').getByText(new RegExp(reEscape(STU.name))).first()
+      .locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " rounded-lg ")][1]');
+    await expect(studentRow).toBeVisible({ timeout: 8000 });
+    await studentRow.getByRole('button', { name: /Kontrol et/ }).click();
     await tea.waitForTimeout(500);
-    await tea.getByPlaceholder(/Puan/).fill('100');
-    await tea.getByRole('button', { name: /^Kontrol Et$/ }).click();
+    await studentRow.getByPlaceholder(/Puan/).fill('100');
+    await studentRow.getByRole('button', { name: /^Kontrol Et$/ }).click();
     // Kontrol başarısı toast ile doğrulanır (modal mutate sonrası yeniden yüklenir)
     await expect(tea.getByText('Kontrol edildi').first()).toBeVisible({ timeout: 8000 });
     await tea.screenshot({ path: 'e2e/shots/odev-05-ogretmen-kontrol.png', fullPage: true });
