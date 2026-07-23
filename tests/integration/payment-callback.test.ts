@@ -120,7 +120,9 @@ describe.sequential('PayTR callback güvenliği ve idempotency', () => {
 
     const order = await prisma.payOrder.findUniqueOrThrow({ where: { oid: OID_MISMATCH } });
     const student = await prisma.student.findFirstOrThrow({ where: { orgSlug: ORG, legacyId: STUDENT_ID } });
-    const finance = await prisma.finance.findUniqueOrThrow({ where: { studentId: student.id } });
+    const finance = await prisma.finance.findUniqueOrThrow({
+      where: { orgSlug_branch_studentId: { orgSlug: ORG, branch: BRANCH, studentId: student.id } },
+    });
     expect(order.status).toBe('pending');
     expect(finance.payments).toEqual([]);
   });
@@ -137,7 +139,8 @@ describe.sequential('PayTR callback güvenliği ve idempotency', () => {
     const order = await prisma.payOrder.findUniqueOrThrow({ where: { oid: OID_CONCURRENT } });
     const student = await prisma.student.findFirstOrThrow({ where: { orgSlug: ORG, legacyId: STUDENT_ID } });
     const finance = await prisma.finance.findUniqueOrThrow({
-      where: { studentId: student.id }, include: { installments: { orderBy: { idx: 'asc' } } },
+      where: { orgSlug_branch_studentId: { orgSlug: ORG, branch: BRANCH, studentId: student.id } },
+      include: { installments: { orderBy: { idx: 'asc' } } },
     });
     const payments = (finance.payments as Array<{ amount: number }>) || [];
 

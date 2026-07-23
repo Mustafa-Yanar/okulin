@@ -24,7 +24,9 @@ describe('finans işlemi atomikliği', () => {
 
     const student = await prisma.student.findFirstOrThrow({ where: { orgSlug: 'testkurs', legacyId: 's_101_1' } });
     const finance = await prisma.finance.findUniqueOrThrow({
-      where: { studentId: student.id },
+      where: {
+        orgSlug_branch_studentId: { orgSlug: 'testkurs', branch: 'main', studentId: student.id },
+      },
       include: { installments: { orderBy: { idx: 'asc' } } },
     });
     const payments = (finance.payments as Array<{ amount: number; receiptNo: string }>) || [];

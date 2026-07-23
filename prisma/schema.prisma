@@ -8,7 +8,7 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_POSTGRES_PRISMA_URL")    // pooled — runtime sorguları
+  url       = env("DATABASE_POSTGRES_PRISMA_URL") // pooled — runtime sorguları
   directUrl = env("DATABASE_POSTGRES_URL_NON_POOLING") // direct — migration / db push
 }
 
@@ -42,10 +42,11 @@ model SuperAdmin {
 model Branch {
   id        String   @id @default(cuid())
   orgSlug   String
-  slug      String   // 'main', 'akyazi', ...
+  slug      String // 'main', 'akyazi', ...
   name      String
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+
   @@unique([orgSlug, slug])
   @@index([orgSlug])
 }
@@ -69,6 +70,7 @@ model DemoRequest {
   note      String?
   ip        String?
   createdAt DateTime @default(now())
+
   @@index([createdAt])
 }
 
@@ -84,6 +86,7 @@ model PayOrder {
   data                Json?
   createdAt           DateTime  @default(now())
   student             Student?  @relation(fields: [orgSlug, branch, studentId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
+
   @@index([orgSlug, branch])
 }
 
@@ -96,6 +99,7 @@ model Director {
   username     String
   passwordHash String
   name         String
+
   @@unique([orgSlug, branch])
 }
 
@@ -109,6 +113,7 @@ model Counselor {
   passwordHash       String
   phone              String?
   mustChangePassword Boolean @default(true)
+
   @@unique([orgSlug, branch, legacyId])
 }
 
@@ -125,6 +130,7 @@ model AssistantDirector {
   passwordHash       String
   phone              String?
   mustChangePassword Boolean @default(true)
+
   @@unique([orgSlug, branch, legacyId])
 }
 
@@ -138,6 +144,7 @@ model Accountant {
   passwordHash       String
   phone              String?
   mustChangePassword Boolean @default(true)
+
   @@unique([orgSlug, branch, legacyId])
 }
 
@@ -152,6 +159,7 @@ model Parent {
   name               String?
   mustChangePassword Boolean @default(true)
   children           Json    @default("[]")
+
   @@unique([orgSlug, branch, phone])
   @@index([orgSlug, branch])
 }
@@ -170,12 +178,14 @@ model Teacher {
   photoUrl           String?
   phone              String?
   mustChangePassword Boolean         @default(true)
-  programTemplate    Json?           // program:{legacyId} Redis objesi (grid şablonu + etutSablonlari)
+  programTemplate    Json? // program:{legacyId} Redis objesi (grid şablonu + etutSablonlari)
   presets            TeacherPreset[]
   slotBookings       SlotBooking[]
   etutSablonlarRel   EtutSablon[]
   attendances        Attendance[]
+
   @@unique([orgSlug, branch, legacyId])
+  @@unique([orgSlug, branch, id])
   @@index([orgSlug, branch])
 }
 
@@ -188,27 +198,27 @@ model TeacherPreset {
 }
 
 model Student {
-  id                 String    @id @default(cuid())
+  id                 String     @id @default(cuid())
   orgSlug            String
-  branch             String    @default("main")
+  branch             String     @default("main")
   legacyId           String
   name               String
   username           String
   passwordHash       String
-  class              Class?    @relation(fields: [classId], references: [id])
+  class              Class?     @relation(fields: [orgSlug, branch, classId], references: [orgSlug, branch, id])
   classId            String?
   group              String
   phone              String?
-  tcNo               String?   // öğrenci TC kimlik no (senet/makbuz — opsiyonel)
+  tcNo               String? // öğrenci TC kimlik no (senet/makbuz — opsiyonel)
   birthDate          String?
-  diplomaNotu        Float?    // yalnız mezun (50-100); OBP = ×5 türetilir
-  mustChangePassword Boolean   @default(false)
+  diplomaNotu        Float? // yalnız mezun (50-100); OBP = ×5 türetilir
+  mustChangePassword Boolean    @default(false)
   parentName         String?
   parentPhone        String?
   parentRelation     String?
   parentNote         String?
-  parentTcNo         String?   // ödeyecek/veli TC kimlik no (senet — opsiyonel)
-  parentAddress      String?   // veli/ödeyecek adresi (senet — opsiyonel)
+  parentTcNo         String? // ödeyecek/veli TC kimlik no (senet — opsiyonel)
+  parentAddress      String? // veli/ödeyecek adresi (senet — opsiyonel)
   parent2Name        String?
   parent2Phone       String?
   parent2Relation    String?
@@ -218,28 +228,32 @@ model Student {
   hedefler           Hedef[]
   topics             Topic[]
   guidances          Guidance[]
+
   @@unique([orgSlug, branch, legacyId])
+  @@unique([orgSlug, branch, id])
   @@index([orgSlug, branch])
   @@index([classId])
 }
 
 model Class {
-  id        String    @id @default(cuid())
-  orgSlug   String
-  branch    String    @default("main")
-  legacyId  String
-  ad        String
-  group     String
-  kademe    String
-  duzey     String?
-  dal       String?
-  dersler   String[]  @default([])
-  seeded    Boolean   @default(true)
+  id           String    @id @default(cuid())
+  orgSlug      String
+  branch       String    @default("main")
+  legacyId     String
+  ad           String
+  group        String
+  kademe       String
+  duzey        String?
+  dal          String?
+  dersler      String[]  @default([])
+  seeded       Boolean   @default(true)
   // Sınıf ders programı penceresi (KATI): { "0": [1,2,3], "5": [1,2] } — gün→ders NO listesi.
   // İşaretli slotlar CP-SAT'a windows olarak gider; işaretsiz güne/slota ders yerleşmez.
   slotTemplate Json?
-  students  Student[]
+  students     Student[]
+
   @@unique([orgSlug, branch, legacyId])
+  @@unique([orgSlug, branch, id])
   @@index([orgSlug, branch])
 }
 
@@ -252,30 +266,32 @@ model Course {
   core    Boolean @default(true)
   family  String?
   active  Boolean @default(true)
+
   @@unique([orgSlug, branch, key])
   @@index([orgSlug, branch])
 }
 
 model SlotBooking {
-  id          String  @id @default(cuid())
-  orgSlug     String
-  branch      String  @default("main")
-  weekKey     String
-  teacher     Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  teacherId   String
-  dayIndex    Int
-  slotId      String
-  booked      Boolean @default(false)
-  disabled    Boolean @default(false)
-  fixed       Boolean @default(false)
+  id        String  @id @default(cuid())
+  orgSlug   String
+  branch    String  @default("main")
+  weekKey   String
+  teacher   Teacher @relation(fields: [orgSlug, branch, teacherId], references: [orgSlug, branch, id], onDelete: Cascade)
+  teacherId String
+  dayIndex  Int
+  slotId    String
+  booked    Boolean @default(false)
+  disabled  Boolean @default(false)
+  fixed     Boolean @default(false)
   // Rezervasyon-dönemi kolonları (studentId/studentName/studentCls/dersBranch/bookedBy)
   // 2026-07-23'te düşürüldü — grid rezervasyonu B3'te emekli, canlı tarama 1560 satırda
   // hepsini boş/kopya kanıtladı. Etüt kimliği EtutReservation'da yaşar.
-  data        Json?   // hücrenin tam içeriği (lessonType, cls, subBranch, branch)
+  data      Json? // hücrenin tam içeriği (lessonType, cls, subBranch, branch)
   // Saat snapshot'ı (spec §4): slot saat config'i sonradan değişirse eski kayıt kaymasın.
   // Nullable — mevcut satırlar için boş; Faz 2 birleşik servis yazarken doldurur.
-  startsAt    String?
-  endsAt      String?
+  startsAt  String?
+  endsAt    String?
+
   @@unique([orgSlug, branch, weekKey, teacherId, dayIndex, slotId])
   @@index([orgSlug, branch, weekKey])
   @@index([orgSlug, branch, teacherId, weekKey])
@@ -287,13 +303,14 @@ model TenantConfig {
   slotTimes       Json?
   currentWeek     String?
   programTemplate Json?
-  receiptCounter  Int     @default(0)  // makbuz no sayacı (MKB-YYYY-#####)
+  receiptCounter  Int     @default(0) // makbuz no sayacı (MKB-YYYY-#####)
   officialName    String? // kurum resmi ünvanı (senet/makbuz alacaklı — örn. "…Ltd. Şti.")
   taxOffice       String? // vergi dairesi
   taxNo           String? // vergi no
   officialAddress String? // kurum resmi adresi (belge üst/alt bilgisi)
-  denemeNameMap   Json?   // deneme excelName(lower)→studentId kalıcı eşleştirme
-  paymentConfig   Json?   // PayTR ödeme yapılandırması (payment:config Redis karşılığı; şifreli anahtarlar)
+  denemeNameMap   Json? // deneme excelName(lower)→studentId kalıcı eşleştirme
+  paymentConfig   Json? // PayTR ödeme yapılandırması (payment:config Redis karşılığı; şifreli anahtarlar)
+
   @@id([orgSlug, branch])
 }
 
@@ -307,6 +324,7 @@ model OrgConfig {
   branch  String @default("main")
   key     String
   value   Json
+
   @@unique([orgSlug, branch, key])
   @@index([orgSlug, branch])
 }
@@ -315,27 +333,29 @@ model Finance {
   id               String        @id @default(cuid())
   orgSlug          String
   branch           String        @default("main")
-  student          Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  studentId        String        @unique
+  student          Student       @relation(fields: [orgSlug, branch, studentId], references: [orgSlug, branch, id], onDelete: Cascade)
+  studentId        String
   registrationDate String?
   // Para: Decimal(12,2) (Float→Decimal göçü 2026-07-23; okuma katmanı number'a çevirir — lib/prisma)
   totalFee         Decimal       @db.Decimal(12, 2)
   discount         Decimal       @default(0) @db.Decimal(12, 2)
   netFee           Decimal       @db.Decimal(12, 2)
   paymentPlan      String
-  payments         Json?         // ödeme ledger'ı [{id,date,amount,method,note,receiptNo,recordedBy}]; balance türetilir
+  payments         Json? // ödeme ledger'ı [{id,date,amount,method,note,receiptNo,recordedBy}]; balance türetilir
   installments     Installment[]
+
+  @@unique([orgSlug, branch, studentId])
   @@index([orgSlug, branch])
 }
 
 model Installment {
-  id         String  @id @default(cuid())
-  finance    Finance @relation(fields: [financeId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  finance    Finance  @relation(fields: [financeId], references: [id], onDelete: Cascade)
   financeId  String
   idx        Int
   dueDate    String
-  amount     Decimal @db.Decimal(12, 2)
-  paid       Boolean @default(false)
+  amount     Decimal  @db.Decimal(12, 2)
+  paid       Boolean  @default(false)
   paidDate   String?
   paidAmount Decimal? @db.Decimal(12, 2)
   method     String?
@@ -343,14 +363,15 @@ model Installment {
 }
 
 model Expense {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   orgSlug  String
-  branch   String @default("main")
+  branch   String  @default("main")
   legacyId String
   type     String
   amount   Decimal @db.Decimal(12, 2)
   date     String
   data     Json?
+
   @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch])
 }
@@ -359,12 +380,13 @@ model Attendance {
   id        String  @id @default(cuid())
   orgSlug   String
   branch    String  @default("main")
-  date      String  // YYYY-MM-DD
-  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  date      String // YYYY-MM-DD
+  teacher   Teacher @relation(fields: [orgSlug, branch, teacherId], references: [orgSlug, branch, id], onDelete: Cascade)
   teacherId String
-  cls       String  // sınıf kodu ("101", "m1" vb.)
-  lessonNo  String  // "1","2",... veya "e<etutId>"
-  records   Json    // { [studentId]: 'var' | 'gec' | 'yok' }
+  cls       String // sınıf kodu ("101", "m1" vb.)
+  lessonNo  String // "1","2",... veya "e<etutId>"
+  records   Json // { [studentId]: 'var' | 'gec' | 'yok' }
+
   @@unique([orgSlug, branch, date, teacherId, cls, lessonNo])
   @@index([orgSlug, branch])
   @@index([orgSlug, branch, date])
@@ -374,10 +396,12 @@ model Behavior {
   id        String          @id @default(cuid())
   orgSlug   String
   branch    String          @default("main")
-  student   Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  studentId String          @unique
+  student   Student         @relation(fields: [orgSlug, branch, studentId], references: [orgSlug, branch, id], onDelete: Cascade)
+  studentId String
   total     Int             @default(0)
   entries   BehaviorEntry[]
+
+  @@unique([orgSlug, branch, studentId])
   @@index([orgSlug, branch])
 }
 
@@ -409,6 +433,7 @@ model Exam {
   computedAt     DateTime? // son yeniden-puanlama (compute route); report okur
   rows           ExamRow[]
   createdAt      DateTime  @default(now())
+
   @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch])
 }
@@ -429,6 +454,7 @@ model Odev {
   branch   String @default("main")
   legacyId String
   data     Json
+
   @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch])
 }
@@ -439,12 +465,13 @@ model Hedef {
   id        String   @id @default(cuid())
   orgSlug   String
   branch    String   @default("main")
-  studentId String   // legacy öğrenci id (route legacy id ile çalışır, join yok)
+  studentId String // legacy öğrenci id (route legacy id ile çalışır, join yok)
   weekly    Int      @default(0)
   setBy     String?
   setByName String?
   updatedAt DateTime @default(now())
   student   Student? @relation(fields: [orgSlug, branch, studentId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
+
   @@unique([orgSlug, branch, studentId])
   @@index([orgSlug, branch])
 }
@@ -459,6 +486,7 @@ model Etkinlik {
   startDate String
   endDate   String?
   data      Json
+
   @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch])
 }
@@ -470,6 +498,7 @@ model Form {
   legacyId  String
   data      Json
   responses FormResponse[]
+
   @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch])
 }
@@ -491,6 +520,7 @@ model Lead {
   name     String
   stage    String
   data     Json
+
   @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch])
 }
@@ -506,20 +536,23 @@ model Announcement {
   data       Json
   createdAt  DateTime                @default(now())
   recipients AnnouncementRecipient[]
+
   @@unique([orgSlug, branch, legacyId])
+  @@unique([orgSlug, branch, id])
   @@index([orgSlug, branch])
 }
 
 model AnnouncementRecipient {
   id             String       @id @default(cuid())
-  orgSlug        String       // inbox sorgusu (role+recipientId) tenant-scope için ZORUNLU
+  orgSlug        String // inbox sorgusu (role+recipientId) tenant-scope için ZORUNLU
   branch         String       @default("main")
-  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  announcement   Announcement @relation(fields: [orgSlug, branch, announcementId], references: [orgSlug, branch, id], onDelete: Cascade)
   announcementId String
   role           String
   recipientId    String
   name           String?
   read           Boolean      @default(false)
+
   @@index([orgSlug, branch, role, recipientId])
   @@index([announcementId])
 }
@@ -532,6 +565,7 @@ model Resource {
   title    String
   url      String?
   data     Json
+
   @@unique([orgSlug, branch, legacyId])
   @@index([orgSlug, branch])
 }
@@ -539,12 +573,13 @@ model Resource {
 // Konu/kazanım yüzdesi — öğrenci başına TEK kayıt (topics:<sid>).
 // data = { [subject]: { [topicIndex]: percent 0-100 } }.
 model Topic {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   orgSlug   String
-  branch    String @default("main")
-  studentId String   // legacy öğrenci id (route legacy id ile çalışır, join yok)
+  branch    String   @default("main")
+  studentId String // legacy öğrenci id (route legacy id ile çalışır, join yok)
   data      Json
   student   Student? @relation(fields: [orgSlug, branch, studentId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
+
   @@unique([orgSlug, branch, studentId])
   @@index([orgSlug, branch])
 }
@@ -552,13 +587,14 @@ model Topic {
 // Rehberlik soru-takibi — öğrenci+hafta bazlı (guidance:<sid>:<weekKey>).
 // data = { entries:{[subject]:{correct,wrong,empty}}, reviewed, submittedAt, reviewedAt }.
 model Guidance {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   orgSlug   String
-  branch    String @default("main")
-  studentId String   // legacy öğrenci id (route legacy id ile çalışır, join yok)
+  branch    String   @default("main")
+  studentId String // legacy öğrenci id (route legacy id ile çalışır, join yok)
   week      String
   data      Json
   student   Student? @relation(fields: [orgSlug, branch, studentId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
+
   @@unique([orgSlug, branch, studentId, week])
   @@index([orgSlug, branch])
   @@index([studentId])
@@ -572,6 +608,7 @@ model AuditLog {
   actor   String?
   action  String
   data    Json?
+
   @@index([orgSlug, branch])
 }
 
@@ -582,6 +619,7 @@ model ErrLog {
   at      DateTime @default(now())
   message String
   data    Json?
+
   @@index([orgSlug, branch])
 }
 
@@ -596,6 +634,7 @@ model NotifLog {
   kind      String
   dedupeKey String
   at        DateTime @default(now())
+
   @@unique([orgSlug, branch, kind, dedupeKey])
   @@index([orgSlug, branch])
 }
@@ -608,6 +647,7 @@ model PushSub {
   userId   String
   endpoint String @unique
   keys     Json
+
   @@index([orgSlug, branch])
 }
 
@@ -736,6 +776,7 @@ model NotificationPreference {
   category  String
   enabled   Boolean  @default(true)
   updatedAt DateTime @updatedAt
+
   @@unique([orgSlug, branch, role, userId, category])
   @@index([orgSlug, branch, role, userId])
 }
@@ -744,22 +785,24 @@ model NotificationPreference {
 // id = DB PK (cuid); legacyId = JSON'daki kimlik (API'ler etutId olarak bunu kullanır).
 // Rezervasyon alanları BURADA DEĞİL — EtutReservation'da (hafta-bazlı).
 model EtutSablon {
-  id            String    @id @default(cuid())
+  id            String            @id @default(cuid())
   orgSlug       String
-  branch        String    @default("main")
-  legacyId      String    // JSON şablon id (etutSablonlari[].id) — API'ler etutId olarak bunu kullanır
-  teacherId     String    // legacyId (etutSablonlari JSON konvansiyonu — DİKKAT: SlotBooking.teacherId bundan FARKLI, Teacher.id kullanır)
-  teacher       Teacher   @relation(fields: [orgSlug, branch, teacherId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
+  branch        String            @default("main")
+  legacyId      String // JSON şablon id (etutSablonlari[].id) — API'ler etutId olarak bunu kullanır
+  teacherId     String // legacyId (etutSablonlari JSON konvansiyonu — DİKKAT: SlotBooking.teacherId bundan FARKLI, Teacher.id kullanır)
+  teacher       Teacher           @relation(fields: [orgSlug, branch, teacherId], references: [orgSlug, branch, legacyId], onDelete: Cascade)
   dayIndex      Int
-  start         String    // "HH:MM"
+  start         String // "HH:MM"
   end           String
-  aktif         Boolean   @default(true)
-  pasifHaftalar String[]  @default([])
+  aktif         Boolean           @default(true)
+  pasifHaftalar String[]          @default([])
   deletedAt     DateTime? // soft-delete (Faz 2: normal silme yolu bunu doldurur; cascade yalnız bilinçli hard-delete — reset-all)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
   reservations  EtutReservation[]
+
   @@unique([orgSlug, branch, legacyId])
+  @@unique([orgSlug, branch, id])
   @@index([orgSlug, branch, teacherId])
   @@index([orgSlug, branch])
 }
@@ -783,12 +826,12 @@ model EtutReservation {
   orgSlug           String
   branch            String     @default("main")
   sablonId          String
-  sablon            EtutSablon @relation(fields: [sablonId], references: [id], onDelete: Cascade)
-  teacherId         String     // legacyId — sorgu kolaylığı (denormalize)
-  scope             EtutScope  // WEEK | RECURRING
+  sablon            EtutSablon @relation(fields: [orgSlug, branch, sablonId], references: [orgSlug, branch, id], onDelete: Cascade)
+  teacherId         String // legacyId — sorgu kolaylığı (denormalize)
+  scope             EtutScope // WEEK | RECURRING
   status            EtutStatus @default(ACTIVE) // ACTIVE | CANCELLED
-  weekKey           String     // WEEK: "YYYY-Www" | RECURRING: "*"
-  effectiveFromWeek String?    // yalnız RECURRING: bu haftadan itibaren
+  weekKey           String // WEEK: "YYYY-Www" | RECURRING: "*"
+  effectiveFromWeek String? // yalnız RECURRING: bu haftadan itibaren
   studentId         String
   studentName       String
   studentCls        String
@@ -802,10 +845,11 @@ model EtutReservation {
   cancelReason      String?
   // Snapshot (geçmiş etiketi + interval çakışma; aktif doluluk sablonId+weekKey ile)
   dayIndex          Int
-  startsAt          String     // "HH:MM"
+  startsAt          String // "HH:MM"
   endsAt            String
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
+
   @@unique([orgSlug, branch, sablonId, weekKey])
   @@index([orgSlug, branch, weekKey])
   @@index([orgSlug, branch, studentId, weekKey])
