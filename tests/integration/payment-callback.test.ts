@@ -16,6 +16,8 @@ const OID_CONCURRENT = 'integration_concurrent_callback';
 const OID_FRESH_PROCESSING = 'integration_fresh_processing';
 const OID_STALE_PROCESSING = 'integration_stale_processing';
 const OID_LEDGER_RECOVERY = 'integration_ledger_recovery';
+const OID_VADE_FARKI = 'integration_vade_farki';
+const OID_BASKET_MISMATCH = 'integration_basket_mismatch';
 const EXPECTED_AMOUNT = 500_000; // 5.000 TL, kuruş
 const RECOVERY_AMOUNT = 100_000; // 1.000 TL, kuruş
 const RECOVERY_FINANCE_ID = 'finance_digerkurs_callback_recovery';
@@ -27,19 +29,23 @@ const ALL_OIDS = [
   OID_FRESH_PROCESSING,
   OID_STALE_PROCESSING,
   OID_LEDGER_RECOVERY,
+  OID_VADE_FARKI,
+  OID_BASKET_MISMATCH,
 ];
 
 function hash(oid: string, status: string, amount: string): string {
   return crypto.createHmac('sha256', KEY).update(oid + SALT + status + amount).digest('base64');
 }
 
-function callbackRequest(oid: string, amount: string): Request {
+function callbackRequest(oid: string, amount: string, paymentAmount?: string): Request {
   const body = new URLSearchParams({
     merchant_oid: oid,
     status: 'success',
     total_amount: amount,
     hash: hash(oid, 'success', amount),
   });
+  // payment_amount HMAC'e dahil DEĞİL (PayTR sözleşmesi) — imzasız ikincil alan.
+  if (paymentAmount !== undefined) body.set('payment_amount', paymentAmount);
   return new Request('http://localhost/api/payment/callback', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -79,6 +85,17 @@ describe.sequential('PayTR callback güvenliği ve idempotency', () => {
         oid, orgSlug: ORG, branch: BRANCH, studentId: STUDENT_ID,
         amount: EXPECTED_AMOUNT, status: 'pending',
         data: { installmentIdx: index, studentName: 'İkinci Test Öğrencisi' },
+      })),
+    });
+    // Vade farkı senaryoları: recovery finansının 0. taksiti + sepet-uyuşmazlık siparişi.
+    await prisma.payOrder.createMany({
+      data: [
+        { oid: OID_VADE_FARKI, installmentIdx: 0 },
+        { oid: OID_BASKET_MISMATCH, installmentIdx: 0 },
+      ].map((order) => ({
+        oid: order.oid, orgSlug: ORG, branch: BRANCH, studentId: RECOVERY_STUDENT_ID,
+        amount: RECOVERY_AMOUNT, status: 'pending',
+        data: { installmentIdx: order.installmentIdx, studentName: 'İkinci Yapay Öğrenci' },
       })),
     });
     await prisma.payOrder.createMany({
@@ -205,5 +222,31 @@ describe.sequential('PayTR callback güvenliği ve idempotency', () => {
     expect(matching[0].receiptNo).toBe(original.receiptNo);
     expect(payments).toHaveLength(2);
     expect(counterAfter).toBe(counterBefore);
+  });
+
+  it('vade farkı: total_amount siparişten BÜYÜKSE meşrudur, kredilendirir (Codex S3)', async () => {
+    // PayTR taksit/vade farkında total_amount > payment_amount gönderir; katı eşitlik
+    // gerçek veli ödemesini reddederdi. payment_amount sipariş tutarına eşit olmalı.
+    const vadeliTotal = String(RECOVERY_AMOUNT + 7_500); // +75 TL vade farkı
+    const response = await paymentCallback(callbackRequest(OID_VADE_FARKI, vadeliTotal, String(RECOVERY_AMOUNT)));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('OK');
+
+    const order = await prisma.payOrder.findUniqueOrThrow({ where: { oid: OID_VADE_FARKI } });
+    const finance = await prisma.finance.findUniqueOrThrow({
+      where: { id: RECOVERY_FINANCE_ID }, include: { installments: { orderBy: { idx: 'asc' } } },
+    });
+    expect(order.status).toBe('paid');
+    expect(finance.installments[0]).toMatchObject({ paid: true, paidAmount: 1000 });
+  });
+
+  it('payment_amount (sepet) sipariş tutarından farklıysa reddeder', async () => {
+    const response = await paymentCallback(
+      callbackRequest(OID_BASKET_MISMATCH, String(RECOVERY_AMOUNT), String(RECOVERY_AMOUNT - 1)),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('tutar uyuşmuyor');
+    const order = await prisma.payOrder.findUniqueOrThrow({ where: { oid: OID_BASKET_MISMATCH } });
+    expect(order.status).toBe('pending');
   });
 });

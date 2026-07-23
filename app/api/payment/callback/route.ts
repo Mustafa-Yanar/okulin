@@ -103,13 +103,20 @@ export async function POST(req: Request) {
   }
 
   const provider = getProvider(cfg.provider || 'paytr');
-  const { valid, status, amount } = provider.verifyCallback({ config: { key: key || '', salt: salt || '' }, form });
+  const { valid, status, amount, paymentAmount } = provider.verifyCallback({ config: { key: key || '', salt: salt || '' }, form });
   if (!valid) return fail('hash uyuşmuyor'); // sahte/bozuk bildirim — kredilendirme yok
 
-  // HMAC, bildirimin PayTR'den geldiğini kanıtlar; tutarın BU siparişe ait beklenen
-  // tutar olduğunu ayrıca doğrulamak zorundayız. Kuruş cinsinden tam sayı karşılaştır.
-  const callbackAmount = Number(amount);
-  if (status === 'success' && (!Number.isSafeInteger(callbackAmount) || callbackAmount !== order.amount)) {
+  // HMAC, bildirimin PayTR'den geldiğini kanıtlar; tutarın BU siparişe ait olduğunu
+  // ayrıca doğrularız. total_amount HMAC-korumalıdır ama vade farkı/taksit komisyonu
+  // nedeniyle sipariş tutarından BÜYÜK olabilir (PayTR sözleşmesi) → katı eşitlik
+  // meşru taksitli ödemeyi reddederdi. Kural: total_amount >= sipariş; ayrıca
+  // payment_amount (orijinal sepet, imzasız) geldiyse siparişe TAM eşit olmalı.
+  const callbackTotal = Number(amount);
+  const basketAmount = paymentAmount === '' ? null : Number(paymentAmount);
+  if (status === 'success' && (
+    !Number.isSafeInteger(callbackTotal) || callbackTotal < order.amount ||
+    (basketAmount !== null && (!Number.isSafeInteger(basketAmount) || basketAmount !== order.amount))
+  )) {
     return fail('tutar uyuşmuyor');
   }
 

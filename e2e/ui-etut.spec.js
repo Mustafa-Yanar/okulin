@@ -16,7 +16,7 @@
  */
 const { test, expect } = require('@playwright/test');
 const {
-  BASE, JSON_HEADERS, DIR_STATE, TEA_STATE, STU_STATE,
+  BASE, JSON_HEADERS, DIR_STATE, STU_STATE,
   getWeekKey, slotStartTime, DAY_LABELS, whoami, reEscape,
 } = require('./helpers');
 
@@ -94,7 +94,6 @@ test('etüt: öğrenci rezerve eder → öğrenci + öğretmen tarafı doğrular
   created.etutId = etutId;
 
   const stuCtx = await browser.newContext({ storageState: STU_STATE });
-  const teaCtx = await browser.newContext({ storageState: TEA_STATE });
   const stu = await stuCtx.newPage();
 
   try {
@@ -131,10 +130,12 @@ test('etüt: öğrenci rezerve eder → öğrenci + öğretmen tarafı doğrular
     await expect(stu.getByText(new RegExp(DAY_LABELS[day])).first()).toBeVisible({ timeout: 10000 });
     await expect(stu.getByText(/\d+ etüt/).first()).toBeVisible({ timeout: 8000 });
 
-    // ---- OTURUM ÖĞRETMENİ tarafı: veri düzeyinde çapraz doğrulama ----
-    const teaView = await teaCtx.request.get(`${BASE}/api/etut-sablon/all?week=${weekKey}`);
-    expect(teaView.status()).toBe(200);
-    const teaEtuts = (await teaView.json()).etutler || [];
+    // ---- MÜDÜR tarafı: veri düzeyinde çapraz doğrulama ----
+    // Öğretmen /api/etut-sablon/all'da artık YALNIZ kendi satırlarını görür (self-filtre);
+    // partner oturum öğretmeninden farklı olabilir → tam listeyi müdür okur.
+    const dirView = await dirSetup.request.get(`${BASE}/api/etut-sablon/all?week=${weekKey}`);
+    expect(dirView.status()).toBe(200);
+    const teaEtuts = (await dirView.json()).etutler || [];
     const booked = teaEtuts.find((e) => e.id === etutId && e.teacherId === partner.id);
     expect(booked, 'etüt öğretmen tarafında görünmeli').toBeTruthy();
     expect(booked.booked, 'etüt rezerve görünmeli').toBe(true);
@@ -144,6 +145,5 @@ test('etüt: öğrenci rezerve eder → öğrenci + öğretmen tarafı doğrular
     // Veri temizliği afterAll'da — burada yalnız context'ler kapatılır
     await dirSetup.close();
     await stuCtx.close();
-    await teaCtx.close();
   }
 });

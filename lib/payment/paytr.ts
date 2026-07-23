@@ -111,6 +111,7 @@ export interface CallbackForm {
   merchant_oid?: string;
   status?: string;
   total_amount?: string;
+  payment_amount?: string; // orijinal sepet tutarı (kuruş) — HMAC'e DAHİL DEĞİL
   hash?: string;
 }
 
@@ -118,7 +119,9 @@ export interface VerifyCallbackResult {
   valid: boolean;
   status: string;
   merchantOid: string;
-  amount: string;
+  amount: string;        // total_amount — HMAC ile bütünlük korumalı; vade farkı/taksit
+                         // komisyonu nedeniyle sipariş tutarından BÜYÜK olabilir (PayTR sözleşmesi)
+  paymentAmount: string; // payment_amount — bilgi amaçlı ikincil kontrol (imzasız alan)
 }
 
 // Adım 2 — callback hash doğrula. form: { merchant_oid, status, total_amount, hash }
@@ -139,5 +142,5 @@ export function verifyCallback({ config, form }: { config: Pick<PaytrConfig, 'ke
     valid = a.length === b.length && crypto.timingSafeEqual(a, b);
   } catch { valid = false; }
 
-  return { valid, status, merchantOid, amount: totalAmount };
+  return { valid, status, merchantOid, amount: totalAmount, paymentAmount: form.payment_amount || '' };
 }
