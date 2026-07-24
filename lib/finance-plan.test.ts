@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  dagitTutar, planHatasi, planToplami, kurus,
+  dagitTutar, dagitTarihler, planHatasi, planToplami, kurus,
   kapanacakTaksitSayisi, kabulEdilenTutarlar, odenmisTaksitHatasi, sonOdenmisIdx,
 } from './finance-plan';
 
@@ -170,5 +170,51 @@ describe('kurus', () => {
   it('ikinci basamağa yuvarlar', () => {
     expect(kurus(3333.3333)).toBe(3333.33);
     expect(kurus(0.1 + 0.2)).toBe(0.3);
+  });
+});
+
+describe('dagitTarihler', () => {
+  const drow = (dueDate: string, paid = false) => ({ dueDate, paid });
+
+  it('düzenlenen taksitten sonrakiler yeni tarihten aylık akar, öncekiler değişmez', () => {
+    const rows = [drow('2026-08-01'), drow('2026-09-05'), drow('2026-10-01'), drow('2026-11-01'), drow('2026-12-01')];
+    const out = dagitTarihler(rows, 2, '2026-10-15');
+    expect(out.map(r => r.dueDate)).toEqual(['2026-08-01', '2026-09-05', '2026-10-15', '2026-11-15', '2026-12-15']);
+  });
+
+  it('sırayla elle giriş: son elle girilenden sonrası otomatik kalır (10 taksit, ilk 3 elle)', () => {
+    let rows = Array.from({ length: 10 }, (_, i) => drow(`2026-0${Math.min(9, i + 1)}-01`));
+    rows = dagitTarihler(rows, 0, '2026-08-10');
+    rows = dagitTarihler(rows, 1, '2026-09-20');
+    rows = dagitTarihler(rows, 2, '2026-10-05');
+    expect(rows.slice(0, 4).map(r => r.dueDate)).toEqual(['2026-08-10', '2026-09-20', '2026-10-05', '2026-11-05']);
+    expect(rows[9].dueDate).toBe('2027-05-05'); // 3. taksit + 7 ay
+  });
+
+  it('sonraki ÖDENMİŞ taksitin tarihi değişmez, aylık sayaç kaymaz', () => {
+    const rows = [drow('2026-08-01'), drow('2026-09-01', true), drow('2026-10-01'), drow('2026-11-01')];
+    const out = dagitTarihler(rows, 0, '2026-08-15');
+    expect(out.map(r => r.dueDate)).toEqual(['2026-08-15', '2026-09-01', '2026-10-15', '2026-11-15']);
+  });
+
+  it('ay sonu taşması JS setMonth ile aynı (31 Oca + 1 ay → 3 Mar; artık yıl değil)', () => {
+    const out = dagitTarihler([drow('2026-01-31'), drow('2026-02-28'), drow('2026-03-31')], 0, '2026-01-31');
+    expect(out.map(r => r.dueDate)).toEqual(['2026-01-31', '2026-03-03', '2026-03-31']);
+  });
+
+  it('yıl devri doğru akar', () => {
+    const out = dagitTarihler([drow('2026-11-15'), drow('2026-12-15'), drow('2027-01-15')], 0, '2026-11-20');
+    expect(out.map(r => r.dueDate)).toEqual(['2026-11-20', '2026-12-20', '2027-01-20']);
+  });
+
+  it('boş giriş yalnız o satırı günceller, akış tetiklenmez', () => {
+    const out = dagitTarihler([drow('2026-08-01'), drow('2026-09-01')], 0, '');
+    expect(out.map(r => r.dueDate)).toEqual(['', '2026-09-01']);
+  });
+
+  it('düzenlenen satırın KENDİSİ ödenmişse hiçbir şey değişmez (makbuz kilidi)', () => {
+    const rows = [drow('2026-08-01', true), drow('2026-09-01')];
+    expect(dagitTarihler(rows, 0, '2026-08-20').map(r => r.dueDate)).toEqual(['2026-08-01', '2026-09-01']);
+    expect(dagitTarihler(rows, 0, '').map(r => r.dueDate)).toEqual(['2026-08-01', '2026-09-01']);
   });
 });

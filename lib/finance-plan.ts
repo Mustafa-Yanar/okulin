@@ -92,6 +92,37 @@ export function kabulEdilenTutarlar(acikTaksitler: readonly PlanRow[]): number[]
   return out;
 }
 
+// ── TAKSİT TARİHİ YENİDEN AKIŞI ──────────────────────────────────────────────
+// Bir taksit tarihi ELLE değişince o taksitten SONRAKİLER yeni tarihten aylık yeniden
+// dağıtılır (Mustafa isteği 2026-07-24: muhasebeci ilk N tarihi elle girer, kalanı
+// otomatik akar; sırayla girildiğinde son elle girilenden sonrası hep otomatik kalır).
+// Kurallar:
+// - Düzenlenen satırdan ÖNCEKİ satırlar değişmez (elle girilmişleri korur).
+// - ÖDENMİŞ satırın tarihi değişmez (makbuz kilidi — sunucu da reddeder), atlanan
+//   ödenmiş satır aylık sayacı kaydırmaz: j. satır = yeniTarih + (j - idx) ay.
+// - Ay ekleme JS setMonth taşmasıyla buildInstallments ile AYNI davranır (31 Oca + 1 ay → 3 Mar).
+export interface TarihRow { dueDate: string; paid?: boolean; }
+
+const ymd = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+export function dagitTarihler<T extends TarihRow>(rows: readonly T[], idx: number, yeniTarih: string): T[] {
+  // Ödenmiş satır HİÇBİR dalda değişmez — düzenlenen satırın kendisi dahil (UI zaten
+  // disabled eder; bu saf fonksiyonun kendi kilididir, sunucu da böyle kaydı reddeder).
+  if (rows[idx]?.paid) return rows.slice();
+  // Boş giriş (kullanıcı tarihi silerken): yalnız o satır güncellenir, akış tetiklenmez.
+  if (!yeniTarih) return rows.map((x, j) => (j === idx ? { ...x, dueDate: yeniTarih } : x));
+  const base = new Date(yeniTarih + 'T00:00:00');
+  return rows.map((x, j) => {
+    if (j < idx) return x;
+    if (j === idx) return { ...x, dueDate: yeniTarih };
+    if (x.paid) return x;
+    const d = new Date(base);
+    d.setMonth(d.getMonth() + (j - idx));
+    return { ...x, dueDate: ymd(d) };
+  });
+}
+
 // Tutarları dağıt: ÖDENMİŞ taksitlerin tutarına DOKUNULMAZ (para zaten tahsil edildi,
 // geçmişe dönük tutar değiştirmek makbuzla çelişir), kalan (netFee − ödenmiş toplamı)
 // yalnız ÖDENMEMİŞ taksitlere eşit bölünür; yuvarlama artığı son ödenmemiş taksite yazılır.

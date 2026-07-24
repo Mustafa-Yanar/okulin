@@ -16,7 +16,7 @@ import { classShortUpper } from '@/lib/classCatalog';
 import type { Session } from '@/lib/auth';
 import { formatTurkishMobile } from '@/lib/phone';
 import type { PaymentEntry } from '@/lib/finance';
-import { dagitTutar, sonOdenmisIdx } from '@/lib/finance-plan';
+import { dagitTutar, dagitTarihler, sonOdenmisIdx } from '@/lib/finance-plan';
 import type { ShowToast, FinanceDTO, FinanceListItemDTO, InstallmentDTO, KurumBilgi } from '../types';
 import type { Branding } from '@/lib/branding';
 import Makbuz from './belge/Makbuz';
@@ -471,14 +471,16 @@ function FinanceRegisterModal({ student, veli, existing, onClose, onSuccess, sho
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(n => n >= minTaksit).map(n => <option key={n} value={n}>{n === 1 ? '1 Taksit (tek ödeme)' : `${n} Taksit`}</option>)}
                 </select>
               </div>
-              <p className="text-caption mb-2">Tarihler ilk taksitten itibaren aylık otomatik dağıtılır; her taksit tarihini ve tutarını elle düzenleyebilirsiniz.
+              <p className="text-caption mb-2">Tarihler ilk taksitten itibaren aylık otomatik dağıtılır. Bir taksit tarihini elle değiştirirseniz sonraki taksitler o tarihten itibaren aylık yeniden dağıtılır; tutarlar elle düzenlenebilir.
                 {minTaksit > 1 && ` Ödenmiş taksit bulunduğu için taksit sayısı ${minTaksit}'in altına indirilemez.`}</p>
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                 {installments.map((inst, i) => (
                   <div key={i} className={`flex items-center gap-2 p-2 rounded-lg border ${inst.paid ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
                     <span className="text-xs text-gray-500 w-6 text-center font-600" style={{ fontWeight: 600 }}>{i + 1}.</span>
                     <input type="date" value={inst.dueDate}
-                      onChange={e => setInstallments(prev => prev.map((x, j) => j === i ? { ...x, dueDate: e.target.value } : x))}
+                      // Elle girilen tarihten SONRAKİ (ödenmemiş) taksitler o tarihten aylık
+                      // yeniden akar — ilk N taksit elle girilir, kalanı otomatik dağılır.
+                      onChange={e => setInstallments(prev => dagitTarihler(prev, i, e.target.value))}
                       className="bg-white border border-gray-200 rounded px-2 py-1 text-xs focus:border-[var(--brand,#6366f1)] focus:outline-none flex-1"
                       disabled={inst.paid}
                     />
