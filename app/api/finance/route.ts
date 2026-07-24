@@ -24,10 +24,21 @@ const financeOut = (f: FinanceWithInst | null | undefined, stu: StudentLike | nu
   studentId: stu?.legacyId, studentName: stu?.name, studentCls: stu?.class?.legacyId || '',
   registrationDate: f.registrationDate, totalFee: Number(f.totalFee), discount: Number(f.discount), netFee: Number(f.netFee),
   paymentPlan: f.paymentPlan,
+  // Senet borçlusu (veli1/veli2/manuel seçimi + alan anlık görüntüsü); eski kayıtlarda null.
+  debtorKind: f.debtorKind, debtorName: f.debtorName, debtorPhone: f.debtorPhone,
+  debtorTcNo: f.debtorTcNo, debtorAddress: f.debtorAddress,
   installments: (f.installments || []).map((i) => ({ idx: i.idx, dueDate: i.dueDate, amount: Number(i.amount), paid: i.paid, paidDate: i.paidDate, paidAmount: i.paidAmount === null ? null : Number(i.paidAmount), method: i.method, receiptNo: i.receiptNo })),
   payments: ((f.payments as unknown as PaymentEntry[] | null) || []),
   balance: Number(f.netFee) - ((f.payments as unknown as PaymentEntry[] | null) || []).reduce((s, p) => s + (p.amount || 0), 0),
 }) : null;
+// Veli çıktısı: borçlu alanları KIRPILIR (KVKK) — "Farklı Kişi" borçlusu üçüncü bir
+// şahıstır; TC/telefon/adresi velinin okuyabildiği yanıta girmemeli.
+function stripDebtor(o: ReturnType<typeof financeOut>) {
+  if (!o) return o;
+  const { debtorKind: _k, debtorName: _n, debtorPhone: _p, debtorTcNo: _t, debtorAddress: _a, ...pub } = o;
+  return pub;
+}
+
 // Bir öğrencinin finans kaydını SQL'den çek (legacyId ile).
 async function financeByLegacySql(studentId: string | null) {
   const stu = await tdb().student.findFirst({ where: { legacyId: studentId || '' }, include: { class: true } });
@@ -43,6 +54,12 @@ const FinanceSchema = z.object({
   totalFee: zMoney,
   discount: zMoney.optional(),
   paymentPlan: z.enum(['pesin', 'taksitli']).optional(),
+  // Senet borçlusu — gönderilmeyen alan mevcut değeri korur, boş string alanı temizler (null).
+  debtorKind: z.enum(['veli1', 'veli2', 'manuel']).optional(),
+  debtorName: z.string().max(200).optional(),
+  debtorPhone: z.string().max(40).optional(),
+  debtorTcNo: z.string().max(20).optional(),
+  debtorAddress: z.string().max(500).optional(),
   installments: z.array(
     z.object({ dueDate: z.string().max(40).optional(), amount: zMoney.optional() }).passthrough()
   ).max(120).optional(),
@@ -60,7 +77,7 @@ export const GET = withAuth('auth', 'finance', async (req, _ctx, session) => {
       return NextResponse.json({ error: 'Yetkisiz' }, { status: 403 });
     }
     const { stu, f } = await financeByLegacySql(studentId);
-    return NextResponse.json(financeOut(f, stu));
+    return NextResponse.json(stripDebtor(financeOut(f, stu)));
   }
 
   if (session.role !== 'director' && session.role !== 'accountant') {
@@ -79,6 +96,7 @@ export const GET = withAuth('auth', 'finance', async (req, _ctx, session) => {
     // Muhasebe belgeleri (senet/makbuz/gecikmiş liste) için öğrenci+veli kimlik bilgisi.
     studentTc: s.tcNo || '', studentPhone: s.phone || '', parentName: s.parentName || '', parentPhone: s.parentPhone || '',
     parentTcNo: s.parentTcNo || '', parentAddress: s.parentAddress || '', className: s.class?.ad || '',
+    parent2Name: s.parent2Name || '', parent2Phone: s.parent2Phone || '', // borçlu seçimi (2. veli)
     finance: financeOut(s.finance, s),
   }));
   list.sort((a, b) => a.studentName.localeCompare(b.studentName, 'tr'));
@@ -88,9 +106,17 @@ export const GET = withAuth('auth', 'finance', async (req, _ctx, session) => {
 export const POST = withAuth(['director', 'accountant'], 'finance', async (req, _ctx, session) => {
   const parsed = await parseBody(req, FinanceSchema);
   if (!parsed.ok) return parsed.response;
-  const { studentId, studentName, studentCls, totalFee, discount, paymentPlan, installments } = parsed.data;
+  const { studentId, studentName, studentCls, totalFee, discount, paymentPlan, installments,
+    debtorKind, debtorName, debtorPhone, debtorTcNo, debtorAddress } = parsed.data;
   if (!totalFee) {
     return NextResponse.json({ error: 'Öğrenci ve ücret zorunlu' }, { status: 400 });
+  }
+
+  // Sunucu invariantı: taksitli plan taksitsiz olamaz (istemci min 1 dayatır; bu kapı
+  // bayat/bozuk istemciyi keser — taksitsiz "taksitli" kayıt senet/hatırlatma/online
+  // ödeme yollarında sessizce peşin gibi davranırdı).
+  if (paymentPlan === 'taksitli' && (!installments || installments.length === 0)) {
+    return NextResponse.json({ error: 'Taksitli plan için en az 1 taksit gerekli' }, { status: 400 });
   }
 
   const netFee = Math.max(0, (parseFloat(String(totalFee)) || 0) - (parseFloat(String(discount)) || 0));
@@ -131,7 +157,10 @@ export const POST = withAuth(['director', 'accountant'], 'finance', async (req, 
     if (odenmisErr) throw new HttpError(400, odenmisErr);
     instCount = instData.length;
 
-    const data = { registrationDate: existing?.registrationDate || new Date().toISOString().slice(0, 10), totalFee: parseFloat(String(totalFee)) || 0, discount: parseFloat(String(discount)) || 0, netFee, paymentPlan: paymentPlan || 'pesin', payments: ((existing?.payments as unknown as PaymentEntry[] | null) || []) as unknown as object };
+    // Borçlu alanları: undefined → Prisma dokunmaz (eski istemci/kısmi istek mevcut değeri
+    // korur); gönderilmiş boş string → null (alan temizlenir).
+    const bosNull = (v: string | undefined) => v === undefined ? undefined : (v.trim() || null);
+    const data = { registrationDate: existing?.registrationDate || new Date().toISOString().slice(0, 10), totalFee: parseFloat(String(totalFee)) || 0, discount: parseFloat(String(discount)) || 0, netFee, paymentPlan: paymentPlan || 'pesin', payments: ((existing?.payments as unknown as PaymentEntry[] | null) || []) as unknown as object, debtorKind: debtorKind, debtorName: bosNull(debtorName), debtorPhone: bosNull(debtorPhone), debtorTcNo: bosNull(debtorTcNo), debtorAddress: bosNull(debtorAddress) };
     let finRow: Finance;
     if (existing) { await tx.installment.deleteMany({ where: { financeId: existing.id } }); finRow = await tx.finance.update({ where: { id: existing.id }, data }); }
     else finRow = await tx.finance.create({ data: { ...data, orgSlug, branch, studentId: stu.id } });

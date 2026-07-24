@@ -449,8 +449,8 @@ function StudentRow({ s, subtitle, pending, onClick, nested = false }: StudentRo
       </div>
       <div className="min-w-0 flex-1">
         <div className="font-600 truncate" style={{ fontWeight: 600 }}>{s.name}</div>
-        {subtitle ? <div className="text-caption truncate">{subtitle}</div>
-          : s.username && <div className="text-caption truncate">@{s.username}</div>}
+        {/* username = ad-soyad (StudentForm öyle kurar) — "@isim" tekrarı gürültüydü, kaldırıldı */}
+        {subtitle && <div className="text-caption truncate">{subtitle}</div>}
       </div>
       <ChevronRight size={14} className="text-gray-400 shrink-0" />
     </button>

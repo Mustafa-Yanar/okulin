@@ -9,7 +9,7 @@ Canlı: okulin.com | Test kurumu: testkurs.okulin.com
 
 ## Klasör Yapısı
 - `app/page.tsx` — ana SPA sarmalayıcı → `app/_components/AppContent.tsx` (müdür/öğretmen/öğrenci panelleri)
-- `app/api/` — 92 API route (hepsi `route.ts`, `withAuth` yetki wrapper'ı)
+- `app/api/` — 93 API route (hepsi `route.ts`, `withAuth` yetki wrapper'ı)
 - `app/_components/` — UI bileşenleri (director/finance/program/rehberlik/odev/davranis/crm/form/library/etkinlik)
 - `lib/` — hepsi `.ts`: auth, sqldb (`tdb`), prisma, redis/tenant, constants, slots, finance, config, org, institution, push, notify, id, errors
   - Veri SQL'de. Redis'in canlı yüzeyi yalnız 3 şey: `rl:*` (rate-limit), `device:*` (OTP cihaz tanıma), `mexch:*` (mobil oturum takası). Başka bir şey için Redis'e YAZMA.

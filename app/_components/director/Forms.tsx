@@ -4,7 +4,8 @@
 // Müdür paneli modal formları: öğretmen, öğrenci, Excel import, şifre sıfırlama.
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { User, Check, BookOpen, Download } from 'lucide-react';
+import { User, Check, BookOpen, Download, UserPlus, X } from 'lucide-react';
+import { PARENT_RELATIONS } from '@/lib/constants';
 import { classesForGroup, classShortUpper, type ClassEntry } from '@/lib/classCatalog';
 import { isValidTurkishMobile, formatTurkishMobile } from '@/lib/phone';
 import { GROUPS, Modal, Label, FormField } from './shared';
@@ -39,6 +40,9 @@ export interface StudentFormPayload {
   tcNo: string;          // öğrenci TC (muhasebe belgeleri — opsiyonel)
   parentTcNo: string;    // veli TC (senet — opsiyonel)
   parentAddress: string; // veli adresi (senet — opsiyonel)
+  parent2Name: string;    // 2. veli/iletişim (opsiyonel)
+  parent2Phone: string;
+  parent2Relation: string;
 }
 
 // allowedGroups birleşimi → o gruplardaki şubelerin (registry) kullandığı gerçek dersler,
@@ -201,12 +205,19 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
   const [tcNo, setTcNo] = useState(initial?.tcNo || '');
   const [parentTcNo, setParentTcNo] = useState(initial?.parentTcNo || '');
   const [parentAddress, setParentAddress] = useState(initial?.parentAddress || '');
+  // 2. veli/iletişim — opsiyonel; Veli sekmesindeki (VeliPanel) alanların aynısı,
+  // kayıt anında da girilebilsin diye burada. Bölüm kapatılırsa alanlar TEMİZLENİR.
+  const [showSecond, setShowSecond] = useState(!!(initial?.parent2Name || initial?.parent2Phone));
+  const [parent2Name, setParent2Name] = useState(initial?.parent2Name || '');
+  const [parent2Phone, setParent2Phone] = useState(initial?.parent2Phone ? formatTurkishMobile(initial.parent2Phone) : '');
+  const [parent2Relation, setParent2Relation] = useState(initial?.parent2Relation || '');
   const [loading, setLoading] = useState(false);
   // Yeni öğrenci: grup (ya da şube listesi) değişince ilk şubeyi seç. Düzenlemede cls korunur.
   useEffect(() => { if (!isEdit) setCls(groupClasses[0]?.id || ''); }, [selectedGroup, groupClasses, isEdit]);
 
   const phoneInvalid = phone.trim() !== '' && !isValidTurkishMobile(phone);
   const parentPhoneInvalid = parentPhone.trim() !== '' && !isValidTurkishMobile(parentPhone);
+  const parent2PhoneInvalid = showSecond && parent2Phone.trim() !== '' && !isValidTurkishMobile(parent2Phone);
   // Veli zorunlu. Şifre boşsa öğrenci telefonu ilk şifre olur; telefon da yoksa "12345678".
   const parentMissing = !isEdit && (parentName.trim() === '' || parentPhone.trim() === '');
 
@@ -218,7 +229,7 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (phoneInvalid || parentPhoneInvalid || diplomaInvalid) return; // geçersiz veriyle gönderme
+    if (phoneInvalid || parentPhoneInvalid || parent2PhoneInvalid || diplomaInvalid) return; // geçersiz veriyle gönderme
     if (parentMissing) return;
     if (!cls) { alert('Önce bir şube/sınıf seçin (Sınıflar sekmesinden şube ekleyebilirsiniz)'); return; }
     setLoading(true);
@@ -226,6 +237,9 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
       name, username: name, password, cls, phone, parentPhone, parentName, birthDate,
       diplomaNotu: isMezun ? diplomaNotu.trim() : '',
       tcNo: tcNo.trim(), parentTcNo: parentTcNo.trim(), parentAddress: parentAddress.trim(),
+      parent2Name: showSecond ? parent2Name.trim() : '',
+      parent2Phone: showSecond ? parent2Phone.trim() : '',
+      parent2Relation: showSecond ? parent2Relation : '',
     });
     setLoading(false);
   };
@@ -297,12 +311,38 @@ export function StudentForm({ initial, classes = [], onClose, onSave, onSwitchTo
           <textarea className="input" rows={2} placeholder="Senet için (opsiyonel)"
             value={parentAddress} onChange={e=>setParentAddress(e.target.value)} />
         </FormField>
+        {!showSecond ? (
+          <button type="button" onClick={() => setShowSecond(true)} className="btn-ghost !px-3 !py-2 text-xs flex items-center gap-1.5">
+            <UserPlus size={13} /> 2. Veli / İletişim Ekle
+          </button>
+        ) : (
+          <div className="rounded-xl p-3 space-y-3" style={{ background: 'var(--bg-muted)' }}>
+            <div className="flex items-center justify-between">
+              <span className="text-label">2. Veli / İletişim</span>
+              <button type="button" onClick={() => setShowSecond(false)} className="btn-icon" title="Kaldır"><X size={14} /></button>
+            </div>
+            <FormField label="Ad Soyad">
+              <input className="input" value={parent2Name} onChange={e=>setParent2Name(e.target.value)} placeholder="Örn. Mehmet Yılmaz" />
+            </FormField>
+            <FormField label="Yakınlık Derecesi">
+              <select className="input" value={parent2Relation} onChange={e=>setParent2Relation(e.target.value)}>
+                <option value="">Yakınlık seç</option>
+                {PARENT_RELATIONS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </FormField>
+            <FormField label="Telefon">
+              <input className={`input ${parent2PhoneInvalid ? 'input-error' : ''}`} type="tel" inputMode="tel" placeholder="05XX XXX XX XX"
+                value={parent2Phone} onChange={e=>setParent2Phone(e.target.value)} aria-invalid={parent2PhoneInvalid || undefined} />
+              {parent2PhoneInvalid && <p className="input-hint input-hint--error">Geçersiz numara. Örnek: 0532 123 45 67</p>}
+            </FormField>
+          </div>
+        )}
         <FormField label="Doğum Tarihi">
           <input className="input" type="date" value={birthDate} onChange={e=>setBirthDate(e.target.value)}
             max={new Date().toISOString().split('T')[0]} />
         </FormField>
         <div className="flex gap-3 pt-2">
-          <button className="btn-primary flex-1" disabled={loading || phoneInvalid || parentPhoneInvalid || parentMissing || diplomaInvalid}>{loading?'Kaydediliyor...':'Kaydet'}</button>
+          <button className="btn-primary flex-1" disabled={loading || phoneInvalid || parentPhoneInvalid || parent2PhoneInvalid || parentMissing || diplomaInvalid}>{loading?'Kaydediliyor...':'Kaydet'}</button>
           <button type="button" className="btn-ghost" onClick={onClose}>İptal</button>
         </div>
       </form>

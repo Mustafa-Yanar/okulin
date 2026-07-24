@@ -70,7 +70,9 @@ export default function Senet({ kurum, ogrenci, veli, installments, duzenlemeTar
       ) : chunks.map((chunk, ci) => (
         <div key={ci} className="print-page senet-sheet bg-white text-slate-800 w-full max-w-[820px] shadow-xl print:shadow-none" style={{ padding: '10px 20px' }}>
           {chunk.map((inst, i) => (
-            <SenetKart key={i} no={ci * 3 + i + 1} toplam={rows.length} inst={inst}
+            // Senet no = taksitin plandaki sırası (idx+1), toplam = plandaki tüm taksitler.
+            // Ödenmişler basılmaz ama numara KAYMAZ: 2. ayın senedi hep "2 / N" kalır.
+            <SenetKart key={i} no={inst.idx + 1} toplam={installments.length} inst={inst}
               kurum={kurum} unvan={unvan} ogrenci={ogrenci} veli={veli} duzenlemeTarihi={duzenlemeTarihi} />
           ))}
         </div>

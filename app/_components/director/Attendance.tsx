@@ -4,13 +4,14 @@
 // sınıf-gün detay modalı (AttendanceSummaryModal) ve öğrenci devamsızlık
 // geçmişi (StudentAttendanceView).
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Phone, ClipboardList, GraduationCap } from 'lucide-react';
+import { Phone, ClipboardList, GraduationCap, CalendarOff, Trash2 } from 'lucide-react';
 import { getWeekKey, ALL_DAYS } from '@/lib/constants';
 import { api, Modal } from './shared';
 import { useClasses } from '../ClassesContext';
 import { classShort } from '@/lib/classCatalog';
 import LoadingBox from '../Loading';
-import type { ShowToast } from '../types';
+import { useConfirm } from '../ConfirmProvider';
+import type { ShowToast, StudentDTO } from '../types';
 
 // GET /api/attendance/summary — sınıf → ders → yok/geç listeleri.
 interface AttSummaryStudent {
@@ -154,6 +155,129 @@ function AttendanceSummaryModal({ cls, label, date, onClose }: { cls: string; la
   );
 }
 
+// ── Yoklama muafiyeti yönetimi (müdür + rehberlik) ──────────────────────────
+// İzinli/raporlu öğrenciye tarih aralığı tanımlanır; aralıkta öğretmen paneli "Muaf"
+// gösterir (işaretlenemez), sunucu da yazımı süzer (POST /api/attendance).
+function MuafiyetModal({ onClose, showToast }: { onClose: () => void; showToast?: ShowToast }) {
+  const { classes } = useClasses();
+  const confirm = useConfirm();
+  const [students, setStudents] = useState<StudentDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selId, setSelId] = useState('');
+  const [from, setFrom] = useState('');
+  const [until, setUntil] = useState('');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try { setStudents(await api<StudentDTO[]>('/api/students')); }
+    catch (err) { showToast?.((err as Error).message, 'error'); }
+    finally { setLoading(false); }
+  }, [showToast]);
+  useEffect(() => { load(); }, [load]);
+
+  // YEREL tarih — toISOString() UTC döndürür; TSİ 00:00-03:00 arasında rozet
+  // (Aktif/Planlı/Bitti) bir gün geriden hesaplanırdı.
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const mevcut = students
+    .filter(s => s.exemptFrom && s.exemptUntil)
+    .sort((a, b) => b.exemptUntil.localeCompare(a.exemptUntil) || a.name.localeCompare(b.name, 'tr'));
+  const secilebilir = [...students].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+
+  const trDate = (iso: string) => { const [y, m, d] = iso.split('-'); return d ? `${d}.${m}.${y}` : iso; };
+  const durumOf = (s: StudentDTO): [string, string] =>
+    s.exemptUntil < today ? ['Bitti', 'bg-gray-100 text-gray-500']
+    : s.exemptFrom > today ? ['Planlı', 'bg-amber-100 text-amber-700']
+    : ['Aktif', 'bg-sky-100 text-sky-700'];
+
+  async function save() {
+    if (!selId) { showToast?.('Önce öğrenci seçin', 'error'); return; }
+    if (!from || !until) { showToast?.('Başlangıç ve bitiş tarihlerini seçin', 'error'); return; }
+    if (from > until) { showToast?.('Başlangıç tarihi bitişten sonra olamaz', 'error'); return; }
+    setSaving(true);
+    try {
+      await api('/api/students/exemption', {
+        method: 'POST',
+        body: JSON.stringify({ id: selId, exemptFrom: from, exemptUntil: until, exemptNote: note }),
+      });
+      showToast?.('Muafiyet kaydedildi');
+      setSelId(''); setFrom(''); setUntil(''); setNote('');
+      await load();
+    } catch (err) { showToast?.((err as Error).message, 'error'); }
+    finally { setSaving(false); }
+  }
+
+  async function remove(s: StudentDTO) {
+    if (!(await confirm({ message: `${s.name} için muafiyet kaldırılsın mı?`, confirmLabel: 'Kaldır' }))) return;
+    try {
+      await api('/api/students/exemption', {
+        method: 'POST',
+        body: JSON.stringify({ id: s.id, exemptFrom: '', exemptUntil: '', exemptNote: '' }),
+      });
+      showToast?.(`Muafiyet kaldırıldı — ${s.name}`);
+      await load();
+    } catch (err) { showToast?.((err as Error).message, 'error'); }
+  }
+
+  return (
+    <Modal title="Yoklama Muafiyetleri" onClose={onClose}>
+      {loading ? <LoadingBox height="h-32" /> : (
+        <div className="space-y-4">
+          <div className="rounded-xl p-3 space-y-3" style={{ background: 'var(--bg-muted)' }}>
+            <span className="text-label">Yeni Muafiyet</span>
+            <select className="input" value={selId} onChange={e => setSelId(e.target.value)} aria-label="Öğrenci seç">
+              <option value="">— Öğrenci seç —</option>
+              {secilebilir.map(s => (
+                <option key={s.id} value={s.id}>{s.name} ({classShort(classes, s.cls)})</option>
+              ))}
+            </select>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-label block mb-1">Başlangıç</span>
+                <input type="date" className="input" value={from} onChange={e => setFrom(e.target.value)} />
+              </label>
+              <label className="block">
+                <span className="text-label block mb-1">Bitiş</span>
+                <input type="date" className="input" value={until} onChange={e => setUntil(e.target.value)} />
+              </label>
+            </div>
+            <input type="text" className="input" value={note} onChange={e => setNote(e.target.value)}
+              placeholder="Not (opsiyonel — örn. raporlu, ailevi izin)" maxLength={300} />
+            <button onClick={save} disabled={saving} className="btn-primary w-full !py-2 text-sm">
+              {saving ? 'Kaydediliyor…' : 'Muafiyet Tanımla'}
+            </button>
+            <p className="text-caption">Aralıktaki günlerde öğrenci yoklamada <b>Muaf</b> görünür; öğretmen işaretleyemez, devamsızlık bildirimi gitmez. Geçmiş tarihli tanımlarsanız aralıktaki mevcut yok/geç kayıtları da temizlenir.</p>
+          </div>
+
+          <div>
+            <span className="text-label block mb-2">Tanımlı Muafiyetler ({mevcut.length})</span>
+            {mevcut.length === 0 ? (
+              <p className="text-caption py-2">Tanımlı muafiyet yok.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {mevcut.map(s => {
+                  const [durum, cls] = durumOf(s);
+                  return (
+                    <div key={s.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border" style={{ background: 'var(--bg-surface)', borderColor: 'var(--border-light)' }}>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-600 truncate" style={{ fontWeight: 600 }}>{s.name} <span className="text-caption font-400" style={{ fontWeight: 400 }}>({classShort(classes, s.cls)})</span></div>
+                        <div className="text-caption">{trDate(s.exemptFrom)} – {trDate(s.exemptUntil)}{s.exemptNote ? ` · ${s.exemptNote}` : ''}</div>
+                      </div>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-600 shrink-0 ${cls}`} style={{ fontWeight: 600 }}>{durum}</span>
+                      <button onClick={() => remove(s)} className="btn-icon btn-icon-danger shrink-0" title="Muafiyeti kaldır"><Trash2 size={13} /></button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 export function DirectorAttendanceView({ showToast }: { showToast?: ShowToast }) {
   const { classes } = useClasses();
   const today = new Date();
@@ -164,6 +288,7 @@ export function DirectorAttendanceView({ showToast }: { showToast?: ShowToast })
   const [summary, setSummary] = useState<AttendanceSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedCls, setSelectedCls] = useState<string | null>(null);
+  const [showMuafiyet, setShowMuafiyet] = useState(false);
 
   // Bu haftanın pazartesisi (gün kutucuklarının tarih sayısı buradan türer).
   const weekMonday = useMemo(() => {
@@ -207,6 +332,12 @@ export function DirectorAttendanceView({ showToast }: { showToast?: ShowToast })
 
   return (
     <div>
+      <div className="flex items-center justify-end mb-3">
+        <button onClick={() => setShowMuafiyet(true)}
+          className="btn-ghost !px-3 !py-2 text-xs flex items-center gap-1.5">
+          <CalendarOff size={13} /> Muafiyetler
+        </button>
+      </div>
       {/* Haftalık gün şeridi (Figma Date & Time ilhamı): gün adı + tarih kutucuğu. */}
       <div className="flex gap-1.5 mb-5">
         {ALL_DAYS.map(day => {
@@ -281,6 +412,8 @@ export function DirectorAttendanceView({ showToast }: { showToast?: ShowToast })
       {selectedCls && (
         <AttendanceSummaryModal cls={selectedCls} label={classShort(classes, selectedCls)} date={dateForSelectedDay} onClose={() => setSelectedCls(null)} />
       )}
+
+      {showMuafiyet && <MuafiyetModal onClose={() => setShowMuafiyet(false)} showToast={showToast} />}
     </div>
   );
 }

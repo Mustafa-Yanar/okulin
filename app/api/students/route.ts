@@ -41,8 +41,15 @@ const StudentDeleteSchema = z.object({
 // Tam öğrenci listesi (telefon/veli telefonu/doğum tarihi/diploma notu dahil PII) —
 // yalnız personel rolleri. student/parent burada YOK: kendi verilerini ayrı, filtreli
 // uçlardan görürler (canReadStudent ile korunan rotalar).
-export const GET = withAuth(['director', 'teacher', 'counselor', 'accountant'], async () => {
-  return NextResponse.json(await listStudents());
+export const GET = withAuth(['director', 'teacher', 'counselor', 'accountant'], async (_req, _ctx, session) => {
+  const list = await listStudents();
+  // Yönetim notları (veliye özel not + muafiyet gerekçesi) yalnız müdür/rehberliğe:
+  // "raporlu/ailevi izin" gibi hassas gerekçeler öğretmen ve muhasebeye gitmez (KVKK).
+  // Muafiyet TARİHLERİ kalır — öğretmen paneli "Muaf" rozetini onlarla türetir.
+  if (session.role === 'teacher' || session.role === 'accountant') {
+    return NextResponse.json(list.map((s) => ({ ...s, parentNote: '', exemptNote: '' })));
+  }
+  return NextResponse.json(list);
 });
 
 // POST/PUT 'intake': kayıt akışı — müdür/rehber (manage kuralı) + muhasebeci

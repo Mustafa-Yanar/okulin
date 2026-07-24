@@ -45,6 +45,9 @@ export const GET = withAuth(['director', 'counselor'], async (req) => {
   const attRecords = await tdb().attendance.findMany({ where: { date }, include: { teacher: true } });
   const attMap: Record<string, Record<string, string>> = {};
   for (const r of attRecords) attMap[`${r.teacher.legacyId}|${r.cls}|${r.lessonNo}`] = (r.records as Record<string, string> | null) || {}; // records: Json
+  // "Alındı" = kayıt SATIRI var (records boş olsa bile) — sınıfın tümü muafsa süzgeç {}
+  // bırakır; length>0 koşulu bunu "alınmadı" gösterirdi.
+  const attTaken = new Set(Object.keys(attMap));
 
   const clsMap: Record<string, { cls: string; lessons: LessonSummary[] }> = {};
   for (const t of teachers) {
@@ -74,7 +77,7 @@ export const GET = withAuth(['director', 'counselor'], async (req) => {
         slotNo: slotIdx + 1,
         teacherId: t.id,
         teacherName: t.name,
-        attendanceTaken: Object.keys(recObj).length > 0,
+        attendanceTaken: attTaken.has(`${t.id}|${cls}|${lessonNo}`),
         absent,
         late,
       });

@@ -39,6 +39,9 @@ export interface StudentDTO {
   tcNo: string;          // öğrenci TC (muhasebe belgeleri)
   parentTcNo: string;    // veli TC (senet)
   parentAddress: string; // veli adresi (senet)
+  exemptFrom: string;    // yoklama muafiyeti aralığı (YYYY-MM-DD; boş = muafiyet yok)
+  exemptUntil: string;
+  exemptNote: string;
 }
 
 // Öğretmen ders ön-tanımı (preset): sınıf + ders eşlemesi.
@@ -96,6 +99,12 @@ export interface FinanceDTO {
   discount: number;
   netFee: number;
   paymentPlan: string;
+  // Senet borçlusu — veli1/veli2 seçimi ya da elle giriş; eski kayıtlarda null (→ 1. veli).
+  debtorKind?: 'veli1' | 'veli2' | 'manuel' | null;
+  debtorName?: string | null;
+  debtorPhone?: string | null;
+  debtorTcNo?: string | null;
+  debtorAddress?: string | null;
   installments: InstallmentDTO[];
   payments: PaymentEntry[];
   balance: number;
@@ -111,6 +120,8 @@ export interface FinanceListItemDTO {
   parentPhone?: string;
   parentTcNo?: string;
   parentAddress?: string;
+  parent2Name?: string;    // borçlu seçimi (2. veli)
+  parent2Phone?: string;
   className?: string;      // sınıf adı (ör. "7/701")
   finance: FinanceDTO | null;
 }

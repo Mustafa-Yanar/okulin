@@ -107,8 +107,9 @@ const BODY_VALIDATION_ALLOWLIST = [
 
 describe('API mimari sözleşmeleri', () => {
   it('route ve handler envanteri bilinçli değişir', () => {
-    expect(routeFiles()).toHaveLength(92);
-    expect(handlers()).toHaveLength(169);
+    // 93. route: POST /api/students/exemption (yoklama muafiyeti, 2026-07-24)
+    expect(routeFiles()).toHaveLength(93);
+    expect(handlers()).toHaveLength(170);
   });
 
   it('merkezi wrapper dışındaki her API kapısı gerekçeli allowlist’tedir', () => {

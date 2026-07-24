@@ -14,6 +14,7 @@ import {
   daySlots as buildDaySlots
 } from '@/lib/constants';
 import { subjectMatchesBranch } from '@/lib/deneme/branch';
+import { isExemptOn } from '@/lib/exemption';
 import RehberlikAccordion from './rehberlik/RehberlikAccordion';
 import SlotGrid from './SlotGrid';
 import ResourceLibrary from './library/ResourceLibrary';
@@ -269,12 +270,19 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                               <div className="space-y-1 mb-2">
                                 {stuList.map(student => {
                                   const current = att[student.id];
+                                  // Muaf (izinli/raporlu): işaretlenemez — sunucu da yazımı süzer.
+                                  const muaf = isExemptOn(student.exemptFrom, student.exemptUntil, date);
                                   return (
                                     <div key={student.id} className="flex items-center justify-between py-1">
                                       <div className="flex items-center gap-2 min-w-0">
                                         <User size={12} className="text-gray-400 shrink-0" />
                                         <span className="text-sm text-gray-800 truncate">{student.name}</span>
                                       </div>
+                                      {muaf ? (
+                                        <span title={student.exemptNote || 'İzinli/raporlu — yoklamadan muaf'}
+                                          className="text-xs px-3 py-2 min-h-[36px] rounded-lg border bg-sky-50 border-sky-200 text-sky-700 font-600 flex items-center shrink-0 ml-2"
+                                          style={{ fontWeight: 600 }}>Muaf</span>
+                                      ) : (
                                       <div className="flex gap-1 shrink-0 ml-2">
                                         {STATUS_OPTS.map(opt => (
                                           <button key={opt.value}
@@ -286,6 +294,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                                           </button>
                                         ))}
                                       </div>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -307,12 +316,15 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
 
                 {day.etuts?.map((e) => {
                   const lessonNo = `e${e.id}`;
-                  const cls = e.studentCls || (students.find(s => s.id === e.studentId)?.cls) || '';
+                  const etutStu = students.find(s => s.id === e.studentId);
+                  const cls = e.studentCls || etutStu?.cls || '';
                   const lk = `${day.dayIndex}_${lessonNo}`;
                   const lOpen = !!openLessons[lk];
                   const attKey = `${date}_${cls}_${lessonNo}`;
                   const att = attendance[attKey] || {};
                   const current = att[e.studentId!];
+                  // Muaf (izinli/raporlu): işaretlenemez — sunucu da yazımı süzer.
+                  const muaf = isExemptOn(etutStu?.exemptFrom, etutStu?.exemptUntil, date);
                   return (
                     <div key={lessonNo} className="time-block time-etut time-block--lead rounded-xl overflow-hidden">
                       <button onClick={() => toggleLesson(day.dayIndex, lessonNo, cls)}
@@ -334,6 +346,11 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                               <span className="text-sm text-gray-800 truncate">{e.studentName}</span>
                               {cls && <span className="text-xs text-gray-400">({classShortUpper(classes, cls)})</span>}
                             </div>
+                            {muaf ? (
+                              <span title={etutStu?.exemptNote || 'İzinli/raporlu — yoklamadan muaf'}
+                                className="text-xs px-3 py-2 min-h-[36px] rounded-lg border bg-sky-50 border-sky-200 text-sky-700 font-600 flex items-center shrink-0 ml-2"
+                                style={{ fontWeight: 600 }}>Muaf</span>
+                            ) : (
                             <div className="flex gap-1 shrink-0 ml-2">
                               {STATUS_OPTS.map(opt => (
                                 <button key={opt.value}
@@ -345,6 +362,7 @@ function TeacherAttendancePanel({ session, weekKey, showToast }: TeacherAttendan
                                 </button>
                               ))}
                             </div>
+                            )}
                           </div>
                           <button
                             onClick={() => saveAttendance(day.dayIndex, cls, lessonNo)}

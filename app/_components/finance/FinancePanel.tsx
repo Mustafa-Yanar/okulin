@@ -14,6 +14,7 @@ import { useConfirm } from '../ConfirmProvider';
 import { useClasses } from '../ClassesContext';
 import { classShortUpper } from '@/lib/classCatalog';
 import type { Session } from '@/lib/auth';
+import { formatTurkishMobile } from '@/lib/phone';
 import type { PaymentEntry } from '@/lib/finance';
 import { dagitTutar, sonOdenmisIdx } from '@/lib/finance-plan';
 import type { ShowToast, FinanceDTO, FinanceListItemDTO, InstallmentDTO, KurumBilgi } from '../types';
@@ -203,8 +204,19 @@ interface RegisterStudent {
   studentCls?: string;
 }
 
+// Senet borçlusu seçimi için veli bilgisi (finans liste satırından gelir).
+interface VeliBilgi {
+  parentName?: string;
+  parentPhone?: string;
+  parentTcNo?: string;
+  parentAddress?: string;
+  parent2Name?: string;
+  parent2Phone?: string;
+}
+
 interface FinanceRegisterModalProps {
   student: RegisterStudent;
+  veli?: VeliBilgi;
   existing: FinanceDTO | null;
   onClose: () => void;
   onSuccess: (record: FinanceDTO | null) => void;
@@ -212,13 +224,14 @@ interface FinanceRegisterModalProps {
 }
 
 // ── Finansal kayıt oluşturma / düzenleme modalı ─────────────────────────────
-function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast }: FinanceRegisterModalProps) {
+function FinanceRegisterModal({ student, veli, existing, onClose, onSuccess, showToast }: FinanceRegisterModalProps) {
   const [totalFee, setTotalFee] = useState(existing?.totalFee ? String(existing.totalFee) : '');
   const [discount, setDiscount] = useState(existing?.discount ? String(existing.discount) : '0');
   const [plan, setPlan] = useState(existing?.paymentPlan || 'pesin');
   const [installmentCount, setInstallmentCount] = useState(existing?.installments?.length || 3);
   // Ödenmiş taksit silinemez → taksit sayısı en az (son ödenmiş indeks + 1) olmalı.
-  const minTaksit = Math.max(2, sonOdenmisIdx((existing?.installments || []).map((x, i) => ({ ...x, idx: x.idx ?? i }))) + 1);
+  // Taban 1: "tek seferde ama ileri tarihte ödeyecek" veli için 1 taksitli plan kurulabilir.
+  const minTaksit = Math.max(1, sonOdenmisIdx((existing?.installments || []).map((x, i) => ({ ...x, idx: x.idx ?? i }))) + 1);
   // İlk taksit tarihi — varsayılan: mevcut ilk taksit ya da bir sonraki ayın bugünü.
   // Veli farklı bir güne (ör. her ayın 1'i / 15'i) sabitlenmek isteyebilir.
   const [firstDate, setFirstDate] = useState<string>(() => {
@@ -230,6 +243,38 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
     if (existing?.installments?.length) return existing.installments;
     return [];
   });
+  // Senet borçlusu: varsayılan 1. veli; 2. veli seçilebilir ya da tamamen elle girilir
+  // (veliden farklı biri de olabilir). Seçim yalnız alanları DOLDURUR — alanlar her
+  // durumda düzenlenebilir kalır; kaydedilen, alanlardaki son değerlerdir.
+  // 1. veli ön-doldurması YALNIZ borçlusu hiç kaydedilmemiş (eski) kayıtta yapılır.
+  // Alan-bazlı `?? veli1` KİRLETİRDİ: 2. veli borçlusunun bilinçli boş (null) TC/adresi
+  // yeniden açılışta 1. velininkiyle dolar, ilgisiz bir güncellemede karışık kimlik
+  // kaydedilirdi (Codex denetim bulgusu).
+  const hasDebtor = !!(existing && (existing.debtorKind || existing.debtorName || existing.debtorPhone || existing.debtorTcNo || existing.debtorAddress));
+  const [debtorKind, setDebtorKind] = useState<'veli1' | 'veli2' | 'manuel'>(existing?.debtorKind || (hasDebtor ? 'manuel' : 'veli1'));
+  const [debtorName, setDebtorName] = useState(hasDebtor ? (existing?.debtorName || '') : (veli?.parentName || ''));
+  const [debtorPhone, setDebtorPhone] = useState(hasDebtor ? (existing?.debtorPhone || '') : (veli?.parentPhone ? formatTurkishMobile(veli.parentPhone) : ''));
+  const [debtorTcNo, setDebtorTcNo] = useState(hasDebtor ? (existing?.debtorTcNo || '') : (veli?.parentTcNo || ''));
+  const [debtorAddress, setDebtorAddress] = useState(hasDebtor ? (existing?.debtorAddress || '') : (veli?.parentAddress || ''));
+  const hasVeli2 = !!(veli?.parent2Name || veli?.parent2Phone);
+
+  function selectDebtor(kind: 'veli1' | 'veli2' | 'manuel') {
+    setDebtorKind(kind);
+    if (kind === 'veli1') {
+      setDebtorName(veli?.parentName || '');
+      setDebtorPhone(veli?.parentPhone ? formatTurkishMobile(veli.parentPhone) : '');
+      setDebtorTcNo(veli?.parentTcNo || '');
+      setDebtorAddress(veli?.parentAddress || '');
+    } else if (kind === 'veli2') {
+      setDebtorName(veli?.parent2Name || '');
+      setDebtorPhone(veli?.parent2Phone ? formatTurkishMobile(veli.parent2Phone) : '');
+      // 2. velinin TC/adresi öğrenci kaydında tutulmuyor — muhasebeci elle tamamlar.
+      setDebtorTcNo('');
+      setDebtorAddress('');
+    }
+    // manuel: alanlar olduğu gibi kalır, muhasebeci serbestçe düzenler.
+  }
+
   // Peşin ödeme (yalnız yeni kayıt): kayıt anında ödeme al, tarihi seçilebilir.
   // Tutar boş bırakılırsa net ücretin tamamı alınır; tarih varsayılan bugün.
   const [pesinDate, setPesinDate] = useState<string>(todayISO());
@@ -283,6 +328,12 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Taksitli planda senet borçlusuz kalmasın: ad zorunlu (varsayılan 1. veliyle dolu
+    // gelir; boşsa kullanıcı bilinçli silmiştir — sessizce 1. veliye düşmek yerine uyar).
+    if (plan === 'taksitli' && !debtorName.trim()) {
+      showToast('Senet borçlusunun adını girin (1. veya 2. veliyi seçebilirsiniz)', 'error');
+      return;
+    }
     setSaving(true);
     try {
       const body = {
@@ -292,6 +343,10 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
         totalFee: parseFloat(totalFee),
         discount: parseFloat(discount) || 0,
         paymentPlan: plan,
+        // Borçlu yalnız taksitli planda gönderilir (senet = taksit senedi). Peşin planda
+        // göndermek görünmeyen bir veli1 anlık görüntüsü kaydeder; kayıt sonradan
+        // taksitliye çevrilince modal güncel veli yerine o bayat veriyi getirirdi.
+        ...(plan === 'taksitli' ? { debtorKind, debtorName, debtorPhone, debtorTcNo, debtorAddress } : {}),
         installments: plan === 'taksitli' ? installments : [],
       };
       const res = await fetch('/api/finance', {
@@ -413,11 +468,11 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
                   className="border border-gray-200 rounded-lg px-2 py-1 text-sm bg-white focus:border-[var(--brand,#6366f1)] focus:outline-none">
                   {/* Ödenmiş taksitin altına inilemez — makbuzu kesilmiş taksit silinemez
                       (sunucu da reddeder: finance-plan.odenmisTaksitHatasi). */}
-                  {[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(n => n >= minTaksit).map(n => <option key={n} value={n}>{n} Taksit</option>)}
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(n => n >= minTaksit).map(n => <option key={n} value={n}>{n === 1 ? '1 Taksit (tek ödeme)' : `${n} Taksit`}</option>)}
                 </select>
               </div>
               <p className="text-caption mb-2">Tarihler ilk taksitten itibaren aylık otomatik dağıtılır; her taksit tarihini ve tutarını elle düzenleyebilirsiniz.
-                {minTaksit > 2 && ` Ödenmiş taksit bulunduğu için taksit sayısı ${minTaksit}'in altına indirilemez.`}</p>
+                {minTaksit > 1 && ` Ödenmiş taksit bulunduğu için taksit sayısı ${minTaksit}'in altına indirilemez.`}</p>
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                 {installments.map((inst, i) => (
                   <div key={i} className={`flex items-center gap-2 p-2 rounded-lg border ${inst.paid ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
@@ -436,6 +491,43 @@ function FinanceRegisterModal({ student, existing, onClose, onSuccess, showToast
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {plan === 'taksitli' && (
+            <div className="space-y-3 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+              <p className="text-xs font-600 text-gray-500" style={{ fontWeight: 600 }}>Senet Borçlusu</p>
+              <div className="flex gap-2">
+                {([['veli1', '1. Veli'], ...(hasVeli2 ? [['veli2', '2. Veli']] : []), ['manuel', 'Farklı Kişi']] as [typeof debtorKind, string][]).map(([v, l]) => (
+                  <button key={v} type="button" onClick={() => selectDebtor(v)}
+                    className={`flex-1 py-2 rounded-lg text-xs font-600 border transition ${debtorKind === v ? 'bg-brand-soft border-brand-soft text-brand' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                    style={{ fontWeight: 600 }}>{l}</button>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-label block mb-1.5">Ad Soyad</label>
+                  <input type="text" value={debtorName} onChange={e => { setDebtorName(e.target.value); setDebtorKind('manuel'); }}
+                    className="input" placeholder="Borçlunun adı soyadı" />
+                </div>
+                <div>
+                  <label className="text-label block mb-1.5">Telefon</label>
+                  <input type="tel" inputMode="tel" value={debtorPhone} onChange={e => { setDebtorPhone(e.target.value); setDebtorKind('manuel'); }}
+                    className="input" placeholder="05XX XXX XX XX" />
+                </div>
+                <div>
+                  <label className="text-label block mb-1.5">TC Kimlik No</label>
+                  <input type="text" inputMode="numeric" maxLength={11} value={debtorTcNo}
+                    onChange={e => { setDebtorTcNo(e.target.value.replace(/\D/g, '')); setDebtorKind('manuel'); }}
+                    className="input" placeholder="Senet için (opsiyonel)" />
+                </div>
+                <div>
+                  <label className="text-label block mb-1.5">Adres</label>
+                  <input type="text" value={debtorAddress} onChange={e => { setDebtorAddress(e.target.value); setDebtorKind('manuel'); }}
+                    className="input" placeholder="Senet için (opsiyonel)" />
+                </div>
+              </div>
+              <p className="text-caption text-gray-400">Senetlerde &quot;Borçlu / Ödeyecek&quot; olarak bu bilgiler basılır. 1. veya 2. veliyi seçmek alanları doldurur; alanları düzenlersen kayıt &quot;farklı kişi&quot; olur.</p>
             </div>
           )}
 
@@ -697,6 +789,8 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
       {showRegister && (
         <FinanceRegisterModal
           student={{ id: studentId, name: studentName, cls: studentCls }}
+          veli={{ parentName: item.parentName, parentPhone: item.parentPhone, parentTcNo: item.parentTcNo,
+            parentAddress: item.parentAddress, parent2Name: item.parent2Name, parent2Phone: item.parent2Phone }}
           existing={finance}
           onClose={() => setShowRegister(false)}
           onSuccess={() => { setShowRegister(false); showToast('Kayıt güncellendi'); onRefresh(); }}
@@ -719,7 +813,11 @@ function StudentFinanceRow({ item, onRefresh, showToast, session, kurum }: Stude
         <Senet
           kurum={kurum}
           ogrenci={{ name: studentName, tc: item.studentTc || '', phone: item.studentPhone || '', donem: academicYearOf(finance.registrationDate) }}
-          veli={{ name: item.parentName || '', phone: item.parentPhone || '', address: item.parentAddress || '', tc: item.parentTcNo || '' }}
+          // Borçlu: kayıtta SEÇİM yapılmışsa (debtorKind/debtorName) alanlar olduğu gibi
+          // basılır; yalnız borçlusu hiç kaydedilmemiş eski kayıt 1. veliye düşer.
+          veli={(finance.debtorKind || finance.debtorName)
+            ? { name: finance.debtorName || '', phone: finance.debtorPhone || '', address: finance.debtorAddress || '', tc: finance.debtorTcNo || '' }
+            : { name: item.parentName || '', phone: item.parentPhone || '', address: item.parentAddress || '', tc: item.parentTcNo || '' }}
           installments={finance.installments}
           duzenlemeTarihi={finance.registrationDate || todayISO()}
           onClose={() => setShowSenet(false)}

@@ -222,6 +222,12 @@ model Student {
   parent2Name        String?
   parent2Phone       String?
   parent2Relation    String?
+  // Yoklama muafiyeti (izinli/raporlu): [exemptFrom, exemptUntil] aralığında (YYYY-MM-DD,
+  // iki uç dahil) öğrenci yoklamada "Muaf" görünür; öğretmen işaretleyemez, sunucu da
+  // yazımı süzer (app/api/attendance POST). Müdür + rehberlik yönetir.
+  exemptFrom         String?
+  exemptUntil        String?
+  exemptNote         String?
   finance            Finance?
   behavior           Behavior?
   payOrders          PayOrder[]
@@ -342,6 +348,13 @@ model Finance {
   netFee           Decimal       @db.Decimal(12, 2)
   paymentPlan      String
   payments         Json? // ödeme ledger'ı [{id,date,amount,method,note,receiptNo,recordedBy}]; balance türetilir
+  // Senet borçlusu — muhasebeci kayıtta 1. veli / 2. veli seçer ya da elle girer (veliden
+  // farklı biri olabilir). null (eski kayıtlar): senet 1. veliden doldurulur.
+  debtorKind       String? // 'veli1' | 'veli2' | 'manuel'
+  debtorName       String?
+  debtorPhone      String?
+  debtorTcNo       String?
+  debtorAddress    String?
   installments     Installment[]
 
   @@unique([orgSlug, branch, studentId])

@@ -2,12 +2,15 @@ import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/auth';
 import { parseBody, z } from '@/lib/validate';
 import { notifyAbsentParents } from '@/lib/notify';
+import { isExemptOn } from '@/lib/exemption';
 import { tdb, withScope } from '@/lib/sqldb';
 
 export const runtime = 'nodejs'; // push web-push (Node crypto) gerektirir
 
 const AttendancePostSchema = z.object({
-  date: z.string().min(1).max(40),
+  // Katı YYYY-MM-DD: gevşek string ('2026-07-24T00:00:00' gibi) muafiyet süzgecinin
+  // sözlük karşılaştırmasını ve devamsızlık push dedupe anahtarını baypas ederdi.
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tarih YYYY-AA-GG biçiminde olmalı'),
   cls: z.string().min(1).max(40),
   // Etüt yoklamasında lessonNo = 'e' + şablon id'si; id'ler UUID göçünden beri
   // 36 karakter ('e'+36=37) — eski max(20) etüt yoklamasını 400 ile kesiyordu.
@@ -52,20 +55,35 @@ export const POST = withAuth(['teacher'], async (req, _ctx, session) => {
 
   const teacher = await tdb().teacher.findFirst({ where: { legacyId: session.id } });
   if (!teacher) return NextResponse.json({ error: 'Öğretmen bulunamadı' }, { status: 404 });
+
+  // Muafiyet süzgeci — o tarihte muaf (izinli/raporlu) öğrencinin kaydı YAZILMAZ.
+  // İstemci zaten "Muaf" gösterip düğmeleri kapatır; bu sunucu kapısıdır (bayat istemci
+  // 'yok' gönderirse veli devamsızlık push'u da tetiklenmesin).
+  let records = attendance;
+  const sids = Object.keys(records);
+  if (sids.length) {
+    const stuRows = await tdb().student.findMany({
+      where: { legacyId: { in: sids } },
+      select: { legacyId: true, exemptFrom: true, exemptUntil: true },
+    });
+    const exempt = new Set(stuRows.filter((s) => isExemptOn(s.exemptFrom, s.exemptUntil, date)).map((s) => s.legacyId));
+    if (exempt.size) records = Object.fromEntries(Object.entries(records).filter(([sid]) => !exempt.has(sid)));
+  }
+
   const lessonNoStr = String(lessonNo);
   const existing = await tdb().attendance.findFirst({
     where: { date, teacherId: teacher.id, cls, lessonNo: lessonNoStr },
   });
   if (existing) {
-    await tdb().attendance.update({ where: { id: existing.id }, data: { records: attendance } });
+    await tdb().attendance.update({ where: { id: existing.id }, data: { records } });
   } else {
     await tdb().attendance.create({
-      data: withScope({ date, teacherId: teacher.id, cls, lessonNo: lessonNoStr, records: attendance }),
+      data: withScope({ date, teacherId: teacher.id, cls, lessonNo: lessonNoStr, records }),
     });
   }
 
   // "Gelmedi" tetikleyicisi — yok işaretli öğrencilerin velilerine push (best-effort, bir kez/gün)
-  await notifyAbsentParents(date, attendance);
+  await notifyAbsentParents(date, records);
 
   return NextResponse.json({ ok: true });
 });

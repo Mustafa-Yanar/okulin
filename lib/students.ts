@@ -3,7 +3,7 @@ import { getClass } from '@/lib/classes';
 import { normalizeTurkishMobile } from '@/lib/phone';
 import { initialPassword } from '@/lib/auth';
 import { HttpError } from '@/lib/errors';
-import { tdb, withScope } from '@/lib/sqldb';
+import { tdb, withScope, tenant } from '@/lib/sqldb';
 import { newId as makeId } from '@/lib/id';
 import { purgeMobileAccess } from '@/lib/mobile/purge';
 import type { Prisma } from '@prisma/client';
@@ -21,6 +21,7 @@ export interface StudentOut {
   parentRelation: string; parentNote: string;
   parent2Name: string; parent2Phone: string; parent2Relation: string;
   tcNo: string; parentTcNo: string; parentAddress: string; // muhasebe belgeleri (senet/makbuz)
+  exemptFrom: string; exemptUntil: string; exemptNote: string; // yoklama muafiyeti aralığı
 }
 
 export const studentOut = (s: StudentWithClass): StudentOut => ({
@@ -30,6 +31,7 @@ export const studentOut = (s: StudentWithClass): StudentOut => ({
   parentRelation: s.parentRelation || '', parentNote: s.parentNote || '',
   parent2Name: s.parent2Name || '', parent2Phone: s.parent2Phone || '', parent2Relation: s.parent2Relation || '',
   tcNo: s.tcNo || '', parentTcNo: s.parentTcNo || '', parentAddress: s.parentAddress || '',
+  exemptFrom: s.exemptFrom || '', exemptUntil: s.exemptUntil || '', exemptNote: s.exemptNote || '',
 });
 
 // Diploma notu string'ini doğrula → number (50-100) veya '' döndür; geçersizse null.
@@ -159,6 +161,46 @@ export async function updateStudent(input: StudentUpdateInput): Promise<void> {
   }
   if (password) data.passwordHash = await bcrypt.hash(password, 10);
   await tdb().student.update({ where: { id: s.id }, data });
+}
+
+// Yoklama muafiyeti aralığını kur ya da temizle. İki uç birlikte dolu (from <= until)
+// ya da birlikte boş (muafiyet kaldırılır) olmalı — tek uçlu aralık anlamsız → 400.
+export async function setStudentExemption(
+  id: string, exemptFrom?: string, exemptUntil?: string, exemptNote?: string,
+): Promise<{ name: string; cleared: boolean; cleanedEntries: number }> {
+  const s = await tdb().student.findFirst({ where: { legacyId: id } });
+  if (!s) throw new HttpError(404, 'Öğrenci bulunamadı');
+  const from = (exemptFrom || '').trim();
+  const until = (exemptUntil || '').trim();
+  if (!from && !until) {
+    await tdb().student.update({ where: { id: s.id }, data: { exemptFrom: null, exemptUntil: null, exemptNote: null } });
+    return { name: s.name, cleared: true, cleanedEntries: 0 };
+  }
+  if (!from || !until) throw new HttpError(400, 'Muafiyet için başlangıç ve bitiş tarihlerinin ikisi de gerekli');
+  const RE = /^\d{4}-\d{2}-\d{2}$/;
+  if (!RE.test(from) || !RE.test(until)) throw new HttpError(400, 'Tarih biçimi YYYY-AA-GG olmalı');
+  if (from > until) throw new HttpError(400, 'Başlangıç tarihi bitiş tarihinden sonra olamaz');
+  // Geriye dönük uzlaştırma: aralıktaki MEVCUT yoklama kayıtlarından öğrencinin
+  // girişleri düşülür (rapor sonradan gelir — daha önce yazılmış 'yok/gec' özette ve
+  // öğrenci geçmişinde kalırdı). Bilinçli tek yön: muafiyet sonradan KALDIRILSA da
+  // silinen girişler geri yazılMAZ; o günlerin yoklaması gerekirse yeniden alınır.
+  // Gönderilmiş devamsızlık push'u geri çağrılamaz (best-effort bildirim).
+  //
+  // Silme ATOMİK jsonb `-` operatörüyle: read-modify-write olsaydı eşzamanlı öğretmen
+  // kaydı diğer öğrencilerin yeni durumlarını ezebilirdi. Raw SQL tenant-scope
+  // enjeksiyonundan geçmez → orgSlug/branch WHERE'de AÇIKÇA verilir.
+  const db = tdb();
+  const { orgSlug, branch } = tenant();
+  const [, cleanedEntries] = await db.$transaction([
+    db.student.update({
+      where: { id: s.id },
+      data: { exemptFrom: from, exemptUntil: until, exemptNote: (exemptNote || '').trim() || null },
+    }),
+    db.$executeRaw`UPDATE "Attendance" SET "records" = "records" - ${id}
+      WHERE "orgSlug" = ${orgSlug} AND "branch" = ${branch}
+        AND "date" >= ${from} AND "date" <= ${until} AND "records" ? ${id}`,
+  ]);
+  return { name: s.name, cleared: false, cleanedEntries };
 }
 
 // Tekil sil. Döner: audit için { name, cls } (yoksa id fallback + boş cls).
